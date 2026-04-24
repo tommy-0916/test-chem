@@ -20,5 +20,7 @@ reaserch_agent/logs/
 *.swp
 *.swo
 
+模版/
+
 .vscode/
 .idea/
