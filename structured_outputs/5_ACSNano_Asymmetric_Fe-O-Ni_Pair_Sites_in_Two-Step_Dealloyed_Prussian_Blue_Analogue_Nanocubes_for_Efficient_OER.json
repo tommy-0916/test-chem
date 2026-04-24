@@ -1,0 +1,71 @@
+{
+  "文献题目": "Asymmetric Fe-O-Ni Pair Sites in Two-Step Dealloyed Prussian Blue Analogue Nanocubes Enrich Linear-Adsorbed Intermediates for Efficient Oxygen Evolution",
+  "1. 解决的问题": "该文针对碱性 OER 中 NiFe (oxy)hydroxide 虽活性高但局域不对称 Fe-O-Ni 位点难以精准构筑、重构过程又常导致结构和活性位来源不清晰的问题，提出两步脱合金策略。作者希望通过部分硫化加阳极极化的顺序处理，在 PBA 纳米立方体中稳定生成不对称 Fe-O-Ni 成对位点，以调控关键含氧中间体的吸附构型并降低 OER 能垒。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者先在温和条件下合成 NiFe-PBA 纳米立方体，再用少量硫化铵进行部分表面硫化，形成 NiFe-PBA@Ni-S 核壳前驱体。随后将其负载在碳布上，在 1.0 M KOH 中以 1.52 V（vs. RHE）阳极极化 30 min，得到 NiOOH@FeOOH/NiOOH 异质结构。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "制备 NiFe-PBA",
+        "试剂/对象": "Ni(NO3)2·6H2O + C6H5Na3O7·2H2O + K3Fe(CN)6",
+        "参数": "4 mmol Ni(NO3)2·6H2O + 9 mmol sodium citrate in 200 mL water; add 200 mL 30 mM K3Fe(CN)6 at 30 C; age 24 h; wash and dry at 60 C"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "部分硫化",
+        "试剂/对象": "NiFe-PBA + (NH4)2S",
+        "参数": "8 mg NiFe-PBA in 8 mL water; add 0.5 mL 8% (NH4)2S; stir 20 min at room temperature; wash and dry at 60 C"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "对照全硫化",
+        "试剂/对象": "NiFe-PBA + Na2S·9H2O",
+        "参数": "100 mg Na2S·9H2O; 80 C for 2 h to obtain hollow Ni-S"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "电极制墨",
+        "试剂/对象": "NiFe-PBA@Ni-S",
+        "参数": "disperse in water/isopropanol/Nafion = 3/1/0.01; 2 mg mL^-1; cast on carbon cloth with 20 wt% loading"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "阳极极化重构",
+        "试剂/对象": "NiFe-PBA@Ni-S/carbon cloth",
+        "参数": "1.0 M KOH; chronoamperometry at 1.52 V vs RHE for 30 min; dry at 60 C overnight"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "OER 过电位",
+      "数值": "232 mV",
+      "条件": "10 mA cm^-2 on glassy carbon electrode"
+    },
+    {
+      "序号": 2,
+      "指标": "Tafel 斜率",
+      "数值": "46 mV dec^-1",
+      "条件": "optimized NiOOH@FeOOH/NiOOH"
+    },
+    {
+      "序号": 3,
+      "指标": "OER 过电位",
+      "数值": "248 mV",
+      "条件": "20 mA cm^-2"
+    },
+    {
+      "序号": 4,
+      "指标": "AEMWE 电解性能",
+      "数值": "1 A cm^-2 at 1.69 V",
+      "条件": "laboratory-scale electrolyzer"
+    },
+    {
+      "序号": 5,
+      "指标": "稳定性",
+      "数值": ">48 h and 600 h",
+      "条件": "GCE durability and 1 A cm^-2 electrolyzer durability"
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "文献题目": "Decoupling Roles of Cationic Dimensionality and Valence-Electron Compatibility on Structural Resilience and Kinetics in High-Entropy Prussian Blue Cathodes for Sodium-Ion Storage",
+  "1. 解决的问题": "该文针对高熵 PBA 在钠离子储存中存在的相变复杂、Jahn-Teller 畸变以及动力学不足问题。作者强调 Cu 等组分与阳离子维度匹配对结构韧性和扩散动力学的协同调控，目标是实现零应变固溶体储钠反应和超长循环稳定性。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者采用含 NaCl、PVP 与抗坏血酸的液相共沉淀法制备 HE-Cu 正极。先将 8 mmol Na4Fe(CN)6.10H2O、10 g NaCl、1 g PVP 和 20 mmol C6H8O6 溶于 150 mL 水中形成 A 液；再将 4 mmol EDTA 及 0.8 mmol 的 MnCl2、FeCl2.4H2O、CoCl2.6H2O、NiCl2.6H2O、CuCl2 分别溶于 150 mL 水中形成 B 液。将 A 液在搅拌下加入 B 液，老化 24 h 后离心，用去离子水多次洗涤，最后在 100°C 真空条件下干燥 24 h。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "配制 A 液",
+        "试剂/对象": "Na4Fe(CN)6.10H2O + NaCl + PVP + C6H8O6",
+        "参数": "8 mmol Na4Fe(CN)6.10H2O + 10 g NaCl + 1 g PVP + 20 mmol C6H8O6 in 150 mL water"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "配制 B 液",
+        "试剂/对象": "EDTA + MnCl2 + FeCl2.4H2O + CoCl2.6H2O + NiCl2.6H2O + CuCl2",
+        "参数": "4 mmol EDTA + 0.8 mmol each metal salt in 150 mL water"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "混合反应",
+        "试剂/对象": "将 A 液加入 B 液",
+        "参数": "搅拌条件下加入"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "老化",
+        "试剂/对象": "反应体系",
+        "参数": "24 h"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "离心与洗涤",
+        "试剂/对象": "HE-Cu 产物",
+        "参数": "去离子水多次洗涤"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "真空干燥",
+        "试剂/对象": "HE-Cu 产物",
+        "参数": "100 C; 24 h"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "比容量",
+      "数值": "120.4 mAh g^-1",
+      "条件": "10 mA g^-1; 3.29 V"
+    },
+    {
+      "序号": 2,
+      "指标": "倍率性能",
+      "数值": "124.8, 118.9, 110.9, 104.4, 98.2, 90.0 mAh g^-1",
+      "条件": "10, 20, 50, 100, 200, 500 mA g^-1"
+    },
+    {
+      "序号": 3,
+      "指标": "长循环稳定性",
+      "数值": ">9000 cycles",
+      "条件": "500 mA g^-1; decay rate ~0.0042% per cycle"
+    },
+    {
+      "序号": 4,
+      "指标": "全电池比能量",
+      "数值": "397.0 Wh kg^-1",
+      "条件": "10 mA g^-1"
+    },
+    {
+      "序号": 5,
+      "指标": "全电池循环稳定性",
+      "数值": ">2000 cycles",
+      "条件": "100 mA g^-1; decay rate ~0.019% per cycle"
+    }
+  ]
+}

@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""CLI entrypoint for running the research agent bootstrap flow."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Any, Dict
+
+from reaserch_agent import ResearchAgent
+
+
+DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the research agent. Currently only the bootstrap event "
+            "is implemented end-to-end."
+        )
+    )
+    parser.add_argument(
+        "--event-type",
+        default="bootstrap",
+        help="Event type to run. Default: bootstrap",
+    )
+    parser.add_argument(
+        "--query",
+        help="Human query for the research agent. If omitted, the script will ask interactively.",
+    )
+    parser.add_argument(
+        "--constraints-json",
+        default="{}",
+        help='JSON object passed as event constraints, e.g. \'{"目标":"先生成首轮macro plan"}\'',
+    )
+    parser.add_argument(
+        "--payload-json",
+        default="{}",
+        help='JSON object passed as event payload.',
+    )
+    parser.add_argument(
+        "--knowledge-base-dir",
+        help="Directory containing knowledge-base JSON files in the structured_outputs format.",
+    )
+    parser.add_argument(
+        "--memory-dir",
+        help="Optional directory for memory retrieval. Defaults to the knowledge base directory.",
+    )
+    parser.add_argument(
+        "--model-name",
+        help="Optional model name. If provided, it will override REFINER_LLM_MODEL_NAME.",
+    )
+    parser.add_argument(
+        "--api-key",
+        help="Optional API key. If provided, it will override REFINER_LLM_API_KEY.",
+    )
+    parser.add_argument(
+        "--base-url",
+        help="Optional model endpoint URL. If provided, it will override REFINER_LLM_ENDPOINT_URL.",
+    )
+    parser.add_argument(
+        "--disable-llm",
+        action="store_true",
+        help="Force heuristic mode even if model credentials are configured.",
+    )
+    parser.add_argument(
+        "--max-survey-rounds",
+        type=int,
+        default=2,
+        help="Maximum number of B1 survey rounds. Default: 2",
+    )
+    parser.add_argument(
+        "--knowledge-top-k",
+        type=int,
+        default=5,
+        help="Number of knowledge hits to keep per round. Default: 5",
+    )
+    parser.add_argument(
+        "--memory-top-k",
+        type=int,
+        default=3,
+        help="Number of memory hits to keep. Default: 3",
+    )
+    parser.add_argument(
+        "--print-state-json",
+        action="store_true",
+        help="Print the full returned state as JSON.",
+    )
+    parser.add_argument(
+        "--save-state",
+        help="Optional path for saving the final state JSON.",
+    )
+    return parser
+
+
+def parse_json_dict(raw_text: str, label: str) -> Dict[str, Any]:
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{label} 不是合法 JSON: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise SystemExit(f"{label} 必须是 JSON object。")
+    return parsed
+
+
+def configure_model_env(args: argparse.Namespace) -> None:
+    if args.model_name:
+        os.environ["REFINER_LLM_MODEL_NAME"] = args.model_name
+    if args.api_key:
+        os.environ["REFINER_LLM_API_KEY"] = args.api_key
+    if args.base_url:
+        os.environ["REFINER_LLM_ENDPOINT_URL"] = args.base_url
+
+
+def get_query(args: argparse.Namespace) -> str:
+    if args.query and args.query.strip():
+        return args.query.strip()
+
+    query = input("请输入 bootstrap query: ").strip()
+    if not query:
+        raise SystemExit("query 不能为空。")
+    return query
+
+
+def print_summary(state: Any) -> None:
+    print(f"status: {state.status}")
+    print(f"current_branch: {state.current_branch}")
+    print(f"next_branch: {state.next_branch}")
+    print(f"stage_route: {state.stage_route}")
+    print(f"current_stage: {state.current_stage}")
+    print(f"current_stage_plan: {state.current_stage_plan}")
+
+    if state.knowledge_hits:
+        print(f"top_knowledge_hit: {state.knowledge_hits[0].title}")
+
+    print("macro_plan:")
+    if not state.macro_plan:
+        print("  (empty)")
+        return
+
+    for step in state.macro_plan:
+        step_no = step.get("步骤序号", "?")
+        operation = step.get("操作", "")
+        target = step.get("试剂/对象", "")
+        parameters = step.get("参数", "")
+        print(f"  {step_no}. {operation}")
+        print(f"     试剂/对象: {target}")
+        print(f"     参数: {parameters}")
+
+
+def slugify_query(query: str, max_len: int = 48) -> str:
+    normalized = re.sub(r"\s+", "_", query.strip())
+    normalized = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_\-]+", "", normalized)
+    normalized = normalized.strip("_-")
+    return (normalized[:max_len] or "query").strip("_-")
+
+
+def build_state_json(state: Any) -> str:
+    if hasattr(state, "debug_snapshot"):
+        payload = state.debug_snapshot()
+    else:
+        payload = state.to_dict()
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def write_debug_log(state: Any, log_dir: Path) -> Path:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    created_at = getattr(state, "created_at", "") or ""
+    timestamp = created_at.replace(":", "-").replace("T", "_").split(".", 1)[0]
+    filename = f"{timestamp}_{slugify_query(state.event.query)}.json"
+    output_path = log_dir / filename
+    output_path.write_text(build_state_json(state), encoding="utf-8")
+    return output_path
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    configure_model_env(args)
+    query = get_query(args)
+    constraints = parse_json_dict(args.constraints_json, "constraints_json")
+    payload = parse_json_dict(args.payload_json, "payload_json")
+
+    agent = ResearchAgent(
+        model=None,
+        use_llm=not args.disable_llm,
+        knowledge_base_dir=args.knowledge_base_dir,
+        memory_dir=args.memory_dir,
+        max_survey_rounds=args.max_survey_rounds,
+        knowledge_top_k=args.knowledge_top_k,
+        memory_top_k=args.memory_top_k,
+    )
+
+    state = agent.run(
+        event_type=args.event_type,
+        query=query,
+        constraints=constraints,
+        payload=payload,
+    )
+
+    print_summary(state)
+    debug_log_path = write_debug_log(state, DEFAULT_LOG_DIR)
+    print(f"\ndebug_state_log: {debug_log_path}")
+
+    if args.print_state_json or args.save_state:
+        state_json = build_state_json(state)
+        if args.print_state_json:
+            print("\nfull_state_json:")
+            print(state_json)
+        if args.save_state:
+            output_path = Path(args.save_state).expanduser().resolve()
+            output_path.write_text(state_json, encoding="utf-8")
+            print(f"\nstate JSON saved to: {output_path}")
+
+    return 0 if state.status in {"completed", "not_implemented"} else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

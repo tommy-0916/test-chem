@@ -1,0 +1,77 @@
+{
+  "文献题目": "Stable Ni(II) Sites in Prussian Blue Analogue for Selective, Ampere-Level Ethylene Glycol Electrooxidation",
+  "1. 解决的问题": "该文针对耦合制氢体系中有机小分子阳极氧化虽然可以降低电压，但多数过渡金属催化剂在强碱和高电流下会重构为高价 (oxy)hydroxide，进而与 OER 竞争、降低产物选择性的问题，提出稳定 Ni(II) 位点的 NiFe-sc-PBA。作者目标是在安培级电流密度下实现乙二醇高选择性氧化制甲酸，同时维持催化剂结构稳定并降低耦合制氢能耗。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者通过一步水热法在镍泡沫上直接生长 NiFe-sc-PBA。核心思路是利用柠檬酸钠调节配位中心 Fe 的价态，并借助 PVP 和水热过程获得结构良好、表面均匀的 PBA 纳米立方体阵列。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "基底预处理",
+        "试剂/对象": "nickel foam",
+        "参数": "4 x 3.5 cm2; ultrasonic cleaning with acetone, 3 M HCl, and ethanol until no light-green Ni2+ remains"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "配制 A 液",
+        "试剂/对象": "NiCl2·6H2O + C6H5O7Na3 + PVP",
+        "参数": "0.3568 g NiCl2·6H2O + 0.6176 g sodium citrate + 1.16 g PVP in 40 mL DI water"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "配制 B 液",
+        "试剂/对象": "K3Fe(CN)6",
+        "参数": "0.1646 g in 30 mL DI water"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "混合前驱液",
+        "试剂/对象": "将 A 液滴加到 B 液",
+        "参数": "under vigorous stirring to form solution C"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "水热生长",
+        "试剂/对象": "solution C + pretreated NF",
+        "参数": "100 mL Teflon-lined autoclave; 80 C for 27 h"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "洗涤与干燥",
+        "试剂/对象": "NiFe-sc-PBA/NF",
+        "参数": "wash with DI water and ethanol 3 times; vacuum dry at 60 C overnight"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "EGOR 工作电位",
+      "数值": "1.484 and 1.625 V",
+      "条件": "500 and 1000 mA cm^-2"
+    },
+    {
+      "序号": 2,
+      "指标": "甲酸法拉第效率",
+      "数值": "peak 98.5%",
+      "条件": "EGOR to formic acid"
+    },
+    {
+      "序号": 3,
+      "指标": "稳定性",
+      "数值": "FE_FA > 90%",
+      "条件": "1.60 V over 50 h in H-type cell"
+    },
+    {
+      "序号": 4,
+      "指标": "耦合制氢连续运行",
+      "数值": ">500 h",
+      "条件": "switchable 1.0 or 1.5 A cm^-2"
+    },
+    {
+      "序号": 5,
+      "指标": "节能效果",
+      "数值": "cell voltage reduced by 450 and 530 mV",
+      "条件": "1.0 and 1.5 A cm^-2 versus conventional alkaline water splitting"
+    }
+  ]
+}

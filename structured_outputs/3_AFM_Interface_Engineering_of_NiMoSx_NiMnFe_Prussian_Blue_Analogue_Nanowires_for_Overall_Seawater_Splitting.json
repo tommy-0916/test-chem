@@ -1,0 +1,71 @@
+{
+  "文献题目": "Interface Engineering of NiMoSx@NiMnFe Prussian Blue Analogue Nanowires to Efficiently Boost Overall Seawater Splitting at High Current Densities",
+  "1. 解决的问题": "该文针对碱性海水电解在高电流密度下同时面临氯离子腐蚀、高阳极电位电化学损伤、OER/HER 双功能活性不足和长期稳定性差的问题，构建 NiMoSx@NiMnFe-PBA 核壳纳米线。作者希望通过异质界面调控、PBA 保护壳层和抗氯排斥效应，在海水体系中实现高电流、高稳定的整体分解。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者先在镍泡沫上水热生长 NiMo 前驱体纳米棒，再经二次水热硫化得到中空 NiMoSx。随后通过阴极电沉积在其表面负载 NiMn-LDH，最后将其浸入 K3Fe(CN)6 溶液进行离子交换，形成 NiMoSx@NiMnFe-PBA 核壳纳米棒。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "基底预处理",
+        "试剂/对象": "nickel foam",
+        "参数": "cut to 2.0 x 3.5 cm; ultrasonically wash with ethanol, 3.0 M HCl, and DI water"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "水热制备 NiMo 前驱体",
+        "试剂/对象": "Ni(NO3)2·4H2O + (NH4)6Mo7O24·4H2O + PVP",
+        "参数": "2.0 mmol + 0.286 mmol + 175.0 mg in 40.0 mL DI water; 160 C for 8 h"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "水热硫化",
+        "试剂/对象": "Na2S·9H2O + NiMo precursor",
+        "参数": "1.0 mmol Na2S·9H2O in 35.0 mL DI water; 160 C for 4 h"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "电沉积 NiMn-LDH",
+        "试剂/对象": "NiMoSx 基底",
+        "参数": "80 mL electrolyte with 0.1 M Ni(NO3)2·6H2O + 0.1 M Mn(NO3)2·4H2O + 0.1 M NaNO3; -5 mA cm^-2; optimized deposition time 1500 s"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "离子交换形成 PBA 壳层",
+        "试剂/对象": "NiMoSx@NiMn-LDH + K3Fe(CN)6",
+        "参数": "immerse in 50 mL 0.05 M K3Fe(CN)6 for 0.5 h; wash and dry"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "OER 过电位",
+      "数值": "260, 325, 465 mV",
+      "条件": "10, 100, 1000 mA cm^-2 in 1.0 M KOH seawater"
+    },
+    {
+      "序号": 2,
+      "指标": "HER 过电位",
+      "数值": "71 mV",
+      "条件": "10 mA cm^-2 in alkaline seawater"
+    },
+    {
+      "序号": 3,
+      "指标": "整体海水分解电压",
+      "数值": "1.513, 1.801, 2.061 V",
+      "条件": "10, 100, 1000 mA cm^-2"
+    },
+    {
+      "序号": 4,
+      "指标": "整体海水分解稳定性",
+      "数值": "2500 h",
+      "条件": "500 mA cm^-2"
+    },
+    {
+      "序号": 5,
+      "指标": "OER 动力学",
+      "数值": "45.3 mV dec^-1",
+      "条件": "Tafel slope"
+    }
+  ]
+}

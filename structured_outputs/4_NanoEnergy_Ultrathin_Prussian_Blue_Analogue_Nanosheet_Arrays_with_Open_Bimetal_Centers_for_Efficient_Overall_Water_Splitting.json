@@ -1,0 +1,71 @@
+{
+  "文献题目": "Ultrathin Prussian Blue Analogue Nanosheet Arrays with Open Bimetal Centers for Efficient Overall Water Splitting",
+  "1. 解决的问题": "该文针对直接构建超薄、开放金属位点的 PBA 纳米片阵列仍然困难，以及块体 PBA 导电性差、活性位点利用率低的问题，提出在泡沫基底上原位生长 CoFe-PBA 纳米片阵列。作者目标是得到自支撑、无粘结剂、同时适用于 OER 和 HER 的双功能催化电极。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者采用一步共沉淀法，利用泡沫镍作为导电骨架和生长基底，在室温下原位生成 CoFe-PBA 纳米片阵列。通过调节老化时间获得不同厚度与形貌的样品，最终筛出性能最优的自支撑纳米片电极。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "配制铁氰基配体溶液",
+        "试剂/对象": "Na2Fe(CN)5NO·2H2O",
+        "参数": "1.0 mmol in 100 mL aqueous solution"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "配制金属盐溶液",
+        "试剂/对象": "Co(NO3)2·6H2O",
+        "参数": "3.0 mmol in 100 mL aqueous solution"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "快速混合",
+        "试剂/对象": "两种前驱液",
+        "参数": "mix and stir at room temperature for 60 s"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "基底原位生长",
+        "试剂/对象": "nickel foam",
+        "参数": "insert four pieces of 1.0 x 1.0 cm nickel foam; age in the dark for 2, 12, 24, or 48 h"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "洗涤与干燥",
+        "试剂/对象": "CoFe-PBA NS@NF",
+        "参数": "wash with deionized water; dry at 65 C for 12 h"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "OER 过电位",
+      "数值": "256 mV",
+      "条件": "10 mA cm^-2 in 1.0 M KOH"
+    },
+    {
+      "序号": 2,
+      "指标": "HER 过电位",
+      "数值": "48 mV",
+      "条件": "10 mA cm^-2 in 1.0 M KOH"
+    },
+    {
+      "序号": 3,
+      "指标": "整体水分解电压",
+      "数值": "1.545 V",
+      "条件": "10 mA cm^-2"
+    },
+    {
+      "序号": 4,
+      "指标": "稳定性",
+      "数值": "no less than 36 h",
+      "条件": "alkali electrolyzer operation"
+    },
+    {
+      "序号": 5,
+      "指标": "机制特征",
+      "数值": "超薄/多孔/开放双金属位点",
+      "条件": "利于转化为高活性 Co/Fe-based (oxy)hydroxides"
+    }
+  ]
+}

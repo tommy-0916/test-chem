@@ -1,0 +1,71 @@
+{
+  "文献题目": "Operando Spectroscopic Identification of Active Sites in NiFe Prussian Blue Analogues as Electrocatalysts: Activation of Oxygen Atoms for Oxygen Evolution Reaction",
+  "1. 解决的问题": "该文针对 NiFe-PBA 在碱性 OER 过程中会发生重构、真实活性相与活性来源长期不清晰的问题，重点解析电化学处理后究竟是何种 Ni 物种承担催化作用。作者希望用原位谱学把 PBA 前驱体、重构后的 Ni(OH)2 以及进一步去质子化得到的 NiOOH2-x 区分开来，并建立 OER 活性与 Ni 高价态/氧阴离子活化之间的关系。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者采用液相共沉淀法制备 Na_xNiFe(CN)6 纳米立方体（NF-PBA）。随后在 1 M KOH 的 OER 条件下，材料发生原位电化学重构，形成非晶 Ni(OH)2 并进一步在工作电位下去质子化为 NiOOH2-x 活性态。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "配制 A 液",
+        "试剂/对象": "Na4Fe(CN)6·10H2O",
+        "参数": "2.119 g in 250 mL water"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "配制 B 液",
+        "试剂/对象": "Na3C6H5O7 + NiCl2·6H2O",
+        "参数": "5.882 g sodium citrate + 1.0 g NiCl2·6H2O in 250 mL water"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "液相混合反应",
+        "试剂/对象": "将 A 液倒入 B 液",
+        "参数": "room temperature; age 48 h"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "固液分离与干燥",
+        "试剂/对象": "Na_xNiFe(CN)6 沉淀",
+        "参数": "filter; wash with deionized water; vacuum dry overnight at 100 C"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "原位电化学活化",
+        "试剂/对象": "NF-PBA 电极",
+        "参数": "在 1 M KOH 的 OER 测试过程中原位重构为 NF-PBA-A；文中未单独给出独立化学活化配方"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "OER 过电位",
+      "数值": "258 mV",
+      "条件": "10 mA cm^-2"
+    },
+    {
+      "序号": 2,
+      "指标": "电流密度",
+      "数值": "61 mA cm^-2",
+      "条件": "304 mV overpotential"
+    },
+    {
+      "序号": 3,
+      "指标": "Tafel 斜率",
+      "数值": "46 mV dec^-1",
+      "条件": "NF-PBA-A"
+    },
+    {
+      "序号": 4,
+      "指标": "稳定性",
+      "数值": "恒定输出",
+      "条件": "chronopotentiometry over 100 h"
+    },
+    {
+      "序号": 5,
+      "指标": "活性相证据",
+      "数值": "Ni(OH)2 -> NiOOH2-x with Ni4+",
+      "条件": "原位 XAS/XPS 证明去质子化程度随电位增加"
+    }
+  ]
+}

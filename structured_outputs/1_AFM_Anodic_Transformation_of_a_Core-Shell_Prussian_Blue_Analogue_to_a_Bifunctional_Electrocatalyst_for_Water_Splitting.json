@@ -1,0 +1,83 @@
+{
+  "文献题目": "Anodic Transformation of a Core-Shell Prussian Blue Analogue to a Bifunctional Electrocatalyst for Water Splitting",
+  "1. 解决的问题": "该文针对低成本普鲁士蓝类似物在碱性 OER 条件下容易发生刻蚀和结构解体、难以稳定完成原位转化并追踪真实活性位的问题，设计了带非晶壳层的 NiCo-PBA。作者希望在保持结构完整的同时促进原位转化，获得兼具 OER/HER 活性的双功能水分解催化剂，并阐明活性相随阳极偏压演化的机制。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者先通过液相共沉淀制备 NiCo-PBA 立方体前驱体，再在更高柠檬酸盐含量条件下对其进行拓扑外延，生成带非晶壳层的 NiCo@A-NiCo-PBA。随后将粉体制成浆料涂覆在 FTO 上，并在 1 M NaOH 中以 1.55 V（vs. RHE）阳极活化 10 min，使其原位转化为活性 NiCo@A-NiCo-PBA-AA。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "配制 NiCo-PBA 前驱体 A 液",
+        "试剂/对象": "Ni(NO3)2 + sodium citrate",
+        "参数": "0.6 mmol nickel nitrate + 0.9 mmol sodium citrate in 25 mL deionized water"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "配制 NiCo-PBA 前驱体 B 液",
+        "试剂/对象": "K3Co(CN)6",
+        "参数": "0.4 mmol potassium hexacyanocobaltate(III) in 25 mL deionized water"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备 NiCo-PBA",
+        "试剂/对象": "将 B 液滴加到 A 液",
+        "参数": "magnetic stirring 10 min; age 24 h at room temperature; centrifuge, wash, vacuum dry at 60 C overnight"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "配制核壳结构 A 液",
+        "试剂/对象": "Ni(NO3)2 + sodium citrate + NiCo-PBA 种子",
+        "参数": "0.6 mmol nickel nitrate + 1.5 mmol sodium citrate in 25 mL water; add 20 mg NiCo-PBA and ultrasonicate 20 min"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "拓扑生长非晶壳层",
+        "试剂/对象": "K3Co(CN)6",
+        "参数": "0.4 mmol in 25 mL water; add dropwise to A liquid; stir 10 min; age 24 h; centrifuge, wash, vacuum dry at 60 C overnight"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备电极浆料并涂覆",
+        "试剂/对象": "NiCo@A-NiCo-PBA",
+        "参数": "200 mg powder in 2 mL water/isopropanol (1:3); sonicate 1 h; drop-cast 0.5 mL onto 1 x 3 cm2 FTO; dry 12 h"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "阳极活化",
+        "试剂/对象": "NiCo@A-NiCo-PBA/FTO",
+        "参数": "1 M NaOH; 1.55 V vs RHE for 10 min; Pt mesh counter; saturated Ag/AgCl reference"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "OER 过电位",
+      "数值": "276 mV",
+      "条件": "10 mA cm^-2"
+    },
+    {
+      "序号": 2,
+      "指标": "OER 过电位",
+      "数值": "443 and 544 mV",
+      "条件": "50 and 100 mA cm^-2"
+    },
+    {
+      "序号": 3,
+      "指标": "HER 过电位",
+      "数值": "173 mV",
+      "条件": "10 mA cm^-2 in 1 M NaOH"
+    },
+    {
+      "序号": 4,
+      "指标": "整体水分解电流密度",
+      "数值": "13.7 mA cm^-2",
+      "条件": "1.6 V cell voltage"
+    },
+    {
+      "序号": 5,
+      "指标": "稳定性",
+      "数值": "无明显衰减",
+      "条件": "40 h"
+    }
+  ]
+}

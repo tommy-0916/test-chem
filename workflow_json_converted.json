@@ -1,0 +1,974 @@
+{
+  "startNodeId": "开始节点id",
+  "endNodeId": "结束节点id",
+  "nodeMap": {
+    "开始节点id": {
+      "nodeId": "开始节点id",
+      "dataId": "开始节点属性",
+      "stepType": "ProcessControl",
+      "workstationType": "start",
+      "workstationTypeName": "开始"
+    },
+    "结束节点id": {
+      "nodeId": "结束节点id",
+      "dataId": "结束节点属性",
+      "stepType": "ProcessControl",
+      "workstationType": "end",
+      "workstationTypeName": "结束"
+    },
+    "物料站0节点id": {
+      "nodeId": "物料站0节点id",
+      "dataId": "物料站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "starting_station",
+      "workstationTypeName": "物料站"
+    },
+    "固体进样工作站0节点id": {
+      "nodeId": "固体进样工作站0节点id",
+      "dataId": "固体进样工作站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "solid_dispensing",
+      "workstationTypeName": "固体进样工作站"
+    },
+    "液体进样站0节点id": {
+      "nodeId": "液体进样站0节点id",
+      "dataId": "液体进样站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站"
+    },
+    "磁力搅拌工作站0节点id": {
+      "nodeId": "磁力搅拌工作站0节点id",
+      "dataId": "磁力搅拌工作站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站"
+    },
+    "固体进样工作站1节点id": {
+      "nodeId": "固体进样工作站1节点id",
+      "dataId": "固体进样工作站1节点属性",
+      "stepType": "workstation",
+      "workstationType": "solid_dispensing",
+      "workstationTypeName": "固体进样工作站"
+    },
+    "液体进样站1节点id": {
+      "nodeId": "液体进样站1节点id",
+      "dataId": "液体进样站1节点属性",
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站"
+    },
+    "磁力搅拌工作站1节点id": {
+      "nodeId": "磁力搅拌工作站1节点id",
+      "dataId": "磁力搅拌工作站1节点属性",
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站"
+    },
+    "液体进样站2节点id": {
+      "nodeId": "液体进样站2节点id",
+      "dataId": "液体进样站2节点属性",
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站"
+    },
+    "磁力搅拌工作站2节点id": {
+      "nodeId": "磁力搅拌工作站2节点id",
+      "dataId": "磁力搅拌工作站2节点属性",
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站"
+    },
+    "纯化工作站0节点id": {
+      "nodeId": "纯化工作站0节点id",
+      "dataId": "纯化工作站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "pure",
+      "workstationTypeName": "纯化工作站"
+    },
+    "液体进样站3节点id": {
+      "nodeId": "液体进样站3节点id",
+      "dataId": "液体进样站3节点属性",
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站"
+    },
+    "磁力搅拌工作站3节点id": {
+      "nodeId": "磁力搅拌工作站3节点id",
+      "dataId": "磁力搅拌工作站3节点属性",
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站"
+    },
+    "纯化工作站1节点id": {
+      "nodeId": "纯化工作站1节点id",
+      "dataId": "纯化工作站1节点属性",
+      "stepType": "workstation",
+      "workstationType": "pure",
+      "workstationTypeName": "纯化工作站"
+    },
+    "烘干机0节点id": {
+      "nodeId": "烘干机0节点id",
+      "dataId": "烘干机0节点属性",
+      "stepType": "workstation",
+      "workstationType": "dryer",
+      "workstationTypeName": "烘干机"
+    },
+    "置物工作站0节点id": {
+      "nodeId": "置物工作站0节点id",
+      "dataId": "置物工作站0节点属性",
+      "stepType": "workstation",
+      "workstationType": "elec_chem_storage_workstation",
+      "workstationTypeName": "置物工作站"
+    }
+  },
+  "path": {
+    "开始节点id": "物料站0节点id",
+    "物料站0节点id": "固体进样工作站0节点id",
+    "固体进样工作站0节点id": "液体进样站0节点id",
+    "液体进样站0节点id": "磁力搅拌工作站0节点id",
+    "磁力搅拌工作站0节点id": "固体进样工作站1节点id",
+    "固体进样工作站1节点id": "液体进样站1节点id",
+    "液体进样站1节点id": "磁力搅拌工作站1节点id",
+    "磁力搅拌工作站1节点id": "液体进样站2节点id",
+    "液体进样站2节点id": "磁力搅拌工作站2节点id",
+    "磁力搅拌工作站2节点id": "纯化工作站0节点id",
+    "纯化工作站0节点id": "液体进样站3节点id",
+    "液体进样站3节点id": "磁力搅拌工作站3节点id",
+    "磁力搅拌工作站3节点id": "纯化工作站1节点id",
+    "纯化工作站1节点id": "烘干机0节点id",
+    "烘干机0节点id": "置物工作站0节点id",
+    "置物工作站0节点id": "结束节点id"
+  },
+  "dataMap": {
+    "开始节点属性": {
+      "stepType": "ProcessControl",
+      "workstationType": "start",
+      "workstationTypeName": "开始",
+      "definitionVersion": null,
+      "pipeline": null,
+      "actionParams": [],
+      "container": null,
+      "dataId": "开始节点属性"
+    },
+    "结束节点属性": {
+      "stepType": "ProcessControl",
+      "workstationType": "end",
+      "workstationTypeName": "结束",
+      "definitionVersion": null,
+      "pipeline": null,
+      "actionParams": [],
+      "container": null,
+      "dataId": "结束节点属性"
+    },
+    "物料站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "starting_station",
+      "workstationTypeName": "物料站",
+      "definitionVersion": "303物料站",
+      "pipeline": "common_take_flow",
+      "actionParams": [],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 2,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 1,
+                "selected": true
+              },
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          }
+        ]
+      },
+      "dataId": "物料站0节点属性"
+    },
+    "固体进样工作站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "solid_dispensing",
+      "workstationTypeName": "固体进样工作站",
+      "definitionVersion": "1.0",
+      "pipeline": "solid_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "固体加样",
+          "key": "固体加样",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "固体试剂编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "固体用量",
+              "value": "[[297.0]]"
+            },
+            {
+              "paramCode": "分散方式",
+              "value": "直接加入"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到1号（氯化锰四水合物, MnCl2·4H2O）固体试剂"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 1,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "50ml_heat_resisting_tube",
+            "containerTypeName": "50ml耐热瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "固体进样工作站0节点属性"
+    },
+    "液体进样站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站",
+      "definitionVersion": "移液平台2.0-1ml",
+      "pipeline": "multi_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "加液",
+          "key": "加液",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "原液编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "原液量",
+              "value": "[[30.0]]"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到1号（去离子水）液体药品"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 1,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "96_hole_plate",
+            "containerTypeName": "96孔板",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle",
+            "containerTypeName": "西林瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "液体进样站0节点属性"
+    },
+    "磁力搅拌工作站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站",
+      "definitionVersion": "303-25通道磁力搅拌控制器",
+      "pipeline": "multi_main_flow",
+      "actionParams": [
+        {
+          "actionCode": "磁力搅拌",
+          "key": "磁力搅拌",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "时间（分钟）",
+              "value": "10"
+            },
+            {
+              "paramCode": "搅拌速度",
+              "value": "500"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 1,
+                "selected": true
+              }
+            ]
+          }
+        ]
+      },
+      "dataId": "磁力搅拌工作站0节点属性"
+    },
+    "固体进样工作站1节点属性": {
+      "stepType": "workstation",
+      "workstationType": "solid_dispensing",
+      "workstationTypeName": "固体进样工作站",
+      "definitionVersion": "1.0",
+      "pipeline": "solid_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "固体加样",
+          "key": "固体加样",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "固体试剂编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "固体用量",
+              "value": "[[634.0]]"
+            },
+            {
+              "paramCode": "分散方式",
+              "value": "直接加入"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到2号（铁氰化钾, K4[Fe(CN)6]·3H2O）固体试剂"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "50ml_heat_resisting_tube",
+            "containerTypeName": "50ml耐热瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "固体进样工作站1节点属性"
+    },
+    "液体进样站1节点属性": {
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站",
+      "definitionVersion": "移液平台2.0-1ml",
+      "pipeline": "multi_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "加液",
+          "key": "加液",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "原液编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "原液量",
+              "value": "[[30.0]]"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到1号（去离子水）液体药品"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "96_hole_plate",
+            "containerTypeName": "96孔板",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle",
+            "containerTypeName": "西林瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "液体进样站1节点属性"
+    },
+    "磁力搅拌工作站1节点属性": {
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站",
+      "definitionVersion": "303-25通道磁力搅拌控制器",
+      "pipeline": "multi_main_flow",
+      "actionParams": [
+        {
+          "actionCode": "磁力搅拌",
+          "key": "磁力搅拌",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "时间（分钟）",
+              "value": "10"
+            },
+            {
+              "paramCode": "搅拌速度",
+              "value": "500"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          }
+        ]
+      },
+      "dataId": "磁力搅拌工作站1节点属性"
+    },
+    "液体进样站2节点属性": {
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站",
+      "definitionVersion": "移液平台2.0-1ml",
+      "pipeline": "multi_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "加液",
+          "key": "加液",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "原液编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "原液量",
+              "value": "[[30.0]]"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到2号（氯化锰溶液）液体药品"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "96_hole_plate",
+            "containerTypeName": "96孔板",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle",
+            "containerTypeName": "西林瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "液体进样站2节点属性"
+    },
+    "磁力搅拌工作站2节点属性": {
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站",
+      "definitionVersion": "303-25通道磁力搅拌控制器",
+      "pipeline": "multi_main_flow",
+      "actionParams": [
+        {
+          "actionCode": "磁力搅拌",
+          "key": "磁力搅拌",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "时间（分钟）",
+              "value": "360"
+            },
+            {
+              "paramCode": "搅拌速度",
+              "value": "500"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          }
+        ]
+      },
+      "dataId": "磁力搅拌工作站2节点属性"
+    },
+    "纯化工作站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "pure",
+      "workstationTypeName": "纯化工作站",
+      "definitionVersion": "1.0",
+      "pipeline": "new_pure_flow",
+      "actionParams": [
+        {
+          "actionCode": "最新纯化离心流程",
+          "key": "最新纯化离心流程",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "离心速度",
+              "value": "3000"
+            },
+            {
+              "paramCode": "离心时间",
+              "value": "10"
+            },
+            {
+              "paramCode": "方案",
+              "value": "保留清洗液"
+            },
+            {
+              "paramCode": "是否保留清洗液",
+              "value": "true"
+            },
+            {
+              "paramCode": "清洗次数",
+              "value": "1"
+            },
+            {
+              "paramCode": "清洗液",
+              "value": "去离子水"
+            },
+            {
+              "paramCode": "自动设置加液状态",
+              "value": "false"
+            },
+            {
+              "paramCode": "手动设置加液量（毫升）",
+              "value": "0"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle_sample_retention",
+            "containerTypeName": "留样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "纯化工作站0节点属性"
+    },
+    "液体进样站3节点属性": {
+      "stepType": "workstation",
+      "workstationType": "liquid_dispensing",
+      "workstationTypeName": "液体进样站",
+      "definitionVersion": "移液平台2.0-1ml",
+      "pipeline": "multi_add_flow",
+      "actionParams": [
+        {
+          "actionCode": "加液",
+          "key": "加液",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "原液编号",
+              "value": "[1]"
+            },
+            {
+              "paramCode": "原液量",
+              "value": "[[30.0]]"
+            },
+            {
+              "paramCode": "reagent_declaration",
+              "value": "用到1号（去离子水）液体药品"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "96_hole_plate",
+            "containerTypeName": "96孔板",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle",
+            "containerTypeName": "西林瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "液体进样站3节点属性"
+    },
+    "磁力搅拌工作站3节点属性": {
+      "stepType": "workstation",
+      "workstationType": "magnetic_stirring",
+      "workstationTypeName": "磁力搅拌工作站",
+      "definitionVersion": "303-25通道磁力搅拌控制器",
+      "pipeline": "multi_main_flow",
+      "actionParams": [
+        {
+          "actionCode": "磁力搅拌",
+          "key": "磁力搅拌",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "时间（分钟）",
+              "value": "10"
+            },
+            {
+              "paramCode": "搅拌速度",
+              "value": "500"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          }
+        ]
+      },
+      "dataId": "磁力搅拌工作站3节点属性"
+    },
+    "纯化工作站1节点属性": {
+      "stepType": "workstation",
+      "workstationType": "pure",
+      "workstationTypeName": "纯化工作站",
+      "definitionVersion": "1.0",
+      "pipeline": "new_pure_flow",
+      "actionParams": [
+        {
+          "actionCode": "最新纯化离心流程",
+          "key": "最新纯化离心流程",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "离心速度",
+              "value": "3000"
+            },
+            {
+              "paramCode": "离心时间",
+              "value": "10"
+            },
+            {
+              "paramCode": "方案",
+              "value": "不保留清洗液"
+            },
+            {
+              "paramCode": "是否保留清洗液",
+              "value": "false"
+            },
+            {
+              "paramCode": "清洗次数",
+              "value": "1"
+            },
+            {
+              "paramCode": "清洗液",
+              "value": "去离子水"
+            },
+            {
+              "paramCode": "自动设置加液状态",
+              "value": "false"
+            },
+            {
+              "paramCode": "手动设置加液量（毫升）",
+              "value": "0"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "bottle_sample_retention",
+            "containerTypeName": "留样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "纯化工作站1节点属性"
+    },
+    "烘干机0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "dryer",
+      "workstationTypeName": "烘干机",
+      "definitionVersion": "gxq_1.0",
+      "pipeline": "multi_main_flow",
+      "actionParams": [
+        {
+          "actionCode": "参数设置",
+          "key": "参数设置",
+          "params": [
+            {
+              "paramCode": "进样瓶编号",
+              "value": "[2]"
+            },
+            {
+              "paramCode": "恒温温度",
+              "value": "80"
+            },
+            {
+              "paramCode": "烘干时间（分钟）",
+              "value": "720"
+            },
+            {
+              "paramCode": "容器状态",
+              "value": "无盖"
+            }
+          ]
+        }
+      ],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "50ml_heat_resisting_tube",
+            "containerTypeName": "50ml耐热瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "烘干机0节点属性"
+    },
+    "置物工作站0节点属性": {
+      "stepType": "workstation",
+      "workstationType": "elec_chem_storage_workstation",
+      "workstationTypeName": "置物工作站",
+      "definitionVersion": "1.0",
+      "pipeline": "put_flow",
+      "actionParams": [],
+      "container": {
+        "allocation": [
+          {
+            "containerCount": 1,
+            "containerTypeCode": "bottle_storage",
+            "containerTypeName": "进样瓶",
+            "allocateMode": "extend",
+            "selectedContainers": [
+              {
+                "logicNo": 2,
+                "selected": true
+              }
+            ]
+          },
+          {
+            "containerCount": 0,
+            "containerTypeCode": "50ml_heat_resisting_tube",
+            "containerTypeName": "50ml耐热瓶",
+            "allocateMode": "extend",
+            "selectedContainers": []
+          }
+        ]
+      },
+      "dataId": "置物工作站0节点属性"
+    }
+  },
+  "lockMap": {}
+}

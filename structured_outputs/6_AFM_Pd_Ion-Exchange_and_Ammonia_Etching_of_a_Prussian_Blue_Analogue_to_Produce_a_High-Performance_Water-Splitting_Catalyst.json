@@ -1,0 +1,65 @@
+{
+  "文献题目": "Pd Ion-Exchange and Ammonia Etching of a Prussian Blue Analogue to Produce a High-Performance Water-Splitting Catalyst",
+  "1. 解决的问题": "该文针对高性能双功能析氢/析氧催化剂仍高度依赖贵金属、而现有非贵金属体系在酸碱两种环境下难以同时兼顾活性、结构可设计性和稳定性的问题，以 PBA 为可编辑前驱体构建 Pd 交换和氨刻蚀协同调控策略。作者目标是得到具有高比表面积、暴露活性位和优化吸附能的碳基纳米片催化剂，用于整体水分解。",
+  "2. 具体的合成步骤": {
+    "描述性总结": "作者先通过共沉淀法制备 NiCo-PBA，再用浓氨水刻蚀生成 e-NiCo-PBA，或者同时引入 Pd(acac)2 进行离子交换和氨刻蚀得到 Pd-e-NiCo-PBA。最后将不同 PBA 前驱体在 Ar 气氛下低温煅烧，得到对应的碳复合催化剂，其中目标样品为 Pd-e-NiCo-PBA-C。",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "制备 NiCo-PBA",
+        "试剂/对象": "nickel nitrate + sodium citrate + potassium hexacyanocobaltate(III)",
+        "参数": "0.6 mmol nickel nitrate + 0.9 mmol sodium citrate in 25 mL water; 0.4 mmol K3Co(CN)6 in 25 mL water; dropwise addition over 10 min; age 24 h; wash; vacuum dry at 60 C overnight"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "氨刻蚀",
+        "试剂/对象": "NiCo-PBA + NH3·H2O",
+        "参数": "60 mg NiCo-PBA in 30 mL ethanol; add 30 mL water containing 7.5 mL concentrated ammonia (28%); stir 1 h at room temperature; wash and dry"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "Pd 离子交换与刻蚀",
+        "试剂/对象": "NiCo-PBA + Pd(acac)2 + NH3·H2O",
+        "参数": "60 mg NiCo-PBA in 30 mL 10 mM palladium acetylacetonate ethanol solution; add 30 mL water containing 7.5 mL concentrated ammonia (28%); stir 1 h at room temperature; wash and dry"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "碳化处理",
+        "试剂/对象": "NiCo-PBA, e-NiCo-PBA, or Pd-e-NiCo-PBA",
+        "参数": "heat to 350 C at 1 C min^-1 under Ar; keep 3 h; cool at 10 C min^-1"
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "酸性 HER",
+      "数值": "47 mV and 55 mV dec^-1",
+      "条件": "pH = 0; overpotential and Tafel slope"
+    },
+    {
+      "序号": 2,
+      "指标": "碱性 HER",
+      "数值": "147 mV and 67 mV dec^-1",
+      "条件": "pH = 14; overpotential and Tafel slope"
+    },
+    {
+      "序号": 3,
+      "指标": "碱性 OER",
+      "数值": "309 mV and 67 mV dec^-1",
+      "条件": "pH = 14; overpotential and Tafel slope"
+    },
+    {
+      "序号": 4,
+      "指标": "整体水分解电流密度",
+      "数值": "33 mA cm^-2",
+      "条件": "1.6 V"
+    },
+    {
+      "序号": 5,
+      "指标": "稳定性",
+      "数值": "97.3% activity retained; negligible LSV shift after 5000 cycles",
+      "条件": "over 50 h water splitting"
+    }
+  ]
+}
