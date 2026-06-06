@@ -26,6 +26,7 @@ class SearchHit:
     score: float
     problem: str
     synthesis_summary: str
+    experiment_details: str = ""
     steps: List[Dict[str, Any]] = field(default_factory=list)
     performance: List[Dict[str, Any]] = field(default_factory=list)
     matched_terms: List[str] = field(default_factory=list)
@@ -49,6 +50,7 @@ class ResearchAgentState:
 
     knowledge_hits: List[SearchHit] = field(default_factory=list)
     memory_hits: List[SearchHit] = field(default_factory=list)
+    extracted_protocols: List[Dict[str, Any]] = field(default_factory=list)
     survey_report: Dict[str, Any] = field(default_factory=dict)
 
     stage_route: List[str] = field(default_factory=list)
@@ -57,6 +59,16 @@ class ResearchAgentState:
     macro_plan: List[Dict[str, Any]] = field(default_factory=list)
     stage_route_reason: str = ""
     current_stage_reason: str = ""
+
+    latest_observation: Dict[str, Any] = field(default_factory=dict)
+    observations: List[Dict[str, Any]] = field(default_factory=list)
+    previous_macro_plan: List[Dict[str, Any]] = field(default_factory=list)
+    observation_stage_fit: Dict[str, Any] = field(default_factory=dict)
+    observation_interpretation: Dict[str, Any] = field(default_factory=dict)
+    stage_progress: Dict[str, Any] = field(default_factory=dict)
+    stage_progress_status: str = ""
+    post_observation_repair_path: str = ""
+    manual_handoff: str = ""
 
     persistent_outputs: Dict[str, Any] = field(default_factory=dict)
     device_adaptation_handoff: Dict[str, Any] = field(default_factory=dict)
@@ -83,6 +95,13 @@ class ResearchAgentState:
             "stage路线设计理由": self.stage_route_reason,
             "当前stage设计理由": self.current_stage_reason,
             "调研报告": self.survey_report,
+            "从知识库论文抽取的实验过程": self.extracted_protocols,
+            "最新 observation": self.latest_observation,
+            "observation 与当前 stage 的一致性判断": self.observation_stage_fit,
+            "当前 observation 的结构化科学解释": self.observation_interpretation,
+            "当前阶段推进状态": self.stage_progress,
+            "post observation 修复路径": self.post_observation_repair_path,
+            "人工交接摘要": self.manual_handoff,
         }
 
     def device_adaptation_external_handoff(self) -> Dict[str, Any]:

@@ -1,0 +1,58 @@
+{
+  "station_identity": {
+    "id": "1427568512205824",
+    "name": "物料站",
+    "code": "starting_station",
+    "category": "storage"
+  },
+  "station_function": {
+    "primary_purpose": "负责进样瓶的拿取和初始化，实验流程的起始工作站",
+    "detail_description": "用于放置所需反应容器的初始区域，机器人从此区域拿取反应容器开始实验。",
+    "workflow_position": "front",
+    "available_operations": {
+      "物料拿取": "拿取指定编号的进样瓶"
+    }
+  },
+  "operations": [
+    {
+      "name": "物料拿取",
+      "code": "material_pickup",
+      "description": "放置实验所用的初始容器。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定所需进样瓶编号，如[1,2,3]",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 20,
+            "item_type": "integer"
+          }
+        }
+      ],
+      "safety_limits": {},
+      "data_generation": {
+        "handler": "material_station_handler",
+        "validation_rules": [
+          "validate_bottle_availability"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：输出为离心管架；离心管架上的容器可为50ml试管、聚四氟反应瓶、西林瓶；总容器数在1-10之间；容器为空容器。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ]
+    }
+  },
+  "prompt_template": "**物料站**\n - 操作：物料拿取\n - 说明：实验开始时获取进样瓶\n - 参数：\n  - 容器类型：指定需获取的容器类型（可选'进样瓶'或'西林瓶'）\n  - 容器编号：指定需获取的容器编号（如`[1,2]`，表示拿取1号和2号容器，最大10个）\n - 限制：\n  - 容器必须是离心管架进样\n  - 总容器数在1-10之间\n  - 容器为空容器\n"
+}

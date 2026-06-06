@@ -10,7 +10,7 @@ from .corpus_search import LocalExperimentCorpus
 
 
 class KnowledgeQuery:
-    """Search the local structured_outputs corpus as a bootstrap knowledge base."""
+    """Search the local chem_kb corpus as a bootstrap knowledge base."""
 
     def __init__(self, corpus_dir: str | Path | None = None, top_k: int = 5) -> None:
         self._corpus = LocalExperimentCorpus(corpus_dir=corpus_dir)

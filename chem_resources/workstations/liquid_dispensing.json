@@ -1,0 +1,104 @@
+{
+  "station_identity": {
+    "id": "1418510906065920",
+    "name": "液体进样站",
+    "code": "liquid_dispensing",
+    "category": "sample_preparation"
+  },
+  "station_function": {
+    "primary_purpose": "用于向进样瓶中精确加入液体试剂，支持矩阵式多原液加液",
+    "detail_description": "自动液体处理工作站是一种多功能的液体处理设备。它可以进行精确的移液、分液、混合等操作，并且能够根据不同的实验需求进行灵活编程。其配备的高精度液体处理模块和智能控制系统，确保了液体处理的准确性和重复性。在药物研发、临床检验等领域，可用于高通量的样品处理，如药物筛选实验中的样品稀释、混合等操作，提高实验效率和质量。",
+    "workflow_position": "front",
+    "available_operations": {
+      "加液": "向指定进样瓶加入液体试剂"
+    }
+  },
+  "operations": [
+    {
+      "name": "加液",
+      "code": "add_liquid",
+      "description": "该工作站用于自动精确定量地向反应体系或分析系统添加液体，适用于小体积（1 mL）的液体进样需求，可通过程序精确控制液体进样量、速度、顺序和开关瓶盖，实现多样品或多试剂的批量处理。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要加液的进样瓶编号列表，如[1,2,3]",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "原液编号",
+          "code": "reagent_ids",
+          "type": "array",
+          "required": true,
+          "description": "使用的原液编号（1-8），与原始液体药品一一绑定",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 8,
+            "item_range": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "name": "原液量",
+          "code": "reagent_volumes",
+          "type": "matrix",
+          "required": true,
+          "description": "矩阵式加液量配置，外层对应进样瓶，内层对应原液量(mL)",
+          "constraints": {
+            "precision": 0.1,
+            "max_volume_per_addition": 2.0,
+            "max_total_volume": 5.0,
+            "unit": "mL"
+          }
+        },
+        {
+          "name": "声明",
+          "code": "reagent_declaration",
+          "type": "string",
+          "required": true,
+          "description": "声明使用的原液名称，格式：用到1号原液（试剂名）、2号原液（试剂名）"
+        }
+      ],
+      "safety_limits": {
+        "max_volume": 5.0,
+        "min_volume": 0.1,
+        "max_temperature": null,
+        "max_pressure": null
+      },
+      "data_generation": {
+        "handler": "matrix_liquid_addition",
+        "validation_rules": [
+          "validate_volume_constraints",
+          "validate_matrix_dimensions",
+          "validate_reagent_mapping"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：必须是离心管架进样；离心管架上的容器可为50ml试管、聚四氟反应瓶、西林瓶；总容器数在1-10之间；容器内体积不超过30ml；容器内为纯液体或浑浊液或纯固体。输出状态包含三种情况：1. 有盖-无盖：容器没有盖子，容器内体积不超过30ml，溶液量有一定程度增加。2. 有盖-有盖：容器有盖子，容器内体积不超过30ml，溶液量有一定程度增加。3. 无盖-无盖：容器没有盖子，容器内体积不超过30ml，溶液量有一定程度增加。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ],
+      "custom_mappings": {
+        "tube_num": "sample_bottle_ids",
+        "bottle": "reagent_volumes"
+      }
+    }
+  },
+  "prompt_template": "**液体进样站**\n - 操作：加液\n - 说明：向指定容器中添加液体药品\n - 参数：\n  - 容器类型：指定需加液的容器类型（可选`进样瓶`或`50ml耐热瓶`或'西林瓶'）\n  - 容器编号：指定需加液的容器编号（如`[1,2]`，表示选择1号和2号容器，最大10个）\n  - 原液量: 指定需添加的原液量（如`[[0.5, 0.6], [1.0, 1.5]]`，单位为ml，表示对进样瓶1添加1号原液0.5ml，2号原液0.6ml，对进样瓶2添加1号原液1ml，2号原液1.5ml。）\n\n - 操作：开盖\n - 说明：对指定容器执行开盖操作\n - 参数：\n  - 容器类型：指定需开盖的容器类型（可选`进样瓶`或`50ml耐热瓶`或'西林瓶'）\n  - 容器编号：指定需开盖的容器编号（如`[1,2]`，表示选择1号和2号容器，最大10个）\n\n - 限制：\n  - 必须是离心管架进样\n  - 总容器数在1-10之间\n  - 容器内体积不超过30ml\n  - 容器内为纯液体或浑浊液或纯固体\n"
+}

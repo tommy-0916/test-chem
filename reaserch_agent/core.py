@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,12 @@ class BaseAgent:
 
     def __init__(self, model: Any = None, max_retries: int = 4) -> None:
         self._model = model
+        retry_override = os.getenv("REFINER_LLM_MAX_RETRIES")
+        if retry_override:
+            try:
+                max_retries = max(1, int(retry_override))
+            except ValueError:
+                pass
         self._max_retries = max_retries
 
     @property
@@ -27,11 +34,32 @@ class BaseAgent:
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
 
+            if os.getenv("REFINER_LLM_SINGLE_USER_MESSAGE") == "1":
+                return [
+                    HumanMessage(
+                        content=(
+                            f"[System instructions]\n{system_prompt}\n\n"
+                            f"[Task]\n{task_prompt}"
+                        )
+                    )
+                ]
+
             return [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=task_prompt),
             ]
         except Exception:
+            if os.getenv("REFINER_LLM_SINGLE_USER_MESSAGE") == "1":
+                return [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"[System instructions]\n{system_prompt}\n\n"
+                            f"[Task]\n{task_prompt}"
+                        ),
+                    }
+                ]
+
             return [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": task_prompt},

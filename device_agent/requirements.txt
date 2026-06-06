@@ -1,0 +1,21 @@
+# LangChain和LangGraph
+langchain==1.2.7
+langchain-openai==1.1.7
+langgraph==1.0.7
+
+# 数据验证
+pydantic==2.12.5
+
+# 环境变量
+python-dotenv==1.2.1
+
+# 重试机制
+tenacity==9.1.2
+
+# JSON处理
+orjson==3.10.12
+
+# Knowledge Base Build 依赖
+PyMuPDF==1.23.8          # PDF解析
+jieba==0.42.1            # 中文分词
+rank-bm25==0.2.2         # BM25检索算法

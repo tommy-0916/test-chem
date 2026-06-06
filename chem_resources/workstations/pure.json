@@ -1,0 +1,175 @@
+{
+  "station_identity": {
+    "id": "1327807622448128",
+    "name": "纯化工作站",
+    "code": "pure",
+    "category": "separation"
+  },
+  "station_function": {
+    "primary_purpose": "用于样品的离心纯化和分离处理",
+    "detail_description": "离心纯化工作站主要用于对各类混合物进行离心、清洗或纯化处理。它采用机械臂、震荡机及离心机高度耦合的方式，实现从进样、清洗、离心或纯化的完全无人操作。在化学、生物等实验中，目标产物往往需要进行固相和液相分离，经过清洗得到无杂质的样品，离心纯化工作站能够高效的进行分离获取需要的目标产物。",
+    "workflow_position": "middle",
+    "available_operations": {
+      "最新纯化离心流程": "使用最新的纯化离心流程进行样品分离",
+      "标准离心": "标准离心分离处理"
+    }
+  },
+  "operations": [
+    {
+      "name": "最新纯化离心流程",
+      "code": "latest_purification_centrifuge",
+      "description": "工作站用于对样品进行自动化的离心分离与纯化操作。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要纯化的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "离心速度",
+          "code": "centrifuge_speed",
+          "type": "integer",
+          "required": false,
+          "description": "离心转速，单位：rpm",
+          "default_value": 3000,
+          "constraints": {
+            "min_value": 1000,
+            "max_value": 10000,
+            "unit": "rpm"
+          }
+        },
+        {
+          "name": "离心时间",
+          "code": "centrifuge_time",
+          "type": "integer",
+          "required": false,
+          "description": "离心时间，单位：分钟",
+          "default_value": 10,
+          "constraints": {
+            "min_value": 1,
+            "max_value": 60,
+            "unit": "分钟"
+          }
+        },
+        {
+          "name": "纯化方法",
+          "code": "purification_method",
+          "type": "string",
+          "required": false,
+          "description": "纯化方法选择",
+          "default_value": "最新纯化离心流程",
+          "constraints": {
+            "enum_values": [
+              "最新纯化离心流程",
+              "标准离心",
+              "高速离心"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {
+        "max_speed": 10000.0,
+        "max_time": 60.0
+      },
+      "data_generation": {
+        "handler": "purification_station_handler",
+        "validation_rules": [
+          "validate_speed_range",
+          "validate_time_constraints"
+        ]
+      }
+    },
+    {
+      "name": "标准离心",
+      "code": "standard_centrifuge",
+      "description": "标准离心分离处理。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要纯化的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "离心速度",
+          "code": "centrifuge_speed",
+          "type": "integer",
+          "required": false,
+          "description": "离心转速，单位：rpm",
+          "default_value": 3000,
+          "constraints": {
+            "min_value": 1000,
+            "max_value": 10000,
+            "unit": "rpm"
+          }
+        },
+        {
+          "name": "离心时间",
+          "code": "centrifuge_time",
+          "type": "integer",
+          "required": false,
+          "description": "离心时间，单位：分钟",
+          "default_value": 10,
+          "constraints": {
+            "min_value": 1,
+            "max_value": 60,
+            "unit": "分钟"
+          }
+        },
+        {
+          "name": "纯化方法",
+          "code": "purification_method",
+          "type": "string",
+          "required": false,
+          "description": "纯化方法选择",
+          "default_value": "最新纯化离心流程",
+          "constraints": {
+            "enum_values": [
+              "最新纯化离心流程",
+              "标准离心",
+              "高速离心"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {
+        "max_speed": 10000.0,
+        "max_time": 60.0
+      },
+      "data_generation": {
+        "handler": "purification_station_handler",
+        "validation_rules": [
+          "validate_speed_range",
+          "validate_time_constraints"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：必须是离心管架进样；离心管架上的容器可为50ml试管；总试管数必须是在1-10之间的双数；容器里必须为悬浊液；容器必须要有盖子；容器内溶液不能超过30ml。1，保留清洗液输出：容器内下层为固体，上层为液体；容器内体积不超过30ml；容器有盖子。2，不保留清洗液输出：容器内为纯固体和微量的液体；容器有盖子。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ]
+    }
+  },
+  "prompt_template": "**纯化工作站**\n   - 操作：离心\n   - 说明：用于对样品进行自动化的离心分离与纯化操作\n   - 参数：\n    - 离心方案：指定离心方案（可选`留液`或`留固`或`留固液`）\n    - 离心时间：指定离心时间（如`10`，单位为分钟，可选范围为1-99分钟）\n    - 离心速度：指定离心速度（如`3000`，单位为转/分钟，可选范围为1-12000转/分钟）\n    - 清洗次数：指定清洗次数（如`3`，单位为次，可选范围为1-10次）\n    - 清洗液：指定清洗液（可选`水`或`酒精`或`双氧水`）\n    - 自动设置加液状态：指定是否自动设置加液状态（可选`是`或`否`）\n    - 手动设置加液量：指定手动设置加液量（如`15`，单位为ml，可选范围为1-50ml）\n    - 是否保留清洗液：指定是否保留清洗液（可选`是`或`否`）\n    - 保留清洗液数量：指定保留清洗液数量（如`15`，单位为ml，可选范围为1-50ml）\n    - 容器类型：指定需离心的容器类型（可选`进样瓶`或`留样瓶`）\n    - 容器编号：指定需离心的容器编号（如`[1,2]`，表示离心1号和2号容器，最大10个）\n   - 限制：\n    - 容器必须是离心管架进样\n    - 总试管数必须是在1-10之间的双数\n    - 容器里必须为悬浊液\n    - 容器必须要有盖子\n    - 容器内溶液不能超过30ml\n"
+}

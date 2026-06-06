@@ -1,0 +1,256 @@
+{
+  "station_identity": {
+    "id": "1421325849887744",
+    "name": "置物工作站",
+    "code": "elec_chem_storage_workstation",
+    "category": "storage"
+  },
+  "station_function": {
+    "primary_purpose": "用于进样瓶的归位和存储管理，实验流程的收尾工作站",
+    "detail_description": "置物工作站为样品提供一个稳定、安静的环境，用于样品的静置和平衡。在一些实验中，样品在处理后需要一定的时间进行静置，以达到稳定的状态或使某些反应充分进行。该工作站可以精确控制环境的温度、湿度等条件，确保样品在静置过程中不受外界干扰。例如在一些化学分析实验中，样品在混合或反应后需要静置一段时间以达到均匀的状态，置物工作站能够提供适宜的条件，保证实验结果的准确性。",
+    "workflow_position": "end",
+    "available_operations": {
+      "进样瓶归位": "将进样瓶归位到指定存储位置",
+      "批量归位": "批量进样瓶归位操作",
+      "分类存储": "按类别分类存储进样瓶"
+    }
+  },
+  "operations": [
+    {
+      "name": "进样瓶归位",
+      "code": "bottle_placement",
+      "description": "一方面用于放置合成过程中需静置反应的反应容器，另一方面用于放置合成及测试结束后的废弃容器。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要归位的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 20,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "存储位置",
+          "code": "storage_location",
+          "type": "string",
+          "required": false,
+          "description": "指定存储位置类型",
+          "default_value": "默认位置",
+          "constraints": {
+            "enum_values": [
+              "默认位置",
+              "常温区",
+              "低温区",
+              "特殊存储区"
+            ]
+          }
+        },
+        {
+          "name": "归位方式",
+          "code": "placement_method",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶归位方式",
+          "default_value": "顺序归位",
+          "constraints": {
+            "enum_values": [
+              "顺序归位",
+              "分类归位",
+              "指定位置"
+            ]
+          }
+        },
+        {
+          "name": "标记状态",
+          "code": "labeling_status",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶标记状态",
+          "default_value": "已完成",
+          "constraints": {
+            "enum_values": [
+              "已完成",
+              "待检测",
+              "需复测",
+              "异常样品"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {},
+      "data_generation": {
+        "handler": "storage_station_handler",
+        "validation_rules": [
+          "validate_storage_location",
+          "validate_capacity"
+        ]
+      }
+    },
+    {
+      "name": "批量归位",
+      "code": "batch_placement",
+      "description": "批量进样瓶归位操作",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要归位的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 20,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "存储位置",
+          "code": "storage_location",
+          "type": "string",
+          "required": false,
+          "description": "指定存储位置类型",
+          "default_value": "默认位置",
+          "constraints": {
+            "enum_values": [
+              "默认位置",
+              "常温区",
+              "低温区",
+              "特殊存储区"
+            ]
+          }
+        },
+        {
+          "name": "归位方式",
+          "code": "placement_method",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶归位方式",
+          "default_value": "顺序归位",
+          "constraints": {
+            "enum_values": [
+              "顺序归位",
+              "分类归位",
+              "指定位置"
+            ]
+          }
+        },
+        {
+          "name": "标记状态",
+          "code": "labeling_status",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶标记状态",
+          "default_value": "已完成",
+          "constraints": {
+            "enum_values": [
+              "已完成",
+              "待检测",
+              "需复测",
+              "异常样品"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {},
+      "data_generation": {
+        "handler": "storage_station_handler",
+        "validation_rules": [
+          "validate_storage_location",
+          "validate_capacity"
+        ]
+      }
+    },
+    {
+      "name": "分类存储",
+      "code": "classified_storage",
+      "description": "按类别分类存储进样瓶",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要归位的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 20,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "存储位置",
+          "code": "storage_location",
+          "type": "string",
+          "required": false,
+          "description": "指定存储位置类型",
+          "default_value": "默认位置",
+          "constraints": {
+            "enum_values": [
+              "默认位置",
+              "常温区",
+              "低温区",
+              "特殊存储区"
+            ]
+          }
+        },
+        {
+          "name": "归位方式",
+          "code": "placement_method",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶归位方式",
+          "default_value": "顺序归位",
+          "constraints": {
+            "enum_values": [
+              "顺序归位",
+              "分类归位",
+              "指定位置"
+            ]
+          }
+        },
+        {
+          "name": "标记状态",
+          "code": "labeling_status",
+          "type": "string",
+          "required": false,
+          "description": "进样瓶标记状态",
+          "default_value": "已完成",
+          "constraints": {
+            "enum_values": [
+              "已完成",
+              "待检测",
+              "需复测",
+              "异常样品"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {},
+      "data_generation": {
+        "handler": "storage_station_handler",
+        "validation_rules": [
+          "validate_storage_location",
+          "validate_capacity"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：容器必须是离心管架；离心管架上的容器可为50ml试管、聚四氟反应瓶、西林瓶；总容器数在1-10之间；输入与输出样品状态一致。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ]
+    }
+  },
+  "prompt_template": "**置物工作站**\n - 操作：物料放置\n - 说明：实验结束时归还进样瓶（必须是最后一步）\n - 参数：\n  - 容器类型：指定需获取的容器类型（可选`进样瓶`或`50ml耐热瓶`）\n  - 容器编号：指定需获取的容器编号（如`[1,2]`，表示选择1号和2号容器，最大10个）\n - 限制：\n  - 容器必须是离心管架\n  - 总容器数在1-10之间\n"
+}

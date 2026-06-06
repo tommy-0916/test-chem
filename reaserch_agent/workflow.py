@@ -6,14 +6,30 @@ import json
 import logging
 import os
 import re
+from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Sequence
 
 from .core import BaseAgent
 from .prompts import (
+    ABNORMAL_OBSERVATION_SURVEY_EXPANSION_PROMPT,
+    ABNORMAL_OBSERVATION_SURVEY_QUERY_GENERATE_PROMPT,
     BOOTSTRAP_SYSTEM_PROMPT,
+    CURRENT_STAGE_REPAIR_ASSESS_PROMPT,
+    DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT,
     MACRO_PLAN_DESIGN_PROMPT,
+    MANUAL_HANDOFF_COMPOSE_PROMPT,
+    NEW_ROUTE_STAGE_DESIGN_PROMPT,
+    OBSERVATION_STAGE_FIT_JUDGE_PROMPT,
+    PAPER_PROTOCOL_EXTRACT_PROMPT,
+    POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT,
+    POST_OBSERVATION_REPORT_UPDATE_PROMPT,
+    POST_OBSERVATION_SYSTEM_PROMPT,
     SIMILAR_EXP_SEARCH_PROMPT,
+    SIMILAR_ABNORMAL_CASE_SEARCH_PROMPT,
     STAGE_DESIGN_PROMPT,
+    STAGE_INTERNAL_REPAIR_ASSESS_PROMPT,
+    STAGE_PROGRESS_UPDATE_PROMPT,
+    STAGE_ROUTE_REPAIR_ASSESS_PROMPT,
     SURVEY_EXPANSION_PROMPT,
     SURVEY_QUERY_GENERATE_PROMPT,
     SURVEY_REPORT_GENERATE_PROMPT,
@@ -24,9 +40,30 @@ from .utils import LLMFactory
 
 logger = logging.getLogger(__name__)
 
+PLACEHOLDER_MACRO_TERMS = [
+    "围绕 query",
+    "围绕query",
+    "进一步优化",
+    "结合文献",
+    "当前缺少",
+    "待补充",
+    "探索性配方",
+    "首轮探索",
+    "进一步细化",
+    "进行材料制备",
+    "开展电化学测试",
+]
+PARAMETER_DETAIL_RE = re.compile(
+    r"(\d+(?:\.\d+)?\s*(?:mmol|mol|mg|g|mL|L|M|h|min|s|°C|℃|C|V|mV|A|mA|"
+    r"mAh\s*g\s*[-−]?\s*1|mA\s*g\s*[-−]?\s*1|mV\s*s\s*[-−]?\s*1|cm2|cm\^2))|"
+    r"(overnight|室温|room temperature|滴加|dropwise|洗涤|澄清|清澈|多次|干燥|真空|vacuum|"
+    r"centrifuge|centrifuged|stir|stirring|sonicate|ultrasonicate|age|aged)",
+    re.IGNORECASE,
+)
+
 
 class ResearchAgent(BaseAgent):
-    """Research agent runtime with B0 waiting and B1 bootstrap implemented."""
+    """Research agent runtime with B0/B1 and B2 post-observation implemented."""
 
     def __init__(
         self,
@@ -38,13 +75,18 @@ class ResearchAgent(BaseAgent):
         max_survey_rounds: int = 2,
         knowledge_top_k: int = 5,
         memory_top_k: int = 3,
+        enable_memory: bool | None = None,
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
 
+        if use_llm is True and model is None:
+            raise RuntimeError("ResearchAgent was created with use_llm=True but no LLM model is configured")
+
         super().__init__(model=model)
-        self._use_llm = bool(model) if use_llm is None else bool(model) and use_llm
+        self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
+        self._enable_memory = self._resolve_enable_memory(enable_memory)
         resolved_knowledge_dir = (
             knowledge_base_dir
             or os.getenv("RESEARCH_KNOWLEDGE_BASE_DIR")
@@ -65,12 +107,21 @@ class ResearchAgent(BaseAgent):
             top_k=memory_top_k,
         )
 
+    def _resolve_enable_memory(self, enable_memory: bool | None) -> bool:
+        if enable_memory is not None:
+            return bool(enable_memory)
+        raw_value = os.getenv("RESEARCH_ENABLE_MEMORY")
+        if raw_value is None:
+            return False
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
     def run(
         self,
         event_type: str,
         query: str = "",
         constraints: Dict[str, Any] | None = None,
         payload: Dict[str, Any] | None = None,
+        previous_state: ResearchAgentState | Dict[str, Any] | None = None,
     ) -> ResearchAgentState:
         event = ResearchEvent(
             event_type=event_type,
@@ -78,15 +129,100 @@ class ResearchAgent(BaseAgent):
             constraints=constraints or {},
             payload=payload or {},
         )
-        return self.run_event(event)
+        return self.run_event(event, previous_state=previous_state)
 
-    def run_event(self, event: ResearchEvent) -> ResearchAgentState:
-        state = ResearchAgentState(event=event)
+    def run_event(
+        self,
+        event: ResearchEvent,
+        previous_state: ResearchAgentState | Dict[str, Any] | None = None,
+    ) -> ResearchAgentState:
+        state = self._build_state_for_event(event, previous_state)
         state.status = "running"
         state.add_log(
             f"ResearchAgent started with event={event.event_type}, llm_enabled={self._use_llm}"
         )
         return self._run_b0(state)
+
+    def _build_state_for_event(
+        self,
+        event: ResearchEvent,
+        previous_state: ResearchAgentState | Dict[str, Any] | None = None,
+    ) -> ResearchAgentState:
+        if previous_state is None:
+            return ResearchAgentState(event=event)
+
+        if isinstance(previous_state, ResearchAgentState):
+            state = deepcopy(previous_state)
+        elif isinstance(previous_state, dict):
+            state = self._state_from_dict(previous_state)
+        else:
+            raise TypeError(
+                "previous_state must be a ResearchAgentState, dict, or None"
+            )
+
+        inherited_query = self._query_from_state(state)
+        state.event = event
+        if not event.query:
+            state.event.query = inherited_query
+        state.current_branch = "B0"
+        state.next_branch = None
+        state.route_message = ""
+        state.manual_handoff = ""
+        return state
+
+    def _query_from_state(self, state: ResearchAgentState) -> str:
+        if state.event.query:
+            return state.event.query
+        handoff_query = state.device_adaptation_handoff.get("query")
+        if handoff_query:
+            return str(handoff_query)
+        return ""
+
+    def _state_from_dict(self, payload: Dict[str, Any]) -> ResearchAgentState:
+        event_payload = payload.get("event") or {}
+        event = ResearchEvent(
+            event_type=str(event_payload.get("event_type", "")),
+            query=str(event_payload.get("query", "")),
+            constraints=dict(event_payload.get("constraints", {}) or {}),
+            payload=dict(event_payload.get("payload", {}) or {}),
+        )
+        state = ResearchAgentState(event=event)
+
+        search_hit_fields = {
+            "title",
+            "file_path",
+            "score",
+            "problem",
+            "synthesis_summary",
+            "experiment_details",
+            "steps",
+            "performance",
+            "matched_terms",
+        }
+        for key, value in payload.items():
+            if key == "event" or not hasattr(state, key):
+                continue
+            if key in {"knowledge_hits", "memory_hits"} and isinstance(value, list):
+                hits: List[SearchHit] = []
+                for item in value:
+                    if isinstance(item, SearchHit):
+                        hits.append(item)
+                    elif isinstance(item, dict):
+                        filtered = {
+                            field: item.get(field)
+                            for field in search_hit_fields
+                            if field in item
+                        }
+                        filtered.setdefault("title", "")
+                        filtered.setdefault("file_path", "")
+                        filtered.setdefault("score", 0.0)
+                        filtered.setdefault("problem", "")
+                        filtered.setdefault("synthesis_summary", "")
+                        hits.append(SearchHit(**filtered))
+                setattr(state, key, hits)
+            else:
+                setattr(state, key, value)
+        return state
 
     def _run_b0(self, state: ResearchAgentState) -> ResearchAgentState:
         state.current_branch = "B0"
@@ -94,19 +230,38 @@ class ResearchAgent(BaseAgent):
             state.branch_history.append("B0")
         state.add_log(f"B0 waiting received event: {state.event.event_type}")
 
-        if state.event.event_type == "bootstrap":
+        normalized_event_type = self._normalize_event_type(state.event.event_type)
+
+        if normalized_event_type == "bootstrap":
             state.next_branch = "B1"
             state.route_message = "bootstrap event received; routing to B1"
             state.add_log(state.route_message)
             return self._run_b1(state)
 
+        if normalized_event_type == "new_observation":
+            state.next_branch = "B2"
+            state.route_message = "new observation event received; routing to B2"
+            state.add_log(state.route_message)
+            return self._run_b2(state)
+
         state.status = "not_implemented"
         state.next_branch = None
         state.route_message = (
-            f"当前阶段仅实现 B0/B1；事件 {state.event.event_type} 暂未实现。"
+            f"当前阶段已实现 B0/B1/B2；事件 {state.event.event_type} 暂未实现。"
         )
         state.add_log(state.route_message)
         return state
+
+    def _normalize_event_type(self, event_type: str) -> str:
+        normalized = re.sub(r"[\s\-]+", "_", (event_type or "").strip().lower())
+        aliases = {
+            "observation": "new_observation",
+            "new_observation": "new_observation",
+            "post_observation": "new_observation",
+            "observation_returned": "new_observation",
+            "bootstrap": "bootstrap",
+        }
+        return aliases.get(normalized, normalized)
 
     def _run_b1(self, state: ResearchAgentState) -> ResearchAgentState:
         state.current_branch = "B1"
@@ -129,11 +284,6 @@ class ResearchAgent(BaseAgent):
 
                 seen_queries.update(query_queue)
                 round_hits = self._knowledge_query.search(query_queue)
-                if not round_hits and round_index == 1:
-                    fallback_hits = self._knowledge_query.search(
-                        ["普鲁士蓝 类似物 合成", "Prussian Blue analogue synthesis"]
-                    )
-                    round_hits = fallback_hits
 
                 accumulated_hits = self._merge_hits(accumulated_hits, round_hits)
                 state.survey_rounds.append(
@@ -154,12 +304,21 @@ class ResearchAgent(BaseAgent):
                 query_queue = expansion["new_queries"]
 
             state.knowledge_hits = accumulated_hits
-            state.memory_queries = self._step_similar_exp_search(state)
-            state.memory_hits = self._memory_query.search(state.memory_queries)
+            state.extracted_protocols = self._step_paper_protocol_extract(state)
             state.add_log(
-                f"similar exp search completed with {len(state.memory_queries)} queries and "
-                f"{len(state.memory_hits)} memory hits"
+                f"paper protocol extract completed with {len(state.extracted_protocols)} protocols"
             )
+            if self._enable_memory:
+                state.memory_queries = self._step_similar_exp_search(state)
+                state.memory_hits = self._memory_query.search(state.memory_queries)
+                state.add_log(
+                    f"similar exp search completed with {len(state.memory_queries)} queries and "
+                    f"{len(state.memory_hits)} memory hits"
+                )
+            else:
+                state.memory_queries = []
+                state.memory_hits = []
+                state.add_log("memory disabled; skipped similar exp search")
 
             state.survey_report = self._step_survey_report_generate(state)
             stage_design = self._step_stage_design(state)
@@ -195,12 +354,1671 @@ class ResearchAgent(BaseAgent):
             state.add_log(state.route_message)
             return state
 
+    def _run_b2(self, state: ResearchAgentState) -> ResearchAgentState:
+        state.current_branch = "B2"
+        if not state.branch_history or state.branch_history[-1] != "B2":
+            state.branch_history.append("B2")
+        state.add_log("Entered B2 post_observation")
+
+        try:
+            observation = self._extract_observation_payload(state.event.payload)
+            if not observation:
+                raise ValueError("B2 requires an observation in event.payload")
+
+            if not state.current_stage or not state.stage_route:
+                raise ValueError("B2 requires previous stage context from B1/B2")
+
+            state.previous_macro_plan = self._extract_previous_macro_plan(state)
+            if self._is_device_feasibility_feedback(state.event.payload, observation):
+                observation = self._normalize_device_feasibility_observation(
+                    state,
+                    observation,
+                )
+
+            state.latest_observation = observation
+            state.observations.append(observation)
+            state.add_log(
+                "B2 received observation and previous macro plan with "
+                f"{len(state.previous_macro_plan)} steps"
+            )
+
+            if self._is_device_feasibility_observation(state.latest_observation):
+                fit_judge = self._heuristic_observation_stage_fit_judge(state)
+                state.observation_stage_fit = fit_judge
+                state.observation_interpretation = dict(
+                    fit_judge.get("observation_interpretation", {}) or {}
+                )
+                state.add_log(
+                    "device feasibility feedback uses deterministic fit judge and "
+                    "skips generic abnormal repair"
+                )
+                return self._run_b2_device_adaptation_path(state)
+
+            fit_judge = self._step_observation_stage_fit_judge(state)
+            state.observation_stage_fit = fit_judge
+            state.observation_interpretation = dict(
+                fit_judge.get("observation_interpretation", {}) or {}
+            )
+            state.add_log(
+                "observation stage fit judge completed with status="
+                f"{fit_judge.get('status')}"
+            )
+
+            if self._observation_fits_current_stage(fit_judge):
+                return self._run_b2_normal_path(state)
+
+            return self._run_b2_abnormal_path(state)
+
+        except Exception as exc:
+            logger.exception("B2 post_observation failed")
+            state.add_error(f"B2 post_observation failed: {exc}")
+            state.status = "manual_required"
+            state.current_branch = "B2"
+            state.next_branch = "B8"
+            state.route_message = "post_observation unresolved; manual intervention required"
+            state.add_log(state.route_message)
+            return state
+
+    def _run_b2_normal_path(self, state: ResearchAgentState) -> ResearchAgentState:
+        progress = self._step_stage_progress_update(state)
+        self._apply_stage_progress(state, progress)
+        state.post_observation_repair_path = "normal_progress"
+        state.add_log(
+            "stage progress update completed with status="
+            f"{state.stage_progress_status}"
+        )
+
+        if state.stage_progress_status == "closure_ready":
+            state.macro_plan = []
+            state.current_stage_plan = (
+                f"{state.current_stage_plan} 最新 observation 已支持当前 stage 收束。"
+            ).strip()
+        else:
+            macro_design = self._step_post_observation_macro_plan_design(state)
+            state.current_stage_plan = macro_design["current_stage_plan"]
+            state.macro_plan = macro_design["macro_plan"]
+
+        return self._complete_b2(state, "B2 post_observation completed on normal path")
+
+    def _run_b2_abnormal_path(self, state: ResearchAgentState) -> ResearchAgentState:
+        state.add_log("B2 detected abnormal or inconclusive observation; starting repair path")
+        query_queue = self._step_abnormal_observation_survey_query_generate(state)
+        accumulated_hits = list(state.knowledge_hits)
+        seen_queries = set()
+
+        for round_index in range(1, self._max_survey_rounds + 1):
+            query_queue = [query for query in query_queue if query not in seen_queries]
+            if not query_queue:
+                break
+            seen_queries.update(query_queue)
+
+            round_hits = self._knowledge_query.search(query_queue)
+            accumulated_hits = self._merge_hits(accumulated_hits, round_hits)
+            state.survey_rounds.append(
+                {
+                    "branch": "B2",
+                    "round": round_index,
+                    "queries": list(query_queue),
+                    "hit_titles": [hit.title for hit in round_hits],
+                }
+            )
+            state.add_log(
+                f"B2 abnormal survey round {round_index} produced {len(round_hits)} hits; "
+                f"{len(accumulated_hits)} unique hits accumulated"
+            )
+
+            expansion = self._step_abnormal_observation_survey_expansion(
+                state,
+                accumulated_hits,
+            )
+            if not expansion["continue_research"]:
+                break
+            query_queue = expansion["new_queries"]
+
+        state.knowledge_hits = accumulated_hits
+        if self._enable_memory:
+            abnormal_memory_queries = self._step_similar_abnormal_case_search(state)
+            state.memory_queries = self._clean_queries(
+                list(state.memory_queries) + abnormal_memory_queries
+            )
+            abnormal_memory_hits = self._memory_query.search(abnormal_memory_queries)
+            state.memory_hits = self._merge_hits(state.memory_hits, abnormal_memory_hits)
+            state.add_log(
+                f"similar abnormal case search completed with {len(abnormal_memory_queries)} "
+                f"queries and {len(abnormal_memory_hits)} new memory hits"
+            )
+        else:
+            state.memory_queries = []
+            state.memory_hits = []
+            state.add_log("memory disabled; skipped similar abnormal case search")
+
+        state.survey_report = self._step_post_observation_report_update(state)
+        state.add_log("post-observation report update completed")
+
+        if self._is_device_feasibility_observation(state.latest_observation):
+            return self._run_b2_device_adaptation_path(state)
+
+        internal_repair = self._step_stage_internal_repair_assess(state)
+        if internal_repair.get("repairable"):
+            updated_plan = str(internal_repair.get("updated_current_stage_plan", "")).strip()
+            if updated_plan:
+                state.current_stage_plan = updated_plan
+            state.stage_progress = {
+                "stage_progress_status": "repair_current_stage_plan",
+                "progress_summary": internal_repair.get("repair_reason", ""),
+            }
+            state.stage_progress_status = "repair_current_stage_plan"
+            state.post_observation_repair_path = "stage_internal"
+            macro_design = self._step_post_observation_macro_plan_design(state)
+            state.current_stage_plan = macro_design["current_stage_plan"]
+            state.macro_plan = macro_design["macro_plan"]
+            return self._complete_b2(
+                state,
+                "B2 post_observation completed with stage-internal repair",
+            )
+
+        current_stage_repair = self._step_current_stage_repair_assess(state)
+        if current_stage_repair.get("repairable"):
+            new_stage = str(current_stage_repair.get("current_stage", "")).strip()
+            if new_stage:
+                state.current_stage = new_stage
+                if new_stage not in state.stage_route:
+                    state.stage_route = [new_stage] + [
+                        stage for stage in state.stage_route if stage != new_stage
+                    ]
+            state.current_stage_reason = str(
+                current_stage_repair.get("current_stage_reason", "")
+                or current_stage_repair.get("repair_reason", "")
+            ).strip()
+            updated_plan = str(current_stage_repair.get("current_stage_plan", "")).strip()
+            if updated_plan:
+                state.current_stage_plan = updated_plan
+            state.stage_progress = {
+                "stage_progress_status": "repair_current_stage",
+                "progress_summary": current_stage_repair.get("repair_reason", ""),
+            }
+            state.stage_progress_status = "repair_current_stage"
+            state.post_observation_repair_path = "current_stage"
+            macro_design = self._step_post_observation_macro_plan_design(state)
+            state.current_stage_plan = macro_design["current_stage_plan"]
+            state.macro_plan = macro_design["macro_plan"]
+            return self._complete_b2(
+                state,
+                "B2 post_observation completed with current-stage repair",
+            )
+
+        route_repair = self._step_stage_route_repair_assess(state)
+        if route_repair.get("repairable"):
+            route = self._clean_queries(route_repair.get("stage_route", []))
+            if route:
+                state.stage_route = route
+            state.stage_route_reason = str(
+                route_repair.get("stage_route_reason", "")
+                or route_repair.get("repair_reason", "")
+            ).strip()
+            new_stage_design = self._step_new_route_stage_design(state)
+            state.current_stage = new_stage_design["current_stage"]
+            state.current_stage_reason = new_stage_design["current_stage_reason"]
+            state.current_stage_plan = new_stage_design["current_stage_plan"]
+            state.stage_progress = {
+                "stage_progress_status": "repair_stage_route",
+                "progress_summary": route_repair.get("repair_reason", ""),
+            }
+            state.stage_progress_status = "repair_stage_route"
+            state.post_observation_repair_path = "stage_route"
+            macro_design = self._step_post_observation_macro_plan_design(state)
+            state.current_stage_plan = macro_design["current_stage_plan"]
+            state.macro_plan = macro_design["macro_plan"]
+            return self._complete_b2(
+                state,
+                "B2 post_observation completed with stage-route repair",
+            )
+
+        state.post_observation_repair_path = "manual_handoff"
+        state.manual_handoff = self._step_manual_handoff_compose(
+            state,
+            [
+                internal_repair.get("repair_reason", ""),
+                current_stage_repair.get("repair_reason", ""),
+                route_repair.get("repair_reason", ""),
+            ],
+        )
+        state.status = "manual_required"
+        state.current_branch = "B2"
+        state.next_branch = "B8"
+        state.persistent_outputs = state.research_layer_internal_outputs()
+        state.device_adaptation_handoff = state.device_adaptation_external_handoff()
+        state.route_message = "B2 post_observation could not repair automatically"
+        state.add_log(state.route_message)
+        return state
+
+    def _run_b2_device_adaptation_path(
+        self,
+        state: ResearchAgentState,
+    ) -> ResearchAgentState:
+        original_stage = state.current_stage
+        original_stage_route = list(state.stage_route)
+        original_stage_plan = state.current_stage_plan
+        original_stage_reason = state.current_stage_reason
+        original_stage_route_reason = state.stage_route_reason
+
+        self._augment_device_adaptation_knowledge(state)
+        state.stage_progress = {
+            "stage_progress_status": "device_adaptation_repair",
+            "progress_summary": "设备适应层反馈当前 macro action 不能落地，本轮只允许 LLM 重写设备可执行 macro_plan。",
+        }
+        state.stage_progress_status = "device_adaptation_repair"
+        state.post_observation_repair_path = "device_adaptation"
+        state.add_log(
+            "device feasibility feedback routed to device_adaptation; preserving "
+            "current_stage, stage_route, target material, and observation point"
+        )
+
+        macro_design = self._step_device_adaptation_macro_plan_design(
+            state,
+            original_stage_plan,
+        )
+        state.current_stage = original_stage
+        state.stage_route = original_stage_route
+        state.current_stage_reason = original_stage_reason
+        state.stage_route_reason = original_stage_route_reason
+        state.current_stage_plan = self._device_adapted_current_stage_plan(
+            state,
+            original_stage_plan,
+        )
+        state.macro_plan = macro_design["macro_plan"]
+        return self._complete_b2(
+            state,
+            "B2 post_observation completed with device-adaptation repair",
+        )
+
+    def _augment_device_adaptation_knowledge(self, state: ResearchAgentState) -> None:
+        queries = self._clean_queries(
+            [
+                state.event.query,
+                state.current_stage,
+                f"{state.event.query} 常压 瓶内 合成",
+                f"{state.event.query} room temperature bottle synthesis",
+                f"{state.event.query} no autoclave synthesis",
+            ]
+        )
+        if not queries:
+            return
+
+        hits = self._knowledge_query.search(queries)
+        state.knowledge_hits = self._merge_hits(state.knowledge_hits, hits)
+        state.survey_rounds.append(
+            {
+                "branch": "B2",
+                "round": "device_adaptation",
+                "queries": queries,
+                "hit_titles": [hit.title for hit in hits],
+            }
+        )
+        state.add_log(
+            "device adaptation used existing knowledge hits plus targeted local search "
+            f"({len(hits)} new hits)"
+        )
+
+    def _complete_b2(self, state: ResearchAgentState, route_message: str) -> ResearchAgentState:
+        state.persistent_outputs = state.research_layer_internal_outputs()
+        state.device_adaptation_handoff = state.device_adaptation_external_handoff()
+        state.last_completed_branch = "B2"
+        state.current_branch = "B0"
+        state.next_branch = "B0"
+        if state.branch_history[-1] != "B0":
+            state.branch_history.append("B0")
+        state.status = "completed"
+        state.route_message = route_message
+        state.add_log(route_message)
+        return state
+
+    def _extract_observation_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not payload:
+            return {}
+
+        if self._payload_looks_like_device_feasibility_error(payload):
+            return dict(payload)
+
+        for key in ["observation", "latest_observation", "observation_event"]:
+            value = payload.get(key)
+            if isinstance(value, dict):
+                observation = dict(value)
+                for meta_key in [
+                    "feedback_type",
+                    "request",
+                    "status",
+                    "error_package",
+                    "terminal_package",
+                    "blocking_constraints",
+                    "verification_result",
+                    "verification_category",
+                    "supported_containers",
+                    "supported_workstations",
+                    "unsupported_containers",
+                    "unsupported_workstations",
+                    "device_capabilities",
+                ]:
+                    if meta_key in payload and meta_key not in observation:
+                        observation[meta_key] = payload[meta_key]
+                return observation
+            if isinstance(value, str) and value.strip():
+                return {"summary": value.strip()}
+
+        observation_keys = {
+            "summary",
+            "observation_type",
+            "metrics",
+            "signals",
+            "raw",
+            "result",
+            "status",
+            "notes",
+            "extracted_metrics",
+            "feedback_type",
+            "blocking_constraints",
+            "error_package",
+        }
+        if any(key in payload for key in observation_keys):
+            return dict(payload)
+
+        return {}
+
+    def _payload_looks_like_device_feasibility_error(
+        self,
+        payload: Dict[str, Any],
+    ) -> bool:
+        feedback_type = str(payload.get("feedback_type", "")).strip().lower()
+        if feedback_type in {"device_feasibility_error", "physical_infeasible"}:
+            return True
+        status = str(payload.get("status", "")).strip().lower()
+        if status in {"feasibility_error", "physical_infeasible"}:
+            return True
+        error_package = payload.get("error_package")
+        if isinstance(error_package, dict):
+            error_type = str(error_package.get("type", "")).strip().lower()
+            if error_type in {"physical_infeasible", "device_feasibility_error"}:
+                return True
+        return False
+
+    def _is_device_feasibility_feedback(
+        self,
+        payload: Dict[str, Any],
+        observation: Dict[str, Any],
+    ) -> bool:
+        if self._payload_looks_like_device_feasibility_error(payload):
+            return True
+        if self._payload_looks_like_device_feasibility_error(observation):
+            return True
+        text = json.dumps(
+            {"payload": payload, "observation": observation},
+            ensure_ascii=False,
+        ).lower()
+        return any(
+            term in text
+            for term in [
+                "device_feasibility_error",
+                "physical_infeasible",
+                "feasibility_error",
+                "设备不可执行",
+                "设备不支持",
+                "当前设备层不支持",
+                "无法执行",
+                "没有反应釜",
+                "没有高压釜",
+            ]
+        )
+
+    def _normalize_device_feasibility_observation(
+        self,
+        state: ResearchAgentState,
+        observation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = dict(state.event.payload or {})
+        raw_feedback = dict(observation or {})
+        error_package = self._first_dict(
+            raw_feedback.get("error_package"),
+            payload.get("error_package"),
+            (payload.get("terminal_package") or {}).get("error_package")
+            if isinstance(payload.get("terminal_package"), dict)
+            else None,
+        )
+        blocking_reasons = self._extract_device_blocking_reasons(
+            payload,
+            raw_feedback,
+            error_package,
+        )
+        supported_containers = self._extract_device_capability_list(
+            "supported_containers",
+            raw_feedback,
+            payload,
+        )
+        supported_workstations = self._extract_device_capability_list(
+            "supported_workstations",
+            raw_feedback,
+            payload,
+        )
+        not_supported = self._extract_device_capability_list(
+            "not_supported",
+            raw_feedback,
+            payload,
+        )
+        if not supported_containers:
+            supported_containers = ["进样瓶", "西林瓶", "50ml耐热瓶", "留样瓶"]
+        if not supported_workstations:
+            supported_workstations = [
+                "物料站",
+                "固体进样工作站",
+                "液体进样站",
+                "磁力搅拌工作站",
+                "纯化工作站",
+                "超声清洗工作站",
+                "烘干机",
+                "双工位电化学工作站",
+                "电化学存储工作站",
+            ]
+
+        unsupported_items = self._extract_unsupported_device_items(
+            blocking_reasons,
+            raw_feedback,
+            payload,
+        )
+        summary = (
+            "设备适应层返回 feasibility_error：当前设备层不支持上一段 macro action 的执行。"
+            f"主要原因：{'；'.join(blocking_reasons) if blocking_reasons else '设备层未给出具体原因'}。"
+        )
+        return {
+            "feedback_type": "device_feasibility_error",
+            "device_layer_supported": False,
+            "device_layer_status": "unsupported",
+            "summary": summary,
+            "unsupported_reasons": blocking_reasons,
+            "blocking_constraints": blocking_reasons,
+            "unsupported_requested_items": unsupported_items,
+            "supported_device_capabilities": {
+                "supported_containers": supported_containers,
+                "supported_workstations": supported_workstations,
+                "not_supported": not_supported,
+            },
+            "device_error_package": error_package,
+            "previous_stage_context": {
+                "stage_route": state.stage_route,
+                "current_stage": state.current_stage,
+                "current_stage_plan": state.current_stage_plan,
+                "stage_route_reason": state.stage_route_reason,
+                "current_stage_reason": state.current_stage_reason,
+            },
+            "previous_macro_action": state.previous_macro_plan,
+            "prior_paper_hits": self._summarize_knowledge_hits_for_feedback(
+                state.knowledge_hits
+            ),
+            "request": str(
+                raw_feedback.get("request")
+                or payload.get("request")
+                or "请在当前设备层支持的容器和工作站范围内重新规划 macro_plan。"
+            ).strip(),
+            "raw_device_feedback": self._truncate_context_value(
+                {
+                    "payload": payload,
+                    "observation": raw_feedback,
+                },
+                max_chars=1600,
+            ),
+        }
+
+    def _first_dict(self, *values: Any) -> Dict[str, Any]:
+        for value in values:
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    def _extract_device_capability_list(
+        self,
+        key: str,
+        observation: Dict[str, Any],
+        payload: Dict[str, Any],
+    ) -> List[str]:
+        candidates: List[Any] = [
+            observation.get(key),
+            payload.get(key),
+        ]
+        for source in [observation.get("device_capabilities"), payload.get("device_capabilities")]:
+            if isinstance(source, dict):
+                candidates.append(source.get(key))
+
+        for candidate in candidates:
+            cleaned = self._clean_queries(candidate or [])
+            if cleaned:
+                return cleaned
+        return []
+
+    def _extract_device_blocking_reasons(
+        self,
+        payload: Dict[str, Any],
+        observation: Dict[str, Any],
+        error_package: Dict[str, Any],
+    ) -> List[str]:
+        candidates: List[Any] = []
+        for source in [observation, payload, error_package]:
+            if not isinstance(source, dict):
+                continue
+            candidates.extend(
+                [
+                    source.get("blocking_constraints"),
+                    source.get("unsupported_reasons"),
+                    source.get("reasons"),
+                    source.get("message"),
+                    source.get("verification_suggestion"),
+                ]
+            )
+        if isinstance(payload.get("terminal_package"), dict):
+            terminal_error = payload["terminal_package"].get("error_package")
+            if isinstance(terminal_error, dict):
+                candidates.extend(
+                    [
+                        terminal_error.get("blocking_constraints"),
+                        terminal_error.get("message"),
+                    ]
+                )
+
+        reasons: List[str] = []
+        for candidate in candidates:
+            if isinstance(candidate, list):
+                reasons.extend(str(item).strip() for item in candidate if str(item).strip())
+            elif isinstance(candidate, str) and candidate.strip():
+                reasons.append(candidate.strip())
+        return self._clean_queries(reasons)
+
+    def _extract_unsupported_device_items(
+        self,
+        blocking_reasons: Sequence[str],
+        observation: Dict[str, Any],
+        payload: Dict[str, Any],
+    ) -> List[str]:
+        explicit_items = self._clean_queries(
+            observation.get("unsupported_requested_items", [])
+            or payload.get("unsupported_requested_items", [])
+            or observation.get("unsupported_containers", [])
+            or payload.get("unsupported_containers", [])
+            or observation.get("unsupported_workstations", [])
+            or payload.get("unsupported_workstations", [])
+        )
+        if explicit_items:
+            return explicit_items
+
+        text = " ".join(blocking_reasons).lower()
+        item_patterns = [
+            ("反应釜", ["反应釜", "高压釜", "autoclave", "聚四氟乙烯内衬"]),
+            ("高压/密闭溶剂热工作站", ["溶剂热", "solvothermal", "sealed reactor"]),
+            ("XRD 工作站", ["xrd 工作站", "xrd workstation"]),
+            ("pH 自动检测/闭环调节", ["ph", "pH", "传感器", "闭环"]),
+        ]
+        items = [
+            label
+            for label, keywords in item_patterns
+            if any(keyword.lower() in text for keyword in keywords)
+        ]
+        return self._clean_queries(items)
+
+    def _summarize_knowledge_hits_for_feedback(
+        self,
+        hits: Sequence[SearchHit],
+    ) -> List[Dict[str, Any]]:
+        summarized: List[Dict[str, Any]] = []
+        for hit in hits[:3]:
+            summarized.append(
+                {
+                    "title": hit.title,
+                    "file_path": hit.file_path,
+                    "score": hit.score,
+                    "problem": hit.problem,
+                    "synthesis_summary": self._truncate_context_value(
+                        hit.synthesis_summary,
+                        max_chars=500,
+                    ),
+                    "experiment_details": self._truncate_context_value(
+                        hit.experiment_details,
+                        max_chars=700,
+                    ),
+                    "steps": self._truncate_context_value(hit.steps, max_chars=500),
+                }
+            )
+        return summarized
+
+    def _extract_previous_macro_plan(self, state: ResearchAgentState) -> List[Dict[str, Any]]:
+        payload_plan = state.event.payload.get("previous_macro_plan")
+        if isinstance(payload_plan, list):
+            return self._normalize_macro_plan(payload_plan)
+        return self._normalize_macro_plan(state.macro_plan)
+
+    def _observation_fits_current_stage(self, fit_judge: Dict[str, Any]) -> bool:
+        if not bool(fit_judge.get("fits_current_stage")):
+            return False
+        return str(fit_judge.get("status", "")).strip().lower() != "abnormal"
+
+    def _observation_text(self, state: ResearchAgentState) -> str:
+        return json.dumps(state.latest_observation, ensure_ascii=False).lower()
+
+    def _stage_context_json(self, state: ResearchAgentState) -> Dict[str, Any]:
+        return {
+            "query": state.event.query,
+            "observation": state.latest_observation,
+            "previous_macro_plan": state.previous_macro_plan,
+            "current_stage": state.current_stage,
+            "current_stage_plan": state.current_stage_plan,
+            "stage_route": state.stage_route,
+            "stage_route_reason": state.stage_route_reason,
+            "current_stage_reason": state.current_stage_reason,
+            "survey_report": state.survey_report,
+            "fit_judge": state.observation_stage_fit,
+        }
+
+    def _raise_llm_step_failure(
+        self,
+        state: ResearchAgentState,
+        step_name: str,
+        reason: Any,
+    ) -> None:
+        message = f"{step_name} LLM failed without fallback: {reason}"
+        state.add_log(message)
+        raise RuntimeError(message)
+
+    def _step_observation_stage_fit_judge(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "observation_stage_fit_judge",
+                    OBSERVATION_STAGE_FIT_JUDGE_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_plan=state.current_stage_plan,
+                        current_stage_reason=state.current_stage_reason,
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["observation_stage_fit_judge"] = result
+                return self._normalize_fit_judge(result)
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("observation stage fit judge failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "observation_stage_fit_judge",
+                    exc,
+                )
+
+        return self._heuristic_observation_stage_fit_judge(state)
+
+    def _step_stage_progress_update(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "stage_progress_update",
+                    STAGE_PROGRESS_UPDATE_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        current_stage_plan=state.current_stage_plan,
+                        stage_route_reason=state.stage_route_reason,
+                        current_stage_reason=state.current_stage_reason,
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["stage_progress_update"] = result
+                return self._normalize_stage_progress(result, state)
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("stage progress update failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "stage_progress_update",
+                    exc,
+                )
+
+        return self._heuristic_stage_progress_update(state)
+
+    def _step_post_observation_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
+        reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "post_observation_macro_plan_design",
+                    POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_plan=state.current_stage_plan,
+                        stage_route_reason=state.stage_route_reason,
+                        current_stage_reason=state.current_stage_reason,
+                        reference_context=reference_context or "当前没有可用参考案例",
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["post_observation_macro_plan_design"] = result
+                macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
+                if macro_plan:
+                    current_stage_plan = str(result.get("current_stage_plan", "")).strip()
+                    quality_issues = self._macro_plan_quality_issues(
+                        macro_plan,
+                        state.event.query,
+                    )
+                    if quality_issues:
+                        raise ValueError(
+                            "post-observation macro plan quality check failed: "
+                            + "; ".join(quality_issues[:5])
+                        )
+                    return {
+                        "current_stage_plan": current_stage_plan or state.current_stage_plan,
+                        "macro_plan": macro_plan,
+                    }
+                self._raise_llm_step_failure(
+                    state,
+                    "post_observation_macro_plan_design",
+                    "LLM returned empty macro_plan",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("post-observation macro plan failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "post_observation_macro_plan_design",
+                    exc,
+                )
+
+        return self._heuristic_post_observation_macro_plan_design(state)
+
+    def _step_device_adaptation_macro_plan_design(
+        self,
+        state: ResearchAgentState,
+        original_stage_plan: str,
+    ) -> Dict[str, Any]:
+        reference_context = self._format_device_adaptation_reference_context(
+            state.knowledge_hits[:2]
+        )
+        observation_context = self._compact_device_adaptation_observation(
+            state.latest_observation
+        )
+        survey_context = self._compact_device_adaptation_survey_report(
+            state.survey_report
+        )
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "device_adaptation_macro_plan_design",
+                    DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            observation_context, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            survey_context, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_plan=original_stage_plan,
+                        stage_route_reason=state.stage_route_reason,
+                        current_stage_reason=state.current_stage_reason,
+                        reference_context=reference_context or "当前没有可用参考案例",
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["device_adaptation_macro_plan_design"] = result
+                macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
+                if macro_plan:
+                    quality_issues = self._macro_plan_quality_issues(
+                        macro_plan,
+                        state.event.query,
+                    )
+                    device_issues = self._device_adaptation_macro_plan_issues(
+                        state,
+                        macro_plan,
+                    )
+                    if quality_issues or device_issues:
+                        raise ValueError(
+                            "device-adaptation macro plan quality check failed: "
+                            + "; ".join((quality_issues + device_issues)[:6])
+                        )
+                    return {
+                        "current_stage_plan": self._device_adapted_current_stage_plan(
+                            state,
+                            original_stage_plan,
+                        ),
+                        "macro_plan": macro_plan,
+                    }
+                self._raise_llm_step_failure(
+                    state,
+                    "device_adaptation_macro_plan_design",
+                    "LLM returned empty macro_plan",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning(
+                    "device-adaptation macro plan failed: %s",
+                    exc,
+                )
+                self._raise_llm_step_failure(
+                    state,
+                    "device_adaptation_macro_plan_design",
+                    exc,
+                )
+
+        return self._device_feasible_repair_design_for_non_llm_mode(
+            state,
+            original_stage_plan,
+        )
+
+    def _compact_device_adaptation_observation(
+        self,
+        observation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        capabilities = observation.get("supported_device_capabilities", {})
+        compact = {
+            "feedback_type": observation.get("feedback_type"),
+            "device_layer_supported": observation.get("device_layer_supported"),
+            "summary": self._short_observation_summary(observation, max_chars=500),
+            "unsupported_reasons": self._clean_queries(
+                observation.get("unsupported_reasons", [])
+                or observation.get("blocking_constraints", [])
+            )[:8],
+            "unsupported_requested_items": self._clean_queries(
+                observation.get("unsupported_requested_items", [])
+            )[:8],
+            "supported_device_capabilities": capabilities
+            if isinstance(capabilities, dict)
+            else {},
+            "previous_stage_context": observation.get("previous_stage_context", {}),
+            "request": observation.get("request", ""),
+        }
+        return self._truncate_context_value(compact, max_chars=800)
+
+    def _compact_device_adaptation_survey_report(
+        self,
+        survey_report: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return self._truncate_context_value(
+            {
+                "summary": survey_report.get("summary", ""),
+                "key_findings": self._clean_queries(survey_report.get("key_findings", []))[:5],
+                "candidate_precedents": self._clean_queries(
+                    survey_report.get("candidate_precedents", [])
+                )[:3],
+                "route_implications": self._clean_queries(
+                    survey_report.get("route_implications", [])
+                )[:5],
+            },
+            max_chars=700,
+        )
+
+    def _device_feasible_repair_design_for_non_llm_mode(
+        self,
+        state: ResearchAgentState,
+        original_stage_plan: str,
+    ) -> Dict[str, Any]:
+        macro_plan = self._device_feasible_repair_macro_plan(
+            state,
+            self._infer_target_material(state.event.query),
+        )
+        macro_plan = self._ensure_device_adaptation_observation_step(
+            state,
+            self._normalize_macro_plan(macro_plan),
+        )
+        return {
+            "current_stage_plan": self._device_adapted_current_stage_plan(
+                state,
+                original_stage_plan,
+            ),
+            "macro_plan": macro_plan,
+        }
+
+    def _device_adapted_current_stage_plan(
+        self,
+        state: ResearchAgentState,
+        original_stage_plan: str,
+    ) -> str:
+        observation = state.latest_observation
+        reasons = self._clean_queries(
+            observation.get("unsupported_reasons", [])
+            or observation.get("blocking_constraints", [])
+        )
+        capabilities = observation.get("supported_device_capabilities", {})
+        supported_containers: List[str] = []
+        supported_workstations: List[str] = []
+        if isinstance(capabilities, dict):
+            supported_containers = self._clean_queries(
+                capabilities.get("supported_containers", [])
+            )
+            supported_workstations = self._clean_queries(
+                capabilities.get("supported_workstations", [])
+            )
+
+        note = (
+            "设备适配说明：本轮 B2 只修复 macro action 的设备可执行性，"
+            "不改变当前 stage、stage_route、合成目标、目标物相或目标 observation point。"
+            f"原始 query/目标语义保持为：{state.event.query}。"
+            f"设备层拒绝原因：{'；'.join(reasons) if reasons else '未给出具体原因'}。"
+            f"可用容器：{'、'.join(supported_containers) if supported_containers else '未明确'}；"
+            f"可用工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}。"
+            "若当前设备层不能执行 XRD，则 XRD 保留为离线 observation/送样/数据回传；"
+            "不能用颜色、质量或浑浊度替代 XRD completion condition。"
+        )
+        return f"{original_stage_plan.strip()} {note}".strip()
+
+    def _ensure_device_adaptation_observation_step(
+        self,
+        state: ResearchAgentState,
+        macro_plan: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        observations = self._infer_observation_points(state.event.query, state.survey_report)
+        if "XRD" not in observations:
+            return self._normalize_macro_plan(macro_plan)
+
+        normalized = self._normalize_macro_plan(macro_plan)
+        has_xrd = False
+        xrd_steps_seen = 0
+        deduped: List[Dict[str, Any]] = []
+        for step in normalized:
+            step_blob = " ".join(
+                [
+                    str(step.get("操作", "")),
+                    str(step.get("试剂/对象", "")),
+                    str(step.get("参数", "")),
+                ]
+            ).lower()
+            is_xrd_step = "xrd" in step_blob or "pxrd" in step_blob
+            if not is_xrd_step:
+                deduped.append(step)
+                continue
+            has_xrd = True
+            xrd_steps_seen += 1
+            if xrd_steps_seen > 1:
+                continue
+            step["操作"] = "离线 XRD observation 与数据回传"
+            step["试剂/对象"] = "干燥后的目标样品粉末、外部 XRD/PXRD 表征平台"
+            step["参数"] = (
+                "将设备工作流得到的干燥粉末作为离线送样样品；采集粉末 XRD/PXRD 图谱，"
+                "与 K2Fe[Fe(CN)6]·2H2O 或文献 Fe-HCF 参考峰对比，判断是否达到当前 stage 的目标 observation point。"
+                "该步骤为离线 observation/handoff，不由当前设备层工作站执行。"
+            )
+            deduped.append(step)
+
+        normalized = deduped
+
+        if has_xrd and not self._has_real_drying_step(normalized):
+            insert_at = max(0, len(normalized) - 1)
+            normalized.insert(
+                insert_at,
+                {
+                    "步骤序号": insert_at + 1,
+                    "操作": "烘干机低温干燥",
+                    "试剂/对象": "洗涤后的目标样品湿沉淀、进样瓶、烘干机",
+                    "参数": "将保留的湿沉淀置于进样瓶中，在烘干机 60 C 常压干燥 720 min，得到可送样的干燥粉末。",
+                },
+            )
+
+        if not has_xrd:
+            if not self._has_real_drying_step(normalized):
+                normalized.append(
+                    {
+                        "步骤序号": len(normalized) + 1,
+                        "操作": "烘干机低温干燥",
+                        "试剂/对象": "洗涤后的目标样品湿沉淀、进样瓶、烘干机",
+                        "参数": "将保留的湿沉淀置于进样瓶中，在烘干机 60 C 常压干燥 720 min，得到可送样的干燥粉末。",
+                    }
+                )
+            normalized.append(
+                {
+                    "步骤序号": len(normalized) + 1,
+                    "操作": "离线 XRD observation 与数据回传",
+                    "试剂/对象": "干燥后的目标样品粉末、外部 XRD/PXRD 表征平台",
+                    "参数": (
+                        "将设备工作流得到的干燥粉末作为离线送样样品；采集粉末 XRD/PXRD 图谱，"
+                        "与 K2Fe[Fe(CN)6]·2H2O 或文献 Fe-HCF 参考峰对比，判断是否达到当前 stage 的目标 observation point。"
+                        "该步骤为离线 observation/handoff，不由当前设备层工作站执行。"
+                    ),
+                }
+            )
+
+        return self._normalize_macro_plan(normalized)
+
+    def _has_real_drying_step(self, macro_plan: Sequence[Dict[str, Any]]) -> bool:
+        for step in macro_plan:
+            operation = str(step.get("操作", ""))
+            target = str(step.get("试剂/对象", ""))
+            parameters = str(step.get("参数", ""))
+            step_blob = f"{operation} {target} {parameters}".lower()
+            if "xrd" in step_blob or "pxrd" in step_blob:
+                continue
+            if any(term in step_blob for term in ["干燥", "烘干", "dry"]):
+                return True
+        return False
+
+    def _device_adaptation_macro_plan_issues(
+        self,
+        state: ResearchAgentState,
+        macro_plan: List[Dict[str, Any]],
+    ) -> List[str]:
+        plan_blob = json.dumps(macro_plan, ensure_ascii=False).lower()
+        observation_blob = self._observation_text(state)
+        issues: List[str] = []
+
+        if any(
+            term in observation_blob
+            for term in ["反应釜", "高压釜", "聚四氟", "autoclave", "solvothermal", "溶剂热"]
+        ):
+            blocked_terms = ["反应釜", "高压釜", "聚四氟", "autoclave", "solvothermal"]
+            repeated = [term for term in blocked_terms if term.lower() in plan_blob]
+            for step in macro_plan:
+                step_blob = " ".join(
+                    [
+                        str(step.get("操作", "")),
+                        str(step.get("试剂/对象", "")),
+                        str(step.get("参数", "")),
+                    ]
+                )
+                if "溶剂热" not in step_blob:
+                    continue
+                if any(marker in step_blob for marker in ["替代", "不使用", "删除", "上一版", "上一段"]):
+                    continue
+                repeated.append("溶剂热")
+            if repeated:
+                issues.append(
+                    "macro_plan repeats device-blocked reactor/solvothermal terms: "
+                    + ", ".join(repeated[:4])
+                )
+
+        if "xrd" in observation_blob and "xrd 工作站" in plan_blob:
+            issues.append("macro_plan uses XRD workstation instead of offline XRD handoff")
+
+        if "xrd" in plan_blob and not self._has_real_drying_step(macro_plan):
+            issues.append("macro_plan has offline XRD handoff but no real drying step before XRD")
+
+        if "真空干燥箱" in observation_blob and "真空干燥箱" in plan_blob:
+            issues.append("macro_plan repeats unsupported vacuum drying cabinet")
+
+        if "current_stage" in plan_blob or "stage_route" in plan_blob:
+            issues.append("macro_plan should contain executable lab steps, not stage metadata")
+
+        if ("纯化" in plan_blob or "离心" in plan_blob) and (
+            "烘干" in plan_blob or "干燥" in plan_blob
+        ):
+            drying_after_purification = False
+            saw_purification = False
+            has_open_before_drying = False
+            for step in macro_plan:
+                step_blob = " ".join(
+                    [
+                        str(step.get("操作", "")),
+                        str(step.get("试剂/对象", "")),
+                        str(step.get("参数", "")),
+                    ]
+                )
+                if "纯化" in step_blob or "离心" in step_blob:
+                    saw_purification = True
+                if saw_purification and ("开盖" in step_blob or "盖子打开" in step_blob):
+                    has_open_before_drying = True
+                if saw_purification and ("烘干" in step_blob or "干燥" in step_blob):
+                    drying_after_purification = True
+                    break
+            if drying_after_purification and not has_open_before_drying:
+                issues.append("macro_plan dries after purification without an explicit uncapping step")
+
+        if "液体进样" in plan_blob or "加液" in plan_blob:
+            has_add_liquid = any(
+                "加液" in " ".join(
+                    [
+                        str(step.get("操作", "")),
+                        str(step.get("试剂/对象", "")),
+                        str(step.get("参数", "")),
+                    ]
+                )
+                for step in macro_plan
+            )
+            if has_add_liquid and "开盖" not in plan_blob:
+                issues.append("macro_plan adds liquid without an explicit uncapping step")
+            if has_add_liquid and "关盖" not in plan_blob:
+                issues.append("macro_plan adds liquid without an explicit capping step")
+
+        if "磁力搅拌" in plan_blob or "搅拌工作站" in plan_blob:
+            for step in macro_plan:
+                step_blob = " ".join(
+                    [
+                        str(step.get("操作", "")),
+                        str(step.get("试剂/对象", "")),
+                        str(step.get("参数", "")),
+                    ]
+                ).lower()
+                if ("磁力搅拌" in step_blob or "搅拌工作站" in step_blob) and (
+                    "50ml耐热瓶" in step_blob or "50ml 耐热瓶" in step_blob
+                ):
+                    issues.append("macro_plan uses 50ml heat-resistant bottle for magnetic stirring")
+                    break
+
+        unsupported_closure_terms = [
+            "观察深蓝",
+            "观察颜色",
+            "观察浑浊",
+            "洗涤至",
+            "洗至",
+            "上清液接近无色",
+            "上清液基本无色",
+            "直至上清",
+            "缓慢滴加",
+            "控速滴加",
+            "同步搅拌",
+        ]
+        repeated_closure_terms = [
+            term for term in unsupported_closure_terms if term.lower() in plan_blob
+        ]
+        if repeated_closure_terms:
+            issues.append(
+                "macro_plan repeats device-unsupported conditional/closed-loop terms: "
+                + ", ".join(repeated_closure_terms[:5])
+            )
+
+        return issues
+
+    def _step_abnormal_observation_survey_query_generate(
+        self,
+        state: ResearchAgentState,
+    ) -> List[str]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "abnormal_observation_survey_query_generate",
+                    ABNORMAL_OBSERVATION_SURVEY_QUERY_GENERATE_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_plan=state.current_stage_plan,
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["abnormal_observation_survey_query_generate"] = result
+                queries = self._clean_queries(result.get("queries", []))
+                if queries:
+                    return queries
+                self._raise_llm_step_failure(
+                    state,
+                    "abnormal_observation_survey_query_generate",
+                    "LLM returned no usable queries",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("abnormal survey query generate failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "abnormal_observation_survey_query_generate",
+                    exc,
+                )
+
+        return self._heuristic_abnormal_observation_queries(state)
+
+    def _step_abnormal_observation_survey_expansion(
+        self,
+        state: ResearchAgentState,
+        accumulated_hits: Sequence[SearchHit],
+    ) -> Dict[str, Any]:
+        knowledge_context = self._knowledge_query.format_context(accumulated_hits)
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "abnormal_observation_survey_expansion",
+                    ABNORMAL_OBSERVATION_SURVEY_EXPANSION_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        knowledge_context=knowledge_context or "当前没有命中结果",
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs.setdefault(
+                    "abnormal_observation_survey_expansion", []
+                ).append(result)
+                return {
+                    "continue_research": bool(result.get("continue_research")),
+                    "new_queries": self._clean_queries(result.get("new_queries", [])),
+                    "reason": result.get("reason", ""),
+                }
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("abnormal survey expansion failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "abnormal_observation_survey_expansion",
+                    exc,
+                )
+
+        return {
+            "continue_research": False,
+            "new_queries": [],
+            "reason": "已有增量知识足以进入保守修复判断。",
+        }
+
+    def _step_similar_abnormal_case_search(self, state: ResearchAgentState) -> List[str]:
+        knowledge_context = self._knowledge_query.format_context(state.knowledge_hits[:5])
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "similar_abnormal_case_search",
+                    SIMILAR_ABNORMAL_CASE_SEARCH_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        knowledge_context=knowledge_context or "当前没有命中结果",
+                        current_stage=state.current_stage,
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["similar_abnormal_case_search"] = result
+                queries = self._clean_queries(result.get("queries", []))
+                if queries:
+                    return queries
+                self._raise_llm_step_failure(
+                    state,
+                    "similar_abnormal_case_search",
+                    "LLM returned no usable queries",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("similar abnormal case search failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "similar_abnormal_case_search",
+                    exc,
+                )
+
+        return self._heuristic_similar_abnormal_queries(state)
+
+    def _step_post_observation_report_update(self, state: ResearchAgentState) -> Dict[str, Any]:
+        knowledge_context = self._knowledge_query.format_context(state.knowledge_hits[:5])
+        memory_context = self._memory_query.format_context(state.memory_hits[:3])
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "post_observation_report_update",
+                    POST_OBSERVATION_REPORT_UPDATE_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        knowledge_context=knowledge_context or "当前没有增量知识命中",
+                        memory_context=memory_context or "当前没有历史异常案例命中",
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["post_observation_report_update"] = result
+                if result.get("summary"):
+                    return result
+                self._raise_llm_step_failure(
+                    state,
+                    "post_observation_report_update",
+                    "LLM returned no summary",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("post observation report update failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "post_observation_report_update",
+                    exc,
+                )
+
+        return self._heuristic_post_observation_report_update(state)
+
+    def _step_stage_internal_repair_assess(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "stage_internal_repair_assess",
+                    STAGE_INTERNAL_REPAIR_ASSESS_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_reason=state.current_stage_reason,
+                        current_stage_plan=state.current_stage_plan,
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["stage_internal_repair_assess"] = result
+                return {
+                    "repairable": bool(result.get("repairable")),
+                    "updated_current_stage_plan": str(
+                        result.get("updated_current_stage_plan", "")
+                    ).strip(),
+                    "repair_reason": str(result.get("repair_reason", "")).strip(),
+                }
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("stage internal repair assess failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "stage_internal_repair_assess",
+                    exc,
+                )
+
+        return self._heuristic_stage_internal_repair_assess(state)
+
+    def _step_current_stage_repair_assess(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "current_stage_repair_assess",
+                    CURRENT_STAGE_REPAIR_ASSESS_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_reason=state.current_stage_reason,
+                        current_stage_plan=state.current_stage_plan,
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_reason=state.stage_route_reason,
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["current_stage_repair_assess"] = result
+                return result
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("current stage repair assess failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "current_stage_repair_assess",
+                    exc,
+                )
+
+        return self._heuristic_current_stage_repair_assess(state)
+
+    def _step_stage_route_repair_assess(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "stage_route_repair_assess",
+                    STAGE_ROUTE_REPAIR_ASSESS_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_reason=state.current_stage_reason,
+                        current_stage_plan=state.current_stage_plan,
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_reason=state.stage_route_reason,
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["stage_route_repair_assess"] = result
+                return result
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("stage route repair assess failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "stage_route_repair_assess",
+                    exc,
+                )
+
+        return self._heuristic_stage_route_repair_assess(state)
+
+    def _step_new_route_stage_design(self, state: ResearchAgentState) -> Dict[str, Any]:
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "new_route_stage_design",
+                    NEW_ROUTE_STAGE_DESIGN_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_reason=state.stage_route_reason,
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["new_route_stage_design"] = result
+                current_stage = str(result.get("current_stage", "")).strip()
+                if current_stage and current_stage in state.stage_route:
+                    return {
+                        "current_stage": current_stage,
+                        "current_stage_reason": str(
+                            result.get("current_stage_reason", "")
+                        ).strip(),
+                        "current_stage_plan": str(
+                            result.get("current_stage_plan", "")
+                        ).strip(),
+                    }
+                self._raise_llm_step_failure(
+                    state,
+                    "new_route_stage_design",
+                    "LLM returned invalid current_stage",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("new route stage design failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "new_route_stage_design",
+                    exc,
+                )
+
+        current_stage = state.stage_route[0] if state.stage_route else state.current_stage
+        return {
+            "current_stage": current_stage,
+            "current_stage_reason": "根据异常 observation 更新 stage_route 后，从新路线的首个观察点重新进入。",
+            "current_stage_plan": (
+                f"当前 stage 为 {current_stage}。根据最新 observation 重新建立到该观察点的"
+                "完整化学语义实验计划，优先验证异常原因并保留可复用的已验证前缀。"
+            ),
+        }
+
+    def _step_manual_handoff_compose(
+        self,
+        state: ResearchAgentState,
+        repair_failures: Sequence[str],
+    ) -> str:
+        cleaned_failures = [item for item in repair_failures if item]
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "manual_handoff_compose",
+                    MANUAL_HANDOFF_COMPOSE_PROMPT.format(
+                        query=state.event.query,
+                        observation_json=json.dumps(
+                            state.latest_observation, ensure_ascii=False, indent=2
+                        ),
+                        current_stage=state.current_stage,
+                        current_stage_reason=state.current_stage_reason,
+                        stage_route_json=json.dumps(
+                            state.stage_route, ensure_ascii=False, indent=2
+                        ),
+                        stage_route_reason=state.stage_route_reason,
+                        current_stage_plan=state.current_stage_plan,
+                        previous_macro_plan_json=json.dumps(
+                            state.previous_macro_plan, ensure_ascii=False, indent=2
+                        ),
+                        survey_report_json=json.dumps(
+                            state.survey_report, ensure_ascii=False, indent=2
+                        ),
+                        fit_judge_json=json.dumps(
+                            state.observation_stage_fit, ensure_ascii=False, indent=2
+                        ),
+                        repair_failures_json=json.dumps(
+                            cleaned_failures, ensure_ascii=False, indent=2
+                        ),
+                    ),
+                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                )
+                state.raw_llm_outputs["manual_handoff_compose"] = result
+                handoff = str(result.get("manual_handoff", "")).strip()
+                if handoff:
+                    return handoff
+                self._raise_llm_step_failure(
+                    state,
+                    "manual_handoff_compose",
+                    "LLM returned empty manual_handoff",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("manual handoff compose failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "manual_handoff_compose",
+                    exc,
+                )
+
+        observation_summary = self._short_observation_summary(state.latest_observation)
+        return (
+            f"最新 observation（{observation_summary}）无法由 B2 自动修复。"
+            f"当前 stage={state.current_stage}；已尝试 stage 内部、当前 stage、stage route 三层修复。"
+            f"失败原因：{'；'.join(cleaned_failures) if cleaned_failures else '自动判断置信不足'}。"
+            "建议人工优先核查 observation 是否有效、样品是否对应上一段 macro plan、以及是否需要改写目标 observation point。"
+        )
+
+    def _apply_stage_progress(
+        self,
+        state: ResearchAgentState,
+        progress: Dict[str, Any],
+    ) -> None:
+        route = self._clean_queries(progress.get("stage_route", state.stage_route))
+        if route:
+            state.stage_route = route
+
+        current_stage = str(progress.get("current_stage", "")).strip()
+        if current_stage:
+            state.current_stage = current_stage
+            if current_stage not in state.stage_route:
+                state.stage_route = [current_stage] + [
+                    stage for stage in state.stage_route if stage != current_stage
+                ]
+
+        state.stage_route_reason = str(
+            progress.get("stage_route_reason", state.stage_route_reason)
+        ).strip()
+        state.current_stage_reason = str(
+            progress.get("current_stage_reason", state.current_stage_reason)
+        ).strip()
+        current_stage_plan = str(progress.get("current_stage_plan", "")).strip()
+        if current_stage_plan:
+            state.current_stage_plan = current_stage_plan
+
+        status = str(
+            progress.get("stage_progress_status", "continue_current_stage")
+        ).strip()
+        state.stage_progress_status = status or "continue_current_stage"
+        state.stage_progress = {
+            "stage_progress_status": state.stage_progress_status,
+            "progress_summary": str(progress.get("progress_summary", "")).strip(),
+        }
+
     def _step_survey_query_generate(self, state: ResearchAgentState) -> List[str]:
         constraints_json = json.dumps(state.event.constraints, ensure_ascii=False, indent=2)
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "survey_query_generate",
                     SURVEY_QUERY_GENERATE_PROMPT.format(
                         query=state.event.query,
                         constraints_json=constraints_json,
@@ -210,11 +2028,901 @@ class ResearchAgent(BaseAgent):
                 queries = self._clean_queries(result.get("queries", []))
                 if queries:
                     return queries
+                self._raise_llm_step_failure(
+                    state,
+                    "survey_query_generate",
+                    "LLM returned no usable queries",
+                )
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("survey query generate failed, falling back to heuristics: %s", exc)
-                state.add_log(f"survey query generate LLM failed, fallback used: {exc}")
+                logger.warning("survey query generate failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "survey_query_generate",
+                    exc,
+                )
 
         return self._heuristic_survey_queries(state.event.query, state.event.constraints)
+
+    def _normalize_fit_judge(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        status = str(result.get("status", "inconclusive")).strip().lower()
+        if status not in {"normal", "abnormal", "inconclusive"}:
+            status = "inconclusive"
+        interpretation = result.get("observation_interpretation", {})
+        if not isinstance(interpretation, dict):
+            interpretation = {"summary": str(interpretation)}
+        return {
+            "fits_current_stage": bool(result.get("fits_current_stage"))
+            and status != "abnormal",
+            "status": status,
+            "reason": str(result.get("reason", "")).strip(),
+            "observation_interpretation": {
+                "summary": str(interpretation.get("summary", "")).strip(),
+                "positive_signals": self._clean_queries(
+                    interpretation.get("positive_signals", [])
+                ),
+                "negative_signals": self._clean_queries(
+                    interpretation.get("negative_signals", [])
+                ),
+                "uncertainties": self._clean_queries(interpretation.get("uncertainties", [])),
+            },
+        }
+
+    def _normalize_stage_progress(
+        self,
+        result: Dict[str, Any],
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        status = str(
+            result.get("stage_progress_status", "continue_current_stage")
+        ).strip()
+        valid_statuses = {
+            "continue_current_stage",
+            "advance_to_next_stage",
+            "closure_ready",
+        }
+        if status not in valid_statuses:
+            status = "continue_current_stage"
+        route = self._clean_queries(result.get("stage_route", state.stage_route))
+        current_stage = str(result.get("current_stage", state.current_stage)).strip()
+        if route and current_stage not in route:
+            current_stage = route[0]
+        return {
+            "stage_progress_status": status,
+            "current_stage": current_stage or state.current_stage,
+            "current_stage_reason": str(
+                result.get("current_stage_reason", state.current_stage_reason)
+            ).strip(),
+            "stage_route": route or state.stage_route,
+            "stage_route_reason": str(
+                result.get("stage_route_reason", state.stage_route_reason)
+            ).strip(),
+            "progress_summary": str(result.get("progress_summary", "")).strip(),
+        }
+
+    def _heuristic_observation_stage_fit_judge(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        if self._is_device_feasibility_observation(state.latest_observation):
+            negative_signals = self._clean_queries(
+                state.latest_observation.get("unsupported_reasons", [])
+                or state.latest_observation.get("blocking_constraints", [])
+                or ["当前设备层不支持上一段 macro action"]
+            )
+            return {
+                "fits_current_stage": False,
+                "status": "abnormal",
+                "reason": "设备适应层返回 feasibility_error，需要在当前 stage 内改写为设备可执行路线。",
+                "observation_interpretation": {
+                    "summary": self._short_observation_summary(state.latest_observation),
+                    "positive_signals": [],
+                    "negative_signals": negative_signals,
+                    "uncertainties": self._clean_queries(
+                        state.latest_observation.get("unsupported_requested_items", [])
+                    ),
+                },
+            }
+
+        text = self._observation_text_for_signal_detection(state.latest_observation)
+        negated_match_terms = [
+            "do not cleanly match",
+            "does not cleanly match",
+            "not cleanly match",
+            "do not match",
+            "does not match",
+            "not match",
+            "not consistent",
+            "不匹配",
+            "不符合",
+            "未匹配",
+            "没有匹配",
+        ]
+        abnormal_terms = [
+            "失败",
+            "fail",
+            "failed",
+            "failure",
+            "no precipitate",
+            "无沉淀",
+            "未形成",
+            "杂相",
+            "impurity",
+            "impurities",
+            "byproduct",
+            "偏离",
+            "deviation",
+            "异常",
+            "无有效",
+            "invalid",
+            "低于预期",
+            "poor",
+            "溶解",
+            "dissolved",
+            "不可用",
+            "weak extra peaks",
+            "extra peaks",
+            "elevated background",
+            "broad pba-like",
+            "broad peaks",
+            "pale blue",
+            "turbid",
+            "formed immediately",
+            "precipitate formed immediately",
+            "immediately when",
+            "before solvothermal",
+            "neutral rather than acidic",
+            "water-rich",
+            "杂峰",
+            "背景升高",
+            "宽峰",
+            "浑浊",
+            "立即沉淀",
+            "过早沉淀",
+            "相不匹配",
+            *negated_match_terms,
+        ]
+        positive_terms = [
+            "成功",
+            "形成",
+            "matched",
+            "match",
+            "consistent",
+            "符合",
+            "目标",
+            "沉淀",
+            "precipitate",
+            "xrd peaks",
+            "characteristic peaks",
+            "稳定",
+            "有效",
+        ]
+        inconclusive_terms = ["不确定", "inconclusive", "unclear", "待确认", "噪声", "noise"]
+
+        negative_signals = [term for term in abnormal_terms if term in text]
+        positive_signals = [term for term in positive_terms if term in text]
+        if any(term in text for term in negated_match_terms):
+            positive_signals = [
+                term
+                for term in positive_signals
+                if term not in {"match", "matched", "consistent", "符合"}
+            ]
+        if any(
+            term in text
+            for term in [
+                "formed immediately",
+                "precipitate formed immediately",
+                "immediately when",
+                "before solvothermal",
+                "立即沉淀",
+                "过早沉淀",
+            ]
+        ):
+            positive_signals = [
+                term for term in positive_signals if term not in {"沉淀", "precipitate"}
+            ]
+        uncertainties = [term for term in inconclusive_terms if term in text]
+
+        if negative_signals:
+            status = "abnormal"
+            fits = False
+            reason = "observation 中出现失败、杂相或偏离目标的信号，需要进入修复路径。"
+        elif uncertainties:
+            status = "inconclusive"
+            fits = True
+            reason = "observation 信息不足但未显示明确失败，保守继续当前 stage。"
+        elif positive_signals:
+            status = "normal"
+            fits = True
+            reason = "observation 包含支持当前 stage 的正向信号。"
+        else:
+            status = "inconclusive"
+            fits = True
+            reason = "observation 未给出明确异常信号，保守视为可继续当前 stage。"
+
+        return {
+            "fits_current_stage": fits,
+            "status": status,
+            "reason": reason,
+            "observation_interpretation": {
+                "summary": self._short_observation_summary(state.latest_observation),
+                "positive_signals": positive_signals,
+                "negative_signals": negative_signals,
+                "uncertainties": uncertainties,
+            },
+        }
+
+    def _observation_text_for_signal_detection(self, observation: Dict[str, Any]) -> str:
+        """Flatten observation while ignoring false-valued metric names."""
+        parts: List[str] = []
+
+        def visit(key: str, value: Any) -> None:
+            if isinstance(value, dict):
+                for nested_key, nested_value in value.items():
+                    visit(str(nested_key), nested_value)
+            elif isinstance(value, list):
+                for item in value:
+                    visit(key, item)
+            elif isinstance(value, bool):
+                if value:
+                    parts.append(str(key))
+            elif value is not None:
+                parts.append(f"{key} {value}" if key else str(value))
+
+        for key, value in observation.items():
+            visit(str(key), value)
+        return " ".join(parts).lower()
+
+    def _is_device_feasibility_observation(self, observation: Dict[str, Any]) -> bool:
+        return str(observation.get("feedback_type", "")).strip().lower() in {
+            "device_feasibility_error",
+            "physical_infeasible",
+        } or str(observation.get("device_layer_status", "")).strip().lower() in {
+            "unsupported",
+            "feasibility_error",
+        }
+
+    def _heuristic_stage_progress_update(self, state: ResearchAgentState) -> Dict[str, Any]:
+        text = self._observation_text(state)
+        route = list(state.stage_route)
+        current_stage = state.current_stage
+        status = "continue_current_stage"
+
+        observation_complete_terms = [
+            "完成",
+            "已完成",
+            "目标",
+            "符合",
+            "matched",
+            "consistent",
+            "success",
+            "成功",
+            "characteristic peaks",
+        ]
+        current_index = route.index(current_stage) if current_stage in route else 0
+        if any(term in text for term in observation_complete_terms):
+            if current_index + 1 < len(route):
+                status = "advance_to_next_stage"
+                current_stage = route[current_index + 1]
+            else:
+                status = "closure_ready"
+
+        if status == "advance_to_next_stage":
+            reason = "最新 observation 已完成当前 stage 的目标观察点，因此进入 stage_route 中的下一阶段。"
+        elif status == "closure_ready":
+            reason = "最新 observation 支持当前最后一个 stage 的完成条件，当前研究链路可准备收束。"
+        else:
+            reason = "最新 observation 未明确完成当前 stage 的目标观察点，继续在当前 stage 内推进。"
+
+        return {
+            "stage_progress_status": status,
+            "current_stage": current_stage,
+            "current_stage_reason": reason,
+            "stage_route": route,
+            "stage_route_reason": state.stage_route_reason,
+            "progress_summary": reason,
+        }
+
+    def _heuristic_post_observation_macro_plan_design(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        if state.post_observation_repair_path in {
+            "stage_internal",
+            "current_stage",
+            "stage_route",
+        }:
+            macro_plan = self._repair_macro_plan_from_observation(state)
+        else:
+            macro_plan = self._next_macro_plan_from_reference(state)
+
+        if not macro_plan:
+            reference_plan = self._best_structured_reference_macro_plan(state)
+            if reference_plan:
+                macro_plan = reference_plan
+            else:
+                macro_plan = self._synthesize_macro_plan_from_context(
+                    state,
+                    state.knowledge_hits[0] if state.knowledge_hits else None,
+                )
+
+        macro_plan = self._ensure_macro_plan_reaches_observation(
+            state,
+            self._normalize_macro_plan(macro_plan),
+        )
+        quality_issues = self._macro_plan_quality_issues(macro_plan, state.event.query)
+        if quality_issues:
+            repaired_reference = self._best_structured_reference_macro_plan(state)
+            if repaired_reference:
+                macro_plan = self._normalize_macro_plan(repaired_reference)
+
+        current_stage_plan = (
+            f"当前 stage 为 {state.current_stage}。最新 observation："
+            f"{self._short_observation_summary(state.latest_observation)}。"
+            "下一段计划在保留已验证前缀的基础上推进到该 stage 的目标 observation point，"
+            "并根据 observation 调整关键变量与完成条件。"
+        )
+        if state.post_observation_repair_path:
+            current_stage_plan += f" 本轮 B2 路径为 {state.post_observation_repair_path}。"
+
+        return {
+            "current_stage_plan": current_stage_plan,
+            "macro_plan": macro_plan,
+        }
+
+    def _heuristic_abnormal_observation_queries(self, state: ResearchAgentState) -> List[str]:
+        observation_summary = self._short_observation_summary(state.latest_observation)
+        queries = [
+            f"{state.event.query} abnormal observation repair",
+            f"{state.event.query} failed synthesis troubleshooting",
+            f"{state.current_stage} {observation_summary} cause",
+            f"{state.event.query} alternative synthesis parameters",
+        ]
+        if "xrd" in self._observation_text(state) or "XRD" in state.current_stage:
+            queries.append(f"{state.event.query} XRD impurity phase troubleshooting")
+        return self._clean_queries(queries)[:5]
+
+    def _heuristic_similar_abnormal_queries(self, state: ResearchAgentState) -> List[str]:
+        summary = self._short_observation_summary(state.latest_observation)
+        return self._clean_queries(
+            [
+                f"{state.event.query} {summary}",
+                f"{state.current_stage} abnormal repair",
+                f"{state.event.query} failed experiment",
+                f"{summary} troubleshooting",
+            ]
+        )[:4]
+
+    def _heuristic_post_observation_report_update(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        report = dict(state.survey_report or {})
+        summary = str(report.get("summary", "")).strip()
+        observation_summary = self._short_observation_summary(state.latest_observation)
+        if self._is_device_feasibility_observation(state.latest_observation):
+            reasons = self._clean_queries(
+                state.latest_observation.get("unsupported_reasons", [])
+                or state.latest_observation.get("blocking_constraints", [])
+            )
+            capabilities = state.latest_observation.get("supported_device_capabilities", {})
+            supported_containers = []
+            supported_workstations = []
+            if isinstance(capabilities, dict):
+                supported_containers = self._clean_queries(
+                    capabilities.get("supported_containers", [])
+                )
+                supported_workstations = self._clean_queries(
+                    capabilities.get("supported_workstations", [])
+                )
+            update_sentence = (
+                f"设备适应层反馈当前设备层不支持上一段 macro action："
+                f"{'；'.join(reasons) if reasons else observation_summary}。"
+                "后续计划必须保留当前 stage 的科学目标和论文依据，但删除或替换不可执行的容器、工作站和动作。"
+            )
+            report["summary"] = f"{summary} {update_sentence}".strip()
+            report["key_findings"] = self._clean_queries(
+                list(report.get("key_findings", []))
+                + [
+                    "B2 device feasibility error: 当前设备层不支持上一段 macro action。",
+                    f"不支持原因：{'；'.join(reasons) if reasons else '设备层未给出具体原因'}",
+                ]
+            )
+            report["candidate_precedents"] = self._clean_queries(
+                list(report.get("candidate_precedents", []))
+                + [hit.title for hit in state.knowledge_hits[:3]]
+            )
+            report["route_implications"] = self._clean_queries(
+                list(report.get("route_implications", []))
+                + [
+                    "优先在当前 stage 内重写 macro_plan，使其使用设备层支持的容器和工作站。",
+                    f"支持容器：{'、'.join(supported_containers) if supported_containers else '未明确'}",
+                    f"支持工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}",
+                    "如果反应釜、XRD 或 pH 闭环不可用，应改为瓶内配液/搅拌/老化/离心/干燥，XRD 作为离线 observation。",
+                ]
+            )
+            report["open_questions"] = self._clean_queries(
+                list(report.get("open_questions", []))
+                + [
+                    "在不使用设备层不支持项的条件下，是否仍能到达当前 stage 的目标 observation point。",
+                ]
+            )
+            return report
+
+        update_sentence = (
+            f"最新 observation 显示：{observation_summary}。"
+            "因此后续计划应优先判断异常是否来自前驱体比例、混合/滴加、老化、洗涤干燥或目标观察点设置。"
+        )
+        report["summary"] = f"{summary} {update_sentence}".strip()
+        report["key_findings"] = self._clean_queries(
+            list(report.get("key_findings", []))
+            + [
+                f"B2 observation: {observation_summary}",
+                "异常修复优先保留当前 stage，并先调整 stage 内部实验计划。",
+            ]
+        )
+        report["candidate_precedents"] = self._clean_queries(
+            list(report.get("candidate_precedents", []))
+            + [hit.title for hit in state.knowledge_hits[:3]]
+        )
+        report["route_implications"] = self._clean_queries(
+            list(report.get("route_implications", []))
+            + [
+                "优先进行最小修复：改变当前 stage 的关键变量，而不是立即重写 stage route。",
+                "若重复 observation 仍偏离目标，再考虑修改当前 stage 或 stage route。",
+            ]
+        )
+        report["open_questions"] = self._clean_queries(
+            list(report.get("open_questions", []))
+            + [
+                "当前异常是否由实验执行偏差、反应条件不合适，还是 stage 边界设置错误导致。",
+            ]
+        )
+        return report
+
+    def _heuristic_stage_internal_repair_assess(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        text = self._observation_text(state)
+        if self._is_device_feasibility_observation(state.latest_observation):
+            reasons = self._clean_queries(
+                state.latest_observation.get("unsupported_reasons", [])
+                or state.latest_observation.get("blocking_constraints", [])
+            )
+            capabilities = state.latest_observation.get("supported_device_capabilities", {})
+            supported_containers = []
+            if isinstance(capabilities, dict):
+                supported_containers = self._clean_queries(
+                    capabilities.get("supported_containers", [])
+                )
+            updated_plan = (
+                f"{state.current_stage_plan} 设备适应层反馈当前设备层不支持上一段 macro action："
+                f"{'；'.join(reasons) if reasons else '设备层未给出具体原因'}。"
+                "本轮修复保留当前 stage 和目标 observation point，但必须把 macro_plan 改写成设备可执行路线；"
+                f"优先使用{'、'.join(supported_containers) if supported_containers else '设备层支持的容器'}，"
+                "避免再次使用被拒绝的容器、工作站或动作。"
+            )
+            return {
+                "repairable": True,
+                "updated_current_stage_plan": updated_plan.strip(),
+                "repair_reason": "设备不可执行反馈通常可通过重写当前 stage 内部 macro_plan 修复，不需要改变 observation point。",
+            }
+
+        route_level_terms = [
+            "目标错误",
+            "wrong target",
+            "不适合该路线",
+            "route invalid",
+            "stage route",
+            "完全不相关",
+        ]
+        if any(term in text for term in route_level_terms):
+            return {
+                "repairable": False,
+                "updated_current_stage_plan": "",
+                "repair_reason": "observation 暗示目标或路线层级可能错误，不能只在当前 stage 内部修复。",
+            }
+
+        updated_plan = (
+            f"{state.current_stage_plan} 最新 observation 显示异常："
+            f"{self._short_observation_summary(state.latest_observation)}。"
+            "本轮修复保留当前 stage 和目标 observation point，优先调整前驱体比例、浓度、滴加/混合顺序、"
+            "老化时间、洗涤干燥条件，并在下一段 macro plan 后重新获取 observation。"
+        )
+        return {
+            "repairable": True,
+            "updated_current_stage_plan": updated_plan.strip(),
+            "repair_reason": "异常仍可解释为当前 stage 内部条件偏差，优先执行最小修复。",
+        }
+
+    def _heuristic_current_stage_repair_assess(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        text = self._observation_text(state)
+        if self._is_device_feasibility_observation(state.latest_observation):
+            return {
+                "repairable": False,
+                "repair_reason": "设备不可执行反馈只允许触发设备适配 macro_plan，不应修改 current_stage。",
+            }
+        if any(term in text for term in ["stage错误", "阶段错误", "wrong stage"]):
+            new_stage = f"重新确认{self._infer_target_material(state.event.query)}的首个观察点"
+            return {
+                "repairable": True,
+                "current_stage": new_stage,
+                "current_stage_reason": "observation 暗示当前 stage 定义过窄，需要先重新确认首个观察点。",
+                "current_stage_plan": (
+                    f"当前 stage 调整为 {new_stage}，先通过保守重复/对照实验确认异常来源，"
+                    "再决定是否回到原 stage_route。"
+                ),
+                "repair_reason": "可通过修改当前 stage 修复。",
+            }
+        return {
+            "repairable": False,
+            "repair_reason": "当前异常未强到需要修改当前 stage，优先由 stage 内部修复处理。",
+        }
+
+    def _heuristic_stage_route_repair_assess(
+        self,
+        state: ResearchAgentState,
+    ) -> Dict[str, Any]:
+        text = self._observation_text(state)
+        if self._is_device_feasibility_observation(state.latest_observation):
+            return {
+                "repairable": False,
+                "repair_reason": "设备不可执行反馈只允许触发设备适配 macro_plan，不应重写 stage_route。",
+            }
+        if any(term in text for term in ["route invalid", "路线错误", "目标错误"]):
+            route = [
+                f"重新合成{self._infer_target_material(state.event.query)}并完成首个结果观察",
+                "基于首个结果重新设计后续验证 stage",
+            ]
+            return {
+                "repairable": True,
+                "stage_route": route,
+                "stage_route_reason": "observation 暗示原 stage route 的目标或边界不可靠，需要重建观察点路线。",
+                "repair_reason": "可通过改写 stage route 修复。",
+            }
+        return {
+            "repairable": False,
+            "repair_reason": "没有足够证据说明需要重写 stage route。",
+        }
+
+    def _repair_macro_plan_from_observation(
+        self,
+        state: ResearchAgentState,
+    ) -> List[Dict[str, Any]]:
+        text = self._observation_text(state)
+        context_text = " ".join(
+            [
+                state.event.query,
+                text,
+                json.dumps(state.previous_macro_plan, ensure_ascii=False),
+            ]
+        ).lower()
+        material = self._infer_target_material(state.event.query)
+        if self._is_device_feasibility_observation(state.latest_observation):
+            return self._device_feasible_repair_macro_plan(state, material)
+
+        potassium_iron_pba_terms = [
+            "k2fe",
+            "k4fe(cn)6",
+            "k4[fe(cn)6",
+            "fecl2",
+            "ferrocyanide",
+            "亚铁氰化",
+            "亚铁氰化铁",
+            "水系 k",
+            "k 离子",
+            "potassium-ion",
+        ]
+        if any(term in context_text for term in potassium_iron_pba_terms):
+            if material == "目标样品":
+                material = "K2Fe[Fe(CN)6]·2H2O / 亚铁氰化铁"
+            return [
+                {
+                    "步骤序号": 1,
+                    "操作": "重新配制酸性低氧的亚铁氰化物 A 液",
+                    "试剂/对象": "K4Fe(CN)6·3H2O、去离子水、乙二醇、稀 HCl；柠檬酸钠作为可选低剂量变量",
+                    "参数": (
+                        "K4Fe(CN)6·3H2O 保持 0.5 mmol；使用预脱氧的水/乙二醇混合溶剂约 25-50 mL，"
+                        "建议乙二醇体积分数提高到 50-70%；用稀 HCl 将体系调至 pH 2-3。"
+                        "上一轮 0.75 mmol 柠檬酸钠先取消或降至 <=0.1 mmol 作为对照，避免中性络合环境导致过早成核。"
+                    ),
+                },
+                {
+                    "步骤序号": 2,
+                    "操作": "新鲜配制酸性 Fe2+ B 液并抑制氧化",
+                    "试剂/对象": "FeCl2·4H2O、预脱氧水/乙二醇、稀 HCl、抗坏血酸",
+                    "参数": (
+                        "FeCl2·4H2O 保持 0.5 mmol，现配现用；溶剂体积约 25 mL，pH 2-3。"
+                        "在氮气保护或低氧条件下操作，加入 0.02-0.05 mmol 抗坏血酸作为 agent 补全建议，"
+                        "用于降低 Fe2+ 氧化和水解风险。"
+                    ),
+                },
+                {
+                    "步骤序号": 3,
+                    "操作": "在酸性乙二醇富集体系中受控混合",
+                    "试剂/对象": "B 液与 A 液",
+                    "参数": (
+                        "室温强搅拌下将 B 液以 30-60 min 缓慢滴入 A 液，或采用双通道同步滴加到酸性水/乙二醇母液中；"
+                        "混合过程中维持 pH 2-3，并记录是否仍出现立即大量沉淀。"
+                        "目标是避免上一轮在中性水相中先形成粗大/缺陷 PBA，再进入溶剂热。"
+                    ),
+                },
+                {
+                    "步骤序号": 4,
+                    "操作": "立即进行酸性溶剂热晶化",
+                    "试剂/对象": "受控混合后的反应液",
+                    "参数": (
+                        "将均一或轻微浑浊的反应液立即转入聚四氟乙烯内衬反应釜，80 C 保温 24 h；"
+                        "本轮先保持温度和时间不变，只改变酸性、低氧、溶剂组成和滴加策略，以定位偏相原因。"
+                    ),
+                },
+                {
+                    "步骤序号": 5,
+                    "操作": "温和洗涤并低温干燥",
+                    "试剂/对象": f"{material} 修复样品沉淀",
+                    "参数": (
+                        "离心收集后用预脱氧去离子水和乙醇各洗涤 2-3 次；50-60 C 真空干燥 overnight。"
+                        "避免长时间暴露在空气和中性水中，以减少 Fe2+ 氧化、缺陷增加或副相生成。"
+                    ),
+                },
+                {
+                    "步骤序号": 6,
+                    "操作": "重新执行 PXRD 并判定目标相",
+                    "试剂/对象": f"干燥后的 {material} 粉末",
+                    "参数": (
+                        "采集 PXRD 10-30 min；以 K2Fe[Fe(CN)6]·2H2O 参考峰为目标，重点比较峰位、相对强度、峰宽、"
+                        "杂峰和背景。若仍为浅蓝宽峰并伴随杂峰，再进入 Fe/K 比例和氧化态路线级修复。"
+                    ),
+                },
+            ]
+        if "xrd" in text or "XRD" in state.current_stage or "杂相" in text:
+            return [
+                {
+                    "步骤序号": 1,
+                    "操作": "调整前驱体比例并配制修复实验 A 液",
+                    "试剂/对象": "金属盐前驱体、柠檬酸钠、去离子水",
+                    "参数": "将金属盐总量控制在 1-2 mmol，柠檬酸钠与金属离子摩尔比调整至约 1.0-1.5，在 25-50 mL 去离子水中配成澄清溶液",
+                },
+                {
+                    "步骤序号": 2,
+                    "操作": "配制低浓度六氰合铁酸盐 B 液",
+                    "试剂/对象": "K3[Fe(CN)6] 或 K4[Fe(CN)6]、去离子水",
+                    "参数": "按摩尔量 1-2 mmol 配制于 25-50 mL 去离子水中，降低局部过饱和以减少杂相形成",
+                },
+                {
+                    "步骤序号": 3,
+                    "操作": "慢速滴加并重新共沉淀",
+                    "试剂/对象": "B 液滴加至 A 液",
+                    "参数": "室温磁力搅拌，控制滴加时间 20-60 min；滴加后继续搅拌 10-30 min，并观察沉淀颜色和均一性",
+                },
+                {
+                    "步骤序号": 4,
+                    "操作": "延长老化并洗涤干燥",
+                    "试剂/对象": f"{material} 沉淀",
+                    "参数": "室温老化 12-24 h；离心后用去离子水和乙醇洗涤 2-3 次；50-60 C 真空干燥 overnight",
+                },
+                {
+                    "步骤序号": 5,
+                    "操作": "重新执行结构观察",
+                    "试剂/对象": f"干燥后的 {material} 粉末",
+                    "参数": "研磨并铺展样品，采集 XRD 或目标表征信号 10-30 min，用于判断杂相是否降低、目标峰是否增强",
+                },
+            ]
+
+        if "无沉淀" in text or "no precipitate" in text:
+            return [
+                {
+                    "步骤序号": 1,
+                    "操作": "提高反应物有效浓度",
+                    "试剂/对象": "金属盐前驱体、六氰合铁酸盐溶液",
+                    "参数": "将两种前驱体浓度提高到约 0.05-0.1 M，并控制总体积 25-50 mL 以提高成核概率",
+                },
+                {
+                    "步骤序号": 2,
+                    "操作": "调节混合顺序并诱导成核",
+                    "试剂/对象": "B 液滴加至 A 液",
+                    "参数": "在室温强搅拌下缓慢滴加 20-60 min，必要时延长静置老化至 24 h，观察是否出现目标颜色沉淀",
+                },
+                {
+                    "步骤序号": 3,
+                    "操作": "收集并观察修复样品",
+                    "试剂/对象": f"{material} 修复实验产物",
+                    "参数": "离心收集可能形成的沉淀，洗涤至上清液澄清后 50-60 C 低温干燥，并记录颜色、产率和可测性",
+                },
+            ]
+
+        return [
+            {
+                "步骤序号": 1,
+                "操作": "设置保守修复对照实验",
+                "试剂/对象": "上一段 macro plan 中的核心前驱体与目标样品",
+                "参数": "保留上一轮已验证条件，同时只改变一个关键变量；建议优先调整浓度、滴加时间或老化时间，变化幅度控制在 20-50%",
+            },
+            {
+                "步骤序号": 2,
+                "操作": "重复制备并获取对照 observation",
+                "试剂/对象": f"{material} 修复实验样品",
+                "参数": "按修复条件完成反应、洗涤和 50-60 C 干燥；在相同 observation 条件下重新采集结果 10-30 min，用于判断异常是否可复现或已缓解",
+            },
+        ]
+
+    def _device_feasible_repair_macro_plan(
+        self,
+        state: ResearchAgentState,
+        material: str,
+    ) -> List[Dict[str, Any]]:
+        if material == "目标样品":
+            material = "目标 Fe-HCF/PBA 样品"
+        observation = state.latest_observation
+        capabilities = observation.get("supported_device_capabilities", {})
+        supported_containers = []
+        if isinstance(capabilities, dict):
+            supported_containers = self._clean_queries(
+                capabilities.get("supported_containers", [])
+            )
+        primary_container = "进样瓶"
+        if supported_containers and "进样瓶" not in supported_containers:
+            primary_container = supported_containers[0]
+
+        context_text = self._observation_text(state)
+        k_fe_context = any(
+            term in context_text
+            for term in ["k4fe", "fecl2", "k2fe", "亚铁氰化", "hexacyanoferrate"]
+        )
+        if k_fe_context:
+            primary_container = "进样瓶" if "进样瓶" in supported_containers or not supported_containers else primary_container
+            return [
+                {
+                    "步骤序号": 1,
+                    "操作": "液体进样站开盖准备加液",
+                    "试剂/对象": f"偶数个带盖 {primary_container}、液体进样站",
+                    "参数": (
+                        f"获取偶数个 {primary_container} 后转入液体进样站，"
+                        "对容器编号列表执行开盖动作；本轮建议使用 6 个进样瓶以满足后续纯化工作站偶数容器要求。"
+                    ),
+                },
+                {
+                    "步骤序号": 2,
+                    "操作": "进样瓶分瓶加入 A 液",
+                    "试剂/对象": f"{primary_container}、已装载 K4Fe(CN)6·3H2O/柠檬酸钠水溶液原液瓶",
+                    "参数": (
+                        f"使用偶数个带盖 {primary_container} 作为贯通容器；每瓶加入 2.0 mL "
+                        "0.05 M K4Fe(CN)6·3H2O 和 0.075 M 柠檬酸钠混合水溶液，"
+                        "对应每瓶 0.10 mmol K4Fe(CN)6·3H2O 和 0.15 mmol 柠檬酸钠；"
+                        "若需 0.50 mmol 尺度，平行执行 6 瓶并保持总液量低于离心上限。"
+                    ),
+                },
+                {
+                    "步骤序号": 3,
+                    "操作": "进样瓶分瓶加入 B 液形成反应液",
+                    "试剂/对象": f"同一批 {primary_container}、已装载 FeCl2·4H2O 水溶液原液瓶",
+                    "参数": (
+                        "向每瓶加入 2.0 mL 0.05 M FeCl2·4H2O 水溶液，"
+                        "对应每瓶 0.10 mmol Fe2+，与 [Fe(CN)6]4- 保持 1:1；"
+                        "加液作为固定体积动作执行，不设置滴加速率或颜色判断终点。"
+                    ),
+                },
+                {
+                    "步骤序号": 4,
+                    "操作": "液体进样站关盖完成加液",
+                    "试剂/对象": f"装有 Fe-HCF/PBA 反应混合液的 {primary_container}、液体进样站",
+                    "参数": (
+                        "对完成 A 液和 B 液定量加液的同一批进样瓶执行关盖动作，"
+                        "使容器以带盖状态进入磁力搅拌和后续纯化流程。"
+                    ),
+                },
+                {
+                    "步骤序号": 5,
+                    "操作": "进样瓶内固定条件磁力搅拌反应",
+                    "试剂/对象": f"{primary_container} 中的 Fe-HCF/PBA 反应混合液、磁力搅拌工作站",
+                    "参数": (
+                        "将进样瓶放入磁力搅拌工作站，在室温下以 800 r/min 搅拌 120 min，"
+                        "以固定时间推进共沉淀和初步晶化；不使用视觉/颜色反馈作为执行条件。"
+                    ),
+                },
+                {
+                    "步骤序号": 6,
+                    "操作": "进样瓶内固定时间老化",
+                    "试剂/对象": f"{primary_container} 中的 Fe-HCF/PBA 悬浊液、磁力搅拌工作站",
+                    "参数": (
+                        "继续在原进样瓶中以 600 r/min 搅拌老化 120 min；"
+                        "该步骤以固定时间替代静置/观察闭环，保持目标 Fe-HCF/PBA 相不变。"
+                    ),
+                },
+                {
+                    "步骤序号": 7,
+                    "操作": "纯化工作站一次留固洗涤",
+                    "试剂/对象": f"老化后的 {primary_container} 内 {material} 悬浊液、去离子水",
+                    "参数": (
+                        "使用纯化工作站留固程序，设置 6000 rpm 离心 8 min；"
+                        "加入 5.0 mL 去离子水执行 1 次固定清洗，清洗后保留固体并弃去清洗液。"
+                    ),
+                },
+                {
+                    "步骤序号": 8,
+                    "操作": "液体进样站开盖准备干燥",
+                    "试剂/对象": f"洗涤后的 {primary_container} 内 {material} 湿固体、液体进样站",
+                    "参数": (
+                        "纯化工作站输出默认为带盖进样瓶；将装有湿固体的进样瓶转入液体进样站，"
+                        "执行开盖动作，容器编号与纯化步骤保持一致，为后续烘干机常压干燥做准备。"
+                    ),
+                },
+                {
+                    "步骤序号": 9,
+                    "操作": "烘干机低温干燥",
+                    "试剂/对象": f"洗涤后的 {primary_container} 内 {material} 湿固体、烘干机",
+                    "参数": "将留固得到的湿固体在原进样瓶中置于烘干机，60 C 常压干燥 720 min，得到干燥粉末。",
+                },
+                {
+                    "步骤序号": 10,
+                    "操作": "离线结构 observation",
+                    "试剂/对象": f"干燥后的 {material} 粉末",
+                    "参数": (
+                        "将干燥粉末作为离线 XRD/PXRD 送样对象；"
+                        "对比目标 K2Fe[Fe(CN)6]·2H2O 或文献 Fe-HCF 参考峰，判断是否达到当前 stage 的目标 observation point。"
+                    ),
+                },
+            ]
+
+        return [
+            {
+                "步骤序号": 1,
+                "操作": "选择设备支持容器并分装核心反应体系",
+                "试剂/对象": "上一段 macro plan 中的目标样品和可迁移试剂",
+                "参数": (
+                    f"将上一段计划改写为使用 {primary_container} 或设备层支持容器的瓶内路线；"
+                    "根据容器容量按比例缩小或分瓶执行，保持核心试剂和计量关系。"
+                ),
+            },
+            {
+                "步骤序号": 2,
+                "操作": "用瓶内配液、混合和搅拌替代不可执行步骤",
+                "试剂/对象": f"{primary_container} 中的反应体系",
+                "参数": "总液量控制在 20-25 mL；使用液体进样站加液，磁力搅拌工作站 600-1000 r/min 搅拌 30-240 min。",
+            },
+            {
+                "步骤序号": 3,
+                "操作": "完成设备可执行后处理和 observation",
+                "试剂/对象": f"{material} 设备可执行修复样品",
+                "参数": "使用纯化工作站留固离心洗涤，烘干机 60 C 干燥 8-12 h；设备层不支持的表征写作离线 observation。",
+            },
+        ]
+
+    def _next_macro_plan_from_reference(self, state: ResearchAgentState) -> List[Dict[str, Any]]:
+        if state.stage_progress_status == "advance_to_next_stage":
+            for hit in state.knowledge_hits:
+                selected = self._select_stage_steps(hit.steps, state.current_stage)
+                if selected:
+                    return selected
+
+        completed_ops = {
+            str(step.get("操作", "")).strip()
+            for step in state.previous_macro_plan
+            if step.get("操作")
+        }
+        for hit in state.knowledge_hits:
+            selected = self._select_stage_steps(hit.steps, state.current_stage)
+            remaining = [
+                step
+                for step in selected
+                if str(step.get("操作", "")).strip() not in completed_ops
+            ]
+            if remaining:
+                return remaining[:4]
+
+        return []
+
+    def _short_observation_summary(self, observation: Dict[str, Any], max_chars: int = 240) -> str:
+        if not observation:
+            return "空 observation"
+        for key in ["summary", "result", "notes", "raw"]:
+            value = observation.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:max_chars]
+        return json.dumps(observation, ensure_ascii=False)[:max_chars]
 
     def _step_survey_expansion(
         self, state: ResearchAgentState, accumulated_hits: Sequence[SearchHit]
@@ -222,8 +2930,9 @@ class ResearchAgent(BaseAgent):
         knowledge_context = self._knowledge_query.format_context(accumulated_hits)
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "survey_expansion",
                     SURVEY_EXPANSION_PROMPT.format(
                         query=state.event.query,
                         knowledge_context=knowledge_context or "当前没有命中结果",
@@ -237,8 +2946,12 @@ class ResearchAgent(BaseAgent):
                     "reason": result.get("reason", ""),
                 }
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("survey expansion failed, falling back to heuristics: %s", exc)
-                state.add_log(f"survey expansion LLM failed, fallback used: {exc}")
+                logger.warning("survey expansion failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "survey_expansion",
+                    exc,
+                )
 
         return self._heuristic_survey_expansion(state.event.query, accumulated_hits, state.survey_rounds)
 
@@ -246,8 +2959,9 @@ class ResearchAgent(BaseAgent):
         knowledge_context = self._knowledge_query.format_context(state.knowledge_hits[:3])
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "similar_exp_search",
                     SIMILAR_EXP_SEARCH_PROMPT.format(
                         query=state.event.query,
                         knowledge_context=knowledge_context or "当前没有命中结果",
@@ -257,9 +2971,18 @@ class ResearchAgent(BaseAgent):
                 queries = self._clean_queries(result.get("queries", []))
                 if queries:
                     return queries
+                self._raise_llm_step_failure(
+                    state,
+                    "similar_exp_search",
+                    "LLM returned no usable queries",
+                )
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("similar exp search failed, falling back to heuristics: %s", exc)
-                state.add_log(f"similar exp search LLM failed, fallback used: {exc}")
+                logger.warning("similar exp search failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "similar_exp_search",
+                    exc,
+                )
 
         return self._heuristic_memory_queries(state.event.query, state.knowledge_hits)
 
@@ -268,28 +2991,264 @@ class ResearchAgent(BaseAgent):
         memory_context = self._memory_query.format_context(state.memory_hits[:3])
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "survey_report_generate",
                     SURVEY_REPORT_GENERATE_PROMPT.format(
                         query=state.event.query,
                         knowledge_context=knowledge_context or "当前没有知识命中",
-                        memory_context=memory_context or "当前没有历史案例命中",
+                        memory_context=(
+                            memory_context
+                            or "当前 memory 禁用或没有历史案例命中；请仅基于知识库论文抽取结果。"
+                        ),
                     ),
                 )
                 state.raw_llm_outputs["survey_report_generate"] = result
                 if result.get("summary"):
                     return result
+                self._raise_llm_step_failure(
+                    state,
+                    "survey_report_generate",
+                    "LLM returned no summary",
+                )
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("survey report generate failed, using heuristic report: %s", exc)
-                state.add_log(f"survey report generate LLM failed, fallback used: {exc}")
+                logger.warning("survey report generate failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "survey_report_generate",
+                    exc,
+                )
 
         return self._heuristic_survey_report(state.event.query, state.knowledge_hits, state.memory_hits)
+
+    def _step_paper_protocol_extract(self, state: ResearchAgentState) -> List[Dict[str, Any]]:
+        knowledge_context = self._knowledge_query.format_context(state.knowledge_hits[:5])
+        if self._use_llm:
+            try:
+                result = self._invoke_state_json(
+                    state,
+                    "paper_protocol_extract",
+                    PAPER_PROTOCOL_EXTRACT_PROMPT.format(
+                        query=state.event.query,
+                        knowledge_context=knowledge_context or "当前没有知识命中",
+                    ),
+                )
+                state.raw_llm_outputs["paper_protocol_extract"] = result
+                protocols = self._normalize_extracted_protocols(
+                    result.get("protocols", []),
+                    state.knowledge_hits,
+                )
+                if protocols:
+                    return protocols
+                self._raise_llm_step_failure(
+                    state,
+                    "paper_protocol_extract",
+                    "LLM returned no usable protocols",
+                )
+            except Exception as exc:  # pragma: no cover - depends on remote model
+                logger.warning("paper protocol extract failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "paper_protocol_extract",
+                    exc,
+                )
+
+        return self._heuristic_paper_protocol_extract(state.knowledge_hits)
+
+    def _normalize_extracted_protocols(
+        self,
+        protocols: Sequence[Any],
+        knowledge_hits: Sequence[SearchHit],
+    ) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        title_to_path = {hit.title: hit.file_path for hit in knowledge_hits}
+
+        for protocol in protocols:
+            if not isinstance(protocol, dict):
+                continue
+            steps = self._normalize_protocol_steps(protocol.get("steps", []))
+            if not steps:
+                continue
+            source_title = str(protocol.get("source_title", "")).strip()
+            normalized.append(
+                {
+                    "source_title": source_title,
+                    "source_file": str(
+                        protocol.get("source_file", "") or title_to_path.get(source_title, "")
+                    ).strip(),
+                    "relevance": str(protocol.get("relevance", "")).strip(),
+                    "protocol_summary": str(protocol.get("protocol_summary", "")).strip(),
+                    "steps": steps,
+                    "missing_parameters": self._clean_queries(
+                        protocol.get("missing_parameters", [])
+                    ),
+                }
+            )
+        return normalized
+
+    def _normalize_protocol_steps(self, steps: Sequence[Any]) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                continue
+            normalized.append(
+                {
+                    "步骤序号": step.get("步骤序号", index) or index,
+                    "操作": str(step.get("操作", "")).strip(),
+                    "试剂/对象": str(step.get("试剂/对象", "")).strip(),
+                    "参数": str(step.get("参数", "") or "文献未说明").strip(),
+                    "evidence": str(step.get("evidence", "")).strip(),
+                }
+            )
+        for index, step in enumerate(normalized, start=1):
+            step["步骤序号"] = index
+        return normalized
+
+    def _heuristic_paper_protocol_extract(
+        self,
+        knowledge_hits: Sequence[SearchHit],
+    ) -> List[Dict[str, Any]]:
+        protocols: List[Dict[str, Any]] = []
+        for hit in knowledge_hits[:3]:
+            steps = self._normalize_protocol_steps(hit.steps)
+            missing_parameters: List[str] = []
+            if not steps:
+                steps = self._protocol_steps_from_pdf_hit(hit)
+                missing_parameters = [
+                    "PDF 文本未提供可完全结构化的参数列表；缺失参数保留为 文献未说明。"
+                ]
+            if not steps:
+                continue
+            protocols.append(
+                {
+                    "source_title": hit.title,
+                    "source_file": hit.file_path,
+                    "relevance": "本地知识库检索命中，与当前 query 的材料、方法或目标相关。",
+                    "protocol_summary": hit.synthesis_summary or hit.experiment_details,
+                    "steps": steps,
+                    "missing_parameters": missing_parameters,
+                }
+            )
+        return protocols
+
+    def _protocol_steps_from_pdf_hit(self, hit: SearchHit) -> List[Dict[str, Any]]:
+        text = hit.experiment_details or hit.synthesis_summary
+        if not text.strip():
+            return []
+
+        sentences = re.split(r"(?<=[。.!?])\s+|\n+", text)
+        selected: List[str] = []
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) < 25:
+                continue
+            lowered = sentence.lower()
+            if any(
+                keyword in lowered
+                for keyword in [
+                    "synth",
+                    "prepar",
+                    "coprecipitation",
+                    "solution",
+                    "stir",
+                    "aged",
+                    "washed",
+                    "dried",
+                    "xrd",
+                    "sem",
+                    "tem",
+                    "合成",
+                    "制备",
+                    "配制",
+                    "搅拌",
+                    "老化",
+                    "洗涤",
+                    "干燥",
+                    "表征",
+                ]
+            ):
+                selected.append(sentence)
+            if len(selected) >= 8:
+                break
+
+        steps: List[Dict[str, Any]] = []
+        for index, sentence in enumerate(selected, start=1):
+            parameters = self._extract_parameter_text(sentence)
+            steps.append(
+                {
+                    "步骤序号": index,
+                    "操作": self._infer_operation_from_sentence(sentence),
+                    "试剂/对象": self._infer_object_from_sentence(sentence),
+                    "参数": parameters or "文献未说明",
+                    "evidence": sentence[:400],
+                }
+            )
+        return steps
+
+    def _extract_parameter_text(self, sentence: str) -> str:
+        unit_matches = re.findall(
+            r"\d+(?:\.\d+)?\s*(?:mmol|mol|mg|g|mL|L|M|h|min|s|°C|℃|C|rpm|V|mA|A|Å|nm|μm|um|%)",
+            sentence,
+            flags=re.IGNORECASE,
+        )
+        condition_terms = [
+            term
+            for term in [
+                "room temperature",
+                "overnight",
+                "dropwise",
+                "stirring",
+                "stirred",
+                "aged",
+                "washed",
+                "dried",
+                "室温",
+                "过夜",
+                "滴加",
+                "搅拌",
+                "老化",
+                "洗涤",
+                "干燥",
+            ]
+            if term.lower() in sentence.lower()
+        ]
+        if unit_matches or condition_terms:
+            return sentence[:500]
+        return ""
+
+    def _infer_operation_from_sentence(self, sentence: str) -> str:
+        lowered = sentence.lower()
+        if "xrd" in lowered or "pxrd" in lowered or "衍射" in sentence:
+            return "XRD/PXRD 表征"
+        if "sem" in lowered or "tem" in lowered or "mapping" in lowered:
+            return "形貌与元素分布表征"
+        if "washed" in lowered or "洗涤" in sentence:
+            return "洗涤与后处理"
+        if "dried" in lowered or "干燥" in sentence:
+            return "干燥处理"
+        if "stir" in lowered or "搅拌" in sentence or "coprecipitation" in lowered:
+            return "共沉淀/混合反应"
+        if "solution" in lowered or "配制" in sentence:
+            return "配制溶液"
+        return "论文实验步骤"
+
+    def _infer_object_from_sentence(self, sentence: str) -> str:
+        candidates = re.findall(
+            r"(?:[A-Z][A-Za-z0-9\[\]\(\)·\.\-]+(?:\s*\+\s*[A-Z][A-Za-z0-9\[\]\(\)·\.\-]+)*)",
+            sentence,
+        )
+        if candidates:
+            return ", ".join(candidates[:5])
+        if "PBA" in sentence or "普鲁士蓝" in sentence:
+            return "PBA 样品"
+        return "文献实验对象"
 
     def _step_stage_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "stage_design",
                     STAGE_DESIGN_PROMPT.format(
                         query=state.event.query,
                         survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
@@ -309,9 +3268,18 @@ class ResearchAgent(BaseAgent):
                             "current_stage_reason": result.get("current_stage_reason", ""),
                         },
                     )
+                self._raise_llm_step_failure(
+                    state,
+                    "stage_design",
+                    "LLM returned invalid stage_route/current_stage",
+                )
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("stage design failed, falling back to heuristics: %s", exc)
-                state.add_log(f"stage design LLM failed, fallback used: {exc}")
+                logger.warning("stage design failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "stage_design",
+                    exc,
+                )
 
         return self._normalize_stage_design(
             query=state.event.query,
@@ -324,14 +3292,18 @@ class ResearchAgent(BaseAgent):
         )
 
     def _step_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
-        reference_context = self._knowledge_query.format_context(state.knowledge_hits[:2])
+        reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
         if self._use_llm:
             try:
-                result = self.invoke_json(
-                    BOOTSTRAP_SYSTEM_PROMPT,
+                result = self._invoke_state_json(
+                    state,
+                    "macro_plan_design",
                     MACRO_PLAN_DESIGN_PROMPT.format(
                         query=state.event.query,
                         survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
+                        extracted_protocols_json=json.dumps(
+                            state.extracted_protocols, ensure_ascii=False, indent=2
+                        ),
                         stage_route_json=json.dumps(state.stage_route, ensure_ascii=False, indent=2),
                         current_stage=state.current_stage,
                         stage_route_reason=state.stage_route_reason,
@@ -346,14 +3318,31 @@ class ResearchAgent(BaseAgent):
                         state,
                         result.get("current_stage_plan", "").strip(),
                     )
-                    macro_plan = self._ensure_macro_plan_reaches_observation(state, macro_plan)
+                    quality_issues = self._macro_plan_quality_issues(
+                        macro_plan,
+                        state.event.query,
+                    )
+                    if quality_issues:
+                        raise ValueError(
+                            "macro plan quality check failed: "
+                            + "; ".join(quality_issues[:5])
+                        )
                     return {
                         "current_stage_plan": current_stage_plan,
                         "macro_plan": macro_plan,
                     }
+                self._raise_llm_step_failure(
+                    state,
+                    "macro_plan_design",
+                    "LLM returned empty macro_plan",
+                )
             except Exception as exc:  # pragma: no cover - depends on remote model
-                logger.warning("macro plan design failed, falling back to heuristics: %s", exc)
-                state.add_log(f"macro plan design LLM failed, fallback used: {exc}")
+                logger.warning("macro plan design failed: %s", exc)
+                self._raise_llm_step_failure(
+                    state,
+                    "macro_plan_design",
+                    exc,
+                )
 
         heuristic_design = self._heuristic_macro_plan_design(state)
         heuristic_design["current_stage_plan"] = self._ensure_stage_plan_mentions_observation(
@@ -364,7 +3353,263 @@ class ResearchAgent(BaseAgent):
             state,
             heuristic_design.get("macro_plan", []),
         )
+        quality_issues = self._macro_plan_quality_issues(
+            heuristic_design["macro_plan"],
+            state.event.query,
+        )
+        if quality_issues:
+            reference_plan = self._best_structured_reference_macro_plan(state)
+            if reference_plan:
+                repaired_plan = self._ensure_macro_plan_reaches_observation(state, reference_plan)
+                repaired_issues = self._macro_plan_quality_issues(repaired_plan, state.event.query)
+                if not repaired_issues:
+                    state.add_log(
+                        "macro plan quality check replaced coarse offline draft with structured "
+                        f"reference steps: {'; '.join(quality_issues[:3])}"
+                    )
+                    heuristic_design["macro_plan"] = repaired_plan
+                    return heuristic_design
+
+            state.add_log(
+                "macro plan quality check warning: "
+                + "; ".join(quality_issues[:5])
+            )
         return heuristic_design
+
+    def _invoke_state_json(
+        self,
+        state: ResearchAgentState,
+        task_name: str,
+        task_prompt: str,
+        system_prompt: str = BOOTSTRAP_SYSTEM_PROMPT,
+    ) -> Dict[str, Any]:
+        """Invoke the LLM with an explicit compact state context."""
+        contextual_prompt = (
+            "## 已有 workflow 上下文\n"
+            "下面是当前 agent state 的压缩摘要。请把它当作本次调用的显式上下文；"
+            "不要假设后端模型会记得前一次调用。\n"
+            f"{self._compact_state_context(state, task_name)}\n\n"
+            "## 当前任务\n"
+            f"{task_prompt}"
+        )
+        return self.invoke_json(system_prompt, contextual_prompt)
+
+    def _compact_state_context(self, state: ResearchAgentState, task_name: str) -> str:
+        if task_name == "device_adaptation_macro_plan_design":
+            return self._compact_device_adaptation_state_context(state, task_name)
+
+        payload: Dict[str, Any] = {
+            "task_name": task_name,
+            "event_type": state.event.event_type,
+            "query": state.event.query,
+            "constraints": state.event.constraints,
+            "branch_history": state.branch_history,
+            "survey_queries": state.survey_queries,
+            "survey_rounds": state.survey_rounds[-3:],
+            "knowledge_hits": [
+                {
+                    "title": hit.title,
+                    "score": hit.score,
+                    "matched_terms": hit.matched_terms[:10],
+                    "step_count": len(hit.steps),
+                    "performance_count": len(hit.performance),
+                }
+                for hit in state.knowledge_hits[:5]
+            ],
+            "extracted_protocols": self._truncate_context_value(
+                state.extracted_protocols[:3],
+                max_chars=2400,
+            ),
+            "memory_queries": state.memory_queries,
+            "memory_hits": [
+                {
+                    "title": hit.title,
+                    "score": hit.score,
+                    "matched_terms": hit.matched_terms[:10],
+                    "step_count": len(hit.steps),
+                }
+                for hit in state.memory_hits[:3]
+            ],
+            "survey_report": state.survey_report,
+            "stage_route": state.stage_route,
+            "current_stage": state.current_stage,
+            "current_stage_plan": state.current_stage_plan,
+            "stage_route_reason": state.stage_route_reason,
+            "current_stage_reason": state.current_stage_reason,
+            "macro_plan_preview": state.macro_plan[:3],
+            "latest_observation": state.latest_observation,
+            "previous_macro_plan": state.previous_macro_plan[:5],
+            "observation_stage_fit": state.observation_stage_fit,
+            "stage_progress": state.stage_progress,
+            "post_observation_repair_path": state.post_observation_repair_path,
+            "previous_llm_outputs": self._summarize_previous_llm_outputs(
+                state.raw_llm_outputs
+            ),
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    def _compact_device_adaptation_state_context(
+        self,
+        state: ResearchAgentState,
+        task_name: str,
+    ) -> str:
+        """Keep the B2 device-adaptation prompt focused on equipment repair."""
+        payload: Dict[str, Any] = {
+            "task_name": task_name,
+            "event_type": state.event.event_type,
+            "query": state.event.query,
+            "knowledge_hits": [
+                {
+                    "title": hit.title,
+                    "score": hit.score,
+                    "matched_terms": hit.matched_terms[:8],
+                    "step_count": len(hit.steps),
+                    "performance_count": len(hit.performance),
+                }
+                for hit in state.knowledge_hits[:3]
+            ],
+            "extracted_protocols": self._truncate_context_value(
+                state.extracted_protocols[:2],
+                max_chars=1200,
+            ),
+            "survey_report": self._compact_device_adaptation_survey_report(
+                state.survey_report
+            ),
+            "stage_route": state.stage_route,
+            "current_stage": state.current_stage,
+            "current_stage_plan": self._truncate_context_value(
+                state.current_stage_plan,
+                max_chars=1000,
+            ),
+            "stage_route_reason": self._truncate_context_value(
+                state.stage_route_reason,
+                max_chars=700,
+            ),
+            "current_stage_reason": self._truncate_context_value(
+                state.current_stage_reason,
+                max_chars=700,
+            ),
+            "latest_observation": self._compact_device_adaptation_observation(
+                state.latest_observation
+            ),
+            "previous_macro_plan": self._truncate_context_value(
+                state.previous_macro_plan[:8],
+                max_chars=900,
+            ),
+            "stage_progress": state.stage_progress,
+            "post_observation_repair_path": state.post_observation_repair_path,
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    def _summarize_previous_llm_outputs(self, raw_outputs: Dict[str, Any]) -> Dict[str, Any]:
+        summarized: Dict[str, Any] = {}
+        for key, value in raw_outputs.items():
+            summarized[key] = self._truncate_context_value(value)
+        return summarized
+
+    def _truncate_context_value(self, value: Any, max_chars: int = 1600) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): self._truncate_context_value(item, max_chars=max_chars)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._truncate_context_value(item, max_chars=max_chars)
+                for item in value[-3:]
+            ]
+        text = str(value)
+        if len(text) > max_chars:
+            return text[:max_chars] + "...[truncated]"
+        return value
+
+    def _macro_plan_quality_issues(
+        self,
+        macro_plan: Sequence[Dict[str, Any]],
+        query: str,
+    ) -> List[str]:
+        issues: List[str] = []
+        if not macro_plan:
+            return ["macro_plan 为空"]
+
+        normalized_query = re.sub(r"\s+", "", query)
+        for index, step in enumerate(macro_plan, start=1):
+            operation = str(step.get("操作", "")).strip()
+            target = str(step.get("试剂/对象", "")).strip()
+            parameters = str(step.get("参数", "")).strip()
+            step_blob = f"{operation} {target} {parameters}"
+
+            if not operation:
+                issues.append(f"第 {index} 步缺少操作")
+            if not target:
+                issues.append(f"第 {index} 步缺少试剂/对象")
+            if not parameters:
+                issues.append(f"第 {index} 步缺少参数")
+            if any(term in step_blob for term in PLACEHOLDER_MACRO_TERMS):
+                issues.append(f"第 {index} 步包含占位表达")
+            if normalized_query and re.sub(r"\s+", "", target) == normalized_query:
+                issues.append(f"第 {index} 步把完整 query 当作试剂/对象")
+            if parameters and not PARAMETER_DETAIL_RE.search(parameters):
+                issues.append(f"第 {index} 步参数缺少具体实验条件")
+
+        return issues
+
+    def _best_structured_reference_macro_plan(
+        self,
+        state: ResearchAgentState,
+    ) -> List[Dict[str, Any]]:
+        for hit in state.knowledge_hits:
+            if not hit.steps:
+                continue
+            selected_steps = self._select_stage_steps(hit.steps, state.current_stage)
+            macro_plan = self._normalize_macro_plan(selected_steps or hit.steps)
+            if not self._macro_plan_quality_issues(macro_plan, state.event.query):
+                return macro_plan
+        return []
+
+    def _format_macro_reference_context(self, hits: Sequence[SearchHit]) -> str:
+        """Expose full structured steps so macro planning can imitate corpus granularity."""
+        if not hits:
+            return ""
+
+        blocks: List[str] = []
+        for index, hit in enumerate(hits, start=1):
+            steps = self._normalize_macro_plan(hit.steps)
+            block = {
+                "案例序号": index,
+                "文献题目": hit.title,
+                "解决的问题": hit.problem,
+                "合成摘要": hit.synthesis_summary,
+                "实验相关全文摘要": hit.experiment_details,
+                "参数列表": steps,
+            }
+            blocks.append(json.dumps(block, ensure_ascii=False, indent=2))
+        return "\n\n".join(blocks)
+
+    def _format_device_adaptation_reference_context(
+        self,
+        hits: Sequence[SearchHit],
+    ) -> str:
+        if not hits:
+            return ""
+
+        blocks: List[str] = []
+        for index, hit in enumerate(hits, start=1):
+            steps = self._normalize_macro_plan(hit.steps)[:5]
+            block = {
+                "案例序号": index,
+                "文献题目": hit.title,
+                "合成摘要": self._truncate_context_value(
+                    hit.synthesis_summary or hit.experiment_details,
+                    max_chars=500,
+                ),
+                "可迁移结构化步骤": self._truncate_context_value(
+                    steps,
+                    max_chars=450,
+                ),
+            }
+            blocks.append(json.dumps(block, ensure_ascii=False, indent=2))
+        return "\n\n".join(blocks)
 
     def _merge_hits(self, existing: Sequence[SearchHit], new_hits: Sequence[SearchHit]) -> List[SearchHit]:
         merged: Dict[str, SearchHit] = {hit.file_path: hit for hit in existing}
@@ -667,12 +3912,31 @@ class ResearchAgent(BaseAgent):
         }
 
     def _heuristic_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
+        protocol_steps = self._select_protocol_steps_for_stage(
+            state.extracted_protocols,
+            state.current_stage,
+        )
+        if protocol_steps and self._protocol_steps_are_sufficient(protocol_steps):
+            source_title = str(state.extracted_protocols[0].get("source_title", "知识库论文"))
+            operation_preview = " -> ".join(
+                str(step.get("操作", "")) for step in protocol_steps[:5] if step.get("操作")
+            )
+            return {
+                "current_stage_plan": (
+                    f"当前 stage 以知识库论文《{source_title}》抽取出的实验过程为依据，"
+                    f"将论文 protocol 转换为结构化 macro plan。核心步骤为："
+                    f"{operation_preview or '步骤待补充'}。若参数为“文献未说明”，表示知识库论文文本中没有给出该参数，"
+                    "后续执行前需要人工或设备适配层补齐。"
+                ),
+                "macro_plan": self._normalize_macro_plan(protocol_steps),
+            }
+
         reference_hit = state.knowledge_hits[0] if state.knowledge_hits else None
         if reference_hit is None:
-            fallback_plan = self._synthesize_macro_plan_from_context(state, None)
+            offline_plan = self._synthesize_macro_plan_from_context(state, None)
             return {
                 "current_stage_plan": "当前没有命中本地案例，无法自动生成高置信度的完整 stage 计划。",
-                "macro_plan": fallback_plan,
+                "macro_plan": offline_plan,
             }
 
         stage_steps = self._select_stage_steps(reference_hit.steps, state.current_stage)
@@ -694,6 +3958,43 @@ class ResearchAgent(BaseAgent):
             "macro_plan": macro_plan,
         }
 
+    def _protocol_steps_are_sufficient(self, steps: Sequence[Dict[str, Any]]) -> bool:
+        if len(steps) < 2:
+            return False
+        concrete_steps = 0
+        missing_steps = 0
+        for step in steps:
+            operation = str(step.get("操作", "")).strip()
+            target = str(step.get("试剂/对象", "")).strip()
+            parameters = str(step.get("参数", "")).strip()
+            if not operation or not target:
+                missing_steps += 1
+                continue
+            if not parameters or "文献未说明" in parameters:
+                missing_steps += 1
+                continue
+            if PARAMETER_DETAIL_RE.search(parameters):
+                concrete_steps += 1
+            else:
+                missing_steps += 1
+        return concrete_steps >= 2 and concrete_steps >= missing_steps
+
+    def _select_protocol_steps_for_stage(
+        self,
+        protocols: Sequence[Dict[str, Any]],
+        current_stage: str,
+    ) -> List[Dict[str, Any]]:
+        if not protocols:
+            return []
+
+        protocol = protocols[0]
+        steps = list(protocol.get("steps", []) or [])
+        if not steps:
+            return []
+
+        selected = self._select_stage_steps(steps, current_stage)
+        return selected or steps
+
     def _synthesize_macro_plan_from_context(
         self,
         state: ResearchAgentState,
@@ -706,10 +4007,51 @@ class ResearchAgent(BaseAgent):
                 reference_hit.title if reference_hit else "",
                 reference_hit.problem if reference_hit else "",
                 reference_hit.synthesis_summary if reference_hit else "",
+                reference_hit.experiment_details if reference_hit else "",
             ]
         ).lower()
 
         if "普鲁士蓝" in context_blob or "prussian blue" in context_blob:
+            if any(token in context_blob for token in ["高熵", "high-entropy", "high entropy", "li-s", "锂硫"]):
+                return [
+                    {
+                        "步骤序号": 1,
+                        "操作": "配制高熵 PBA 金属盐 A 液",
+                        "试剂/对象": "Co/Ni/Cu/Mn/Zn 金属盐、柠檬酸钠、去离子水",
+                        "参数": "agent 补全建议: 五种金属盐等摩尔配比，总金属量约 1-2 mmol；加入柠檬酸钠作为络合剂，在 25-50 mL 去离子水中搅拌至澄清",
+                    },
+                    {
+                        "步骤序号": 2,
+                        "操作": "配制六氰合铁酸盐 B 液",
+                        "试剂/对象": "K3[Fe(CN)6] 或 K4[Fe(CN)6]、去离子水",
+                        "参数": "agent 补全建议: 六氰合铁酸盐摩尔量与总金属量保持近似化学计量或略低，溶于 25-50 mL 去离子水中",
+                    },
+                    {
+                        "步骤序号": 3,
+                        "操作": "共沉淀合成高熵 PBA",
+                        "试剂/对象": "将 B 液加入 A 液",
+                        "参数": "agent 补全建议: 室温磁力搅拌下缓慢滴加或倒入，继续搅拌约 10-30 min；随后室温老化 12-24 h 以促进 PBA 晶体生长",
+                    },
+                    {
+                        "步骤序号": 4,
+                        "操作": "分离、洗涤并干燥高熵 PBA",
+                        "试剂/对象": "高熵 PBA 沉淀、去离子水、乙醇",
+                        "参数": "agent 补全建议: 离心收集沉淀，用去离子水和乙醇洗涤 2-3 次至上清液澄清；50-60 C 真空干燥 overnight",
+                    },
+                    {
+                        "步骤序号": 5,
+                        "操作": "硫负载制备 PBA/S 复合物",
+                        "试剂/对象": "高熵 PBA、硫粉",
+                        "参数": "agent 补全建议: 若论文未给出完整参数，可采用熔融扩散思路，将 PBA 与硫粉研磨混合后在密闭容器中 130-155 C 保温 10-12 h；具体比例需由实验约束或文献补充确认",
+                    },
+                    {
+                        "步骤序号": 6,
+                        "操作": "结构与硫负载 observation",
+                        "试剂/对象": "高熵 PBA 或 PBA/S 复合物",
+                        "参数": "agent 补全建议: 采集 XRD/SEM/TEM 或 TGA 数据，确认 PBA 物相、形貌、多金属分布及硫负载状态；若论文未说明扫描条件，由设备适配层补齐",
+                    },
+                ]
+
             if "xrd" in context_blob and any(
                 token in state.current_stage for token in ["XRD", "结构", "表征", "鉴定"]
             ):
@@ -866,17 +4208,30 @@ class ResearchAgent(BaseAgent):
         ]
         return filtered or list(steps[-2:])
 
-    def _normalize_macro_plan(self, steps: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _normalize_macro_plan(self, steps: Sequence[Any]) -> List[Dict[str, Any]]:
         normalized: List[Dict[str, Any]] = []
         for index, step in enumerate(steps, start=1):
-            normalized.append(
-                {
-                    "步骤序号": step.get("步骤序号", index) or index,
-                    "操作": str(step.get("操作", "")).strip(),
-                    "试剂/对象": str(step.get("试剂/对象", "")).strip(),
-                    "参数": str(step.get("参数", "")).strip(),
-                }
-            )
+            if isinstance(step, dict):
+                normalized.append(
+                    {
+                        "步骤序号": step.get("步骤序号", index) or index,
+                        "操作": str(step.get("操作", "")).strip(),
+                        "试剂/对象": str(step.get("试剂/对象", "")).strip(),
+                        "参数": str(step.get("参数", "")).strip(),
+                    }
+                )
+            else:
+                description = str(step).strip()
+                if not description:
+                    continue
+                normalized.append(
+                    {
+                        "步骤序号": index,
+                        "操作": description,
+                        "试剂/对象": "上一段 macro plan 的自然语言步骤",
+                        "参数": "见操作描述",
+                    }
+                )
 
         # Renumber to keep the local macro plan self-contained.
         for index, step in enumerate(normalized, start=1):

@@ -2,9 +2,116 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
+
+
+class CodexResponsesModel:
+    """Small adapter for Codex CLI providers that require wire_api=responses."""
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        base_url: str,
+        reasoning_effort: str = "xhigh",
+        timeout: float = 180.0,
+        codex_path: Optional[str] = None,
+    ) -> None:
+        self._model = model
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._reasoning_effort = reasoning_effort
+        self._timeout = timeout
+        self._codex_path = codex_path or shutil.which("codex") or "/Applications/Codex.app/Contents/Resources/codex"
+
+    def invoke(self, messages: Any) -> Any:
+        prompt = self._messages_to_prompt(messages)
+        with tempfile.TemporaryDirectory(prefix="research-codex-") as tmpdir:
+            tmp_path = Path(tmpdir)
+            output_path = tmp_path / "last_message.txt"
+            self._write_codex_home(tmp_path)
+            cmd = [
+                self._codex_path,
+                "exec",
+                "--skip-git-repo-check",
+                "--output-last-message",
+                str(output_path),
+                "--json",
+                "-",
+            ]
+            env = dict(os.environ)
+            env["CODEX_HOME"] = str(tmp_path)
+            env["OPENAI_API_KEY"] = self._api_key
+            completed = subprocess.run(
+                cmd,
+                input=prompt,
+                text=True,
+                capture_output=True,
+                timeout=self._timeout,
+                env=env,
+                check=False,
+            )
+            if completed.returncode != 0:
+                stderr = completed.stderr.strip()
+                stdout = completed.stdout.strip()
+                detail = stderr or stdout or f"exit code {completed.returncode}"
+                raise RuntimeError(f"Codex responses call failed: {detail[-2000:]}")
+            if not output_path.exists():
+                raise RuntimeError(
+                    "Codex responses call did not produce output-last-message"
+                )
+            text = output_path.read_text(encoding="utf-8").strip()
+            if not text:
+                raise RuntimeError("Codex responses call returned empty output")
+            return SimpleNamespace(content=text)
+
+    def _write_codex_home(self, path: Path) -> None:
+        config = f"""model_provider = "OpenAI"
+model = "{self._escape_toml(self._model)}"
+model_reasoning_effort = "{self._escape_toml(self._reasoning_effort)}"
+disable_response_storage = true
+network_access = "enabled"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
+
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "{self._escape_toml(self._base_url)}"
+wire_api = "responses"
+requires_openai_auth = true
+"""
+        (path / "config.toml").write_text(config, encoding="utf-8")
+        (path / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": self._api_key}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def _messages_to_prompt(self, messages: Any) -> str:
+        parts = []
+        for message in messages:
+            content = getattr(message, "content", None)
+            if content is None and isinstance(message, dict):
+                content = message.get("content")
+            role = getattr(message, "type", None) or getattr(message, "role", None)
+            if role is None and isinstance(message, dict):
+                role = message.get("role")
+            label = str(role or "message")
+            if content:
+                parts.append(f"[{label}]\n{content}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _escape_toml(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 class LLMFactory:
@@ -53,6 +160,18 @@ class LLMFactory:
                 **kwargs,
             )
 
+        if os.getenv("REFINER_LLM_WIRE_API", "").strip().lower() == "codex_responses":
+            if not provider_url:
+                return None
+            return CodexResponsesModel(
+                model=provider_model,
+                api_key=provider_key,
+                base_url=provider_url,
+                reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
+                timeout=LLMFactory._openai_compatible_timeout(),
+                codex_path=os.getenv("REFINER_CODEX_CLI_PATH"),
+            )
+
         return LLMFactory._create_openai_compatible_model(
             provider_model=provider_model,
             provider_key=provider_key,
@@ -78,11 +197,41 @@ class LLMFactory:
             "model": provider_model,
             "api_key": provider_key,
             "temperature": temperature,
+            "default_headers": LLMFactory._openai_compatible_headers(),
+            "timeout": LLMFactory._openai_compatible_timeout(),
+            "use_responses_api": False,
         }
         if provider_url:
             model_kwargs["base_url"] = provider_url
         model_kwargs.update(kwargs)
         return ChatOpenAI(**model_kwargs)
+
+    @staticmethod
+    def _openai_compatible_timeout() -> float:
+        raw_timeout = os.getenv("REFINER_LLM_TIMEOUT_SECONDS", "60")
+        try:
+            return max(1.0, float(raw_timeout))
+        except ValueError:
+            return 60.0
+
+    @staticmethod
+    def _openai_compatible_headers() -> Dict[str, str]:
+        """Headers for OpenAI-compatible gateways that front chat/completions."""
+        headers: Dict[str, str] = {
+            "User-Agent": os.getenv("REFINER_LLM_USER_AGENT", "OpenAI/NodeJS/4.0"),
+        }
+        raw_headers = os.getenv("REFINER_LLM_DEFAULT_HEADERS")
+        if raw_headers:
+            try:
+                parsed_headers = json.loads(raw_headers)
+                if isinstance(parsed_headers, dict):
+                    headers.update(
+                        {str(key): str(value) for key, value in parsed_headers.items()}
+                    )
+            except json.JSONDecodeError:
+                # Keep startup forgiving; invalid optional headers should not disable the LLM.
+                pass
+        return headers
 
     @staticmethod
     def _create_gemini_model(

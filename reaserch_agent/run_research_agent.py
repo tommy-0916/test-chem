@@ -11,6 +11,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from reaserch_agent import ResearchAgent
 
 
@@ -20,8 +23,8 @@ DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the research agent. Currently only the bootstrap event "
-            "is implemented end-to-end."
+            "Run the research agent. Bootstrap and new observation events "
+            "are implemented end-to-end."
         )
     )
     parser.add_argument(
@@ -44,12 +47,28 @@ def build_parser() -> argparse.ArgumentParser:
         help='JSON object passed as event payload.',
     )
     parser.add_argument(
+        "--previous-state",
+        help="Path to a saved state JSON used as context for new observation events.",
+    )
+    parser.add_argument(
+        "--observation",
+        help=(
+            "Convenience text observation. For new observation events, this is stored "
+            "as payload.observation.summary unless payload-json already contains one."
+        ),
+    )
+    parser.add_argument(
         "--knowledge-base-dir",
-        help="Directory containing knowledge-base JSON files in the structured_outputs format.",
+        help="Directory containing knowledge-base PDF or JSON files. Defaults to reaserch_agent/chem_kb.",
     )
     parser.add_argument(
         "--memory-dir",
         help="Optional directory for memory retrieval. Defaults to the knowledge base directory.",
+    )
+    parser.add_argument(
+        "--enable-memory",
+        action="store_true",
+        help="Enable memory retrieval. By default memory is disabled.",
     )
     parser.add_argument(
         "--model-name",
@@ -122,6 +141,15 @@ def get_query(args: argparse.Namespace) -> str:
     if args.query and args.query.strip():
         return args.query.strip()
 
+    normalized_event_type = re.sub(r"[\s\-]+", "_", args.event_type.strip().lower())
+    if args.previous_state and normalized_event_type in {
+        "new_observation",
+        "post_observation",
+        "observation",
+        "observation_returned",
+    }:
+        return ""
+
     query = input("请输入 bootstrap query: ").strip()
     if not query:
         raise SystemExit("query 不能为空。")
@@ -169,6 +197,19 @@ def build_state_json(state: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def load_previous_state(path_text: str | None) -> Dict[str, Any] | None:
+    if not path_text:
+        return None
+    path = Path(path_text).expanduser().resolve()
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"previous-state 不是合法 JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise SystemExit("previous-state 必须是 JSON object。")
+    return parsed
+
+
 def write_debug_log(state: Any, log_dir: Path) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     created_at = getattr(state, "created_at", "") or ""
@@ -187,6 +228,9 @@ def main() -> int:
     query = get_query(args)
     constraints = parse_json_dict(args.constraints_json, "constraints_json")
     payload = parse_json_dict(args.payload_json, "payload_json")
+    if args.observation and "observation" not in payload:
+        payload["observation"] = {"summary": args.observation.strip()}
+    previous_state = load_previous_state(args.previous_state)
 
     agent = ResearchAgent(
         model=None,
@@ -196,6 +240,7 @@ def main() -> int:
         max_survey_rounds=args.max_survey_rounds,
         knowledge_top_k=args.knowledge_top_k,
         memory_top_k=args.memory_top_k,
+        enable_memory=args.enable_memory,
     )
 
     state = agent.run(
@@ -203,6 +248,7 @@ def main() -> int:
         query=query,
         constraints=constraints,
         payload=payload,
+        previous_state=previous_state,
     )
 
     print_summary(state)
