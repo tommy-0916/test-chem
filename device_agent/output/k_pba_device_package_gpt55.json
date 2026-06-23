@@ -1,0 +1,171 @@
+{
+  "feedback_type": "device_feasibility_error",
+  "status": "feasibility_error",
+  "exp_id": "exp_20260610_002",
+  "iteration_id": 0,
+  "workflow_id": 0,
+  "macro_plan": "{\n  \"macro_plan\": [\n    {\n      \"步骤序号\": 1,\n      \"操作\": \"准备水相共沉淀反应容器并配制 Fe2+ 前驱体 A 液\",\n      \"试剂/对象\": \"FeSO4·7H2O、抗坏血酸、KCl、去离子水；50ml耐热瓶或进样瓶\",\n      \"参数\": \"使用当前设备支持的 50ml耐热瓶或进样瓶；配制 20 mL A 液，含 FeSO4·7H2O 1.0 mmol、抗坏血酸 0.20 mmol、KCl 10 mmol，溶剂为去离子水；室温配液，尽量使用新鲜溶液以降低 Fe2+ 氧化\"\n    },\n    {\n      \"步骤序号\": 2,\n      \"操作\": \"配制亚铁氰根前驱体 B 液\",\n      \"试剂/对象\": \"K4[Fe(CN)6]·3H2O、KCl、去离子水；进样瓶或西林瓶\",\n      \"参数\": \"配制 20 mL B 液，含 K4[Fe(CN)6]·3H2O 1.0 mmol、KCl 10 mmol，溶剂为去离子水；室温配液并搅拌至澄清；K+ 过量环境用于提高产物中 K+ 占位概率\"\n    },\n    {\n      \"步骤序号\": 3,\n      \"操作\": \"水相共沉淀生成 K-rich FeHCF 前驱沉淀\",\n      \"试剂/对象\": \"A 液与 B 液混合体系\",\n      \"参数\": \"在室温下将 B 液分批加入 A 液，总体积约 40 mL；磁力搅拌 800 r/min，搅拌 60 min；目标为形成浅色至蓝白色铁氰化物沉淀；该步骤不使用当前设备未支持的反应釜或高压溶剂热器件\"\n    },\n    {\n      \"步骤序号\": 4,\n      \"操作\": \"低温老化促进 PBA 框架结晶\",\n      \"试剂/对象\": \"步骤 3 得到的 FeHCF 悬浊液\",\n      \"参数\": \"将反应悬浊液在 50ml耐热瓶或西林瓶中静置老化 12 h，室温；若设备允许 80 C 以下热环境，则可选择 60 C 静置老化 6 h 作为同一 stage 内的低温老化条件；老化后样品继续用于离心留固\"\n    },\n    {\n      \"步骤序号\": 5,\n      \"操作\": \"离心留固并洗涤去除可溶盐\",\n      \"试剂/对象\": \"老化后的 K-rich FeHCF 悬浊液、去离子水、乙醇\",\n      \"参数\": \"采用当前纯化工作站支持的留固离心方案；每次离心 6000 rpm、10 min；去离子水洗涤 3 次，每次加入 20 mL；乙醇洗涤 1 次，加入 20 mL；每次洗涤后保留固体并倒去上清液\"\n    },\n    {\n      \"步骤序号\": 6,\n      \"操作\": \"低温干燥获得 XRD 待测粉末\",\n      \"试剂/对象\": \"洗涤后的 K-rich FeHCF 湿固体\",\n      \"参数\": \"在当前烘干机支持容器中静置干燥；60 C 干燥 720 min；避免高温脱水或框架破坏；干燥后得到浅色至蓝白色粉末，作为 XRD 待测样品\"\n    },\n    {\n      \"步骤序号\": 7,\n      \"操作\": \"离线 XRD 送样与数据回传\",\n      \"试剂/对象\": \"干燥 K-rich FeHCF 粉末\",\n      \"参数\": \"取 20-50 mg 干燥粉末研细并平铺于 XRD 样品台；离线粉末 XRD 测试，建议 Cu Kα，2θ = 5-60°；记录 PBA 框架特征峰、约 17° 附近 (200) 类峰位置、峰宽和杂相峰；将谱图、峰表和初步相判定回传作为当前 stage observation\"\n    }\n  ]\n}",
+  "macro_plan_summary": "",
+  "observation_plan": {},
+  "device_capabilities": {
+    "supported_containers": [
+      "进样瓶",
+      "西林瓶",
+      "50ml耐热瓶",
+      "留样瓶"
+    ],
+    "supported_workstations": [
+      "solid-sample-workstation 固体进样",
+      "elec-chem-storage-workstation 置物/静置",
+      "dual-station-electrochemical-workstation 双工位电化学测试",
+      "ultrasonic-cleaning-workstation 超声清洗",
+      "material-workstation 物料拿取",
+      "liquid-dispensing-workstation 开盖/加液/关盖",
+      "magnetic-stirring-workstation 磁力搅拌",
+      "dryer-workstation 静置烘干",
+      "pure-workstation 留固离心纯化"
+    ],
+    "not_supported": [
+      "mg-亚克级固体称量/加样",
+      "单容器约40 mL体系直接进入纯化离心",
+      "单个纯化动作内执行水洗3次加乙醇洗1次",
+      "西林瓶进入烘干机",
+      "设备内XRD/PXRD自动采集或在线判读"
+    ]
+  },
+  "feasibility_assessment": {
+    "is_feasible": false,
+    "status": "unsupported",
+    "blocking_constraints": [
+      "步骤1和步骤2要求按 mmol 级固体试剂称量/加入以配制前驱体溶液，但固体进样工作站的进样质量范围为 1-200 g，无法执行 FeSO4·7H2O、抗坏血酸、KCl、K4[Fe(CN)6]·3H2O 等亚克级加样。",
+      "步骤3要求 A 液与 B 液总体积约 40 mL 并在 800 r/min 磁力搅拌 60 min；磁力搅拌工作站仅支持进样瓶体系，而纯化工作站输入限制为容器内液体体积不能超过 30 mL，当前 40 mL 悬浊液无法直接进入后续离心纯化。",
+      "步骤5要求去离子水洗涤 3 次、乙醇洗涤 1 次；纯化工作站当前每次执行的清洗次数约束为 1，且清洗液支持水/酒精/DMF，需要将多次不同清洗液洗涤拆成设备支持的独立纯化动作，当前 macro_plan 写法不是可直接执行动作。",
+      "步骤5要求每次加入 20 mL 清洗液并离心留固，但若使用步骤3的约 40 mL 体系，纯化工作站容器内液体体积不得超过 30 mL 的输入限制不满足。",
+      "步骤6要求在当前烘干机支持容器中干燥洗涤后的湿固体，但前序离心纯化工作站仅支持进样瓶或留样瓶，烘干机支持进样瓶或50ml耐热瓶；若流程选用西林瓶则不能进入烘干机，macro_plan 未限定为可贯通纯化和烘干的进样瓶路线。"
+    ],
+    "unsupported_items": [
+      {
+        "macro_step": "步骤1 准备水相共沉淀反应容器并配制 Fe2+ 前驱体 A 液",
+        "requirement": "称量/加入 FeSO4·7H2O 1.0 mmol、抗坏血酸 0.20 mmol、KCl 10 mmol 等亚克级固体，并配制 20 mL 水溶液",
+        "reason": "固体进样工作站仅支持 1-200 g 的固体进样，macro_plan 所需固体质量低于设备允许范围；液体进样站只能从已装载原液瓶加液，不能替代固体称量配液。",
+        "missing_device_capability": "mg-亚克级固体定量加样/称量能力，或已预配原液的明确装载方案",
+        "suggested_research_revision": "将前驱体 A 液改写为由外部预配并装载到液体进样站原液瓶，或将固体加样质量调整到固体进样工作站允许范围内。"
+      },
+      {
+        "macro_step": "步骤2 配制亚铁氰根前驱体 B 液",
+        "requirement": "称量/加入 K4[Fe(CN)6]·3H2O 1.0 mmol、KCl 10 mmol 等亚克级固体，并配制 20 mL 水溶液",
+        "reason": "所需固体定量低于固体进样工作站 1-200 g 范围，当前设备描述没有小质量固体称量或自动配液称量能力。",
+        "missing_device_capability": "mg-亚克级固体定量加样/称量能力，或外部预配 B 液 handoff",
+        "suggested_research_revision": "将 B 液明确为外部预配后作为液体原液装载，或重新规划为设备支持的加样质量范围。"
+      },
+      {
+        "macro_step": "步骤3 水相共沉淀生成 K-rich FeHCF 前驱沉淀",
+        "requirement": "B 液分批加入 A 液，总体积约 40 mL，800 r/min 磁力搅拌 60 min",
+        "reason": "磁力搅拌工作站仅支持进样瓶体系；后续纯化工作站要求容器内液体体积不能超过 30 mL，当前约 40 mL 体系不能直接衔接离心纯化。",
+        "missing_device_capability": "支持大于30 mL离心输入的纯化能力，或明确的分装/减量方案",
+        "suggested_research_revision": "将反应总体积限制在纯化工作站允许的 30 mL 以内，或明确拆分为偶数个进样瓶并满足每瓶体积限制。"
+      },
+      {
+        "macro_step": "步骤5 离心留固并洗涤去除可溶盐",
+        "requirement": "6000 rpm、10 min；水洗 3 次，每次20 mL；乙醇洗 1 次，20 mL；每次洗涤后留固倒上清",
+        "reason": "纯化工作站当前仅支持留固方案且参数范围覆盖 6000 rpm、10 min、20 mL，但清洗次数约束为 1；多次水洗和酒精洗需要拆成多次设备动作，当前 macro_plan 写成一个复合步骤不可直接执行。",
+        "missing_device_capability": "单个纯化动作内连续执行多次水洗加一次酒精洗的能力",
+        "suggested_research_revision": "将洗涤拆写为设备支持的独立纯化动作：每次清洗次数为 1，分别指定水或酒精，并保证容器数量为 1-10 间偶数且每瓶体积不超过 30 mL。"
+      },
+      {
+        "macro_step": "步骤6 低温干燥获得 XRD 待测粉末",
+        "requirement": "60 C 干燥 720 min，使用当前烘干机支持容器",
+        "reason": "烘干温度和时间在烘干机范围内，但 macro_plan 前序允许使用西林瓶；烘干机仅支持进样瓶或50ml耐热瓶，不支持西林瓶。若选择进样瓶则该步骤可执行，当前写法未限定可贯通容器。",
+        "missing_device_capability": "西林瓶烘干能力，或明确统一使用进样瓶的容器路线",
+        "suggested_research_revision": "将设备内路线明确为进样瓶体系，并保持纯化后湿固体位于进样瓶中进入烘干机。"
+      }
+    ],
+    "supported_parts": [
+      "物料站可获取进样瓶或西林瓶；若选择进样瓶且数量为偶数，可衔接后续磁力搅拌和纯化。",
+      "液体进样站支持进样瓶、西林瓶、50ml耐热瓶的开盖、加液、关盖；若前驱体作为已装载原液，可进行设备支持范围内的液体转移。",
+      "磁力搅拌工作站支持进样瓶体系 800 r/min、60 min 搅拌。",
+      "置物工作站支持50ml耐热瓶或西林瓶室温静置老化，静置时间无限制；但不支持进样瓶置物。",
+      "纯化工作站支持进样瓶留固离心，6000 rpm、10 min、20 mL 清洗液参数在范围内，但需偶数容器、每瓶不超过30 mL、每次清洗次数为1。",
+      "烘干机支持进样瓶或50ml耐热瓶在 60 C 干燥 720 min。",
+      "步骤7明确为离线 XRD 送样与数据回传，属于外部 handoff/observation，不由当前设备层执行，因此不作为设备层不可执行约束。"
+    ],
+    "device_capability_summary": {
+      "supported_containers": [
+        "进样瓶",
+        "西林瓶",
+        "50ml耐热瓶",
+        "留样瓶"
+      ],
+      "supported_workstations": [
+        "solid-sample-workstation 固体进样",
+        "elec-chem-storage-workstation 置物/静置",
+        "dual-station-electrochemical-workstation 双工位电化学测试",
+        "ultrasonic-cleaning-workstation 超声清洗",
+        "material-workstation 物料拿取",
+        "liquid-dispensing-workstation 开盖/加液/关盖",
+        "magnetic-stirring-workstation 磁力搅拌",
+        "dryer-workstation 静置烘干",
+        "pure-workstation 留固离心纯化"
+      ],
+      "not_supported": [
+        "mg-亚克级固体称量/加样",
+        "单容器约40 mL体系直接进入纯化离心",
+        "单个纯化动作内执行水洗3次加乙醇洗1次",
+        "西林瓶进入烘干机",
+        "设备内XRD/PXRD自动采集或在线判读"
+      ]
+    },
+    "recommendation_to_research_agent": "请将前驱体溶液改为外部预配并作为液体原液装载，或调整到固体进样工作站支持的质量范围；同时将设备内路线统一为进样瓶、控制每瓶进入纯化的液体体积不超过30 mL、使用偶数个容器，并把多次水洗/酒精洗拆成清洗次数为1的多个纯化动作。离线 XRD 可保留为外部 handoff 与数据回传。",
+    "source": "llm"
+  },
+  "error_package": {
+    "type": "physical_infeasible",
+    "blocking_constraints": [
+      "步骤1和步骤2要求按 mmol 级固体试剂称量/加入以配制前驱体溶液，但固体进样工作站的进样质量范围为 1-200 g，无法执行 FeSO4·7H2O、抗坏血酸、KCl、K4[Fe(CN)6]·3H2O 等亚克级加样。",
+      "步骤3要求 A 液与 B 液总体积约 40 mL 并在 800 r/min 磁力搅拌 60 min；磁力搅拌工作站仅支持进样瓶体系，而纯化工作站输入限制为容器内液体体积不能超过 30 mL，当前 40 mL 悬浊液无法直接进入后续离心纯化。",
+      "步骤5要求去离子水洗涤 3 次、乙醇洗涤 1 次；纯化工作站当前每次执行的清洗次数约束为 1，且清洗液支持水/酒精/DMF，需要将多次不同清洗液洗涤拆成设备支持的独立纯化动作，当前 macro_plan 写法不是可直接执行动作。",
+      "步骤5要求每次加入 20 mL 清洗液并离心留固，但若使用步骤3的约 40 mL 体系，纯化工作站容器内液体体积不得超过 30 mL 的输入限制不满足。",
+      "步骤6要求在当前烘干机支持容器中干燥洗涤后的湿固体，但前序离心纯化工作站仅支持进样瓶或留样瓶，烘干机支持进样瓶或50ml耐热瓶；若流程选用西林瓶则不能进入烘干机，macro_plan 未限定为可贯通纯化和烘干的进样瓶路线。"
+    ],
+    "message": "请将前驱体溶液改为外部预配并作为液体原液装载，或调整到固体进样工作站支持的质量范围；同时将设备内路线统一为进样瓶、控制每瓶进入纯化的液体体积不超过30 mL、使用偶数个容器，并把多次水洗/酒精洗拆成清洗次数为1的多个纯化动作。离线 XRD 可保留为外部 handoff 与数据回传。",
+    "last_workflow_txt": "",
+    "unsupported_items": [
+      {
+        "macro_step": "步骤1 准备水相共沉淀反应容器并配制 Fe2+ 前驱体 A 液",
+        "requirement": "称量/加入 FeSO4·7H2O 1.0 mmol、抗坏血酸 0.20 mmol、KCl 10 mmol 等亚克级固体，并配制 20 mL 水溶液",
+        "reason": "固体进样工作站仅支持 1-200 g 的固体进样，macro_plan 所需固体质量低于设备允许范围；液体进样站只能从已装载原液瓶加液，不能替代固体称量配液。",
+        "missing_device_capability": "mg-亚克级固体定量加样/称量能力，或已预配原液的明确装载方案",
+        "suggested_research_revision": "将前驱体 A 液改写为由外部预配并装载到液体进样站原液瓶，或将固体加样质量调整到固体进样工作站允许范围内。"
+      },
+      {
+        "macro_step": "步骤2 配制亚铁氰根前驱体 B 液",
+        "requirement": "称量/加入 K4[Fe(CN)6]·3H2O 1.0 mmol、KCl 10 mmol 等亚克级固体，并配制 20 mL 水溶液",
+        "reason": "所需固体定量低于固体进样工作站 1-200 g 范围，当前设备描述没有小质量固体称量或自动配液称量能力。",
+        "missing_device_capability": "mg-亚克级固体定量加样/称量能力，或外部预配 B 液 handoff",
+        "suggested_research_revision": "将 B 液明确为外部预配后作为液体原液装载，或重新规划为设备支持的加样质量范围。"
+      },
+      {
+        "macro_step": "步骤3 水相共沉淀生成 K-rich FeHCF 前驱沉淀",
+        "requirement": "B 液分批加入 A 液，总体积约 40 mL，800 r/min 磁力搅拌 60 min",
+        "reason": "磁力搅拌工作站仅支持进样瓶体系；后续纯化工作站要求容器内液体体积不能超过 30 mL，当前约 40 mL 体系不能直接衔接离心纯化。",
+        "missing_device_capability": "支持大于30 mL离心输入的纯化能力，或明确的分装/减量方案",
+        "suggested_research_revision": "将反应总体积限制在纯化工作站允许的 30 mL 以内，或明确拆分为偶数个进样瓶并满足每瓶体积限制。"
+      },
+      {
+        "macro_step": "步骤5 离心留固并洗涤去除可溶盐",
+        "requirement": "6000 rpm、10 min；水洗 3 次，每次20 mL；乙醇洗 1 次，20 mL；每次洗涤后留固倒上清",
+        "reason": "纯化工作站当前仅支持留固方案且参数范围覆盖 6000 rpm、10 min、20 mL，但清洗次数约束为 1；多次水洗和酒精洗需要拆成多次设备动作，当前 macro_plan 写成一个复合步骤不可直接执行。",
+        "missing_device_capability": "单个纯化动作内连续执行多次水洗加一次酒精洗的能力",
+        "suggested_research_revision": "将洗涤拆写为设备支持的独立纯化动作：每次清洗次数为 1，分别指定水或酒精，并保证容器数量为 1-10 间偶数且每瓶体积不超过 30 mL。"
+      },
+      {
+        "macro_step": "步骤6 低温干燥获得 XRD 待测粉末",
+        "requirement": "60 C 干燥 720 min，使用当前烘干机支持容器",
+        "reason": "烘干温度和时间在烘干机范围内，但 macro_plan 前序允许使用西林瓶；烘干机仅支持进样瓶或50ml耐热瓶，不支持西林瓶。若选择进样瓶则该步骤可执行，当前写法未限定可贯通容器。",
+        "missing_device_capability": "西林瓶烘干能力，或明确统一使用进样瓶的容器路线",
+        "suggested_research_revision": "将设备内路线明确为进样瓶体系，并保持纯化后湿固体位于进样瓶中进入烘干机。"
+      }
+    ],
+    "assessment_source": "llm"
+  }
+}

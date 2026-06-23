@@ -26,6 +26,10 @@ chem_resources/knowledge_base/
 *.swp
 *.swo
 
+# Large source JSON files are stored in the repository as .json.gz archives.
+实验数据v1_workflow_json反转换_补全参数.json
+实验数据v1_workflow_json反转换_补全参数_含结果路径.json
+
 模版/
 
 .vscode/

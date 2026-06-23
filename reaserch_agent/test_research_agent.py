@@ -2,10 +2,196 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from reaserch_agent.workflow import ResearchAgent
+
+
+class CapturingModel:
+    def __init__(self) -> None:
+        self.prompts = []
+
+    def invoke(self, messages):
+        prompt = "\n\n".join(
+            getattr(message, "content", None) or message.get("content", "")
+            for message in messages
+        )
+        self.prompts.append(prompt)
+
+        if "survey query generate" in prompt:
+            return self._json(
+                {
+                    "queries": [
+                        "普鲁士蓝 水系钾离子电池",
+                        "亚铁氰化铁 设备可执行 合成",
+                        "Prussian blue aqueous potassium ion battery",
+                    ],
+                    "reason": "覆盖材料、方法和设备可执行路线。",
+                }
+            )
+        if "survey expansion" in prompt:
+            return self._json(
+                {
+                    "continue_research": False,
+                    "new_queries": [],
+                    "reason": "当前知识足够支撑设备约束下的首轮规划。",
+                }
+            )
+        if "paper protocol extract" in prompt:
+            return self._json(
+                {
+                    "protocols": [
+                        {
+                            "source_title": "测试 protocol",
+                            "source_file": "structured_outputs/test.json",
+                            "relevance": "用于测试设备上下文能进入 B1 prompt。",
+                            "protocol_summary": "固定容器和固定时间条件下制备样品。",
+                            "steps": [
+                                {
+                                    "步骤序号": 1,
+                                    "操作": "配制前驱体溶液",
+                                    "试剂/对象": "K4Fe(CN)6·3H2O、去离子水",
+                                    "参数": "0.5 mmol in 10 mL water",
+                                    "evidence": "测试证据",
+                                }
+                            ],
+                        }
+                    ],
+                    "missing_parameters": [],
+                }
+            )
+        if "survey report generate" in prompt:
+            return self._json(
+                {
+                    "summary": "普鲁士蓝类材料可作为水系钾离子电池正极。",
+                    "key_findings": ["设备上下文要求避开反应釜和在线 XRD。"],
+                    "candidate_precedents": [],
+                    "route_implications": ["优先选择当前设备支持的容器路线。"],
+                    "open_questions": [],
+                }
+            )
+        if "stage design" in prompt:
+            return self._json(
+                {
+                    "stage_route": ["合成目标样品并完成离线 XRD handoff"],
+                    "current_stage": "合成目标样品并完成离线 XRD handoff",
+                    "stage_route_reason": "当前 observation point 为离线 XRD 数据回传。",
+                    "current_stage_reason": "先确认目标相。",
+                }
+            )
+        if "macro plan design" in prompt:
+            return self._json(
+                {
+                    "current_stage_plan": "当前 stage 为合成目标样品并完成离线 XRD handoff；目标 observation point 是离线 XRD 数据回传；stage goal 是获得可送样粉末；planning logic 是使用设备支持容器和固定时间条件；key variables 为体积、时间、温度；expected observation 为 PBA 特征峰；stage completion condition 为离线 XRD 数据返回。",
+                    "macro_plan": [
+                        {
+                            "步骤序号": 1,
+                            "操作": "配制前驱体溶液",
+                            "试剂/对象": "K4Fe(CN)6·3H2O、去离子水、50ml 耐热瓶",
+                            "参数": "0.5 mmol K4Fe(CN)6·3H2O 溶于 10 mL 去离子水，室温混合 10 min",
+                        },
+                        {
+                            "步骤序号": 2,
+                            "操作": "固定条件加热反应",
+                            "试剂/对象": "前驱体溶液、50ml 耐热瓶",
+                            "参数": "80 C 加热 12 h，自然冷却至室温",
+                        },
+                        {
+                            "步骤序号": 3,
+                            "操作": "固定次数洗涤并干燥",
+                            "试剂/对象": "沉淀、去离子水、乙醇",
+                            "参数": "去离子水洗涤 3 次、乙醇洗涤 2 次，60 C 干燥 12 h",
+                        },
+                        {
+                            "步骤序号": 4,
+                            "操作": "离线 XRD handoff",
+                            "试剂/对象": "干燥粉末",
+                            "参数": "收集 30 mg 粉末送外部 XRD，等待数据回传",
+                        },
+                    ],
+                    "macro_plan_summary": "使用设备支持路线推进到离线 XRD handoff。",
+                }
+            )
+        raise AssertionError(f"Unexpected prompt: {prompt[:200]}")
+
+    def _json(self, payload):
+        return SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+
+
+class DeviceAdaptationRetryModel:
+    def __init__(self) -> None:
+        self.prompts = []
+
+    def invoke(self, messages):
+        prompt = "\n\n".join(
+            getattr(message, "content", None) or message.get("content", "")
+            for message in messages
+        )
+        self.prompts.append(prompt)
+
+        if "device-adaptation macro plan design" not in prompt:
+            raise AssertionError(f"Unexpected prompt: {prompt[:200]}")
+
+        if "本地质量检查反馈" not in prompt:
+            return self._json(
+                {
+                    "current_stage_plan": "保持当前 XRD observation point，只缩小规模并保留目标物相。",
+                    "macro_plan": [
+                        {
+                            "步骤序号": 1,
+                            "操作": "小体积共沉淀制备目标样品",
+                            "试剂/对象": "A 液、B 液",
+                            "参数": "每批 15 mL A 液与 15 mL B 液混合，室温 aging 48 h",
+                        },
+                        {
+                            "步骤序号": 2,
+                            "操作": "分离和洗涤沉淀",
+                            "试剂/对象": "目标沉淀、去离子水",
+                            "参数": "固液分离后用去离子水洗涤至上清液基本澄清",
+                        },
+                        {
+                            "步骤序号": 3,
+                            "操作": "常压干燥并离线 XRD",
+                            "试剂/对象": "洗涤后的沉淀",
+                            "参数": "100 C 常压干燥 overnight，送离线 XRD observation",
+                        },
+                    ],
+                    "macro_plan_summary": "第一次故意输出闭环终点以触发质量反馈。",
+                }
+            )
+
+        return self._json(
+            {
+                "current_stage_plan": "保持当前 XRD observation point，只缩小规模并保留目标物相。",
+                "macro_plan": [
+                    {
+                        "步骤序号": 1,
+                        "操作": "小体积共沉淀制备目标样品",
+                        "试剂/对象": "A 液、B 液",
+                        "参数": "每批 15 mL A 液与 15 mL B 液混合，室温 aging 48 h",
+                    },
+                    {
+                        "步骤序号": 2,
+                        "操作": "固定次数分离和洗涤沉淀",
+                        "试剂/对象": "目标沉淀、去离子水",
+                        "参数": "固液分离后用去离子水洗涤 3 次，每次使用 5 mL 去离子水",
+                    },
+                    {
+                        "步骤序号": 3,
+                        "操作": "常压干燥并离线 XRD",
+                        "试剂/对象": "洗涤后的沉淀",
+                        "参数": "100 C 常压干燥 overnight，送离线 XRD observation",
+                    },
+                ],
+                "macro_plan_summary": "第二次根据质量反馈改成固定洗涤次数。",
+            }
+        )
+
+    def _json(self, payload):
+        return SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
 
 
 class ResearchAgentTests(unittest.TestCase):
@@ -84,6 +270,37 @@ class ResearchAgentTests(unittest.TestCase):
 
         self.assertEqual(state.status, "completed")
         self.assertTrue(state.memory_hits)
+
+    def test_b1_first_llm_prompt_includes_device_context(self) -> None:
+        model = CapturingModel()
+        agent = ResearchAgent(
+            model=model,
+            use_llm=True,
+            knowledge_base_dir=str(self.structured_outputs_dir),
+            max_survey_rounds=1,
+        )
+
+        state = agent.run(
+            event_type="bootstrap",
+            query="设计普鲁士蓝水系钾离子电池正极首轮实验",
+            constraints={
+                "device_context": {
+                    "workstations": [
+                        {
+                            "station_name": "dryer-workstation",
+                            "usage_summary": "支持固定温度和固定时间干燥",
+                        }
+                    ]
+                }
+            },
+        )
+
+        self.assertEqual(state.status, "completed")
+        self.assertTrue(model.prompts)
+        first_prompt = model.prompts[0]
+        self.assertIn('"device_context"', first_prompt)
+        self.assertIn("dryer-workstation", first_prompt)
+        self.assertIn("survey query generate", first_prompt)
 
     def test_b1_extracts_protocol_before_macro_plan(self) -> None:
         agent = ResearchAgent(
@@ -207,7 +424,7 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertIn("pH 2-3", macro_blob)
         self.assertIn("K2Fe[Fe(CN)6]·2H2O", macro_blob)
 
-    def test_b2_device_feasibility_error_replans_for_supported_containers(self) -> None:
+    def test_b2_device_feasibility_error_keeps_macro_actions_device_neutral(self) -> None:
         bootstrap_state = self.agent.run(
             event_type="bootstrap",
             query="针对水系 K 离子电池正极材料容量偏低，以亚铁氰化铁为正极并通过 XRD 确认 K2Fe[Fe(CN)6]·2H2O",
@@ -270,14 +487,61 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertTrue(state.latest_observation["previous_macro_action"])
 
         macro_blob = str(state.macro_plan)
-        self.assertIn("进样瓶", macro_blob)
         self.assertIn("离线", macro_blob)
         self.assertIn("XRD", macro_blob)
         self.assertIn("K2Fe[Fe(CN)6]·2H2O", state.event.query)
         self.assertIn("K2Fe[Fe(CN)6]·2H2O", state.current_stage_plan)
         self.assertIn("XRD", state.current_stage_plan)
+        self.assertIn("device agent", state.current_stage_plan)
         self.assertNotIn("聚四氟", macro_blob)
         self.assertNotIn("高压釜", macro_blob)
+        self.assertNotIn("液体进样站", macro_blob)
+        self.assertNotIn("容器编号", macro_blob)
+
+    def test_b2_device_adaptation_retries_after_quality_gate_feedback(self) -> None:
+        model = DeviceAdaptationRetryModel()
+        agent = ResearchAgent(
+            model=model,
+            use_llm=True,
+            knowledge_base_dir=str(self.structured_outputs_dir),
+        )
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+
+        state = agent.run(
+            event_type="new observation",
+            query=bootstrap_state.event.query,
+            payload={
+                "feedback_type": "device_feasibility_error",
+                "status": "feasibility_error",
+                "previous_macro_plan": bootstrap_state.macro_plan,
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "blocking_constraints": [
+                        "250 mL + 250 mL 大体积共沉淀体系不支持。",
+                    ],
+                    "message": "请改为小体积等比例共沉淀。",
+                },
+                "device_capabilities": {
+                    "supported_containers": ["进样瓶", "西林瓶", "50ml耐热瓶"],
+                    "supported_workstations": ["液体进样站", "纯化工作站", "烘干机"],
+                },
+            },
+            previous_state=bootstrap_state,
+        )
+
+        self.assertEqual(state.status, "completed")
+        self.assertIn("device_adaptation_macro_plan_design", state.raw_llm_outputs)
+        self.assertIn("device_adaptation_macro_plan_design_retry_1", state.raw_llm_outputs)
+        self.assertEqual(len(model.prompts), 2)
+        self.assertIn("本地质量检查反馈", model.prompts[1])
+        self.assertIn("洗涤 3 次", str(state.macro_plan))
+        self.assertNotIn("洗涤至", str(state.macro_plan))
+        self.assertTrue(
+            any("passed after quality-feedback retry" in log for log in state.logs)
+        )
 
 
 if __name__ == "__main__":

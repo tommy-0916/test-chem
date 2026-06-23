@@ -23,7 +23,8 @@ survey query generate
 要求：
 - queries 至少 3 条，最多 6 条
 - 每条 query 都应可直接用于本地知识库检索
-- query 应覆盖材料、方法、性能目标、关键变量中的至少两类信息"""
+- query 应覆盖材料、方法、性能目标、关键变量中的至少两类信息
+- 若附加约束中包含 device_context，query 应优先检索可与这些设备能力兼容或可改造成兼容路线的文献方法"""
 
 SURVEY_EXPANSION_PROMPT = """## 任务名称
 survey expansion
@@ -171,12 +172,18 @@ stage design
 ### 调研报告
 {survey_report_json}
 
+### 设备边界上下文
+{device_context_json}
+
 ## 强约束
 1. 必须先在内部识别 `observation point`，再划分 `stage`
 2. 不得按单个工艺步骤、操作动作或常规实验流程直接拆分 stage
 3. 若 query 只有一个关键 observation point，则只允许输出一个 stage
 4. 每个 stage 必须明确对应一个目标 observation point
 5. 当前 stage 必须是最先应进入的 stage，而不是“最重要”的 stage
+6. 若设备边界上下文非空，只用于避免规划明显需要当前平台不存在的大型设备、在线 observation 能力，
+   或必须通过无支持转移/换瓶才能串联的容器路线；不要在 stage 设计中选择具体工作站、机器容器或容器编号，
+   容器和设备动作由下游 device agent 决定。
 
 ## 输出要求
 只输出 JSON：
@@ -193,7 +200,7 @@ stage design
 - `stage_route` 中每个元素都应是 stage 名称，并且名称本身应尽量体现它对应的目标 observation point
 - stage_route 至少 1 个 stage，最多 4 个
 - current_stage 必须是 stage_route 中的一个
-- 不要输出设备语义
+- 不要输出 workstation pipeline 或机器控制语义；但可以在理由中说明某些 observation 需要离线 handoff
 
 特别注意：
 “配液”“混合”“反应”“洗涤”“离心”“干燥”“取样”“送检”这类内容，
@@ -255,16 +262,40 @@ macro plan design
 ### 参考案例
 {reference_context}
 
+### 设备边界上下文
+{device_context_json}
+
 ## 强约束
 1. 待执行 macro plan 必须严格属于当前 stage
 2. 待执行 macro plan 的目标必须是推进到当前 stage 的目标 observation point
 3. 不得把未来 stage 的内容提前写入当前 macro plan
-4. 不得把单个 macro step 写成设备/workstation 控制指令
-5. 若当前 stage 只有一个 observation point，则所有 macro steps 都必须服务于该唯一 observation point
-6. macro step 的格式和粒度必须对齐“文献参数列表”风格，而不是泛化研究建议
-7. 必须优先把“从知识库论文抽取的实验过程”转成 macro_plan
-8. 不得随意改写论文抽取步骤中的试剂、用量、体积、温度、时间等具体参数
-9. 若论文 protocol 足够完整，直接忠实转换；若论文没有读取到完整步骤或关键参数大量缺失，可以基于调研报告和化学常识补全一个可执行 macro plan，但必须在 current_stage_plan 中说明“部分参数为 agent 补全”
+4. 若当前 stage 只有一个 observation point，则所有 macro steps 都必须服务于该唯一 observation point
+5. macro step 的格式和粒度不能是泛化研究建议，每个 macro action 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
+6. 在设备能力满足的情况下，优先把“从知识库论文抽取的实验过程”转成 macro_plan
+7. 不得随意改写论文抽取步骤中的试剂、用量、体积、温度、时间等具体参数
+8. 若论文 protocol 足够完整，直接忠实转换；若论文没有读取到完整步骤或关键参数大量缺失，可以基于论文和化学常识补全一个可执行 macro plan，但必须在 current_stage_plan 中说明“部分参数为 agent 补全”
+9. 若设备边界上下文非空，macro_plan 仍应保持化学实验语义，不要选择具体机器容器、工作站、
+    容器编号或设备动作；只需避免明确要求当前平台不存在的大型设备（如反应釜/高压釜）或在线表征能力。
+10. 如果论文路线含有明显超出当前平台的大型设备，可在不改变科学目标和目标材料的前提下，
+    从化学语义层面改为常压、低温、外部预配、外部表征等可交给下游进一步适配的路线；
+    具体选择进样瓶/西林瓶/50ml耐热瓶、原料瓶位、开盖/关盖、分瓶、配平、清洗动作等由 device agent 完成。
+11. 若设备边界上下文非空，macro_plan 还必须避免“容器连续性硬冲突”：
+    不要提出必须先在一种容器/状态中长时间静置、老化、暂存或反应，随后又必须在另一类不连通容器中
+    离心、洗涤、干燥或测试的路线，除非设备上下文明确存在支持的转移/换瓶操作。
+    research layer 不需要指定具体容器，但要把实验条件写成下游可在同一兼容容器路径内实现的化学语义；
+    若文献路线含有会造成设备容器断链的环节，应优先选择化学上等价、设备可适配的宏观表达，或在
+    current_stage_plan 中说明该环节需由 device layer 判定可行性，不要把不可转移的容器切换写成必需步骤。
+    特别注意：不能仅写“保持同一兼容反应容器路径”“后续直接进入分离”等口头声明来绕过容器断链。
+    若静置/老化会触发不可连通的暂存容器，应在化学语义层面改写为反应体系内继续搅拌熟化/继续反应，
+    或明确作为外部/人工等待 handoff 后重新装载的步骤；不要把设备内不可达的静置老化写成必需动作。
+12. 若设备边界上下文显示固体称量、同步搅拌加液或大体积离心存在限制，macro_plan 必须选择设备可适配的
+    化学语义表达：
+    - 前驱体盐溶液优先写成“外部预配并已装载的原液/前驱体溶液”，不要要求设备内称量 mmol 级固体并配液；
+    - 单个样品的反应总体积应低于后续固液分离输入上限并留有余量；若使用两种前驱体液，优先采用小体积等比例体系；
+    - 不要写“持续磁力搅拌条件下加入”“边搅拌边滴加”“同步搅拌加液”或必须控速加入；
+      可写成固定体积顺序加液/分批加液，随后关体系并进行固定转速、固定时间磁力搅拌。
+    - 对需要结晶/老化的 PBA 体系，应写成固定条件的搅拌老化/搅拌熟化，例如室温、500-800 rpm、固定分钟数；
+      不要写需要不支持容器的独立静置老化。
 
 ## macro step 粒度标尺
 每个 macro step 应该像结构化文献抽取中的 `参数列表`：
@@ -320,6 +351,11 @@ macro plan design
 - macro_plan 必须是一个步骤数组
 - 每一步必须包含 步骤序号、操作、试剂/对象、参数
 - 参数保持实验自然语言，不要翻译成 workstation 级动作
+- 如果输入包含设备边界上下文，参数应尽量写成下游可判断的固定化学条件，例如固定体积、固定时间、
+  固定洗涤次数、固定温度、离线 observation/handoff；不要选择具体机器容器、工作站、容器编号或机器动作。
+- 如果输入包含设备边界上下文且当前平台无法低质量固体称量/同步加液/大体积离心，参数应优先使用
+  “已预配并已装载的前驱体原液”“小体积顺序加液后搅拌”“室温 500-800 rpm 搅拌老化 720 min”
+  这类固定化学条件；不要要求“室温静置老化 12 h”或“持续磁搅下 10 min 加液”。
 - `步骤序号` 从 1 开始连续编号
 - `current_stage_plan` 必须写成一个高层化学语义计划字符串，但内容上要覆盖：
   当前 stage 名称、目标 observation point、stage goal、planning logic、key variables、expected observation、stage completion condition
@@ -331,9 +367,13 @@ macro plan design
 输出前必须检查：
 1. 每一步是否都有明确的具体实验操作，而不是研究建议？
 2. 每一步是否明确写出试剂、样品或处理对象？
-3. 每一步参数是否包含具体实验条件，例如 mmol、mg、mL、M、h、min、C、V、mA g^-1、overnight、室温、滴加、洗涤至澄清等？
+3. 每一步参数是否包含具体实验条件，例如 mmol、mg、mL、M、h、min、C、V、mA g^-1、overnight、室温、固定加入时间、固定洗涤次数和固定干燥时间等？
 4. 是否出现了“围绕 query”“进一步优化”“结合文献细化”“当前缺少”“待补充”等占位表达？
 5. 是否错误写成 workstation 级控制指令？
+6. 若输入含设备边界上下文，macro_plan 是否避免了必须依赖无支持转移/换瓶的容器连续性硬冲突？
+7. 是否只是用“同一兼容路径”这类口头声明掩盖了静置/老化与后续分离/测试之间的容器断链？
+8. 若输入含设备边界上下文，是否避免了设备内 mmol 级固体称量、同步搅拌加液、单容器超体积离心、
+   条件式洗涤/干燥以及独立静置老化？
 若任一检查不通过，必须重写 macro_plan 后再输出 JSON。"""
 
 
@@ -476,11 +516,11 @@ post-observation macro plan design
 如果最新 observation 的 feedback_type 是 device_feasibility_error：
 - 这不是实验结果异常，而是设备适应层判断上一段 macro plan 不能落地
 - 必须读取 observation 中的 unsupported_reasons、blocking_constraints、unsupported_requested_items
-- 必须读取 observation 中的 supported_device_capabilities，尤其是 supported_containers 和 supported_workstations
 - 必须读取 observation 中的 previous_stage_context、previous_macro_action、prior_paper_hits
-- 新 macro_plan 必须保留上一次规划的科学目标和论文依据，但要避开设备不支持的容器、工作站和动作
-- 不要再次输出被拒绝的反应釜、高压釜、聚四氟乙烯内衬反应釜、不可用 XRD 工作站或不可用 pH 闭环动作
-- 如果平台只支持进样瓶、西林瓶、50ml耐热瓶、留样瓶，应优先把路线改写为瓶内配液、混合、搅拌、老化、离心洗涤、干燥或离线 observation
+- 新 macro_plan 必须保留上一次规划的科学目标和论文依据；只在化学动作本身不可由设备层映射时修改化学路线
+- 不要把具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平、单步洗涤展开等设备层映射细节写入 macro_plan
+- 如果被拒绝项是反应釜、高压釜、聚四氟乙烯内衬反应釜这类化学路线级大型设备要求，可以在不改变目标材料/目标 observation 的前提下改为常压、低温、室温老化或外部预配等化学语义路线
+- 如果被拒绝项只是缺少具体容器、工作站或设备动作表达，应在 macro_plan_summary 中说明“交由 device agent 选择/映射”，不要把它改写成具体设备 workflow
 - 若某个目标 observation 只能离线完成，应在 macro_plan 中明确写成“离线 observation”，不要伪造设备层不存在的工作站
 
 ## 输出要求
@@ -509,8 +549,8 @@ DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
 device-adaptation macro plan design
 
 ## 任务目标
-根据设备适应层返回的 device_feasibility_error，只做设备适配层面的 macro_plan 改写。
-这一步不是重新定义研究目标，也不是重写 stage route。
+根据设备适应层返回的 device_feasibility_error，只在 research layer 的化学语义层面修正 macro_plan。
+这一步不是重新定义研究目标，也不是重写 stage route；也不是把实验翻译成机器 workflow。
 
 ## 输入
 ### 人类 query
@@ -548,10 +588,12 @@ device-adaptation macro plan design
 - 不允许把目标从 K2Fe[Fe(CN)6]·2H2O / 亚铁氰化铁改成其他材料或只做颜色/产量观察。
 - 不允许把 XRD completion condition 改成颜色、质量、浑浊度或其他过程 observation。
 - 如果设备层没有 XRD 工作站，XRD 必须写成“离线 XRD observation / 送样 / 数据回传”，不能伪造设备内 XRD 工作站。
-- 只允许修改设备无法执行的容器、工作站、转移方式、体积尺度、分批/分瓶方式、加热/老化方式和洗涤干燥落地方式。
+- research layer 的输出是化学语义 macro action：说明应做什么实验、用什么试剂/样品、关键摩尔量/浓度/体积/温度/时间/洗涤次数/目标 observation。
+- 不要选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平、单步纯化动作、机器人转移路径或设备字段；这些属于下游 device agent 的职责。
+- 只允许修改确实属于化学路线层面的不可执行点，例如反应釜/高压釜/强制在线表征/必须人工闭环判断等；如果只是缺少容器选择或设备动作表达，不要改合成目标，也不要把它写成设备 workflow。
+- 若上一段方案含有设备层不支持的大型设备，可改成常压、低温、室温老化、外部预配原液、离线表征等化学语义替代；具体由哪种容器和工作站完成，交给 device agent。
 - 优先保留上一段 macro plan 中的核心试剂、化学计量关系和论文依据；若需要缩放，应说明按比例缩放而不是更换合成目标。
 - 必须读取 unsupported_reasons、blocking_constraints、unsupported_requested_items，避免再次输出这些不支持项。
-- 必须读取 supported_device_capabilities，尤其 supported_containers 和 supported_workstations，并把 macro_plan 写成这些设备可执行的动作。
 - macro_plan 的每一步应是正向可执行命令，不要把“不使用某设备”写成设备动作。
 - 不要直接照抄 observation 中被设备层判定不支持的动作、容器、工作站、传感器、闭环判断或在线表征能力。
 - 如果最终 observation point 需要设备外表征，必须明确区分“设备内可执行步骤”和“离线 handoff/数据回传”，但不要伪造设备描述中没有的表征工作站。
@@ -564,16 +606,18 @@ device-adaptation macro plan design
     {{
       "步骤序号": 1,
       "操作": "步骤名称",
-      "试剂/对象": "设备支持容器/工作站中的对象",
-      "参数": "具体可执行参数"
+      "试剂/对象": "化学试剂/样品/反应体系对象，不写机器容器或工作站",
+      "参数": "化学实验自然语言参数，不写容器编号、工作站字段或机器人动作"
     }}
   ],
-  "macro_plan_summary": "一句话说明只做了哪些设备适配，不改变合成目标"
+  "macro_plan_summary": "一句话说明哪些化学路线级约束被修正；若仅需设备映射，应说明交由 device agent 选择容器/工作站"
 }}
 
 要求：
 - macro_plan 必须严格属于当前 stage。
 - 参数应包含关键实验条件、体积/摩尔量/温度/时间/转速等，不要输出占位性研究建议。
+- 参数必须写成固定条件；不要写“洗涤至/洗至/直至上清/干燥至/观察颜色/观察浑浊/缓慢滴加/同步搅拌”等需要闭环判断或设备实时感知的表达。
+- 参数不要写“进样瓶编号”“原液编号”“工作站”“液体进样站”“纯化工作站”“烘干机”等机器执行字段，除非这些词来自原始化学对象且确实是研究目标的一部分。
 - 最后一类目标 observation 若设备不可执行，应作为离线 observation/handoff 继续保留。"""
 
 
@@ -731,7 +775,7 @@ post-observation report update
 - 明确加入当前异常 observation 对后续计划的影响
 - 如果 observation.feedback_type 是 device_feasibility_error，应明确写入：
   当前设备层不支持、具体不支持原因、上一段 stage/macro_action 中哪些部分需要删除或替换、
-  以及后续路线必须满足的设备能力边界"""
+  以及哪些内容应交由下游 device agent 做容器/工作站映射"""
 
 
 STAGE_INTERNAL_REPAIR_ASSESS_PROMPT = """## 任务名称
@@ -777,7 +821,8 @@ stage internal repair assess
 - 只有当目标 observation point 和 stage 边界仍然合理时，repairable 才能为 true
 - 如果需要改变 observation point 或 stage 边界，repairable 必须为 false
 - 如果 observation.feedback_type 是 device_feasibility_error，优先判断是否能在不改变当前 observation point 的前提下，
-  仅把当前 stage 内部 macro_plan 改写成设备可执行路线；若可以，repairable 应为 true。
+  仅把当前 stage 内部 macro_plan 中化学路线级不可执行部分改写为可由设备层进一步适配的化学语义路线；
+  若可以，repairable 应为 true。
   updated_current_stage_plan 必须保留原 current_stage、目标材料/目标相和 XRD/目标 observation point。"""
 
 

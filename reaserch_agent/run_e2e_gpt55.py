@@ -18,6 +18,7 @@ if __package__ is None or __package__ == "":
 
 from reaserch_agent import ResearchAgent
 from reaserch_agent.state import ResearchAgentState
+from reaserch_agent.tools import load_device_context
 from reaserch_agent.utils.llm_factory import CodexResponsesModel, LLMFactory
 
 
@@ -29,6 +30,7 @@ DEFAULT_QUERY = (
 DEFAULT_BASE_URL = "https://a-ocnfniawgw.cn-shanghai.fcapp.run/v1"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_KNOWLEDGE_BASE_DIR = REPO_ROOT / "reaserch_agent" / "chem_kb"
+DEFAULT_DEVICE_WORKSTATIONS_DIR = REPO_ROOT / "chem_resources" / "workstations_new"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "reaserch_agent" / "e2e_test" / "gpt55"
 
 
@@ -48,6 +50,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--knowledge-base-dir",
         default=str(DEFAULT_KNOWLEDGE_BASE_DIR),
         help=f"research agent 知识库路径。默认: {DEFAULT_KNOWLEDGE_BASE_DIR}",
+    )
+    parser.add_argument(
+        "--device-workstations-dir",
+        default=str(DEFAULT_DEVICE_WORKSTATIONS_DIR),
+        help=(
+            "输入给 B1 的设备工作站描述目录。默认使用当前 chem_resources/workstations_new。"
+        ),
+    )
+    parser.add_argument(
+        "--no-b1-device-context",
+        action="store_true",
+        help="不把设备能力上下文传给 B1；用于对比旧数据流。",
     )
     parser.add_argument(
         "--output-dir",
@@ -172,6 +186,18 @@ def build_model(args: argparse.Namespace, api_key: str) -> Any:
         api_key=api_key,
         base_url=args.base_url,
     )
+
+
+def build_b1_constraints(args: argparse.Namespace) -> Dict[str, Any]:
+    constraints: Dict[str, Any] = {
+        "knowledge_base_dir": str(Path(args.knowledge_base_dir).expanduser().resolve()),
+        "memory_enabled": bool(args.enable_memory),
+    }
+    if not args.no_b1_device_context:
+        device_dir = Path(args.device_workstations_dir).expanduser().resolve()
+        constraints["device_workstations_dir"] = str(device_dir)
+        constraints["device_context"] = load_device_context(device_dir)
+    return constraints
 
 
 def import_device_main_workflow() -> Any:
@@ -347,10 +373,7 @@ def main() -> int:
     b1_state = research_agent.run(
         event_type="bootstrap",
         query=args.query.strip(),
-        constraints={
-            "knowledge_base_dir": str(Path(args.knowledge_base_dir).expanduser().resolve()),
-            "memory_enabled": bool(args.enable_memory),
-        },
+        constraints=build_b1_constraints(args),
         payload={
             "requested_outputs": ["stage_route", "current_stage", "macro_plan"],
         },
@@ -429,6 +452,8 @@ def main() -> int:
         "base_url": args.base_url,
         "wire_api": args.wire_api,
         "knowledge_base_dir": str(Path(args.knowledge_base_dir).expanduser().resolve()),
+        "device_workstations_dir": str(Path(args.device_workstations_dir).expanduser().resolve()),
+        "b1_device_context_enabled": not args.no_b1_device_context,
         "memory_enabled": bool(args.enable_memory),
         "b1_state_path": str(b1_path),
         "device_layer_input_path": str(output_dir / "02_device_layer_input.json"),

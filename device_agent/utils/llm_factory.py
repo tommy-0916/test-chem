@@ -2,10 +2,16 @@
 LLM instance factory and pooled backend runtime.
 """
 
+import json
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -33,6 +39,136 @@ class BackendConfig:
     model_name: str
     api_key: str
     endpoint_url: str
+
+
+class CodexResponsesModel:
+    """Adapter for Codex-compatible providers that require wire_api=responses."""
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        base_url: str,
+        reasoning_effort: str = "xhigh",
+        timeout: float = 180.0,
+        codex_path: Optional[str] = None,
+    ) -> None:
+        self.model_name = model
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.reasoning_effort = reasoning_effort
+        self.timeout = timeout
+        self.codex_path = (
+            codex_path
+            or shutil.which("codex")
+            or "/Applications/Codex.app/Contents/Resources/codex"
+        )
+
+    def invoke(self, messages: List[Any]) -> ChatResponse:
+        prompt = self._messages_to_prompt(messages)
+        with tempfile.TemporaryDirectory(prefix="device-codex-") as tmpdir:
+            tmp_path = Path(tmpdir)
+            output_path = tmp_path / "last_message.txt"
+            self._write_codex_home(tmp_path)
+            cmd = [
+                self.codex_path,
+                "exec",
+                "--skip-git-repo-check",
+                "--output-last-message",
+                str(output_path),
+                "--json",
+                "-",
+            ]
+            env = dict(os.environ)
+            env["CODEX_HOME"] = str(tmp_path)
+            env["OPENAI_API_KEY"] = self.api_key
+            completed = subprocess.run(
+                cmd,
+                input=prompt,
+                text=True,
+                capture_output=True,
+                timeout=self.timeout,
+                env=env,
+                check=False,
+            )
+            if completed.returncode != 0:
+                stderr = completed.stderr.strip()
+                stdout = completed.stdout.strip()
+                detail = stderr or stdout or f"exit code {completed.returncode}"
+                raise RuntimeError(f"Codex responses call failed: {detail[-2000:]}")
+            if not output_path.exists():
+                raise RuntimeError("Codex responses call did not produce output-last-message")
+            text = output_path.read_text(encoding="utf-8").strip()
+            if not text:
+                raise RuntimeError("Codex responses call returned empty output")
+            return ChatResponse(content=text)
+
+    def _write_codex_home(self, path: Path) -> None:
+        bundled_marketplace = Path(
+            os.getenv(
+                "REFINER_CODEX_BUNDLED_MARKETPLACE",
+                str(Path.home() / ".codex/.tmp/bundled-marketplaces/openai-bundled"),
+            )
+        )
+        primary_runtime_marketplace = Path(
+            os.getenv(
+                "REFINER_CODEX_PRIMARY_RUNTIME_MARKETPLACE",
+                str(
+                    Path.home()
+                    / ".cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+                ),
+            )
+        )
+        config = f"""model_provider = "OpenAI"
+model = "{self._escape_toml(self.model_name)}"
+model_reasoning_effort = "{self._escape_toml(self.reasoning_effort)}"
+disable_response_storage = true
+network_access = "enabled"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
+
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "{self._escape_toml(self.base_url)}"
+wire_api = "responses"
+requires_openai_auth = true
+"""
+        if bundled_marketplace.exists():
+            config += f"""
+[marketplaces.openai-bundled]
+source_type = "local"
+source = "{self._escape_toml(str(bundled_marketplace))}"
+"""
+        if primary_runtime_marketplace.exists():
+            config += f"""
+[marketplaces.openai-primary-runtime]
+source_type = "local"
+source = "{self._escape_toml(str(primary_runtime_marketplace))}"
+"""
+        (path / "config.toml").write_text(config, encoding="utf-8")
+        (path / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": self.api_key}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def _messages_to_prompt(self, messages: List[Any]) -> str:
+        parts = []
+        for message in messages:
+            content = getattr(message, "content", None)
+            if content is None and isinstance(message, dict):
+                content = message.get("content")
+            role = getattr(message, "type", None) or getattr(message, "role", None)
+            if role is None and isinstance(message, dict):
+                role = message.get("role")
+            label = str(role or "message")
+            if content:
+                parts.append(f"[{label}]\n{content}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _escape_toml(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 class OpenAICompatChatModel:
@@ -498,6 +634,16 @@ class LLMFactory:
             raise ValueError(
                 "API key is required. Please set REFINER_LLM_API_KEY in .env file "
                 "or provide it as a parameter."
+            )
+
+        if os.getenv("REFINER_LLM_WIRE_API", "").strip().lower() == "codex_responses":
+            return CodexResponsesModel(
+                model=resolved_model_name,
+                api_key=resolved_api_key,
+                base_url=resolved_endpoint_url,
+                reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
+                timeout=timeout,
+                codex_path=os.getenv("REFINER_CODEX_CLI_PATH"),
             )
 
         return LLMFactory._build_single_backend_model(

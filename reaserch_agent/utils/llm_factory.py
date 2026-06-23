@@ -75,6 +75,21 @@ class CodexResponsesModel:
             return SimpleNamespace(content=text)
 
     def _write_codex_home(self, path: Path) -> None:
+        bundled_marketplace = Path(
+            os.getenv(
+                "REFINER_CODEX_BUNDLED_MARKETPLACE",
+                str(Path.home() / ".codex/.tmp/bundled-marketplaces/openai-bundled"),
+            )
+        )
+        primary_runtime_marketplace = Path(
+            os.getenv(
+                "REFINER_CODEX_PRIMARY_RUNTIME_MARKETPLACE",
+                str(
+                    Path.home()
+                    / ".cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+                ),
+            )
+        )
         config = f"""model_provider = "OpenAI"
 model = "{self._escape_toml(self._model)}"
 model_reasoning_effort = "{self._escape_toml(self._reasoning_effort)}"
@@ -88,6 +103,18 @@ name = "OpenAI"
 base_url = "{self._escape_toml(self._base_url)}"
 wire_api = "responses"
 requires_openai_auth = true
+"""
+        if bundled_marketplace.exists():
+            config += f"""
+[marketplaces.openai-bundled]
+source_type = "local"
+source = "{self._escape_toml(str(bundled_marketplace))}"
+"""
+        if primary_runtime_marketplace.exists():
+            config += f"""
+[marketplaces.openai-primary-runtime]
+source_type = "local"
+source = "{self._escape_toml(str(primary_runtime_marketplace))}"
 """
         (path / "config.toml").write_text(config, encoding="utf-8")
         (path / "auth.json").write_text(

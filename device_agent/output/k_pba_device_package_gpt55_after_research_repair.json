@@ -1,0 +1,136 @@
+{
+  "feedback_type": "device_feasibility_error",
+  "status": "feasibility_error",
+  "exp_id": "exp_20260610_003",
+  "iteration_id": 0,
+  "workflow_id": 0,
+  "macro_plan": "{\n  \"macro_plan\": [\n    {\n      \"步骤序号\": 1,\n      \"操作\": \"外部预配并装载 Fe2+ 前驱体 A 液\",\n      \"试剂/对象\": \"外部预配 A 液、进样瓶\",\n      \"参数\": \"A 液按上一方案等比例缩放配制：每瓶装载 12 mL 水溶液，含 FeSO4·7H2O 0.60 mmol、抗坏血酸 0.12 mmol、KCl 6.0 mmol；室温新鲜配制后作为液体原液装入进样瓶，避免设备内进行亚克级固体称量。\"\n    },\n    {\n      \"步骤序号\": 2,\n      \"操作\": \"外部预配并装载亚铁氰根前驱体 B 液\",\n      \"试剂/对象\": \"外部预配 B 液、进样瓶\",\n      \"参数\": \"B 液按上一方案等比例缩放配制：每瓶装载 12 mL 水溶液，含 K4[Fe(CN)6]·3H2O 0.60 mmol、KCl 6.0 mmol；室温搅拌至澄清后作为液体原液装入进样瓶。\"\n    },\n    {\n      \"步骤序号\": 3,\n      \"操作\": \"水相共沉淀生成 K-rich FeHCF 前驱沉淀\",\n      \"试剂/对象\": \"进样瓶中的 A 液与 B 液混合体系\",\n      \"参数\": \"将 12 mL B 液加入含 12 mL A 液的进样瓶中，单瓶总体积约 24 mL；室温磁力搅拌 800 r/min，60 min；Fe2+ 与 [Fe(CN)6]4- 摩尔比保持 1:1，KCl 维持过量 K+ 环境。\"\n    },\n    {\n      \"步骤序号\": 4,\n      \"操作\": \"室温老化促进 PBA 框架结晶\",\n      \"试剂/对象\": \"进样瓶中的 K-rich FeHCF 悬浊液\",\n      \"参数\": \"反应后悬浊液继续保留在进样瓶中，室温静置老化 12 h；老化后单瓶液体体积仍约 24 mL，满足后续留固离心纯化前体积不超过 30 mL。\"\n    },\n    {\n      \"步骤序号\": 5,\n      \"操作\": \"第一次留固离心并水洗\",\n      \"试剂/对象\": \"老化后的 K-rich FeHCF 悬浊液、去离子水、进样瓶\",\n      \"参数\": \"对每个进样瓶执行留固离心，6000 rpm，10 min，倒去上清液；加入去离子水 20 mL 重悬固体，完成 1 次水洗。\"\n    },\n    {\n      \"步骤序号\": 6,\n      \"操作\": \"第二次留固离心并水洗\",\n      \"试剂/对象\": \"第一次水洗后的 K-rich FeHCF 固体、去离子水、进样瓶\",\n      \"参数\": \"执行留固离心，6000 rpm，10 min，倒去上清液；加入去离子水 20 mL 重悬固体，完成第 2 次水洗。\"\n    },\n    {\n      \"步骤序号\": 7,\n      \"操作\": \"第三次留固离心并水洗\",\n      \"试剂/对象\": \"第二次水洗后的 K-rich FeHCF 固体、去离子水、进样瓶\",\n      \"参数\": \"执行留固离心，6000 rpm，10 min，倒去上清液；加入去离子水 20 mL 重悬固体，完成第 3 次水洗。\"\n    },\n    {\n      \"步骤序号\": 8,\n      \"操作\": \"留固离心并酒精洗\",\n      \"试剂/对象\": \"第三次水洗后的 K-rich FeHCF 固体、酒精、进样瓶\",\n      \"参数\": \"执行留固离心，6000 rpm，10 min，倒去上清液；加入酒精 20 mL 重悬固体，完成 1 次酒精洗。\"\n    },\n    {\n      \"步骤序号\": 9,\n      \"操作\": \"最终留固离心获得湿固体\",\n      \"试剂/对象\": \"酒精洗后的 K-rich FeHCF 悬浊液、进样瓶\",\n      \"参数\": \"执行留固离心，6000 rpm，10 min，倒去上清液，保留进样瓶内湿固体；不再加入清洗液。\"\n    },\n    {\n      \"步骤序号\": 10,\n      \"操作\": \"打开瓶盖准备干燥\",\n      \"试剂/对象\": \"装有 K-rich FeHCF 湿固体的进样瓶\",\n      \"参数\": \"将进样瓶开盖或半开盖，使湿固体处于可静置干燥状态；容器保持为进样瓶，以贯通纯化和干燥步骤。\"\n    },\n    {\n      \"步骤序号\": 11,\n      \"操作\": \"低温静置烘干获得 XRD 待测粉末\",\n      \"试剂/对象\": \"开盖或半开盖进样瓶中的 K-rich FeHCF 湿固体\",\n      \"参数\": \"60 C 静置干燥 720 min；干燥后获得 K-rich FeHCF / 亚铁氰化铁候选粉末，用于离线 XRD。\"\n    },\n    {\n      \"步骤序号\": 12,\n      \"操作\": \"离线 XRD 送样与数据回传\",\n      \"试剂/对象\": \"干燥 K-rich FeHCF 候选粉末\",\n      \"参数\": \"取 20-50 mg 干燥粉末研细并平铺于 XRD 样品台；离线粉末 XRD 测试，建议 Cu Kα，2θ = 5-60°；回传谱图、峰表、约 17° 附近 PBA (200) 类峰信息和杂相初步判定，作为当前 stage observation。\"\n    }\n  ]\n}",
+  "macro_plan_summary": "",
+  "observation_plan": {},
+  "device_capabilities": {
+    "supported_containers": [
+      "进样瓶",
+      "西林瓶",
+      "50ml耐热瓶",
+      "留样瓶"
+    ],
+    "supported_workstations": [
+      "solid-sample-workstation",
+      "elec-chem-storage-workstation",
+      "dual-station-electrochemical-workstation",
+      "ultrasonic-cleaning-workstation",
+      "material-workstation",
+      "liquid-dispensing-workstation",
+      "magnetic-stirring-workstation",
+      "dryer-workstation",
+      "pure-workstation"
+    ],
+    "not_supported": [
+      "进样瓶到进样瓶的液体转移",
+      "进样瓶在置物工作站静置老化",
+      "设备内 XRD/PXRD 自动采集或在线判读",
+      "半开盖状态的明确控制"
+    ]
+  },
+  "feasibility_assessment": {
+    "is_feasible": false,
+    "status": "unsupported",
+    "blocking_constraints": [
+      "步骤 3 要求将一个进样瓶中的 B 液转移加入另一个进样瓶中的 A 液；当前液体进样站仅描述从已装载原料瓶位向目标容器加液，未描述进样瓶到进样瓶的液体转移能力。",
+      "步骤 4 要求进样瓶室温静置老化 12 h；当前置物工作站仅支持 50ml耐热瓶和西林瓶，不支持进样瓶静置放置。",
+      "步骤 5-9 多次离心纯化要求使用进样瓶且执行留固离心；纯化工作站本身支持该类参数，但要求容器总数为 1-10 之间的偶数，macro_plan 未声明偶数数量容器，因此当前方案无法确认满足硬约束。"
+    ],
+    "unsupported_items": [
+      {
+        "macro_step": "步骤 3：水相共沉淀生成 K-rich FeHCF 前驱沉淀",
+        "requirement": "将 12 mL B 液从进样瓶加入含 12 mL A 液的进样瓶",
+        "reason": "液体进样站支持向目标容器加入来自已装载原料瓶位的液体，但设备描述没有进样瓶到进样瓶转移能力。",
+        "missing_device_capability": "进样瓶间液体转移或将进样瓶作为液体源的移液能力",
+        "suggested_research_revision": "将 B 液明确作为液体进样站原料瓶位中的已装载原液，由移液平台2.0-5ml向 A 液进样瓶加液；或重新规划为设备明确支持的加液来源。"
+      },
+      {
+        "macro_step": "步骤 4：室温老化促进 PBA 框架结晶",
+        "requirement": "进样瓶中悬浊液室温静置老化 12 h",
+        "reason": "置物工作站支持静置的容器类型为 50ml耐热瓶或西林瓶，不支持进样瓶。",
+        "missing_device_capability": "进样瓶静置/暂存工作站能力",
+        "suggested_research_revision": "改写为设备支持容器的静置流程，或由上游明确该 12 h 老化为设备外部 handoff。"
+      },
+      {
+        "macro_step": "步骤 5-9：留固离心并水洗/酒精洗/最终离心",
+        "requirement": "对进样瓶执行多轮留固离心，6000 rpm，10 min，清洗液 20 mL",
+        "reason": "纯化工作站支持进样瓶、留固、6000 rpm、10 min、单次清洗和 20 mL 清洗液，但要求容器总数必须为偶数；macro_plan 只写“每个进样瓶/单瓶”，未声明偶数数量。",
+        "missing_device_capability": "无缺失设备能力；缺失满足纯化工作站偶数容器约束的方案声明",
+        "suggested_research_revision": "明确并行处理偶数个进样瓶，或加入配平/空白进样瓶等设备层允许的偶数容器安排。"
+      }
+    ],
+    "supported_parts": [
+      "步骤 1-2 的 A 液、B 液外部预配和装载可视为设备外部准备，不要求当前设备层执行亚克级固体称量。",
+      "步骤 3 中室温磁力搅拌 800 r/min、60 min、进样瓶体系在磁力搅拌工作站参数范围内。",
+      "步骤 5-9 的留固离心参数 6000 rpm、10 min、清洗液水/酒精、20 mL 清洗液在纯化工作站允许范围内，前提是容器有盖、体积不超过30 mL且容器数量为偶数。",
+      "步骤 10 可通过液体进样站开盖实现进样瓶开盖；不支持“半开盖”状态的明确控制。",
+      "步骤 11 的进样瓶静置烘干 60 C、720 min 在烘干机温度和时间范围内。",
+      "步骤 12 明确为离线 XRD 送样与数据回传，属于外部 observation/handoff，不由当前设备层执行，不作为拒绝原因。"
+    ],
+    "device_capability_summary": {
+      "supported_containers": [
+        "进样瓶",
+        "西林瓶",
+        "50ml耐热瓶",
+        "留样瓶"
+      ],
+      "supported_workstations": [
+        "solid-sample-workstation",
+        "elec-chem-storage-workstation",
+        "dual-station-electrochemical-workstation",
+        "ultrasonic-cleaning-workstation",
+        "material-workstation",
+        "liquid-dispensing-workstation",
+        "magnetic-stirring-workstation",
+        "dryer-workstation",
+        "pure-workstation"
+      ],
+      "not_supported": [
+        "进样瓶到进样瓶的液体转移",
+        "进样瓶在置物工作站静置老化",
+        "设备内 XRD/PXRD 自动采集或在线判读",
+        "半开盖状态的明确控制"
+      ]
+    },
+    "recommendation_to_research_agent": "请将 B 液改写为液体进样站原料瓶位中的原液加样来源，并将 12 h 老化改为设备支持的容器静置或明确写成设备外部 handoff；同时明确纯化阶段使用偶数个进样瓶以满足离心工作站约束。",
+    "source": "llm"
+  },
+  "error_package": {
+    "type": "physical_infeasible",
+    "blocking_constraints": [
+      "步骤 3 要求将一个进样瓶中的 B 液转移加入另一个进样瓶中的 A 液；当前液体进样站仅描述从已装载原料瓶位向目标容器加液，未描述进样瓶到进样瓶的液体转移能力。",
+      "步骤 4 要求进样瓶室温静置老化 12 h；当前置物工作站仅支持 50ml耐热瓶和西林瓶，不支持进样瓶静置放置。",
+      "步骤 5-9 多次离心纯化要求使用进样瓶且执行留固离心；纯化工作站本身支持该类参数，但要求容器总数为 1-10 之间的偶数，macro_plan 未声明偶数数量容器，因此当前方案无法确认满足硬约束。"
+    ],
+    "message": "请将 B 液改写为液体进样站原料瓶位中的原液加样来源，并将 12 h 老化改为设备支持的容器静置或明确写成设备外部 handoff；同时明确纯化阶段使用偶数个进样瓶以满足离心工作站约束。",
+    "last_workflow_txt": "",
+    "unsupported_items": [
+      {
+        "macro_step": "步骤 3：水相共沉淀生成 K-rich FeHCF 前驱沉淀",
+        "requirement": "将 12 mL B 液从进样瓶加入含 12 mL A 液的进样瓶",
+        "reason": "液体进样站支持向目标容器加入来自已装载原料瓶位的液体，但设备描述没有进样瓶到进样瓶转移能力。",
+        "missing_device_capability": "进样瓶间液体转移或将进样瓶作为液体源的移液能力",
+        "suggested_research_revision": "将 B 液明确作为液体进样站原料瓶位中的已装载原液，由移液平台2.0-5ml向 A 液进样瓶加液；或重新规划为设备明确支持的加液来源。"
+      },
+      {
+        "macro_step": "步骤 4：室温老化促进 PBA 框架结晶",
+        "requirement": "进样瓶中悬浊液室温静置老化 12 h",
+        "reason": "置物工作站支持静置的容器类型为 50ml耐热瓶或西林瓶，不支持进样瓶。",
+        "missing_device_capability": "进样瓶静置/暂存工作站能力",
+        "suggested_research_revision": "改写为设备支持容器的静置流程，或由上游明确该 12 h 老化为设备外部 handoff。"
+      },
+      {
+        "macro_step": "步骤 5-9：留固离心并水洗/酒精洗/最终离心",
+        "requirement": "对进样瓶执行多轮留固离心，6000 rpm，10 min，清洗液 20 mL",
+        "reason": "纯化工作站支持进样瓶、留固、6000 rpm、10 min、单次清洗和 20 mL 清洗液，但要求容器总数必须为偶数；macro_plan 只写“每个进样瓶/单瓶”，未声明偶数数量。",
+        "missing_device_capability": "无缺失设备能力；缺失满足纯化工作站偶数容器约束的方案声明",
+        "suggested_research_revision": "明确并行处理偶数个进样瓶，或加入配平/空白进样瓶等设备层允许的偶数容器安排。"
+      }
+    ],
+    "assessment_source": "llm"
+  }
+}

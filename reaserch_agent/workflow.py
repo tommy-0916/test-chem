@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import time
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Sequence
 
@@ -35,7 +36,7 @@ from .prompts import (
     SURVEY_REPORT_GENERATE_PROMPT,
 )
 from .state import ResearchAgentState, ResearchEvent, SearchHit
-from .tools import KnowledgeQuery, MemoryQuery
+from .tools import KnowledgeQuery, MemoryQuery, ensure_device_context
 from .utils import LLMFactory
 
 logger = logging.getLogger(__name__)
@@ -53,11 +54,44 @@ PLACEHOLDER_MACRO_TERMS = [
     "进行材料制备",
     "开展电化学测试",
 ]
+DEVICE_ADAPTATION_UNSUPPORTED_CLOSURE_TERMS = [
+    "观察深蓝",
+    "观察颜色",
+    "观察浑浊",
+    "洗涤至",
+    "洗至",
+    "上清液接近无色",
+    "上清液基本无色",
+    "直至上清",
+    "干燥至",
+    "无明显游离水",
+    "缓慢滴加",
+    "控速滴加",
+    "同步搅拌",
+]
+DEVICE_CONTEXT_UNSUPPORTED_MACRO_TERMS = [
+    "持续磁力搅拌条件下加入",
+    "持续磁力搅拌下加入",
+    "边搅拌边加入",
+    "边搅拌边滴加",
+    "同步搅拌加液",
+    "同步加液",
+    "控速滴加",
+    "缓慢滴加",
+    "室温静置老化",
+    "静置老化",
+    "独立静置老化",
+    "干燥至",
+    "洗涤至",
+    "质量变化不明显",
+    "明显潮湿",
+]
 PARAMETER_DETAIL_RE = re.compile(
     r"(\d+(?:\.\d+)?\s*(?:mmol|mol|mg|g|mL|L|M|h|min|s|°C|℃|C|V|mV|A|mA|"
     r"mAh\s*g\s*[-−]?\s*1|mA\s*g\s*[-−]?\s*1|mV\s*s\s*[-−]?\s*1|cm2|cm\^2))|"
     r"(overnight|室温|room temperature|滴加|dropwise|洗涤|澄清|清澈|多次|干燥|真空|vacuum|"
-    r"centrifuge|centrifuged|stir|stirring|sonicate|ultrasonicate|age|aged)",
+    r"centrifuge|centrifuged|stir|stirring|sonicate|ultrasonicate|age|aged|"
+    r"开盖|关盖|半开盖|盖子|留固|上清)",
     re.IGNORECASE,
 )
 
@@ -123,10 +157,11 @@ class ResearchAgent(BaseAgent):
         payload: Dict[str, Any] | None = None,
         previous_state: ResearchAgentState | Dict[str, Any] | None = None,
     ) -> ResearchAgentState:
+        resolved_constraints = ensure_device_context(constraints or {})
         event = ResearchEvent(
             event_type=event_type,
             query=query,
-            constraints=constraints or {},
+            constraints=resolved_constraints,
             payload=payload or {},
         )
         return self.run_event(event, previous_state=previous_state)
@@ -605,7 +640,7 @@ class ResearchAgent(BaseAgent):
         self._augment_device_adaptation_knowledge(state)
         state.stage_progress = {
             "stage_progress_status": "device_adaptation_repair",
-            "progress_summary": "设备适应层反馈当前 macro action 不能落地，本轮只允许 LLM 重写设备可执行 macro_plan。",
+            "progress_summary": "设备适应层反馈当前 macro action 不能落地，本轮只允许 LLM 重写化学语义 macro_plan 中的路线级不可执行部分。",
         }
         state.stage_progress_status = "device_adaptation_repair"
         state.post_observation_repair_path = "device_adaptation"
@@ -855,7 +890,7 @@ class ResearchAgent(BaseAgent):
             "request": str(
                 raw_feedback.get("request")
                 or payload.get("request")
-                or "请在当前设备层支持的容器和工作站范围内重新规划 macro_plan。"
+                or "请在保留当前科学目标的前提下，只修正化学路线级不可执行项；具体容器和工作站由 device agent 映射。"
             ).strip(),
             "raw_device_feedback": self._truncate_context_value(
                 {
@@ -1171,46 +1206,78 @@ class ResearchAgent(BaseAgent):
         )
         if self._use_llm:
             try:
-                result = self._invoke_state_json(
-                    state,
-                    "device_adaptation_macro_plan_design",
-                    DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT.format(
-                        query=state.event.query,
-                        observation_json=json.dumps(
-                            observation_context, ensure_ascii=False, indent=2
-                        ),
-                        previous_macro_plan_json=json.dumps(
-                            state.previous_macro_plan, ensure_ascii=False, indent=2
-                        ),
-                        survey_report_json=json.dumps(
-                            survey_context, ensure_ascii=False, indent=2
-                        ),
-                        stage_route_json=json.dumps(
-                            state.stage_route, ensure_ascii=False, indent=2
-                        ),
-                        current_stage=state.current_stage,
-                        current_stage_plan=original_stage_plan,
-                        stage_route_reason=state.stage_route_reason,
-                        current_stage_reason=state.current_stage_reason,
-                        reference_context=reference_context or "当前没有可用参考案例",
+                base_prompt = DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT.format(
+                    query=state.event.query,
+                    observation_json=json.dumps(
+                        observation_context, ensure_ascii=False, indent=2
                     ),
-                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                    previous_macro_plan_json=json.dumps(
+                        state.previous_macro_plan, ensure_ascii=False, indent=2
+                    ),
+                    survey_report_json=json.dumps(
+                        survey_context, ensure_ascii=False, indent=2
+                    ),
+                    stage_route_json=json.dumps(
+                        state.stage_route, ensure_ascii=False, indent=2
+                    ),
+                    current_stage=state.current_stage,
+                    current_stage_plan=original_stage_plan,
+                    stage_route_reason=state.stage_route_reason,
+                    current_stage_reason=state.current_stage_reason,
+                    reference_context=reference_context or "当前没有可用参考案例",
                 )
-                state.raw_llm_outputs["device_adaptation_macro_plan_design"] = result
-                macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
-                if macro_plan:
-                    quality_issues = self._macro_plan_quality_issues(
-                        macro_plan,
-                        state.event.query,
+                last_failure = "LLM returned empty macro_plan"
+                prior_result: Dict[str, Any] | None = None
+                for attempt in range(2):
+                    task_name = "device_adaptation_macro_plan_design"
+                    task_prompt = base_prompt
+                    if attempt:
+                        task_name = f"{task_name}_quality_feedback_retry"
+                        task_prompt = self._device_adaptation_quality_feedback_prompt(
+                            base_prompt,
+                            prior_result or {},
+                            last_failure,
+                        )
+                    result = self._invoke_state_json(
+                        state,
+                        task_name,
+                        task_prompt,
+                        system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
                     )
-                    device_issues = self._device_adaptation_macro_plan_issues(
+                    output_key = (
+                        "device_adaptation_macro_plan_design"
+                        if attempt == 0
+                        else f"device_adaptation_macro_plan_design_retry_{attempt}"
+                    )
+                    state.raw_llm_outputs[output_key] = result
+                    prior_result = result
+                    macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
+                    if not macro_plan:
+                        last_failure = "LLM returned empty macro_plan"
+                        state.add_log(
+                            f"device adaptation macro plan attempt {attempt + 1} "
+                            f"failed quality gate: {last_failure}"
+                        )
+                        continue
+
+                    issues = self._device_adaptation_macro_plan_all_issues(
                         state,
                         macro_plan,
                     )
-                    if quality_issues or device_issues:
-                        raise ValueError(
+                    if issues:
+                        last_failure = (
                             "device-adaptation macro plan quality check failed: "
-                            + "; ".join((quality_issues + device_issues)[:6])
+                            + "; ".join(issues[:6])
+                        )
+                        state.add_log(
+                            f"device adaptation macro plan attempt {attempt + 1} "
+                            f"failed quality gate: {last_failure}"
+                        )
+                        continue
+
+                    if attempt:
+                        state.add_log(
+                            "device adaptation macro plan passed after quality-feedback retry"
                         )
                     return {
                         "current_stage_plan": self._device_adapted_current_stage_plan(
@@ -1219,10 +1286,11 @@ class ResearchAgent(BaseAgent):
                         ),
                         "macro_plan": macro_plan,
                     }
+
                 self._raise_llm_step_failure(
                     state,
                     "device_adaptation_macro_plan_design",
-                    "LLM returned empty macro_plan",
+                    last_failure,
                 )
             except Exception as exc:  # pragma: no cover - depends on remote model
                 logger.warning(
@@ -1325,12 +1393,13 @@ class ResearchAgent(BaseAgent):
             )
 
         note = (
-            "设备适配说明：本轮 B2 只修复 macro action 的设备可执行性，"
+            "设备反馈修复说明：本轮 B2 只在化学语义层面修复 macro action，"
             "不改变当前 stage、stage_route、合成目标、目标物相或目标 observation point。"
             f"原始 query/目标语义保持为：{state.event.query}。"
             f"设备层拒绝原因：{'；'.join(reasons) if reasons else '未给出具体原因'}。"
-            f"可用容器：{'、'.join(supported_containers) if supported_containers else '未明确'}；"
-            f"可用工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}。"
+            f"下游 device agent 可参考的容器：{'、'.join(supported_containers) if supported_containers else '未明确'}；"
+            f"可参考的工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}。"
+            "research 输出不负责选择具体容器/工作站/瓶位/开关盖/分瓶配平；这些由 device agent 映射。"
             "若当前设备层不能执行 XRD，则 XRD 保留为离线 observation/送样/数据回传；"
             "不能用颜色、质量或浑浊度替代 XRD completion condition。"
         )
@@ -1382,9 +1451,9 @@ class ResearchAgent(BaseAgent):
                 insert_at,
                 {
                     "步骤序号": insert_at + 1,
-                    "操作": "烘干机低温干燥",
-                    "试剂/对象": "洗涤后的目标样品湿沉淀、进样瓶、烘干机",
-                    "参数": "将保留的湿沉淀置于进样瓶中，在烘干机 60 C 常压干燥 720 min，得到可送样的干燥粉末。",
+                    "操作": "低温干燥获得可送样粉末",
+                    "试剂/对象": "洗涤后的目标样品湿沉淀",
+                    "参数": "将湿沉淀在 50-60 C 条件下干燥 8-12 h，得到可用于离线 XRD/PXRD 的干燥粉末；具体干燥容器和设备由 device agent 选择。",
                 },
             )
 
@@ -1393,9 +1462,9 @@ class ResearchAgent(BaseAgent):
                 normalized.append(
                     {
                         "步骤序号": len(normalized) + 1,
-                        "操作": "烘干机低温干燥",
-                        "试剂/对象": "洗涤后的目标样品湿沉淀、进样瓶、烘干机",
-                        "参数": "将保留的湿沉淀置于进样瓶中，在烘干机 60 C 常压干燥 720 min，得到可送样的干燥粉末。",
+                        "操作": "低温干燥获得可送样粉末",
+                        "试剂/对象": "洗涤后的目标样品湿沉淀",
+                        "参数": "将湿沉淀在 50-60 C 条件下干燥 8-12 h，得到可用于离线 XRD/PXRD 的干燥粉末；具体干燥容器和设备由 device agent 选择。",
                     }
                 )
             normalized.append(
@@ -1416,12 +1485,14 @@ class ResearchAgent(BaseAgent):
     def _has_real_drying_step(self, macro_plan: Sequence[Dict[str, Any]]) -> bool:
         for step in macro_plan:
             operation = str(step.get("操作", ""))
-            target = str(step.get("试剂/对象", ""))
             parameters = str(step.get("参数", ""))
-            step_blob = f"{operation} {target} {parameters}".lower()
-            if "xrd" in step_blob or "pxrd" in step_blob:
-                continue
-            if any(term in step_blob for term in ["干燥", "烘干", "dry"]):
+            operation_blob = operation.lower()
+            parameters_blob = parameters.lower()
+            if any(term in operation_blob for term in ["干燥", "烘干", "dry"]):
+                return True
+            if any(term in parameters_blob for term in ["干燥", "烘干", "dry"]) and (
+                PARAMETER_DETAIL_RE.search(parameters) is not None
+            ):
                 return True
         return False
 
@@ -1471,76 +1542,10 @@ class ResearchAgent(BaseAgent):
         if "current_stage" in plan_blob or "stage_route" in plan_blob:
             issues.append("macro_plan should contain executable lab steps, not stage metadata")
 
-        if ("纯化" in plan_blob or "离心" in plan_blob) and (
-            "烘干" in plan_blob or "干燥" in plan_blob
-        ):
-            drying_after_purification = False
-            saw_purification = False
-            has_open_before_drying = False
-            for step in macro_plan:
-                step_blob = " ".join(
-                    [
-                        str(step.get("操作", "")),
-                        str(step.get("试剂/对象", "")),
-                        str(step.get("参数", "")),
-                    ]
-                )
-                if "纯化" in step_blob or "离心" in step_blob:
-                    saw_purification = True
-                if saw_purification and ("开盖" in step_blob or "盖子打开" in step_blob):
-                    has_open_before_drying = True
-                if saw_purification and ("烘干" in step_blob or "干燥" in step_blob):
-                    drying_after_purification = True
-                    break
-            if drying_after_purification and not has_open_before_drying:
-                issues.append("macro_plan dries after purification without an explicit uncapping step")
-
-        if "液体进样" in plan_blob or "加液" in plan_blob:
-            has_add_liquid = any(
-                "加液" in " ".join(
-                    [
-                        str(step.get("操作", "")),
-                        str(step.get("试剂/对象", "")),
-                        str(step.get("参数", "")),
-                    ]
-                )
-                for step in macro_plan
-            )
-            if has_add_liquid and "开盖" not in plan_blob:
-                issues.append("macro_plan adds liquid without an explicit uncapping step")
-            if has_add_liquid and "关盖" not in plan_blob:
-                issues.append("macro_plan adds liquid without an explicit capping step")
-
-        if "磁力搅拌" in plan_blob or "搅拌工作站" in plan_blob:
-            for step in macro_plan:
-                step_blob = " ".join(
-                    [
-                        str(step.get("操作", "")),
-                        str(step.get("试剂/对象", "")),
-                        str(step.get("参数", "")),
-                    ]
-                ).lower()
-                if ("磁力搅拌" in step_blob or "搅拌工作站" in step_blob) and (
-                    "50ml耐热瓶" in step_blob or "50ml 耐热瓶" in step_blob
-                ):
-                    issues.append("macro_plan uses 50ml heat-resistant bottle for magnetic stirring")
-                    break
-
-        unsupported_closure_terms = [
-            "观察深蓝",
-            "观察颜色",
-            "观察浑浊",
-            "洗涤至",
-            "洗至",
-            "上清液接近无色",
-            "上清液基本无色",
-            "直至上清",
-            "缓慢滴加",
-            "控速滴加",
-            "同步搅拌",
-        ]
         repeated_closure_terms = [
-            term for term in unsupported_closure_terms if term.lower() in plan_blob
+            term
+            for term in DEVICE_ADAPTATION_UNSUPPORTED_CLOSURE_TERMS
+            if term.lower() in plan_blob
         ]
         if repeated_closure_terms:
             issues.append(
@@ -1549,6 +1554,45 @@ class ResearchAgent(BaseAgent):
             )
 
         return issues
+
+    def _device_adaptation_macro_plan_all_issues(
+        self,
+        state: ResearchAgentState,
+        macro_plan: List[Dict[str, Any]],
+    ) -> List[str]:
+        return self._macro_plan_quality_issues(
+            macro_plan,
+            state.event.query,
+        ) + self._device_adaptation_macro_plan_issues(
+            state,
+            macro_plan,
+        )
+
+    def _device_adaptation_quality_feedback_prompt(
+        self,
+        base_prompt: str,
+        rejected_result: Dict[str, Any],
+        quality_feedback: str,
+    ) -> str:
+        return (
+            f"{base_prompt}\n\n"
+            "## 本地质量检查反馈\n"
+            "上一轮 JSON 已被 research agent 的质量门拒绝。请不要解释原因，"
+            "直接基于以下反馈重新输出完整 JSON。\n"
+            f"拒绝原因：{quality_feedback}\n\n"
+            "### 上一轮被拒绝的 JSON\n"
+            f"{json.dumps(rejected_result, ensure_ascii=False, indent=2)}\n\n"
+            "### 必须修正\n"
+            "- 保留原始 query、current_stage、stage_route、目标材料、目标 observation point 和核心化学计量关系。\n"
+            "- 不要输出条件式/闭环式终点或需要视觉判断的表达。\n"
+            "- 禁止表达包括："
+            f"{'、'.join(DEVICE_ADAPTATION_UNSUPPORTED_CLOSURE_TERMS)}。\n"
+            "- 将这些表达改成固定次数、固定体积、固定时间、固定温度、固定转速或离线 handoff。"
+            "例如不要写“洗涤至上清液澄清”，应写“去离子水洗涤 3 次，每次使用固定体积”；"
+            "不要写“干燥至无明显游离水”，应写“100 C 常压干燥 overnight”或固定小时数。\n"
+            "- 仍然不要选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。\n"
+            "- 只输出 JSON，字段必须仍为 current_stage_plan、macro_plan、macro_plan_summary。"
+        )
 
     def _step_abnormal_observation_survey_query_generate(
         self,
@@ -2112,7 +2156,7 @@ class ResearchAgent(BaseAgent):
             return {
                 "fits_current_stage": False,
                 "status": "abnormal",
-                "reason": "设备适应层返回 feasibility_error，需要在当前 stage 内改写为设备可执行路线。",
+                "reason": "设备适应层返回 feasibility_error，需要在当前 stage 内修正化学路线级不可执行项。",
                 "observation_interpretation": {
                     "summary": self._short_observation_summary(state.latest_observation),
                     "positive_signals": [],
@@ -2417,7 +2461,8 @@ class ResearchAgent(BaseAgent):
             update_sentence = (
                 f"设备适应层反馈当前设备层不支持上一段 macro action："
                 f"{'；'.join(reasons) if reasons else observation_summary}。"
-                "后续计划必须保留当前 stage 的科学目标和论文依据，但删除或替换不可执行的容器、工作站和动作。"
+                "后续计划必须保留当前 stage 的科学目标和论文依据；research layer 只替换"
+                "化学路线级不可执行项，具体容器、工作站和机器人动作由 device agent 映射。"
             )
             report["summary"] = f"{summary} {update_sentence}".strip()
             report["key_findings"] = self._clean_queries(
@@ -2434,10 +2479,10 @@ class ResearchAgent(BaseAgent):
             report["route_implications"] = self._clean_queries(
                 list(report.get("route_implications", []))
                 + [
-                    "优先在当前 stage 内重写 macro_plan，使其使用设备层支持的容器和工作站。",
+                    "优先在当前 stage 内重写 macro_plan，使其保留化学目标并删除反应釜/在线表征等路线级不可执行项。",
                     f"支持容器：{'、'.join(supported_containers) if supported_containers else '未明确'}",
                     f"支持工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}",
-                    "如果反应釜、XRD 或 pH 闭环不可用，应改为瓶内配液/搅拌/老化/离心/干燥，XRD 作为离线 observation。",
+                    "如果反应釜、XRD 或 pH 闭环不可用，research 只写常压/低温/固定时间/离线 observation 等化学语义替代；容器和工作站落地交给 device agent。",
                 ]
             )
             report["open_questions"] = self._clean_queries(
@@ -2498,9 +2543,8 @@ class ResearchAgent(BaseAgent):
             updated_plan = (
                 f"{state.current_stage_plan} 设备适应层反馈当前设备层不支持上一段 macro action："
                 f"{'；'.join(reasons) if reasons else '设备层未给出具体原因'}。"
-                "本轮修复保留当前 stage 和目标 observation point，但必须把 macro_plan 改写成设备可执行路线；"
-                f"优先使用{'、'.join(supported_containers) if supported_containers else '设备层支持的容器'}，"
-                "避免再次使用被拒绝的容器、工作站或动作。"
+                "本轮修复保留当前 stage 和目标 observation point，只改写化学路线级不可执行点；"
+                "具体使用哪些容器、工作站、瓶位和机器人动作由下游 device agent 根据设备真源选择。"
             )
             return {
                 "repairable": True,
@@ -2756,108 +2800,60 @@ class ResearchAgent(BaseAgent):
     ) -> List[Dict[str, Any]]:
         if material == "目标样品":
             material = "目标 Fe-HCF/PBA 样品"
-        observation = state.latest_observation
-        capabilities = observation.get("supported_device_capabilities", {})
-        supported_containers = []
-        if isinstance(capabilities, dict):
-            supported_containers = self._clean_queries(
-                capabilities.get("supported_containers", [])
-            )
-        primary_container = "进样瓶"
-        if supported_containers and "进样瓶" not in supported_containers:
-            primary_container = supported_containers[0]
-
         context_text = self._observation_text(state)
         k_fe_context = any(
             term in context_text
             for term in ["k4fe", "fecl2", "k2fe", "亚铁氰化", "hexacyanoferrate"]
         )
         if k_fe_context:
-            primary_container = "进样瓶" if "进样瓶" in supported_containers or not supported_containers else primary_container
             return [
                 {
                     "步骤序号": 1,
-                    "操作": "液体进样站开盖准备加液",
-                    "试剂/对象": f"偶数个带盖 {primary_container}、液体进样站",
+                    "操作": "准备 K-rich Fe-HCF 反应用前驱体原液",
+                    "试剂/对象": "Fe2+ 前驱体原液、K4[Fe(CN)6]·3H2O 前驱体原液、KCl 或其他 K+ 来源、抗氧化/络合辅助剂",
                     "参数": (
-                        f"获取偶数个 {primary_container} 后转入液体进样站，"
-                        "对容器编号列表执行开盖动作；本轮建议使用 6 个进样瓶以满足后续纯化工作站偶数容器要求。"
+                        "外部或上游预配澄清水溶液，Fe2+ 与 [Fe(CN)6]4- 保持约 1:1，"
+                        "K+ 保持过量以促进 K-rich Fe-HCF 形成；采用常压液相路线。"
                     ),
                 },
                 {
                     "步骤序号": 2,
-                    "操作": "进样瓶分瓶加入 A 液",
-                    "试剂/对象": f"{primary_container}、已装载 K4Fe(CN)6·3H2O/柠檬酸钠水溶液原液瓶",
+                    "操作": "常压液相共沉淀生成 Fe-HCF/PBA 悬浊液",
+                    "试剂/对象": "Fe2+ 前驱体原液、K4[Fe(CN)6]·3H2O 前驱体原液、K-rich 反应体系",
                     "参数": (
-                        f"使用偶数个带盖 {primary_container} 作为贯通容器；每瓶加入 2.0 mL "
-                        "0.05 M K4Fe(CN)6·3H2O 和 0.075 M 柠檬酸钠混合水溶液，"
-                        "对应每瓶 0.10 mmol K4Fe(CN)6·3H2O 和 0.15 mmol 柠檬酸钠；"
-                        "若需 0.50 mmol 尺度，平行执行 6 瓶并保持总液量低于离心上限。"
+                        "在室温常压条件下将两种前驱体溶液混合，固定总浓度约 0.02-0.05 M，"
+                        "持续搅拌 60-120 min；不使用视觉颜色变化作为停止条件。"
                     ),
                 },
                 {
                     "步骤序号": 3,
-                    "操作": "进样瓶分瓶加入 B 液形成反应液",
-                    "试剂/对象": f"同一批 {primary_container}、已装载 FeCl2·4H2O 水溶液原液瓶",
+                    "操作": "固定时间老化促进 PBA 框架结晶",
+                    "试剂/对象": "Fe-HCF/PBA 反应悬浊液",
                     "参数": (
-                        "向每瓶加入 2.0 mL 0.05 M FeCl2·4H2O 水溶液，"
-                        "对应每瓶 0.10 mmol Fe2+，与 [Fe(CN)6]4- 保持 1:1；"
-                        "加液作为固定体积动作执行，不设置滴加速率或颜色判断终点。"
+                        "保持室温常压，继续搅拌或静置老化 2-12 h；具体采用搅拌保持还是静置保持，"
+                        "由 device agent 根据可用容器和工作站选择。"
                     ),
                 },
                 {
                     "步骤序号": 4,
-                    "操作": "液体进样站关盖完成加液",
-                    "试剂/对象": f"装有 Fe-HCF/PBA 反应混合液的 {primary_container}、液体进样站",
+                    "操作": "分离洗涤 Fe-HCF/PBA 固体",
+                    "试剂/对象": f"{material} 悬浊液、去离子水、乙醇",
                     "参数": (
-                        "对完成 A 液和 B 液定量加液的同一批进样瓶执行关盖动作，"
-                        "使容器以带盖状态进入磁力搅拌和后续纯化流程。"
+                        "离心或等效固液分离后保留固体；用去离子水洗涤 2-3 次，再用乙醇洗涤 1 次；"
+                        "每轮洗涤后重分散并再次分离，直到上清液接近无色。"
                     ),
                 },
                 {
                     "步骤序号": 5,
-                    "操作": "进样瓶内固定条件磁力搅拌反应",
-                    "试剂/对象": f"{primary_container} 中的 Fe-HCF/PBA 反应混合液、磁力搅拌工作站",
+                    "操作": "低温干燥获得 XRD 待测粉末",
+                    "试剂/对象": f"洗涤后的 {material} 湿固体",
                     "参数": (
-                        "将进样瓶放入磁力搅拌工作站，在室温下以 800 r/min 搅拌 120 min，"
-                        "以固定时间推进共沉淀和初步晶化；不使用视觉/颜色反馈作为执行条件。"
+                        "在 50-60 C 常压或真空条件下干燥 8-12 h，得到干燥粉末；"
+                        "具体干燥容器和设备由 device agent 选择。"
                     ),
                 },
                 {
                     "步骤序号": 6,
-                    "操作": "进样瓶内固定时间老化",
-                    "试剂/对象": f"{primary_container} 中的 Fe-HCF/PBA 悬浊液、磁力搅拌工作站",
-                    "参数": (
-                        "继续在原进样瓶中以 600 r/min 搅拌老化 120 min；"
-                        "该步骤以固定时间替代静置/观察闭环，保持目标 Fe-HCF/PBA 相不变。"
-                    ),
-                },
-                {
-                    "步骤序号": 7,
-                    "操作": "纯化工作站一次留固洗涤",
-                    "试剂/对象": f"老化后的 {primary_container} 内 {material} 悬浊液、去离子水",
-                    "参数": (
-                        "使用纯化工作站留固程序，设置 6000 rpm 离心 8 min；"
-                        "加入 5.0 mL 去离子水执行 1 次固定清洗，清洗后保留固体并弃去清洗液。"
-                    ),
-                },
-                {
-                    "步骤序号": 8,
-                    "操作": "液体进样站开盖准备干燥",
-                    "试剂/对象": f"洗涤后的 {primary_container} 内 {material} 湿固体、液体进样站",
-                    "参数": (
-                        "纯化工作站输出默认为带盖进样瓶；将装有湿固体的进样瓶转入液体进样站，"
-                        "执行开盖动作，容器编号与纯化步骤保持一致，为后续烘干机常压干燥做准备。"
-                    ),
-                },
-                {
-                    "步骤序号": 9,
-                    "操作": "烘干机低温干燥",
-                    "试剂/对象": f"洗涤后的 {primary_container} 内 {material} 湿固体、烘干机",
-                    "参数": "将留固得到的湿固体在原进样瓶中置于烘干机，60 C 常压干燥 720 min，得到干燥粉末。",
-                },
-                {
-                    "步骤序号": 10,
                     "操作": "离线结构 observation",
                     "试剂/对象": f"干燥后的 {material} 粉末",
                     "参数": (
@@ -2870,24 +2866,24 @@ class ResearchAgent(BaseAgent):
         return [
             {
                 "步骤序号": 1,
-                "操作": "选择设备支持容器并分装核心反应体系",
+                "操作": "按设备反馈删除路线级不可执行项并保留核心反应体系",
                 "试剂/对象": "上一段 macro plan 中的目标样品和可迁移试剂",
                 "参数": (
-                    f"将上一段计划改写为使用 {primary_container} 或设备层支持容器的瓶内路线；"
-                    "根据容器容量按比例缩小或分瓶执行，保持核心试剂和计量关系。"
+                    "不再要求反应釜、高压釜、设备内 XRD 或在线闭环判断；保留核心试剂和计量关系。"
+                    "具体容器、工作站和分批策略由 device agent 根据设备真源选择。"
                 ),
             },
             {
                 "步骤序号": 2,
-                "操作": "用瓶内配液、混合和搅拌替代不可执行步骤",
-                "试剂/对象": f"{primary_container} 中的反应体系",
-                "参数": "总液量控制在 20-25 mL；使用液体进样站加液，磁力搅拌工作站 600-1000 r/min 搅拌 30-240 min。",
+                "操作": "用常压固定条件反应替代不可执行步骤",
+                "试剂/对象": f"{material} 反应体系",
+                "参数": "采用固定体积、固定时间和固定温度/室温条件执行；不依赖设备层不存在的在线传感或人工判断闭环。",
             },
             {
                 "步骤序号": 3,
-                "操作": "完成设备可执行后处理和 observation",
-                "试剂/对象": f"{material} 设备可执行修复样品",
-                "参数": "使用纯化工作站留固离心洗涤，烘干机 60 C 干燥 8-12 h；设备层不支持的表征写作离线 observation。",
+                "操作": "完成后处理和离线 observation",
+                "试剂/对象": f"{material} 修复样品",
+                "参数": "完成固液分离、洗涤和低温干燥；设备层不支持的表征写作离线 observation。",
             },
         ]
 
@@ -3252,6 +3248,7 @@ class ResearchAgent(BaseAgent):
                     STAGE_DESIGN_PROMPT.format(
                         query=state.event.query,
                         survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
+                        device_context_json=self._device_context_json(state),
                     ),
                 )
                 state.raw_llm_outputs["stage_design"] = result
@@ -3293,27 +3290,51 @@ class ResearchAgent(BaseAgent):
 
     def _step_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
+        base_prompt = MACRO_PLAN_DESIGN_PROMPT.format(
+            query=state.event.query,
+            survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
+            extracted_protocols_json=json.dumps(
+                state.extracted_protocols, ensure_ascii=False, indent=2
+            ),
+            stage_route_json=json.dumps(state.stage_route, ensure_ascii=False, indent=2),
+            current_stage=state.current_stage,
+            stage_route_reason=state.stage_route_reason,
+            current_stage_reason=state.current_stage_reason,
+            reference_context=reference_context or "当前没有可用参考案例",
+            device_context_json=self._device_context_json(state),
+        )
         if self._use_llm:
+            previous_result: Dict[str, Any] | None = None
+            previous_issues: List[str] = []
             try:
-                result = self._invoke_state_json(
-                    state,
-                    "macro_plan_design",
-                    MACRO_PLAN_DESIGN_PROMPT.format(
-                        query=state.event.query,
-                        survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
-                        extracted_protocols_json=json.dumps(
-                            state.extracted_protocols, ensure_ascii=False, indent=2
-                        ),
-                        stage_route_json=json.dumps(state.stage_route, ensure_ascii=False, indent=2),
-                        current_stage=state.current_stage,
-                        stage_route_reason=state.stage_route_reason,
-                        current_stage_reason=state.current_stage_reason,
-                        reference_context=reference_context or "当前没有可用参考案例",
-                    ),
-                )
-                state.raw_llm_outputs["macro_plan_design"] = result
-                macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
-                if macro_plan:
+                for attempt in range(2):
+                    output_key = (
+                        "macro_plan_design"
+                        if attempt == 0
+                        else f"macro_plan_design_retry_{attempt}"
+                    )
+                    task_prompt = base_prompt
+                    if previous_result is not None:
+                        task_prompt += (
+                            "\n\n## 上一次 macro_plan 输出未通过本地质量检查\n"
+                            "请在不改变当前 stage、目标 observation point、科学目标和设备边界的前提下，"
+                            "只重写 `current_stage_plan` 与 `macro_plan`。所有输出仍必须是 JSON object。\n"
+                            "质量问题：\n"
+                            + "\n".join(f"- {issue}" for issue in previous_issues)
+                            + "\n\n上一次输出：\n"
+                            + json.dumps(previous_result, ensure_ascii=False, indent=2)
+                        )
+                    result = self._invoke_state_json(
+                        state,
+                        output_key,
+                        task_prompt,
+                    )
+                    state.raw_llm_outputs[output_key] = result
+                    previous_result = result
+                    macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
+                    if not macro_plan:
+                        previous_issues = ["LLM returned empty macro_plan"]
+                        continue
                     current_stage_plan = self._ensure_stage_plan_mentions_observation(
                         state,
                         result.get("current_stage_plan", "").strip(),
@@ -3322,19 +3343,18 @@ class ResearchAgent(BaseAgent):
                         macro_plan,
                         state.event.query,
                     )
-                    if quality_issues:
-                        raise ValueError(
-                            "macro plan quality check failed: "
-                            + "; ".join(quality_issues[:5])
-                        )
-                    return {
-                        "current_stage_plan": current_stage_plan,
-                        "macro_plan": macro_plan,
-                    }
-                self._raise_llm_step_failure(
-                    state,
-                    "macro_plan_design",
-                    "LLM returned empty macro_plan",
+                    quality_issues.extend(
+                        self._device_context_macro_quality_issues(state, macro_plan)
+                    )
+                    if not quality_issues:
+                        return {
+                            "current_stage_plan": current_stage_plan,
+                            "macro_plan": macro_plan,
+                        }
+                    previous_issues = quality_issues[:5]
+                raise ValueError(
+                    "macro plan quality check failed: "
+                    + "; ".join(previous_issues[:5])
                 )
             except Exception as exc:  # pragma: no cover - depends on remote model
                 logger.warning("macro plan design failed: %s", exc)
@@ -3357,11 +3377,20 @@ class ResearchAgent(BaseAgent):
             heuristic_design["macro_plan"],
             state.event.query,
         )
+        quality_issues.extend(
+            self._device_context_macro_quality_issues(
+                state,
+                heuristic_design["macro_plan"],
+            )
+        )
         if quality_issues:
             reference_plan = self._best_structured_reference_macro_plan(state)
             if reference_plan:
                 repaired_plan = self._ensure_macro_plan_reaches_observation(state, reference_plan)
                 repaired_issues = self._macro_plan_quality_issues(repaired_plan, state.event.query)
+                repaired_issues.extend(
+                    self._device_context_macro_quality_issues(state, repaired_plan)
+                )
                 if not repaired_issues:
                     state.add_log(
                         "macro plan quality check replaced coarse offline draft with structured "
@@ -3375,6 +3404,12 @@ class ResearchAgent(BaseAgent):
                 + "; ".join(quality_issues[:5])
             )
         return heuristic_design
+
+    def _device_context_json(self, state: ResearchAgentState) -> str:
+        device_context = (state.event.constraints or {}).get("device_context")
+        if not device_context:
+            return "{}"
+        return json.dumps(device_context, ensure_ascii=False, indent=2)
 
     def _invoke_state_json(
         self,
@@ -3392,10 +3427,27 @@ class ResearchAgent(BaseAgent):
             "## 当前任务\n"
             f"{task_prompt}"
         )
-        return self.invoke_json(system_prompt, contextual_prompt)
+        verbose = os.getenv("RESEARCH_AGENT_VERBOSE_STEPS", "1").strip().lower()
+        should_print = verbose not in {"0", "false", "no", "off"}
+        started_at = time.time()
+        if should_print:
+            print(f"[research-agent] LLM step start: {task_name}", flush=True)
+        try:
+            result = self.invoke_json(system_prompt, contextual_prompt)
+        except Exception:
+            if should_print:
+                print(f"[research-agent] LLM step failed: {task_name}", flush=True)
+            raise
+        if should_print:
+            elapsed = time.time() - started_at
+            print(
+                f"[research-agent] LLM step done: {task_name} ({elapsed:.1f}s)",
+                flush=True,
+            )
+        return result
 
     def _compact_state_context(self, state: ResearchAgentState, task_name: str) -> str:
-        if task_name == "device_adaptation_macro_plan_design":
+        if task_name.startswith("device_adaptation_macro_plan_design"):
             return self._compact_device_adaptation_state_context(state, task_name)
 
         payload: Dict[str, Any] = {
@@ -3458,6 +3510,10 @@ class ResearchAgent(BaseAgent):
             "task_name": task_name,
             "event_type": state.event.event_type,
             "query": state.event.query,
+            "constraints": self._truncate_context_value(
+                state.event.constraints,
+                max_chars=3200,
+            ),
             "knowledge_hits": [
                 {
                     "title": hit.title,
@@ -3551,6 +3607,58 @@ class ResearchAgent(BaseAgent):
                 issues.append(f"第 {index} 步把完整 query 当作试剂/对象")
             if parameters and not PARAMETER_DETAIL_RE.search(parameters):
                 issues.append(f"第 {index} 步参数缺少具体实验条件")
+
+        return issues
+
+    def _device_context_macro_quality_issues(
+        self,
+        state: ResearchAgentState,
+        macro_plan: Sequence[Dict[str, Any]],
+    ) -> List[str]:
+        if not (state.event.constraints or {}).get("device_context"):
+            return []
+
+        issues: List[str] = []
+        for index, step in enumerate(macro_plan, start=1):
+            operation = str(step.get("操作", "")).strip()
+            target = str(step.get("试剂/对象", "")).strip()
+            parameters = str(step.get("参数", "")).strip()
+            step_blob = f"{operation} {target} {parameters}"
+
+            repeated_terms = [
+                term for term in DEVICE_CONTEXT_UNSUPPORTED_MACRO_TERMS if term in step_blob
+            ]
+            if repeated_terms:
+                issues.append(
+                    f"第 {index} 步包含当前设备边界下不可直接适配的表达: "
+                    + ", ".join(repeated_terms[:4])
+                )
+
+            if re.search(
+                r"(持续|同步|边).{0,8}(磁力搅拌|搅拌).{0,16}(加入|加液|滴加)",
+                step_blob,
+            ) or re.search(
+                r"(加入|加液|滴加).{0,16}(持续|同步|边).{0,8}(磁力搅拌|搅拌)",
+                step_blob,
+            ):
+                issues.append(
+                    f"第 {index} 步要求同步搅拌加液；当前设备应改为顺序/分批加液后固定转速搅拌"
+                )
+
+            if "称取" in step_blob and not re.search(r"外部|预配|已装载|原液", step_blob):
+                issues.append(
+                    f"第 {index} 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液"
+                )
+
+            if re.search(r"(配制|前驱体溶液|原液).{0,80}20\s*mL", step_blob, re.IGNORECASE):
+                issues.append(
+                    f"第 {index} 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限"
+                )
+
+            if "搅拌" in step_blob and re.search(r"以保持|为准|适当|必要时", parameters):
+                issues.append(
+                    f"第 {index} 步搅拌条件不是固定参数；应写固定转速和固定时间"
+                )
 
         return issues
 
@@ -3764,9 +3872,9 @@ class ResearchAgent(BaseAgent):
                     },
                     {
                         "步骤序号": len(macro_plan) + 2,
-                        "操作": "执行 XRD 观察",
-                        "试剂/对象": "XRD 工作站、普鲁士蓝样品",
-                        "参数": "采集样品的粉末 XRD 图谱，并用于后续物相与峰位分析",
+                        "操作": "离线 XRD observation 与数据回传",
+                        "试剂/对象": "干燥后的普鲁士蓝样品、外部 XRD/PXRD 表征平台",
+                        "参数": "将样品作为离线送样对象，采集粉末 XRD/PXRD 图谱并回传，用于后续物相与峰位分析；该步骤不由当前设备层工作站执行。",
                     },
                 ]
             )
@@ -4088,9 +4196,9 @@ class ResearchAgent(BaseAgent):
                     },
                     {
                         "步骤序号": 6,
-                        "操作": "制备并执行 XRD 观察",
-                        "试剂/对象": "干燥后的普鲁士蓝样品、XRD 工作站",
-                        "参数": "将样品研磨并铺展在样品台上，采集粉末 XRD 图谱用于目标物相判定",
+                        "操作": "离线 XRD observation 与数据回传",
+                        "试剂/对象": "干燥后的普鲁士蓝样品、外部 XRD/PXRD 表征平台",
+                        "参数": "将样品研磨并作为离线送样对象，采集粉末 XRD/PXRD 图谱并回传，用于目标物相判定；该步骤不由当前设备层工作站执行",
                     },
                 ]
 

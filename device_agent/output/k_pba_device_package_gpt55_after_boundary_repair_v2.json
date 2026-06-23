@@ -1,0 +1,450 @@
+{
+  "status": "success",
+  "exp_id": "exp_20260610_006",
+  "iteration_id": 0,
+  "workflow_id": 1,
+  "macro_plan": "{\n  \"handoff_type\": \"research_to_device_adaptation\",\n  \"task\": {\n    \"query\": \"针对水系 K 离子电池正极材料容量偏低、难以同时兼顾能量密度与循环寿命的问题。以亚铁氰化铁为正极，目标是在水系电解液中获得更高的可逆储 K+ 容量和更稳定的长循环表现。\",\n    \"stage_route\": [\n      \"合成目标样品并完成 XRD 观察\",\n      \"基于前序结果继续推进并完成 Raman 观察\",\n      \"基于前序结果继续推进并完成 FTIR 观察\",\n      \"基于前序结果继续推进并完成 TEM 观察\",\n      \"基于前序结果继续推进并完成 电化学测试 观察\"\n    ],\n    \"current_stage\": \"合成目标样品并完成 XRD 观察\",\n    \"current_stage_plan\": \"当前 stage 为“合成目标样品并完成 XRD 观察”。目标 observation point 是获得干燥的亚铁氰化铁/普鲁士白候选粉末并完成离线 XRD 数据回传，用于判断是否形成 PBA 型 K 富集铁氰化物晶相及是否存在明显杂相。stage goal 是制备可用于后续 Raman、FTIR、TEM 和电化学评价的 K-rich FeHCF 候选样品。planning logic 是参考文献中 K2FeII[FeII(CN)6]·2H2O 作为高容量水系 K 离子正极的证据，但由于文献合成前驱体、浓度、体积和时间缺失，且当前设备不支持明确的密闭溶剂热反应釜路线，因此采用设备可落地的水相低温共沉淀/老化、离心留固洗涤、低温干燥和离线 XRD handoff；部分投料浓度、体积、洗涤次数、老化和干燥条件为 agent 基于 PBA 水相合成常识与设备边界补全。key variables 包括 Fe2+ 与 [Fe(CN)6]4- 摩尔比、K+ 过量环境、抗氧化条件、混合速率、老化时间、洗涤次数和干燥温度。expected observation 是 XRD 出现普鲁士蓝类似物/亚铁氰化铁的特征衍射峰，重点关注约 17° 附近 PBA (200) 类峰及其它框架衍射峰，且无强烈 Fe 氧化物、盐类或未反应前驱体杂峰。stage completion condition 是完成粉末样品离线 XRD 测试并回传可判读谱图、峰位和相纯度初步结论。 设备适配说明：本轮 B2 只修复 macro action 的设备可执行性，不改变当前 stage、stage_route、合成目标、目标物相或目标 observation point。原始 query/目标语义保持为：针对水系 K 离子电池正极材料容量偏低、难以同时兼顾能量密度与循环寿命的问题。以亚铁氰化铁为正极，目标是在水系电解液中获得更高的可逆储 K+ 容量和更稳定的长循环表现。。设备层拒绝原因：步骤1和步骤2要求按 mmol 级固体试剂称量/加入以配制前驱体溶液，但固体进样工作站的进样质量范围为 1-200 g，无法执行 FeSO4·7H2O、抗坏血酸、KCl、K4[Fe(CN)6]·3H2O 等亚克级加样。；步骤3要求 A 液与 B 液总体积约 40 mL 并在 800 r/min 磁力搅拌 60 min；磁力搅拌工作站仅支持进样瓶体系，而纯化工作站输入限制为容器内液体体积不能超过 30 mL，当前 40 mL 悬浊液无法直接进入后续离心纯化。；步骤5要求去离子水洗涤 3 次、乙醇洗涤 1 次；纯化工作站当前每次执行的清洗次数约束为 1，且清洗液支持水/酒精/DMF，需要将多次不同清洗液洗涤拆成设备支持的独立纯化动作，当前 macro_plan 写法不是可直接执行动作。；步骤5要求每次加入 20 mL 清洗液并离心留固，但若使用步骤3的约 40 mL 体系，纯化工作站容器内液体体积不得超过 30 mL 的输入限制不满足。；步骤6要求在当前烘干机支持容器中干燥洗涤后的湿固体，但前序离心纯化工作站仅支持进样瓶或留样瓶，烘干机支持进样瓶或50ml耐热瓶；若流程选用西林瓶则不能进入烘干机，macro_plan 未限定为可贯通纯化和烘干的进样瓶路线。；请将前驱体溶液改为外部预配并作为液体原液装载，或调整到固体进样工作站支持的质量范围；同时将设备内路线统一为进样瓶、控制每瓶进入纯化的液体体积不超过30 mL、使用偶数个容器，并把多次水洗/酒精洗拆成清洗次数为1的多个纯化动作。离线 XRD 可保留为外部 handoff 与数据回传。。可用容器：进样瓶、西林瓶、50ml耐热瓶、留样瓶；可用工作站：solid-sample-workstation 固体进样、elec-chem-storage-workstation 置物/静置、dual-station-electrochemical-workstation 双工位电化学测试、ultrasonic-cleaning-workstation 超声清洗、material-workstation 物料拿取、liquid-dispensing-workstation 开盖/加液/关盖、magnetic-stirring-workstation 磁力搅拌、dryer-workstation 静置烘干、pure-workstation 留固离心纯化。若当前设备层不能执行 XRD，则 XRD 保留为离线 observation/送样/数据回传；不能用颜色、质量或浑浊度替代 XRD completion condition。 设备反馈修复说明：本轮 B2 只在化学语义层面修复 macro action，不改变当前 stage、stage_route、合成目标、目标物相或目标 observation point。原始 query/目标语义保持为：针对水系 K 离子电池正极材料容量偏低、难以同时兼顾能量密度与循环寿命的问题。以亚铁氰化铁为正极，目标是在水系电解液中获得更高的可逆储 K+ 容量和更稳定的长循环表现。。设备层拒绝原因：步骤4要求反应后悬浊液在进样瓶中室温静置老化12 h；当前明确支持静置/老化的置物工作站仅支持50ml耐热瓶或西林瓶，不支持进样瓶。；当前流程前后必须使用进样瓶完成磁力搅拌和留固离心纯化；设备描述未提供将进样瓶中24 mL悬浊液转移到西林瓶/50ml耐热瓶静置老化、再转回进样瓶进入纯化的合法设备内闭环。；当前主要阻塞是12 h老化要求在进样瓶路线中设备内完成。请将该老化步骤明确改为外部/人工/离线等待 handoff，或提供可由当前设备支持的静置容器与后续纯化闭环；离线XRD可保留为外部observation和数据回传。。下游 device agent 可参考的容器：进样瓶、西林瓶、50ml耐热瓶、留样瓶；可参考的工作站：solid-sample-workstation、elec-chem-storage-workstation、dual-station-electrochemical-workstation、ultrasonic-cleaning-workstation、material-workstation、liquid-dispensing-workstation、magnetic-stirring-workstation、dryer-workstation、pure-workstation。research 输出不负责选择具体容器/工作站/瓶位/开关盖/分瓶配平；这些由 device agent 映射。若当前设备层不能执行 XRD，则 XRD 保留为离线 observation/送样/数据回传；不能用颜色、质量或浑浊度替代 XRD completion condition。\",\n    \"stage_route_reason\": \"stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、Raman、FTIR、TEM、电化学测试，因此 stage_route 按这些观察点组织。\",\n    \"current_stage_reason\": \"当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。\"\n  },\n  \"macro_action_steps\": [\n    {\n      \"步骤序号\": 1,\n      \"操作\": \"外部预配 Fe2+ 前驱体 A 液\",\n      \"试剂/对象\": \"FeSO4·7H2O、抗坏血酸、KCl、去离子水\",\n      \"参数\": \"每批配制 12 mL 水溶液，含 FeSO4·7H2O 0.60 mmol、抗坏血酸 0.12 mmol、KCl 6.0 mmol；室温新鲜配制并搅拌至澄清，尽量减少空气暴露，作为液体前驱体使用。\"\n    },\n    {\n      \"步骤序号\": 2,\n      \"操作\": \"外部预配亚铁氰根前驱体 B 液\",\n      \"试剂/对象\": \"K4[Fe(CN)6]·3H2O、KCl、去离子水\",\n      \"参数\": \"每批配制 12 mL 水溶液，含 K4[Fe(CN)6]·3H2O 0.60 mmol、KCl 6.0 mmol；室温搅拌至澄清，作为液体前驱体使用。\"\n    },\n    {\n      \"步骤序号\": 3,\n      \"操作\": \"水相共沉淀生成 K-rich FeHCF 前驱沉淀\",\n      \"试剂/对象\": \"A 液与 B 液混合体系\",\n      \"参数\": \"将 12 mL B 液加入 12 mL A 液中，每批总体积约 24 mL；室温搅拌 60 min，参考搅拌速率 800 r/min；Fe2+ 与 [Fe(CN)6]4- 摩尔比保持 1:1，KCl 提供过量 K+ 环境。\"\n    },\n    {\n      \"步骤序号\": 4,\n      \"操作\": \"离线室温老化促进 PBA 框架结晶\",\n      \"试剂/对象\": \"共沉淀后的 K-rich FeHCF 悬浊液\",\n      \"参数\": \"将反应后的悬浊液转入离线等待 handoff，在室温条件下静置老化 12 h；老化期间不进行 pH 自动检测或闭环调节；老化后返回后续固液分离与洗涤流程。\"\n    },\n    {\n      \"步骤序号\": 5,\n      \"操作\": \"留固固液分离并完成第一次水洗\",\n      \"试剂/对象\": \"老化后的 K-rich FeHCF 悬浊液、去离子水\",\n      \"参数\": \"对老化悬浊液进行留固固液分离，参考离心条件 6000 rpm、10 min，弃去上清液；加入 20 mL 去离子水重悬固体，完成第 1 次水洗。\"\n    },\n    {\n      \"步骤序号\": 6,\n      \"操作\": \"第二次水洗\",\n      \"试剂/对象\": \"第一次水洗后的 K-rich FeHCF 固体、去离子水\",\n      \"参数\": \"再次留固固液分离，参考离心条件 6000 rpm、10 min，弃去上清液；加入 20 mL 去离子水重悬固体，完成第 2 次水洗。\"\n    },\n    {\n      \"步骤序号\": 7,\n      \"操作\": \"第三次水洗\",\n      \"试剂/对象\": \"第二次水洗后的 K-rich FeHCF 固体、去离子水\",\n      \"参数\": \"再次留固固液分离，参考离心条件 6000 rpm、10 min，弃去上清液；加入 20 mL 去离子水重悬固体，完成第 3 次水洗。\"\n    },\n    {\n      \"步骤序号\": 8,\n      \"操作\": \"酒精洗涤\",\n      \"试剂/对象\": \"第三次水洗后的 K-rich FeHCF 固体、酒精\",\n      \"参数\": \"再次留固固液分离，参考离心条件 6000 rpm、10 min，弃去上清液；加入 20 mL 酒精重悬固体，完成 1 次酒精洗。\"\n    },\n    {\n      \"步骤序号\": 9,\n      \"操作\": \"最终留固固液分离获得湿固体\",\n      \"试剂/对象\": \"酒精洗后的 K-rich FeHCF 悬浊液\",\n      \"参数\": \"进行最终留固固液分离，参考离心条件 6000 rpm、10 min，弃去上清液，保留 K-rich FeHCF 湿固体。\"\n    },\n    {\n      \"步骤序号\": 10,\n      \"操作\": \"低温干燥获得 XRD 待测粉末\",\n      \"试剂/对象\": \"K-rich FeHCF 湿固体\",\n      \"参数\": \"在 60 C 条件下静置干燥 720 min，获得干燥的 K-rich FeHCF / 亚铁氰化铁候选粉末；避免使用高温条件以降低结构水过度损失和框架氧化风险。\"\n    },\n    {\n      \"步骤序号\": 11,\n      \"操作\": \"离线 XRD 送样与数据回传\",\n      \"试剂/对象\": \"干燥 K-rich FeHCF / 亚铁氰化铁候选粉末\",\n      \"参数\": \"取 20-50 mg 干燥粉末研细并平铺于 XRD 样品台；进行离线粉末 XRD 测试，建议 Cu Kα，2θ = 5-60°；回传谱图、峰表、约 17° 附近 PBA (200) 类峰信息和杂相初步判定，作为当前 stage 的 completion observation。\"\n    }\n  ],\n  \"research_context\": {\n    \"survey_report\": {\n      \"summary\": \"已有知识表明，水系 K 离子电池中提升亚铁氰化铁正极容量的核心依据是高钾含量 K2FeII[FeII(CN)6]·2H2O 普鲁士白/亚铁氰化铁结构，其开放框架可提供两个 FeII/FeIII 氧化还原过程，文献报道可逆容量最高约 120 mAh g−1，并在 0.5 m K2SO4 水系三电极体系中表现出较快 K+ 扩散与较低电荷转移阻抗。关键支撑表征包括 XRD、FTIR/Raman、TEM/SAED 以及电化学 CV/EIS。PBA 共沉淀文献可作为水相制备和晶相/形貌控制的间接参考，但不直接证明该体系的储 K+ 性能。\",\n      \"key_findings\": [\n        \"高钾含量 K2FeII[FeII(CN)6]·2H2O 是当前目标最直接的候选正极，相比低钾 PBA 可利用两个一电子氧化还原过程，有望突破低于 70 mAh g−1 的容量限制。\",\n        \"案例 1 报道 80 °C 溶剂热法得到约 200 nm 均一纳米立方体，并通过 XRD 精修、FTIR/Raman 水和 CN 振动峰、TEM/SAED 晶面信息确认结构与形貌。\",\n        \"水系电解液中推荐的性能验证线索是 0.5 m K2SO4 三电极体系，观察两对可逆氧化还原峰、K+ 扩散系数数量级约 10−5 cm2 s−1、以及约 3 Ω cm−2 的电荷转移阻抗。\",\n        \"案例 2 说明 PBA 可通过水相室温共沉淀获得单相结构和可调形貌，但其对象为多金属 PBA/锂硫电池硫宿主，只能作为合成方法和 PBA 相确认的间接先例。\"\n      ],\n      \"candidate_precedents\": [\n        \"High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage\",\n        \"High-Entropy Prussian Blue Analogues and Their Oxide Family as Sulfur Hosts for Lithium-Sulfur Batteries\"\n      ],\n      \"route_implications\": [\n        \"stage 设计应优先设置材料获得后的结构/组成 observation point：确认是否形成 K 富集、低缺陷或目标 K2FeII[FeII(CN)6]·2H2O 相，并观察晶型、结晶水/CN 配位状态和纳米立方体形貌。\",\n        \"后续 stage 应围绕水系储 K+ 性能 observation point：在 K2SO4 水系电解液中验证可逆容量、两对氧化还原峰、阻抗和长循环容量保持率。\",\n        \"现有设备可支持液体加样、搅拌、超声、离心留固洗涤、干燥和部分电化学测试；XRD、FTIR/Raman、TEM/SAED、EELS 等应规划为离线表征/送样/数据回传 observation。\",\n        \"若采用 80 °C 溶剂热或水相共沉淀路线，同一材料制备 stage 内可包含配液、混合/反应、老化、固液分离、洗涤和干燥等 macro action，但 stage 边界应落在获得可判定的材料结构 observation，而不是各单步操作。\"\n      ],\n      \"open_questions\": [\n        \"案例 1 抽取结果缺少完整合成参数：前驱体种类与浓度、溶剂组成、反应时间、投料比、洗涤条件和干燥条件。\",\n        \"电极制备细节不足：活性物质/导电剂/粘结剂比例、载量、集流体、干燥条件和电极稳定化流程未明确。\",\n        \"长循环评价条件不足：电压窗口、电流密度或倍率、循环圈数、容量保持率和库仑效率数据未在当前抽取中完整给出。\",\n        \"当前设备能否稳定实现 80 °C 反应体系的密闭加热/搅拌需要进一步确认；若不能，应优先规划设备可落地的室温或低温水相共沉淀路线，并将关键结构结果作为筛选依据。\"\n      ]\n    },\n    \"extracted_paper_protocols\": \"[{\\\"source_title\\\": \\\"High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage\\\", \\\"source_file\\\": \\\"/Users/yutinghuang/Documents/agent code/chem-agent/reaserch_agent/chem_kb/High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage.pdf\\\", \\\"relevance\\\": \\\"该论文直接报道高钾含量 K2FeII[FeII(CN)6]·2H2O 亚铁氰化铁纳米立方体作为水系钾离子电池正极，并给出可逆容量、K+ 嵌脱和循环稳定性相关表征，是当前 query 的核心相关文献。\\\", \\\"protocol_summary\\\": \\\"论文采用 80 °C 溶剂热法制备 K2FeII[FeII(CN)6]·2H2O 纳米立方体，并通过 XRD、FTIR、Raman、TEM/SAED 等确认晶体结构、含水状态、Fe 价态与纳米立方体形貌；随后在 0.5 m K2SO4 水系电解液的三电极体系中进行 CV、阻抗等电化学测试，评估其水系储 K+ 行为。\\\", \\\"steps\\\": [{\\\"步骤序号\\\": 1, \\\"操作\\\": \\\"溶剂热合成钾铁(II)六氰合铁(II)二水合物纳米立方体\\\", \\\"试剂/对象\\\": \\\"potassium iron hexacyanoferrate dihydrate；目标产物 K2FeII[FeII(CN)6]·2H2O\\\", \\\"参数\\\": \\\"80 °C；其余前驱体、溶剂组成、浓度、体积、反应时间文献未说明\\\", \\\"evidence\\\": \\\"文中称 Uniform potassium iron hexacyanoferrate dihydrate nanocubes with an edge length of ≈200 nm were obtained using a solvothermal method at 80 °C。\\\"}, {\\\"步骤序号\\\": 2, \\\"操作\\\": \\\"对水作溶剂条件下的产物进行对比制备/观察\\\", \\\"试剂/对象\\\": \\\"potassium iron hexacyanoferrate dihydrate；water as solvent\\\", \\\"参数\\\": \\\"溶剂为 water；其他反应参数文献未说明\\\", \\\"evidence\\\": \\\"文中称 For comparison, when water was used as a solvent, potassium iron hexacyanoferrate dihydrate with a large particle size distribution was obtained。\\\"}, {\\\"步骤序号\\\": 3, \\\"操作\\\": \\\"XRD 及 Rietveld 精修确认晶体结构\\\", \\\"试剂/对象\\\": \\\"as-prepared potassium iron hexacyanoferrate\\\", \\\"参数\\\": \\\"Rietveld-refined XRD；测试仪器、扫描范围、步长等文献未说明\\\", \\\"evidence\\\": \\\"文中称 Rietveld-refined XRD was used to identify the crystal structure of the as-prepared potassium iron hexacyanoferrate。\\\"}, {\\\"步骤序号\\\": 4, \\\"操作\\\": \\\"FTIR 表征水分子与氰基配位环境\\\", \\\"试剂/对象\\\": \\\"K2FeII[FeII(CN)6]·2H2O 样品\\\", \\\"参数\\\": \\\"O-H stretching 3232 cm−1；H-O-H bending 1621 cm−1；C≡N broad band ≈2060 cm−1 fitted at 2064、2045、2002 cm−1；测试制样条件文献未说明\\\", \\\"evidence\\\": \\\"文中称 peaks at 3232 and 1621 cm−1 are due to water，broad band at ≈2060 cm−1 was fitted with three bands at 2064, 2045, and 2002 cm−1 assigned to cyanide-coordinated FeII。\\\"}, {\\\"步骤序号\\\": 5, \\\"操作\\\": \\\"Raman 表征水分子、C≡N 和 Fe-C≡N-Fe 振动\\\", \\\"试剂/对象\\\": \\\"potassium iron hexacyanoferrate electrode material\\\", \\\"参数\\\": \\\"1640 cm−1；2130 和 2091 cm−1；约 264 和 534 cm−1；测试条件文献未说明\\\", \\\"evidence\\\": \\\"文中称 Raman spectrum revealed water；band at 1640 cm−1 assigned to hydrogen-bonded H2O，2130 and 2091 cm−1 assigned to C≡N stretching，264 and 534 cm−1 correspond to Fe-C≡N-Fe modes。\\\"}, {\\\"步骤序号\\\": 6, \\\"操作\\\": \\\"TEM、SAED、FFT 和 HAABF-STEM 表征形貌与晶面结构\\\", \\\"试剂/对象\\\": \\\"K2FeII[FeII(CN)6]·2H2O particles\\\", \\\"参数\\\": \\\"纳米立方体边长约 200 nm；晶面 d-spacing 5.08 Å；观察到 (100) crystal planes；样品制备和测试电压文献未说明\\\", \\\"evidence\\\": \\\"文中称 TEM image shows uniform, well-packed cubes with edge lengths of ≈200 nm；lattice of crystal planes with d-spacing of 5.08 Å；H...[truncated]\",\n    \"knowledge_hits\": [\n      {\n        \"title\": \"High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage\",\n        \"file_path\": \"/Users/yutinghuang/Documents/agent code/chem-agent/reaserch_agent/chem_kb/High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage.pdf\",\n        \"score\": 48.0,\n        \"problem\": \"www.advmat.de www.MaterialsViews.com High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage COMMUNICATION Dawei Su, Andrew McDonagh, Shi-Zhang Qiao,* and Guoxiu Wang* Large-scale energy storage is a key strategy to effectively utilize intermittent renewable energy.[1] The electrochemical storage of energy using rechargeable batteries plays an important role in this context. Despite the many types of rechargeable batteries that have been investigated, few can meet the requir...[truncated]\",\n        \"synthesis_summary\": \"MaterialsViews.com High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage COMMUNICATION Dawei Su, Andrew McDonagh, Shi-Zhang Qiao,* and Guoxiu Wang* Large-scale energy storage is a key strategy to effectively utilize intermittent renewable energy.[1] The electrochemical storage of energy using rechargeable batteries plays an important role in this context. Despite the many types of rechargeable batteries that have been investigated, few can meet the requirements of capacity, stability, cost, and safety simultaneously. Metal hydride/nickel cells suffer from the low energy density, redoxflow batteries lack high-rate performance, and lithium-ion batteries are too expensive...[truncated]\",\n        \"experiment_details\": \"MaterialsViews.com High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage COMMUNICATION Dawei Su, Andrew McDonagh, Shi-Zhang Qiao,* and Guoxiu Wang* Large-scale energy storage is a key strategy to effectively utilize intermittent renewable energy.[1] The electrochemical storage of energy using rechargeable batteries plays an important role in this context. Despite the many types of rechargeable batteries that have been investigated, few can meet the requirements of capacity, stability, cost, and safety simultaneously. Metal hydride/nickel cells suffer from the low energy density, redoxflow batteries lack high-rate performance, and lithium-ion batteries are too expensive and flammable electrolyte can also cause safety issues.[2] Thus, the development of affordable and safe electric storage batteries for large-scale applications has become a priority. Aqueous electrol...[truncated]\",\n        \"steps\": []\n      },\n      {\n        \"title\": \"High-Entropy Prussian Blue Analogues and Their Oxide Family as Sulfur Hosts for Lithium-Sulfur Batteries\",\n        \"file_path\": \"/Users/yutinghuang/Documents/agent code/chem-agent/reaserch_agent/chem_kb/High-Entropy Prussian Blue Analogues and Their Oxide Family as Sulfur Hosts for Lithium-Sulfur Batteries.pdf\",\n        \"score\": 29.0,\n        \"problem\": \"Angewandte 15213773, 2022, 41, Downloaded from https://onlinelibrary.wiley.com/doi/10.1002/anie.202209350 by Tsinghua University Library, Wiley Online Library on [05/11/2022]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License Chemie Research Articles www.angewandte.org How to cite: Angew. Chem. Int. Ed. 2022, 61, e202209350 International Edition: doi.org...[truncated]\",\n        \"synthesis_summary\": \"Herein, we systematically synthesize a library of PBAs from binary to high-entropy by a facile coprecipitation method. We believe that a wide range of new materials obtained from our coprecipitation and pyrolysis methodology can promote further developments in research on PBA systems and sulfur hosts. A class of materials which has yet to draw concern in the field of HE lithium-sulfur (Li\\u0000 S) battery materials are Prussian blue analogues (PBAs). PBAs are a class of perovskite-type materials described by the general formula AxMy[M’(CN)6]z, where A is alkali metal ions such as Na+ or K+, M and M’ are di or trivalent transition metal ions.[8] In such materials, carbon-coordinated M’ cations and...[truncated]\",\n        \"experiment_details\": \"Herein, we systematically synthesize a library of PBAs from binary to high-entropy by a facile coprecipitation method. We believe that a wide range of new materials obtained from our coprecipitation and pyrolysis methodology can promote further developments in research on PBA systems and sulfur hosts. A class of materials which has yet to draw concern in the field of HE lithium-sulfur (Li\\u0000 S) battery materials are Prussian blue analogues (PBAs). PBAs are a class of perovskite-type materials described by the general formula AxMy[M’(CN)6]z, where A is alkali metal ions such as Na+ or K+, M and M’ are di or trivalent transition metal ions.[8] In such materials, carbon-coordinated M’ cations and nitrogen-coordinated M cations are bridged by cyanide groups to form an open framework. As a matter of fact, as host materials of Li\\u0000 S batteries, PBAs have the following advantages. First, as the Le...[truncated]\",\n        \"steps\": []\n      }\n    ],\n    \"latest_observation\": \"{\\\"feedback_type\\\": \\\"device_feasibility_error\\\", \\\"device_layer_supported\\\": false, \\\"device_layer_status\\\": \\\"unsupported\\\", \\\"summary\\\": \\\"设备适应层返回 feasibility_error：当前设备层不支持上一段 macro action 的执行。主要原因：步骤4要求反应后悬浊液在进样瓶中室温静置老化12 h；当前明确支持静置/老化的置物工作站仅支持50ml耐热瓶或西林瓶，不支持进样瓶。；当前流程前后必须使用进样瓶完成磁力搅拌和留固离心纯化；设备描述未提供将进样瓶中24 mL悬浊液转移到西林瓶/50ml耐热瓶静置老化、再转回进样瓶进入纯化的合法设备内闭环。；当前主要阻塞是12 h老化要求在进样瓶路线中设备内完成。请将该老化步骤明确改为外部/人工/离线等待 handoff，或提供可由当前设备支持的静置容器与后续纯化闭环；离线XRD可保留为外部observation和数据回传。。\\\", \\\"unsupported_reasons\\\": [\\\"步骤4要求反应后悬浊液在进样瓶中室温静置老化12 h；当前明确支持静置/老化的置物工作站仅支持50ml耐热瓶或西林瓶，不支持进样瓶。\\\", \\\"当前流程前后必须使用进样瓶完成磁力搅拌和留固离心纯化；设备描述未提供将进样瓶中24 mL悬浊液转移到西林瓶/50ml耐热瓶静置老化、再转回进样瓶进入纯化的合法设备内闭环。\\\", \\\"当前主要阻塞是12 h老化要求在进样瓶路线中设备内完成。请将该老化步骤明确改为外部/人工/离线等待 handoff，或提供可由当前设备支持的静置容器与后续纯化闭环；离线XRD可保留为外部observation和数据回传。\\\"], \\\"blocking_constraints\\\": [\\\"步骤4要求反应后悬浊液在进样瓶中室温静置老化12 h；当前明确支持静置/老化的置物工作站仅支持50ml耐热瓶或西林瓶，不支持进样瓶。\\\", \\\"当前流程前后必须使用进样瓶完成磁力搅拌和留固离心纯化；设备描述未提供将进样瓶中24 mL悬浊液转移到西林瓶/50ml耐热瓶静置老化、再转回进样瓶进入纯化的合法设备内闭环。\\\", \\\"当前主要阻塞是12 h老化要求在进样瓶路线中设备内完成。请将该老化步骤明确改为外部/人工/离线等待 handoff，或提供可由当前设备支持的静置容器与后续纯化闭环；离线XRD可保留为外部observation和数据回传。\\\"], \\\"unsupported_requested_items\\\": [\\\"pH 自动检测/闭环调节\\\"], \\\"supported_device_capabilities\\\": {\\\"supported_containers\\\": [\\\"进样瓶\\\", \\\"西林瓶\\\", \\\"50ml耐热瓶\\\", \\\"留样瓶\\\"], \\\"supported_workstations\\\": [\\\"solid-sample-workstation\\\", \\\"elec-chem-storage-workstation\\\", \\\"dual-station-electrochemical-workstation\\\", \\\"ultrasonic-cleaning-workstation\\\", \\\"material-workstation\\\", \\\"liquid-dispensing-workstation\\\", \\\"magnetic-stirring-workstation\\\", \\\"dryer-workstation\\\", \\\"pure-workstation\\\"], \\\"not_supported\\\": [\\\"当前设备内XRD采集\\\", \\\"进样瓶在置物工作站静置/老化\\\", \\\"进样瓶与西林瓶/50ml耐热瓶之间的悬浊液往返转移闭环\\\"]}, \\\"device_error_package\\\": ...[truncated]\"\n  },\n  \"device_agent_contract\": {\n    \"research_macro_action_level\": \"The macro_action_steps are chemical-semantic experiment actions. They specify what experiment to do and key chemical parameters, but they may intentionally omit concrete machine containers, workstation names, container IDs, reagent bottle slots, lid operations, balancing, and repeated device sub-steps.\",\n    \"device_agent_responsibilities\": [\n      \"Select concrete supported containers and workstations from the loaded workstations_new truth source.\",\n      \"Map liquid sources to reagent/original-solution bottle slots when appropriate.\",\n      \"Expand macro actions into device-level operations such as lid handling, aliquoting, balancing, repeated purification, drying, and handoff notes.\",\n      \"Return device_feasibility_error only when no legal equipment/container/workstation mapping can realize the chemical action or a mandatory scientific condition is impossible.\"\n    ],\n    \"do_not_return_to_research_for\": [\n      \"missing container IDs\",\n      \"missing workstation names\",\n      \"missing reagent bottle slot numbers\",\n      \"missing open/close lid actions\",\n      \"missing even-vial balancing details\",\n      \"missing split/repeated wash substeps\"\n    ]\n  }\n}",
+  "macro_plan_summary": "当前 stage 目标是制备 K-rich FeHCF/亚铁氰化铁候选粉末并完成离线 XRD，判断是否形成 PBA 型 K 富集铁氰化物晶相及明显杂相。路线为外部预配 12 mL Fe2+ A 液和 12 mL [Fe(CN)6]4- B 液，二者 1:1 混合，在过量 KCl、抗坏血酸保护、室温 800 r/min 搅拌 60 min 后形成沉淀；12 h 老化明确改为外部/离线 handoff；随后留固离心、3 次水洗、1 次酒精洗、最终离心，60 C 干燥 720 min。边界条件包括：设备内处理体积每瓶不超过 30 mL，多次洗涤需拆成单次纯化动作，路线需可贯通纯化与干燥，XRD 只能作为离线送样和数据回传，不能用颜色或浑浊度替代 completion condition。",
+  "observation_plan": {
+    "raw_text": "- 是否需要观察：是\n- 观察位置建议：无\n- 观察内容：离线粉末 XRD 谱图、峰表、约 17° 附近 PBA (200) 类峰及其它框架衍射峰、明显 Fe 氧化物/盐类/未反应前驱体杂峰判定。\n- 观察目的：确认干燥粉末是否形成目标 PBA 型 K-rich FeHCF/亚铁氰化铁晶相，并决定是否进入后续 Raman、FTIR、TEM 和电化学测试 stage；当前设备内无 XRD observation-capable 工作站，不应将磁搅、纯化、烘干等步骤作为 XRD 替代观察。",
+    "是否需要观察": "是",
+    "观察位置建议": "无",
+    "观察内容": "离线粉末 XRD 谱图、峰表、约 17° 附近 PBA (200) 类峰及其它框架衍射峰、明显 Fe 氧化物/盐类/未反应前驱体杂峰判定。",
+    "观察目的": "确认干燥粉末是否形成目标 PBA 型 K-rich FeHCF/亚铁氰化铁晶相，并决定是否进入后续 Raman、FTIR、TEM 和电化学测试 stage；当前设备内无 XRD observation-capable 工作站，不应将磁搅、纯化、烘干等步骤作为 XRD 替代观察。",
+    "needs_observation": true,
+    "suggested_locations": [
+      "dual-station-electrochemical-workstation"
+    ],
+    "allowed_observation_workstations": [
+      "dual-station-electrochemical-workstation"
+    ],
+    "observation_constraint_note": "观察点只能落在 observation-capable 工作站上。当前真源目录中实际存在且可确认的 observation-capable 工作站是 dual-station-electrochemical-workstation；若未来真源中加入 XRD/XDR 工作站，也只能在这些工作站中选点。"
+  },
+  "verification_summary": {
+    "result": "accepted",
+    "category": "none",
+    "blocking_constraints": [],
+    "message": "无"
+  },
+  "workflow_txt": "1. 第1步 material-workstation：\n   - 操作：物料拿取\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 说明：取 2 个进样瓶作为并行反应/离心/干燥容器，满足后续留固离心纯化偶数容器要求；取出后容器默认带盖。\n\n2. 第2步 liquid-dispensing-workstation：\n   - 操作：开盖\n   - 平台：移液平台2.0-1ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 说明：打开 1、2 号进样瓶，盖子保留在移液平台2.0-1ml；进样瓶本体以开盖状态转入移液平台2.0-5ml加液，后续必须返回移液平台2.0-1ml完成关盖。\n\n3. 第3步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[1]\n   - 原液量：[[5.0],[5.0]]\n   - 声明：1号原液瓶装载外部新鲜预配 Fe2+ 前驱体 A 液。\n   - 说明：向每个进样瓶加入 A 液 5.0 mL；本平台只执行加液，容器保持开盖状态，盖子仍保留在移液平台2.0-1ml。\n\n4. 第4步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[1]\n   - 原液量：[[5.0],[5.0]]\n   - 说明：继续向每个进样瓶加入 A 液 5.0 mL；每瓶 A 液累计 10.0 mL。\n\n5. 第5步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[1]\n   - 原液量：[[2.0],[2.0]]\n   - 说明：继续向每个进样瓶加入 A 液 2.0 mL；每瓶 A 液累计 12.0 mL。每 12 mL A 液含 FeSO4·7H2O 0.60 mmol、抗坏血酸 0.12 mmol、KCl 6.0 mmol，外部新鲜预配并尽量减少空气暴露。\n\n6. 第6步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[2]\n   - 原液量：[[5.0],[5.0]]\n   - 声明：2号原液瓶装载外部预配亚铁氰根前驱体 B 液。\n   - 说明：向每个进样瓶加入 B 液 5.0 mL；单次加液量不超过 5 mL 量程。\n\n7. 第7步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[2]\n   - 原液量：[[5.0],[5.0]]\n   - 说明：继续向每个进样瓶加入 B 液 5.0 mL；每瓶 B 液累计 10.0 mL。\n\n8. 第8步 liquid-dispensing-workstation：\n   - 操作：加液\n   - 平台：移液平台2.0-5ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 原液编号：[2]\n   - 原液量：[[2.0],[2.0]]\n   - 说明：继续向每个进样瓶加入 B 液 2.0 mL；每瓶 B 液累计 12.0 mL。每 12 mL B 液含 K4[Fe(CN)6]·3H2O 0.60 mmol、KCl 6.0 mmol。每瓶总体积约 24 mL，Fe2+ 与 [Fe(CN)6]4- 摩尔比为 1:1，单瓶体积不超过 30 mL。\n\n9. 第9步 liquid-dispensing-workstation：\n   - 操作：关盖\n   - 平台：移液平台2.0-1ml\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 说明：1、2 号进样瓶从移液平台2.0-5ml加液后以开盖状态返回移液平台2.0-1ml，使用第2步保留在该平台的盖子关盖。\n\n10. 第10步 magnetic-stirring-workstation：\n    - 操作：磁力搅拌\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 搅拌速度：800 r/min\n    - 搅拌时间：60 分钟\n    - 说明：室温水相共沉淀生成 K-rich FeHCF/亚铁氰化铁前驱沉淀。\n\n11. 第11步 外部/离线 handoff：\n    - 操作：室温静置老化\n    - 对象：1、2 号进样瓶内共沉淀后的 K-rich FeHCF 悬浊液\n    - 老化时间：12 h\n    - 温度：室温\n    - 说明：老化步骤转入外部/人工/离线等待 handoff；老化期间不进行 pH 自动检测或闭环调节。老化后以同一批、同一进样瓶内悬浊液返回后续留固离心纯化流程，返回时容器保持带盖，单瓶液体体积约 24 mL。\n\n12. 第12步 pure-workstation：\n    - 操作：离心\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 方案：留固\n    - 时间（分钟）：10\n    - 速度：6000 rpm\n    - 清洗次数：1\n    - 清洗液：水\n    - 自动设置加液状态：否\n    - 手动设置加液量（毫升）：20\n    - 是否保留清洗液：是\n    - 保留清洗液数量（毫升）：20\n    - 说明：第 1 次水洗；输入单瓶老化悬浊液约 24 mL，不超过 30 mL。该步骤完成离心、倒上清并加入 20 mL 水，输出为带液体且带盖容器。\n\n13. 第13步 ultrasonic-cleaning-workstation：\n    - 操作：超声清洗\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 清洗时间：120 秒\n    - 说明：对第 1 次水洗后的 K-rich FeHCF 固体进行重分散，容器保持带盖状态。\n\n14. 第14步 pure-workstation：\n    - 操作：离心\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 方案：留固\n    - 时间（分钟）：10\n    - 速度：6000 rpm\n    - 清洗次数：1\n    - 清洗液：水\n    - 自动设置加液状态：否\n    - 手动设置加液量（毫升）：20\n    - 是否保留清洗液：是\n    - 保留清洗液数量（毫升）：20\n    - 说明：第 2 次水洗；输入单瓶液体体积约 20 mL，不超过 30 mL。该步骤倒去上清并加入 20 mL 水，输出为带液体且带盖容器。\n\n15. 第15步 ultrasonic-cleaning-workstation：\n    - 操作：超声清洗\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 清洗时间：120 秒\n    - 说明：对第 2 次水洗后的 K-rich FeHCF 固体进行重分散，容器保持带盖状态。\n\n16. 第16步 pure-workstation：\n    - 操作：离心\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 方案：留固\n    - 时间（分钟）：10\n    - 速度：6000 rpm\n    - 清洗次数：1\n    - 清洗液：水\n    - 自动设置加液状态：否\n    - 手动设置加液量（毫升）：20\n    - 是否保留清洗液：是\n    - 保留清洗液数量（毫升）：20\n    - 说明：第 3 次水洗；输入单瓶液体体积约 20 mL，不超过 30 mL。该步骤倒去上清并加入 20 mL 水，输出为带液体且带盖容器。\n\n17. 第17步 ultrasonic-cleaning-workstation：\n    - 操作：超声清洗\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 清洗时间：120 秒\n    - 说明：对第 3 次水洗后的 K-rich FeHCF 固体进行重分散，容器保持带盖状态。\n\n18. 第18步 pure-workstation：\n    - 操作：离心\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 方案：留固\n    - 时间（分钟）：10\n    - 速度：6000 rpm\n    - 清洗次数：1\n    - 清洗液：酒精\n    - 自动设置加液状态：否\n    - 手动设置加液量（毫升）：20\n    - 是否保留清洗液：是\n    - 保留清洗液数量（毫升）：20\n    - 说明：酒精洗；输入单瓶液体体积约 20 mL，不超过 30 mL。该步骤倒去水洗上清并加入 20 mL 酒精，输出为带液体且带盖容器。\n\n19. 第19步 ultrasonic-cleaning-workstation：\n    - 操作：超声清洗\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 清洗时间：120 秒\n    - 说明：对酒精洗后的 K-rich FeHCF 固体进行重分散，容器保持带盖状态。\n\n20. 第20步 pure-workstation：\n    - 操作：离心\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 方案：留固\n    - 时间（分钟）：10\n    - 速度：6000 rpm\n    - 清洗次数：1\n    - 清洗液：酒精\n    - 自动设置加液状态：否\n    - 手动设置加液量（毫升）：20\n    - 是否保留清洗液：否\n    - 保留清洗液数量（毫升）：1\n    - 说明：最终留固固液分离；输入为酒精重分散后的悬浊液，单瓶液体体积约 20 mL，不超过 30 mL。本步骤最终不保留清洗液，倒去上清，保留 K-rich FeHCF 湿固体；保留清洗液数量字段为设备必填范围内占位值，不表示最终残留 1 mL 液体。\n\n21. 第21步 liquid-dispensing-workstation：\n    - 操作：开盖\n    - 平台：移液平台2.0-1ml\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 说明：打开含湿固体的 1、2 号进样瓶，盖子保留在移液平台2.0-1ml，供烘干后回到同一平台关盖。\n\n22. 第22步 dryer-workstation：\n    - 操作：静置烘干\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 烘干温度：60 ℃\n    - 烘干时间（分钟）：720\n    - 说明：低温干燥 K-rich FeHCF 湿固体，获得干燥的 K-rich FeHCF/亚铁氰化铁候选粉末；避免使用高温条件以降低结构水过度损失和框架氧化风险。\n\n23. 第23步 liquid-dispensing-workstation：\n    - 操作：关盖\n    - 平台：移液平台2.0-1ml\n    - 容器类型：进样瓶\n    - 容器编号：[1,2]\n    - 说明：烘干后的 1、2 号进样瓶返回移液平台2.0-1ml，使用第21步保留在该平台的盖子关盖，得到可送样的干燥粉末容器。\n\n24. 第24步 外部/离线 handoff：\n    - 操作：离线 XRD 送样与数据回传\n    - 对象：干燥 K-rich FeHCF/亚铁氰化铁候选粉末\n    - 参数：取 20-50 mg 干燥粉末研细并平铺于 XRD 样品台；进行离线粉末 XRD 测试，建议 Cu Kα，2θ = 5-60°。\n    - 需要观察：是\n    - 观察位置：离线粉末 XRD handoff；当前设备内无 XRD observation-capable 工作站，不在磁力搅拌、纯化、超声、烘干或 dual-station-electrochemical-workstation 上替代该 XRD 观察。\n    - 观察内容：离线粉末 XRD 谱图、峰表、约 17° 附近 PBA (200) 类峰及其它框架衍射峰、明显 Fe 氧化物/盐类/未反应前驱体杂峰判定。\n    - 观察目的：确认干燥粉末是否形成目标 PBA 型 K-rich FeHCF/亚铁氰化铁晶相，并决定是否进入后续 Raman、FTIR、TEM 和电化学测试 stage。",
+  "workflow_json": {
+    "steps": [
+      {
+        "step_number": 1,
+        "workstation": "物料站",
+        "operation": "物料拿取",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "step_number": 2,
+        "workstation": "液体进样站",
+        "operation": "开盖",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-1ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "step_number": 3,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            1
+          ],
+          "原液量": [
+            [
+              5.0
+            ],
+            [
+              5.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 4,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            1
+          ],
+          "原液量": [
+            [
+              5.0
+            ],
+            [
+              5.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 5,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            1
+          ],
+          "原液量": [
+            [
+              2.0
+            ],
+            [
+              2.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 6,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            2
+          ],
+          "原液量": [
+            [
+              5.0
+            ],
+            [
+              5.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 7,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            2
+          ],
+          "原液量": [
+            [
+              5.0
+            ],
+            [
+              5.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 8,
+        "workstation": "液体进样站",
+        "operation": "加液",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-5ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "原液编号": [
+            2
+          ],
+          "原液量": [
+            [
+              2.0
+            ],
+            [
+              2.0
+            ]
+          ]
+        }
+      },
+      {
+        "step_number": 9,
+        "workstation": "液体进样站",
+        "operation": "关盖",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-1ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "step_number": 10,
+        "workstation": "磁力搅拌工作站",
+        "operation": "磁力搅拌",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "搅拌速度": 800,
+          "搅拌时间（分钟）": 60
+        }
+      },
+      {
+        "step_number": 12,
+        "workstation": "纯化工作站",
+        "operation": "离心",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "离心方案": "留固",
+          "离心时间": 10,
+          "离心速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "水",
+          "自动设置加液状态": "否",
+          "手动设置加液量": 20,
+          "是否保留清洗液": "是",
+          "保留清洗液数量": 20
+        }
+      },
+      {
+        "step_number": 13,
+        "workstation": "超声清洗工作站",
+        "operation": "超声清洗",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "清洗时间": 120
+        }
+      },
+      {
+        "step_number": 14,
+        "workstation": "纯化工作站",
+        "operation": "离心",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "离心方案": "留固",
+          "离心时间": 10,
+          "离心速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "水",
+          "自动设置加液状态": "否",
+          "手动设置加液量": 20,
+          "是否保留清洗液": "是",
+          "保留清洗液数量": 20
+        }
+      },
+      {
+        "step_number": 15,
+        "workstation": "超声清洗工作站",
+        "operation": "超声清洗",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "清洗时间": 120
+        }
+      },
+      {
+        "step_number": 16,
+        "workstation": "纯化工作站",
+        "operation": "离心",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "离心方案": "留固",
+          "离心时间": 10,
+          "离心速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "水",
+          "自动设置加液状态": "否",
+          "手动设置加液量": 20,
+          "是否保留清洗液": "是",
+          "保留清洗液数量": 20
+        }
+      },
+      {
+        "step_number": 17,
+        "workstation": "超声清洗工作站",
+        "operation": "超声清洗",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "清洗时间": 120
+        }
+      },
+      {
+        "step_number": 18,
+        "workstation": "纯化工作站",
+        "operation": "离心",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "离心方案": "留固",
+          "离心时间": 10,
+          "离心速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "酒精",
+          "自动设置加液状态": "否",
+          "手动设置加液量": 20,
+          "是否保留清洗液": "是",
+          "保留清洗液数量": 20
+        }
+      },
+      {
+        "step_number": 19,
+        "workstation": "超声清洗工作站",
+        "operation": "超声清洗",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "清洗时间": 120
+        }
+      },
+      {
+        "step_number": 20,
+        "workstation": "纯化工作站",
+        "operation": "离心",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "离心方案": "留固",
+          "离心时间": 10,
+          "离心速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "酒精",
+          "自动设置加液状态": "否",
+          "手动设置加液量": 20,
+          "是否保留清洗液": "否",
+          "保留清洗液数量": 1
+        }
+      },
+      {
+        "step_number": 21,
+        "workstation": "液体进样站",
+        "operation": "开盖",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-1ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "step_number": 22,
+        "workstation": "烘干机",
+        "operation": "静置烘干",
+        "id": 1562664140571648,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "恒温温度（℃）": 60,
+          "烘干时间（分钟）": 720
+        }
+      },
+      {
+        "step_number": 23,
+        "workstation": "液体进样站",
+        "operation": "关盖",
+        "id": 1562664140571648,
+        "parameters": {
+          "平台": "移液平台2.0-1ml",
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ]
+        }
+      }
+    ],
+    "unknown_steps": null
+  }
+}

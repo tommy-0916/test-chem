@@ -15,9 +15,12 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from reaserch_agent import ResearchAgent
+from reaserch_agent.tools import load_device_context
+from reaserch_agent.utils.llm_factory import LLMFactory
 
 
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
+DEFAULT_DEVICE_WORKSTATIONS_DIR = Path(__file__).resolve().parents[1] / "chem_resources" / "workstations_new"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,6 +65,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory containing knowledge-base PDF or JSON files. Defaults to reaserch_agent/chem_kb.",
     )
     parser.add_argument(
+        "--device-workstations-dir",
+        help=(
+            "Optional workstation description directory passed to B1 as device_context. "
+            f"Default when --include-device-context is used: {DEFAULT_DEVICE_WORKSTATIONS_DIR}."
+        ),
+    )
+    parser.add_argument(
+        "--device-context-json",
+        help="Optional JSON object/string for device_context; overrides --device-workstations-dir.",
+    )
+    parser.add_argument(
+        "--include-device-context",
+        action="store_true",
+        help="Load current device capabilities into B1 constraints before the first LLM call.",
+    )
+    parser.add_argument(
         "--memory-dir",
         help="Optional directory for memory retrieval. Defaults to the knowledge base directory.",
     )
@@ -81,6 +100,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--base-url",
         help="Optional model endpoint URL. If provided, it will override REFINER_LLM_ENDPOINT_URL.",
+    )
+    parser.add_argument(
+        "--wire-api",
+        choices=["chat", "codex_responses"],
+        default="chat",
+        help=(
+            "LLM wire API. Use codex_responses for the gpt-5.5 Codex-compatible endpoint."
+        ),
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        default="xhigh",
+        help="Reasoning effort used when --wire-api codex_responses. Default: xhigh.",
+    )
+    parser.add_argument(
+        "--llm-timeout-seconds",
+        type=float,
+        default=240.0,
+        help="LLM timeout seconds. Default: 240.",
     )
     parser.add_argument(
         "--disable-llm",
@@ -128,13 +166,39 @@ def parse_json_dict(raw_text: str, label: str) -> Dict[str, Any]:
     return parsed
 
 
+def attach_device_context(args: argparse.Namespace, constraints: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(constraints or {})
+    if args.device_context_json:
+        parsed = parse_json_dict(args.device_context_json, "device_context_json")
+        updated["device_context"] = parsed
+        return updated
+
+    if args.include_device_context or args.device_workstations_dir:
+        workstations_dir = (
+            Path(args.device_workstations_dir).expanduser().resolve()
+            if args.device_workstations_dir
+            else DEFAULT_DEVICE_WORKSTATIONS_DIR
+        )
+        updated["device_workstations_dir"] = str(workstations_dir)
+        updated["device_context"] = load_device_context(workstations_dir)
+
+    return updated
+
+
 def configure_model_env(args: argparse.Namespace) -> None:
     if args.model_name:
         os.environ["REFINER_LLM_MODEL_NAME"] = args.model_name
     if args.api_key:
         os.environ["REFINER_LLM_API_KEY"] = args.api_key
+        os.environ["OPENAI_API_KEY"] = args.api_key
     if args.base_url:
         os.environ["REFINER_LLM_ENDPOINT_URL"] = args.base_url
+    os.environ["REFINER_LLM_TIMEOUT_SECONDS"] = str(args.llm_timeout_seconds)
+    if args.wire_api == "codex_responses":
+        os.environ["REFINER_LLM_WIRE_API"] = "codex_responses"
+        os.environ["REFINER_LLM_REASONING_EFFORT"] = args.reasoning_effort
+    else:
+        os.environ.pop("REFINER_LLM_WIRE_API", None)
 
 
 def get_query(args: argparse.Namespace) -> str:
@@ -226,14 +290,43 @@ def main() -> int:
 
     configure_model_env(args)
     query = get_query(args)
-    constraints = parse_json_dict(args.constraints_json, "constraints_json")
+    constraints = attach_device_context(
+        args,
+        parse_json_dict(args.constraints_json, "constraints_json"),
+    )
     payload = parse_json_dict(args.payload_json, "payload_json")
     if args.observation and "observation" not in payload:
         payload["observation"] = {"summary": args.observation.strip()}
     previous_state = load_previous_state(args.previous_state)
 
+    print(
+        "starting research agent: "
+        f"event_type={args.event_type}, "
+        f"model={args.model_name or 'env/default'}, "
+        f"wire_api={args.wire_api}, "
+        f"device_context={'on' if constraints.get('device_context') else 'off'}, "
+        f"memory={'on' if args.enable_memory else 'off'}",
+        flush=True,
+    )
+    if args.wire_api == "codex_responses":
+        print(
+            "codex_responses is non-streaming here; the terminal may stay quiet "
+            "until each LLM step finishes.",
+            flush=True,
+        )
+
+    model = None
+    if not args.disable_llm:
+        model = LLMFactory.create_or_none(
+            model_name=args.model_name,
+            api_key=args.api_key,
+            base_url=args.base_url,
+        )
+        if model is None:
+            raise SystemExit("模型没有创建成功，请检查 model/base_url/api_key/wire-api 配置。")
+
     agent = ResearchAgent(
-        model=None,
+        model=model,
         use_llm=not args.disable_llm,
         knowledge_base_dir=args.knowledge_base_dir,
         memory_dir=args.memory_dir,
