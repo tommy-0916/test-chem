@@ -35,7 +35,8 @@ class CodexResponsesModel:
 
     def invoke(self, messages: Any) -> Any:
         prompt = self._messages_to_prompt(messages)
-        with tempfile.TemporaryDirectory(prefix="research-codex-") as tmpdir:
+        tmpdir = tempfile.mkdtemp(prefix="research-codex-")
+        try:
             tmp_path = Path(tmpdir)
             output_path = tmp_path / "last_message.txt"
             self._write_codex_home(tmp_path)
@@ -73,6 +74,8 @@ class CodexResponsesModel:
             if not text:
                 raise RuntimeError("Codex responses call returned empty output")
             return SimpleNamespace(content=text)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _write_codex_home(self, path: Path) -> None:
         bundled_marketplace = Path(

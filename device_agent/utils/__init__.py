@@ -16,9 +16,17 @@
 创建日期: 2026-01-29
 """
 
-from .llm_factory import LLMFactory
-from .log_manager import LogManager
 from .workstation_loader import WorkstationLoader
+
+try:
+    from .llm_factory import LLMFactory
+except ModuleNotFoundError:  # pragma: no cover - depends on optional runtime deps
+    LLMFactory = None
+
+try:
+    from .log_manager import LogManager
+except ModuleNotFoundError:  # pragma: no cover - depends on optional runtime deps
+    LogManager = None
 
 __all__ = [
     "LLMFactory",

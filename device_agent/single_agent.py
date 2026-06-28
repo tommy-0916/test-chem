@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -218,7 +219,16 @@ class SingleDeviceAgent:
         workflow_id: int = 0,
     ) -> SingleDeviceAgentState:
         exp_id = exp_id or self._default_exp_id()
-        workstation_descriptions = self._workstation_loader.format_for_prompt()
+        handoff_text = json.dumps(research_handoff, ensure_ascii=False)
+        workstation_selection_text = self._workstation_selection_text(research_handoff)
+        if self._use_full_workstation_prompt():
+            workstation_descriptions = self._workstation_loader.format_for_prompt()
+        elif hasattr(self._workstation_loader, "format_relevant_for_prompt"):
+            workstation_descriptions = self._workstation_loader.format_relevant_for_prompt(
+                workstation_selection_text
+            )
+        else:
+            workstation_descriptions = self._workstation_loader.format_for_prompt()
         state = SingleDeviceAgentState(
             research_handoff=research_handoff,
             exp_id=exp_id,
@@ -248,6 +258,22 @@ class SingleDeviceAgent:
 
     def run(self, research_handoff: Dict[str, Any]) -> Dict[str, Any]:
         return self.run_state(research_handoff).terminal_package
+
+    def _use_full_workstation_prompt(self) -> bool:
+        raw = os.getenv("CHEM_DEVICE_AGENT_FULL_WORKSTATIONS", "")
+        return raw.strip().lower() in {"1", "true", "yes", "on", "full"}
+
+    def _workstation_selection_text(self, research_handoff: Dict[str, Any]) -> str:
+        """Focus workstation retrieval on executable intent, not long feedback history."""
+        task = research_handoff.get("task")
+        if not isinstance(task, dict):
+            task = {}
+        focused = {
+            "query": task.get("query", ""),
+            "current_stage": task.get("current_stage", ""),
+            "macro_action_steps": research_handoff.get("macro_action_steps", []),
+        }
+        return json.dumps(focused, ensure_ascii=False)
 
     def _invoke_mapping(self, state: SingleDeviceAgentState) -> Dict[str, Any]:
         prompt = SINGLE_DEVICE_TASK_PROMPT

@@ -16,11 +16,12 @@ if __package__ is None or __package__ == "":
 
 from reaserch_agent import ResearchAgent
 from reaserch_agent.tools import load_device_context
+from reaserch_agent.tools.device_context import default_workstations_dir
 from reaserch_agent.utils.llm_factory import LLMFactory
 
 
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
-DEFAULT_DEVICE_WORKSTATIONS_DIR = Path(__file__).resolve().parents[1] / "chem_resources" / "workstations_new"
+DEFAULT_DEVICE_WORKSTATIONS_DIR = default_workstations_dir()
 
 
 def build_parser() -> argparse.ArgumentParser:

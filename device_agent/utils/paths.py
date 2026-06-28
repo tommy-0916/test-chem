@@ -46,7 +46,23 @@ def workstation_dir(use_new_format: bool = True) -> Path:
     env_name = "CHEM_WORKSTATIONS_NEW_DIR" if use_new_format else "CHEM_WORKSTATIONS_DIR"
     if os.getenv(env_name):
         return _env_path(env_name)
-    return chem_resources_root() / ("workstations_new" if use_new_format else "workstations")
+    if not use_new_format:
+        return chem_resources_root() / "workstations"
+
+    for candidate in (
+        chem_resources_root()
+        / "lab-design-main"
+        / "skills"
+        / "chemistry-experiment-workstation",
+        chem_resources_root()
+        / "lab-design-all"
+        / "skills"
+        / "chemistry-experiment-workstation",
+        chem_resources_root() / "workstations_new",
+    ):
+        if candidate.exists():
+            return candidate
+    return chem_resources_root() / "workstations_new"
 
 
 def format_reference_path(kind: str) -> Path:

@@ -14,9 +14,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
-from dotenv import load_dotenv
 from openai import OpenAI
 from utils.paths import default_env_file
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - depends on optional local deps
+    def load_dotenv(*args, **kwargs):
+        return False
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +72,8 @@ class CodexResponsesModel:
 
     def invoke(self, messages: List[Any]) -> ChatResponse:
         prompt = self._messages_to_prompt(messages)
-        with tempfile.TemporaryDirectory(prefix="device-codex-") as tmpdir:
+        tmpdir = tempfile.mkdtemp(prefix="device-codex-")
+        try:
             tmp_path = Path(tmpdir)
             output_path = tmp_path / "last_message.txt"
             self._write_codex_home(tmp_path)
@@ -103,6 +109,8 @@ class CodexResponsesModel:
             if not text:
                 raise RuntimeError("Codex responses call returned empty output")
             return ChatResponse(content=text)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _write_codex_home(self, path: Path) -> None:
         bundled_marketplace = Path(

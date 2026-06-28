@@ -55,8 +55,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--workstations-dir",
         help=(
-            "Optional path to workstations_new. The device agent will extract each "
-            "station's USAGE.md and AUDIT-RULES.md from this directory."
+            "Optional path to workstation truth source. Supports the old "
+            "workstations_new layout and the new lab-design-main layout."
+        ),
+    )
+    parser.add_argument(
+        "--full-workstations",
+        action="store_true",
+        help=(
+            "Include the full loaded workstation truth source in the device-agent "
+            "prompt instead of selecting only relevant workstations."
         ),
     )
     parser.add_argument(
@@ -256,7 +264,7 @@ def build_device_agent_input_package(
                 "and repeated device sub-steps."
             ),
             "device_agent_responsibilities": [
-                "Select concrete supported containers and workstations from the loaded workstations_new truth source.",
+                "Select concrete supported containers and workstations from the loaded workstation truth source.",
                 "Map liquid sources to reagent/original-solution bottle slots when appropriate.",
                 "Expand macro actions into device-level operations such as lid handling, aliquoting, balancing, repeated purification, drying, and handoff notes.",
                 "Maintain one continuous, supported container path across reaction, aging/resting, purification, washing, drying, and testing; if a vessel change is required, it must be backed by an explicit supported transfer/vessel-change operation.",
@@ -293,6 +301,8 @@ def configure_model_env(args: argparse.Namespace) -> None:
         os.environ["REFINER_LLM_REASONING_EFFORT"] = args.reasoning_effort
     if args.workstations_dir:
         os.environ["CHEM_WORKSTATIONS_NEW_DIR"] = str(Path(args.workstations_dir).expanduser())
+    if args.full_workstations:
+        os.environ["CHEM_DEVICE_AGENT_FULL_WORKSTATIONS"] = "1"
 
 
 def dump_json(path_text: str | None, data: Any) -> None:

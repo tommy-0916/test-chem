@@ -1131,54 +1131,73 @@ class ResearchAgent(BaseAgent):
 
     def _step_post_observation_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
+        base_prompt = POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT.format(
+            query=state.event.query,
+            observation_json=json.dumps(
+                state.latest_observation, ensure_ascii=False, indent=2
+            ),
+            previous_macro_plan_json=json.dumps(
+                state.previous_macro_plan, ensure_ascii=False, indent=2
+            ),
+            survey_report_json=json.dumps(
+                state.survey_report, ensure_ascii=False, indent=2
+            ),
+            stage_route_json=json.dumps(
+                state.stage_route, ensure_ascii=False, indent=2
+            ),
+            current_stage=state.current_stage,
+            current_stage_plan=state.current_stage_plan,
+            stage_route_reason=state.stage_route_reason,
+            current_stage_reason=state.current_stage_reason,
+            reference_context=reference_context or "当前没有可用参考案例",
+        )
         if self._use_llm:
+            previous_result: Dict[str, Any] | None = None
+            previous_issues: List[str] = []
             try:
-                result = self._invoke_state_json(
-                    state,
-                    "post_observation_macro_plan_design",
-                    POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT.format(
-                        query=state.event.query,
-                        observation_json=json.dumps(
-                            state.latest_observation, ensure_ascii=False, indent=2
-                        ),
-                        previous_macro_plan_json=json.dumps(
-                            state.previous_macro_plan, ensure_ascii=False, indent=2
-                        ),
-                        survey_report_json=json.dumps(
-                            state.survey_report, ensure_ascii=False, indent=2
-                        ),
-                        stage_route_json=json.dumps(
-                            state.stage_route, ensure_ascii=False, indent=2
-                        ),
-                        current_stage=state.current_stage,
-                        current_stage_plan=state.current_stage_plan,
-                        stage_route_reason=state.stage_route_reason,
-                        current_stage_reason=state.current_stage_reason,
-                        reference_context=reference_context or "当前没有可用参考案例",
-                    ),
-                    system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
-                )
-                state.raw_llm_outputs["post_observation_macro_plan_design"] = result
-                macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
-                if macro_plan:
+                for attempt in range(2):
+                    output_key = (
+                        "post_observation_macro_plan_design"
+                        if attempt == 0
+                        else f"post_observation_macro_plan_design_retry_{attempt}"
+                    )
+                    task_prompt = base_prompt
+                    if previous_result is not None:
+                        task_prompt += (
+                            "\n\n## 上一次 post-observation macro_plan 输出未通过本地质量检查\n"
+                            "请在不改变当前 stage、目标 observation point、科学目标和设备边界的前提下，"
+                            "只重写 `current_stage_plan` 与 `macro_plan`。所有输出仍必须是 JSON object。\n"
+                            "质量问题：\n"
+                            + "\n".join(f"- {issue}" for issue in previous_issues)
+                            + "\n\n上一次输出：\n"
+                            + json.dumps(previous_result, ensure_ascii=False, indent=2)
+                        )
+                    result = self._invoke_state_json(
+                        state,
+                        output_key,
+                        task_prompt,
+                        system_prompt=POST_OBSERVATION_SYSTEM_PROMPT,
+                    )
+                    state.raw_llm_outputs[output_key] = result
+                    previous_result = result
+                    macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
+                    if not macro_plan:
+                        previous_issues = ["LLM returned empty macro_plan"]
+                        continue
                     current_stage_plan = str(result.get("current_stage_plan", "")).strip()
                     quality_issues = self._macro_plan_quality_issues(
                         macro_plan,
                         state.event.query,
                     )
-                    if quality_issues:
-                        raise ValueError(
-                            "post-observation macro plan quality check failed: "
-                            + "; ".join(quality_issues[:5])
-                        )
-                    return {
-                        "current_stage_plan": current_stage_plan or state.current_stage_plan,
-                        "macro_plan": macro_plan,
-                    }
-                self._raise_llm_step_failure(
-                    state,
-                    "post_observation_macro_plan_design",
-                    "LLM returned empty macro_plan",
+                    if not quality_issues:
+                        return {
+                            "current_stage_plan": current_stage_plan or state.current_stage_plan,
+                            "macro_plan": macro_plan,
+                        }
+                    previous_issues = quality_issues[:5]
+                raise ValueError(
+                    "post-observation macro plan quality check failed: "
+                    + "; ".join(previous_issues[:5])
                 )
             except Exception as exc:  # pragma: no cover - depends on remote model
                 logger.warning("post-observation macro plan failed: %s", exc)
@@ -1496,6 +1515,26 @@ class ResearchAgent(BaseAgent):
                 return True
         return False
 
+    def _macro_plan_requests_xrd_observation(
+        self,
+        macro_plan: Sequence[Dict[str, Any]],
+    ) -> bool:
+        for step in macro_plan:
+            operation = str(step.get("操作", "")).lower()
+            parameters = str(step.get("参数", "")).lower()
+            target = str(step.get("试剂/对象", "")).lower()
+            step_blob = " ".join([operation, target, parameters])
+            if "xrd" not in step_blob and "衍射" not in step_blob:
+                continue
+            if any(
+                marker in step_blob
+                for marker in ["已确认", "放行", "前序", "上一 stage", "previous", "confirmed"]
+            ):
+                continue
+            if any(term in operation for term in ["xrd", "衍射", "表征", "观察", "测试", "采集"]):
+                return True
+        return False
+
     def _device_adaptation_macro_plan_issues(
         self,
         state: ResearchAgentState,
@@ -1533,7 +1572,7 @@ class ResearchAgent(BaseAgent):
         if "xrd" in observation_blob and "xrd 工作站" in plan_blob:
             issues.append("macro_plan uses XRD workstation instead of offline XRD handoff")
 
-        if "xrd" in plan_blob and not self._has_real_drying_step(macro_plan):
+        if self._macro_plan_requests_xrd_observation(macro_plan) and not self._has_real_drying_step(macro_plan):
             issues.append("macro_plan has offline XRD handoff but no real drying step before XRD")
 
         if "真空干燥箱" in observation_blob and "真空干燥箱" in plan_blob:
@@ -3605,10 +3644,18 @@ class ResearchAgent(BaseAgent):
                 issues.append(f"第 {index} 步包含占位表达")
             if normalized_query and re.sub(r"\s+", "", target) == normalized_query:
                 issues.append(f"第 {index} 步把完整 query 当作试剂/对象")
-            if parameters and not PARAMETER_DETAIL_RE.search(parameters):
+            if (
+                parameters
+                and not PARAMETER_DETAIL_RE.search(parameters)
+                and not self._is_observation_judgement_step(operation, parameters)
+            ):
                 issues.append(f"第 {index} 步参数缺少具体实验条件")
 
         return issues
+
+    def _is_observation_judgement_step(self, operation: str, parameters: str) -> bool:
+        blob = f"{operation} {parameters}"
+        return any(term in blob for term in ["判据", "判定", "比较", "数据", "指标", "observation"])
 
     def _device_context_macro_quality_issues(
         self,
