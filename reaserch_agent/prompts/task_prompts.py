@@ -148,6 +148,7 @@ paper protocol extract
 要求：
 - protocols 最多输出 3 个，优先输出与 query 最相关的论文
 - steps 中的“参数”不得使用“适量”“按需”“建议”等规划性表达，除非论文原文就是这样
+- 若知识文本中含有 [p.N] 页码标记，请给对应 step 附加可选字段 "page"（整数，取该实验段所在页）；没有标记则省略该字段
 - 不要输出设备/workstation 控制语义"""
 
 STAGE_DESIGN_PROMPT = """## 任务名称
@@ -351,6 +352,7 @@ macro plan design
 - macro_plan 必须是一个步骤数组
 - 每一步必须包含 步骤序号、操作、试剂/对象、参数
 - 参数保持实验自然语言，不要翻译成 workstation 级动作
+- 每一步可附加可选字段 `来源`：标注该步骤关键参数来自哪个 protocol（paper_id 或文献题目，可带页码如 p.4）；由 agent 依据化学常识补全的写 "agent补全"。不确定时可省略该字段，系统会自动标注，缺失不算错误。
 - 如果输入包含设备边界上下文，参数应尽量写成下游可判断的固定化学条件，例如固定体积、固定时间、
   固定洗涤次数、固定温度、离线 observation/handoff；不要选择具体机器容器、工作站、容器编号或机器动作。
 - 如果输入包含设备边界上下文且当前平台无法低质量固体称量/同步加液/大体积离心，参数应优先使用
@@ -542,7 +544,8 @@ post-observation macro plan design
 - macro_plan 必须严格属于当前 stage
 - 每一步必须包含具体实验操作、试剂/对象、参数
 - 参数应包含关键实验条件，不要输出占位性研究建议
-- 不要重复上一段已经完成且 observation 已确认成功的 macro steps，除非需要复现实验或修复异常"""
+- 不要重复上一段已经完成且 observation 已确认成功的 macro steps，除非需要复现实验或修复异常
+- 每一步可附加可选字段 `来源`：标注该步骤参数来自哪个 protocol（paper_id 或文献题目，可带页码）；agent 补全的写 "agent补全"。缺失不算错误。"""
 
 
 DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
@@ -618,7 +621,8 @@ device-adaptation macro plan design
 - 参数应包含关键实验条件、体积/摩尔量/温度/时间/转速等，不要输出占位性研究建议。
 - 参数必须写成固定条件；不要写“洗涤至/洗至/直至上清/干燥至/观察颜色/观察浑浊/缓慢滴加/同步搅拌”等需要闭环判断或设备实时感知的表达。
 - 参数不要写“进样瓶编号”“原液编号”“工作站”“液体进样站”“纯化工作站”“烘干机”等机器执行字段，除非这些词来自原始化学对象且确实是研究目标的一部分。
-- 最后一类目标 observation 若设备不可执行，应作为离线 observation/handoff 继续保留。"""
+- 最后一类目标 observation 若设备不可执行，应作为离线 observation/handoff 继续保留。
+- 每一步可附加可选字段 `来源`：保留原步骤的文献 protocol 引用（paper_id/文献题目/页码）；设备适配改写的步骤标注 "agent补全(设备适配改写)"。缺失不算错误。"""
 
 
 ABNORMAL_OBSERVATION_SURVEY_QUERY_GENERATE_PROMPT = """## 任务名称

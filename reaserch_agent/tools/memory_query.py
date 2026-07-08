@@ -23,6 +23,15 @@ class MemoryQuery:
         self._corpus = LocalExperimentCorpus(corpus_dir=corpus_dir)
         self._top_k = top_k
 
+    def refresh(self) -> None:
+        """Pick up corpus files ingested after construction."""
+        self._corpus.refresh()
+
+    @property
+    def memory(self) -> LayeredChemMemory:
+        """Underlying layered store (campaign trajectory writes/recall)."""
+        return self._memory
+
     def search(self, queries: Sequence[str], top_k: int | None = None) -> List[SearchHit]:
         resolved_top_k = top_k or self._top_k
         query_text = "\n".join(query.strip() for query in queries if query and query.strip())

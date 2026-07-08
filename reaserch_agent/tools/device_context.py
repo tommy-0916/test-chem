@@ -11,6 +11,94 @@ DEFAULT_USAGE_CHAR_LIMIT = 900
 DEFAULT_AUDIT_CHAR_LIMIT = 1200
 DEFAULT_TOTAL_CHAR_LIMIT = 18000
 
+UNAVAILABLE_STATUSES = {
+    "offline",
+    "unavailable",
+    "down",
+    "maintenance",
+    "fault",
+    "disabled",
+    "停机",
+    "维修",
+    "故障",
+    "不可用",
+    "禁用",
+}
+BUSY_STATUSES = {"busy", "occupied", "占用", "忙碌"}
+
+
+def load_device_status(path_text: str | Path) -> Dict[str, str]:
+    """Read a station-availability map: flat {name: status} or {"stations": {...}}."""
+    path = Path(path_text).expanduser().resolve()
+    parsed = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(parsed, dict) and isinstance(parsed.get("stations"), dict):
+        parsed = parsed["stations"]
+    if not isinstance(parsed, dict):
+        raise ValueError("device status file must be a JSON object")
+    return {
+        str(name).strip(): str(status).strip()
+        for name, status in parsed.items()
+        if str(name).strip()
+    }
+
+
+def apply_device_status(
+    context: Dict[str, Any],
+    status_map: Dict[str, str],
+) -> Dict[str, Any]:
+    """Overlay live station availability onto a loaded device context.
+
+    Unavailable stations stay visible but are flagged ⛔ so the research
+    layer avoids routes that need them (and the feasibility loop can name
+    them explicitly) instead of mistaking them for missing capabilities.
+    """
+    if not status_map:
+        return context
+    normalized_status = {
+        name.strip().lower(): status for name, status in status_map.items()
+    }
+    updated = dict(context)
+    workstations: List[Dict[str, Any]] = []
+    unavailable_names: List[str] = []
+    for station in updated.get("workstations", []) or []:
+        entry = dict(station)
+        status = _lookup_station_status(entry, normalized_status)
+        if status:
+            entry["availability"] = status
+            if status.lower() in UNAVAILABLE_STATUSES:
+                entry["availability_note"] = (
+                    f"⛔ 当前不可用（{status}）：规划路线必须避开该工作站能力。"
+                )
+                unavailable_names.append(
+                    entry.get("display_name") or entry.get("station_name", "")
+                )
+            elif status.lower() in BUSY_STATUSES:
+                entry["availability_note"] = (
+                    f"⚠️ 当前占用（{status}）：可以使用但可能需要等待。"
+                )
+        workstations.append(entry)
+    updated["workstations"] = workstations
+    updated["station_status"] = dict(status_map)
+    if unavailable_names:
+        updated["planning_policy"] = (
+            str(updated.get("planning_policy", ""))
+            + " 当前设备可用性提示：以下工作站此刻不可用，规划的化学路线不得依赖它们——"
+            + "、".join(name for name in unavailable_names if name)
+            + "。忙碌(busy)设备可用但可能等待。"
+        ).strip()
+    return updated
+
+
+def _lookup_station_status(
+    station: Dict[str, Any],
+    normalized_status: Dict[str, str],
+) -> str:
+    for key in ("station_name", "display_name", "code", "name"):
+        value = str(station.get(key, "")).strip().lower()
+        if value and value in normalized_status:
+            return normalized_status[value]
+    return ""
+
 
 def default_workstations_dir() -> Path:
     resource_root = Path(__file__).resolve().parents[2] / "chem_resources"
@@ -94,22 +182,47 @@ def ensure_device_context(constraints: Dict[str, Any]) -> Dict[str, Any]:
     """Return constraints with device_context loaded when requested."""
     updated = dict(constraints or {})
     if updated.get("device_context"):
-        return updated
+        return _ensure_status_applied(updated)
 
     device_context_path = updated.get("device_context_path")
     if device_context_path:
         updated["device_context"] = load_device_context_from_path(str(device_context_path))
-        return updated
+        return _ensure_status_applied(updated)
 
     workstations_dir = updated.get("device_workstations_dir")
     if workstations_dir:
         updated["device_context"] = load_device_context(str(workstations_dir))
-        return updated
+        return _ensure_status_applied(updated)
 
     if updated.get("include_default_device_context"):
         updated["device_context"] = load_device_context()
 
-    return updated
+    return _ensure_status_applied(updated)
+
+
+def _ensure_status_applied(constraints: Dict[str, Any]) -> Dict[str, Any]:
+    context = constraints.get("device_context")
+    if not isinstance(context, dict):
+        return constraints
+    if context.get("station_status"):
+        return constraints
+
+    status_map: Dict[str, str] = {}
+    inline_status = constraints.get("device_status")
+    if isinstance(inline_status, dict):
+        status_map = {
+            str(name): str(status) for name, status in inline_status.items()
+        }
+    else:
+        status_path = constraints.get("device_status_path")
+        if status_path:
+            try:
+                status_map = load_device_status(str(status_path))
+            except (OSError, ValueError, json.JSONDecodeError):
+                status_map = {}
+    if status_map:
+        constraints["device_context"] = apply_device_status(context, status_map)
+    return constraints
 
 
 def _read_text(path: Path) -> str:

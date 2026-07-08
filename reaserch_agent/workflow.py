@@ -8,6 +8,7 @@ import os
 import re
 import time
 from copy import deepcopy
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Sequence
 
 from .core import BaseAgent
@@ -37,6 +38,7 @@ from .prompts import (
 )
 from .state import ResearchAgentState, ResearchEvent, SearchHit
 from .tools import KnowledgeQuery, MemoryQuery, ensure_device_context
+from .tools.web_tool import WebToolExecutor
 from .utils import LLMFactory
 
 logger = logging.getLogger(__name__)
@@ -110,6 +112,11 @@ class ResearchAgent(BaseAgent):
         knowledge_top_k: int = 5,
         memory_top_k: int = 3,
         enable_memory: bool | None = None,
+        enable_online_literature: bool | None = None,
+        literature_client: Any = None,
+        literature_download_pdfs: bool = False,
+        enable_web_search: bool | None = None,
+        web_search_client: Any = None,
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
@@ -121,11 +128,17 @@ class ResearchAgent(BaseAgent):
         self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
         self._enable_memory = self._resolve_enable_memory(enable_memory)
+        self._online_literature = self._resolve_online_literature(enable_online_literature)
+        self._literature_client = literature_client
+        self._literature_download_pdfs = literature_download_pdfs
+        self._web_search_enabled = self._resolve_web_search(enable_web_search)
+        self._web_search_client = web_search_client
         resolved_knowledge_dir = (
             knowledge_base_dir
             or os.getenv("RESEARCH_KNOWLEDGE_BASE_DIR")
             or corpus_dir
         )
+        self._knowledge_base_dir = resolved_knowledge_dir
         resolved_memory_dir = (
             memory_dir
             or os.getenv("RESEARCH_MEMORY_DIR")
@@ -149,6 +162,30 @@ class ResearchAgent(BaseAgent):
             return False
         return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
+    def _resolve_online_literature(
+        self,
+        enable_online_literature: bool | None,
+    ) -> bool | None:
+        """True = always, False = never, None = auto (when pending references exist)."""
+        if enable_online_literature is not None:
+            return bool(enable_online_literature)
+        raw_value = os.getenv("RESEARCH_ONLINE_LITERATURE")
+        if raw_value is None:
+            return None
+        normalized = raw_value.strip().lower()
+        if normalized in {"auto", ""}:
+            return None
+        return normalized in {"1", "true", "yes", "on"}
+
+    def _resolve_web_search(self, enable_web_search: bool | None) -> bool:
+        """Web line is opt-in: explicit flag, else RESEARCH_WEB_SEARCH env."""
+        if enable_web_search is not None:
+            return bool(enable_web_search)
+        raw_value = os.getenv("RESEARCH_WEB_SEARCH")
+        if raw_value is None:
+            return False
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
     def run(
         self,
         event_type: str,
@@ -156,6 +193,8 @@ class ResearchAgent(BaseAgent):
         constraints: Dict[str, Any] | None = None,
         payload: Dict[str, Any] | None = None,
         previous_state: ResearchAgentState | Dict[str, Any] | None = None,
+        campaign_id: str = "",
+        reference_inputs: List[Dict[str, Any]] | None = None,
     ) -> ResearchAgentState:
         resolved_constraints = ensure_device_context(constraints or {})
         event = ResearchEvent(
@@ -164,14 +203,28 @@ class ResearchAgent(BaseAgent):
             constraints=resolved_constraints,
             payload=payload or {},
         )
-        return self.run_event(event, previous_state=previous_state)
+        return self.run_event(
+            event,
+            previous_state=previous_state,
+            campaign_id=campaign_id,
+            reference_inputs=reference_inputs,
+        )
 
     def run_event(
         self,
         event: ResearchEvent,
         previous_state: ResearchAgentState | Dict[str, Any] | None = None,
+        campaign_id: str = "",
+        reference_inputs: List[Dict[str, Any]] | None = None,
     ) -> ResearchAgentState:
         state = self._build_state_for_event(event, previous_state)
+        if campaign_id.strip():
+            state.campaign_id = campaign_id.strip()
+        if reference_inputs:
+            state.reference_inputs = list(state.reference_inputs) + [
+                dict(item) for item in reference_inputs
+            ]
+        self._incoming_plan_snapshot = self._plan_snapshot(state)
         state.status = "running"
         state.add_log(
             f"ResearchAgent started with event={event.event_type}, llm_enabled={self._use_llm}"
@@ -298,6 +351,463 @@ class ResearchAgent(BaseAgent):
         }
         return aliases.get(normalized, normalized)
 
+    def _plan_snapshot(self, state: ResearchAgentState) -> Dict[str, Any] | None:
+        """Compact copy of the current plan for the plan-version ledger."""
+        if not state.stage_route and not state.current_stage and not state.macro_plan:
+            return None
+        return {
+            "stage_route": list(state.stage_route),
+            "current_stage": state.current_stage,
+            "current_stage_plan": state.current_stage_plan,
+            "macro_plan": deepcopy(state.macro_plan),
+            "stage_route_reason": state.stage_route_reason,
+            "current_stage_reason": state.current_stage_reason,
+        }
+
+    @staticmethod
+    def _compose_reason(parts: Sequence[Any]) -> str:
+        cleaned: List[str] = []
+        for part in parts:
+            text = str(part or "").strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+        return " | ".join(cleaned)
+
+    def _observation_summary_for_ledger(self, state: ResearchAgentState) -> str:
+        observation = state.latest_observation or {}
+        summary = str(observation.get("summary", "")).strip()
+        if not summary and observation:
+            summary = json.dumps(observation, ensure_ascii=False)
+        return summary[:300]
+
+    def _post_observation_revision_reason(self, state: ResearchAgentState) -> str:
+        parts: List[str] = []
+        fit = state.observation_stage_fit or {}
+        fit_status = str(fit.get("status", "")).strip()
+        if fit_status:
+            parts.append(f"observation stage fit: {fit_status}")
+        for key in ("reason", "abnormal_reason", "explanation", "fit_reason"):
+            value = str(fit.get(key, "")).strip()
+            if value:
+                parts.append(value)
+                break
+        progress_summary = str(
+            (state.stage_progress or {}).get("progress_summary", "")
+        ).strip()
+        if progress_summary:
+            parts.append(progress_summary)
+        observation = state.latest_observation or {}
+        blocking = observation.get("blocking_constraints")
+        if isinstance(blocking, list) and blocking:
+            parts.append(
+                "设备阻塞约束: " + "；".join(str(item) for item in blocking[:5])
+            )
+        return self._compose_reason(parts)
+
+    def _b2_ledger_trigger(self, state: ResearchAgentState) -> str:
+        if self._is_device_feasibility_observation(state.latest_observation):
+            return "device_feasibility_error"
+        return "observation"
+
+    def _b2_ledger_event(self, state: ResearchAgentState) -> str:
+        if state.post_observation_repair_path == "normal_progress":
+            if state.stage_progress_status == "closure_ready":
+                return "closure"
+            return "advanced"
+        return "revised"
+
+    def _b2_ledger_scope(self, state: ResearchAgentState) -> str:
+        mapping = {
+            "normal_progress": "macro_plan",
+            "stage_internal": "current_stage_plan",
+            "current_stage": "current_stage",
+            "stage_route": "stage_route",
+            "device_adaptation": "macro_plan",
+        }
+        return mapping.get(state.post_observation_repair_path, "macro_plan")
+
+    def _record_plan_revision(
+        self,
+        state: ResearchAgentState,
+        *,
+        event: str,
+        scope: str,
+        trigger: str,
+        branch_path: str,
+        reason: str,
+    ) -> None:
+        """Append one auditable plan event; recording must never break planning."""
+        try:
+            record: Dict[str, Any] = {
+                "campaign_id": state.campaign_id,
+                "plan_version": len(state.plan_revisions) + 1,
+                "event": event,
+                "scope": scope,
+                "trigger": trigger,
+                "branch_path": branch_path,
+                "reason": (reason or "").strip() or "(no reason provided)",
+                "observation_summary": self._observation_summary_for_ledger(state),
+                "evidence_refs": self._collect_evidence_refs(state),
+                "agent_status": state.status,
+                "previous_plan": getattr(self, "_incoming_plan_snapshot", None),
+                "new_plan": self._plan_snapshot(state),
+                "recorded_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            state.plan_revisions.append(record)
+            state.add_log(
+                f"plan ledger event recorded: {event}/{scope} (v{record['plan_version']})"
+            )
+            self._record_campaign_memory(state, record)
+        except Exception as exc:  # pragma: no cover - defensive audit guard
+            state.add_error(f"plan revision record failed: {exc}")
+
+    def _record_campaign_memory(
+        self,
+        state: ResearchAgentState,
+        revision: Dict[str, Any],
+    ) -> None:
+        """Persist one trajectory node (and stage rollups) per plan event."""
+        if not (self._enable_memory and state.campaign_id):
+            return
+        try:
+            memory = self._memory_query.memory
+            node_type = {
+                "initial": "bootstrap",
+                "abandoned": "manual_handoff",
+            }.get(revision["event"], "observation_turn")
+            turn_index = revision["plan_version"]
+            macro_preview = "; ".join(
+                f"{step.get('步骤序号', '?')}.{step.get('操作', '')}"
+                for step in state.macro_plan[:4]
+            )
+            node_payload = {
+                "query": state.event.query,
+                "stage": state.current_stage,
+                "event": revision["event"],
+                "scope": revision["scope"],
+                "trigger": revision["trigger"],
+                "observation_summary": revision.get("observation_summary", ""),
+                "decision_reason": revision.get("reason", ""),
+                "repair_path": state.post_observation_repair_path,
+                "macro_plan_preview": macro_preview,
+                "evidence_refs": revision.get("evidence_refs", []),
+                "status": state.status,
+            }
+            memory.add_experiment(
+                json.dumps(node_payload, ensure_ascii=False, indent=2),
+                metadata={
+                    "title": f"{state.campaign_id} turn {turn_index}: {state.current_stage or 'bootstrap'}",
+                    "campaign_id": state.campaign_id,
+                    "node_type": node_type,
+                    "stage": state.current_stage,
+                    "turn_index": turn_index,
+                    "event": revision["event"],
+                    "trigger": revision["trigger"],
+                    "repair_path": state.post_observation_repair_path,
+                    "status": state.status,
+                },
+                run_id=state.campaign_id,
+            )
+
+            previous_plan = revision.get("previous_plan") or {}
+            previous_stage = str(previous_plan.get("current_stage", "")).strip()
+            stage_concluded = ""
+            if previous_stage and previous_stage != state.current_stage:
+                stage_concluded = previous_stage
+            elif revision["event"] == "closure":
+                stage_concluded = state.current_stage
+            if stage_concluded:
+                rollup_text = (
+                    f"stage '{stage_concluded}' 结束于 turn v{turn_index}"
+                    f"（event={revision['event']}, trigger={revision['trigger']}）。"
+                    f"最后 observation: {revision.get('observation_summary', '')[:200]}。"
+                    f"结论/原因: {revision.get('reason', '')[:300]}"
+                )
+                memory.add_experiment(
+                    rollup_text,
+                    metadata={
+                        "title": f"{state.campaign_id} stage summary: {stage_concluded}",
+                        "campaign_id": state.campaign_id,
+                        "node_type": "stage_summary",
+                        "stage": stage_concluded,
+                        "turn_index": turn_index,
+                        "event": revision["event"],
+                    },
+                    run_id=state.campaign_id,
+                )
+            state.add_log(
+                f"campaign memory node recorded: {node_type} (turn v{turn_index})"
+            )
+        except Exception as exc:  # pragma: no cover - memory must not break planning
+            state.add_error(f"campaign memory record failed: {exc}")
+
+    def _campaign_memory_context(self, state: ResearchAgentState) -> Dict[str, Any]:
+        """Three-layer recall (path summary / recent turns / cross-campaign)."""
+        if not (self._enable_memory and state.campaign_id):
+            return {}
+        try:
+            from .memory.recall import build_campaign_memory_context
+
+            fit_status = str(
+                (state.observation_stage_fit or {}).get("status", "")
+            ).strip().lower()
+            include_cross = fit_status in {"abnormal", "inconclusive"} or (
+                self._is_device_feasibility_observation(state.latest_observation)
+            )
+            signal_text = self._observation_summary_for_ledger(state) or state.current_stage
+            return build_campaign_memory_context(
+                self._memory_query.memory,
+                campaign_id=state.campaign_id,
+                current_stage=state.current_stage,
+                stage_route=list(state.stage_route),
+                signal_text=signal_text,
+                include_cross_campaign=include_cross,
+            )
+        except Exception as exc:  # pragma: no cover - recall must not break planning
+            return {"error": f"campaign memory recall failed: {exc}"}
+
+    def _literature_acquisition_enabled(self, state: ResearchAgentState) -> bool:
+        if self._online_literature is False:
+            return False
+        pending = any(
+            entry.get("status") in {"pending_resolution", "resolution_failed"}
+            or entry.get("kind") in {"local_file", "local_dir"}
+            for entry in state.reference_inputs
+        )
+        if self._online_literature is True:
+            return True
+        if self._web_search_enabled:
+            return True
+        return pending
+
+    def _build_literature_acquisition(self, state: ResearchAgentState):
+        from .tools.literature_acquisition import LiteratureAcquisition
+
+        return LiteratureAcquisition(
+            kb_dir=self._knowledge_base_dir,
+            campaign_id=state.campaign_id,
+            client=self._literature_client,
+            web_client=self._web_search_client,
+            enable_web_search=self._web_search_enabled,
+            download_pdfs=self._literature_download_pdfs,
+        )
+
+    def _maybe_acquire_literature(self, state: ResearchAgentState) -> None:
+        """B1 pre-survey phase: resolve seeds, snowball, archive to campaign."""
+        if not self._literature_acquisition_enabled(state):
+            return
+        try:
+            acquisition = self._build_literature_acquisition(state)
+            summary = acquisition.acquire_for_bootstrap(
+                state.event.query,
+                state.reference_inputs,
+            )
+            state.seed_papers = list(summary.get("seeds", []))
+            state.add_log(
+                "literature acquisition completed: "
+                f"seeds={len(summary.get('seeds', []))}, "
+                f"snowball_kept={summary.get('snowball_kept', 0)}, "
+                f"keyword_kept={summary.get('keyword_kept', 0)}, "
+                f"web_kept={summary.get('web_kept', 0)}"
+                f"{('/' + summary.get('web_engine', '')) if summary.get('web_engine') else ''}, "
+                f"written={len(summary.get('written_files', []))}, "
+                f"errors={len(summary.get('errors', []))}"
+            )
+            for error in summary.get("errors", [])[:5]:
+                state.add_log(f"literature acquisition warning: {error}")
+            self._knowledge_query.refresh()
+            self._memory_query.refresh()
+        except Exception as exc:
+            state.add_error(f"literature acquisition failed: {exc}")
+
+    def _maybe_acquire_repair_literature(
+        self,
+        state: ResearchAgentState,
+        queries: Sequence[str],
+    ) -> None:
+        """B2 abnormal path: one bounded online round before local survey."""
+        if self._online_literature is not True:
+            return
+        try:
+            acquisition = self._build_literature_acquisition(state)
+            summary = acquisition.acquire_for_repair(
+                list(queries),
+                stage=state.current_stage,
+            )
+            state.add_log(
+                "repair literature acquisition completed: "
+                f"kept={summary.get('kept', 0)}, "
+                f"errors={len(summary.get('errors', []))}"
+            )
+            for error in summary.get("errors", [])[:5]:
+                state.add_log(f"repair literature warning: {error}")
+            self._knowledge_query.refresh()
+            self._memory_query.refresh()
+        except Exception as exc:
+            state.add_error(f"repair literature acquisition failed: {exc}")
+
+    # ------------------------------------------------------------------
+    # evidence-grade provenance (P6)
+    # ------------------------------------------------------------------
+
+    def _attach_protocol_provenance(self, state: ResearchAgentState) -> None:
+        """Tag extracted protocols with registry identity + verification status."""
+        if not state.extracted_protocols:
+            return
+        registry = None
+        try:
+            from .tools.literature_acquisition import default_kb_dir
+            from .tools.paper_registry import PaperRegistry
+
+            kb_dir = self._knowledge_base_dir or default_kb_dir()
+            registry = PaperRegistry(kb_dir)
+        except Exception:
+            registry = None
+        for protocol in state.extracted_protocols:
+            if not isinstance(protocol, dict):
+                continue
+            record = None
+            if registry is not None and registry.count():
+                record = registry.find(title=str(protocol.get("source_title", "")))
+                if record is None:
+                    source_file = str(protocol.get("source_file", "")).strip()
+                    if source_file:
+                        for candidate in registry.all():
+                            if source_file in (candidate.get("corpus_files") or []):
+                                record = candidate
+                                break
+            if record is not None:
+                protocol["paper_id"] = str(record.get("paper_id", ""))
+                protocol["verification_status"] = str(
+                    record.get("verification_status", "unverified")
+                )
+                protocol["full_text_status"] = str(record.get("full_text_status", ""))
+            else:
+                protocol.setdefault("paper_id", "")
+                protocol.setdefault("verification_status", "unregistered_local")
+        state.add_log("protocol provenance attached from paper registry")
+
+    @staticmethod
+    def _provenance_tokens(text: str) -> set:
+        lowered = (text or "").lower()
+        tokens = set(re.findall(r"[0-9a-z][0-9a-z()\-\.]{1,}", lowered))
+        for chunk in re.findall(r"[一-鿿]{2,}", lowered):
+            tokens.update(chunk[index : index + 2] for index in range(len(chunk) - 1))
+        return tokens
+
+    def _match_step_to_protocol(
+        self,
+        step: Dict[str, Any],
+        protocols: Sequence[Dict[str, Any]],
+    ) -> str:
+        """Conservative attribution: cite a protocol only on strong overlap."""
+        step_tokens = self._provenance_tokens(
+            f"{step.get('操作', '')} {step.get('试剂/对象', '')} {step.get('参数', '')}"
+        )
+        if not step_tokens:
+            return ""
+        best = ""
+        best_score = 0.0
+        for protocol in protocols:
+            label = str(
+                protocol.get("paper_id") or protocol.get("source_title") or ""
+            ).strip()
+            if not label:
+                continue
+            for protocol_step in protocol.get("steps", []) or []:
+                if not isinstance(protocol_step, dict):
+                    continue
+                protocol_tokens = self._provenance_tokens(
+                    f"{protocol_step.get('操作', '')} "
+                    f"{protocol_step.get('试剂/对象', '')} "
+                    f"{protocol_step.get('参数', '')}"
+                )
+                if not protocol_tokens:
+                    continue
+                overlap = len(step_tokens & protocol_tokens) / max(1, len(step_tokens))
+                if overlap >= 0.5 and overlap > best_score:
+                    best_score = overlap
+                    page = protocol_step.get("page")
+                    suffix = f" p.{page}" if page else ""
+                    best = f"protocol: {label}{suffix}"
+        return best
+
+    def _annotate_macro_plan_sources(self, state: ResearchAgentState) -> None:
+        """Honest per-step provenance: protocol citation or explicit agent fill.
+
+        LLM-provided `来源` values are kept as-is; missing ones are matched
+        against extracted protocols (strong overlap only) or labelled as
+        agent-filled — never fabricated citations.
+        """
+        try:
+            protocols = [
+                protocol
+                for protocol in state.extracted_protocols
+                if isinstance(protocol, dict)
+            ]
+            for step in state.macro_plan:
+                if not isinstance(step, dict):
+                    continue
+                if str(step.get("来源", "")).strip():
+                    continue
+                matched = self._match_step_to_protocol(step, protocols)
+                step["来源"] = matched or "agent补全(未直接引用文献)"
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"macro plan source annotation failed: {exc}")
+
+    def _collect_evidence_refs(self, state: ResearchAgentState) -> List[str]:
+        refs: List[str] = []
+        for step in state.macro_plan:
+            if not isinstance(step, dict):
+                continue
+            source = str(step.get("来源", "")).strip()
+            if source and source not in refs:
+                refs.append(source)
+        for protocol in state.extracted_protocols[:6]:
+            if not isinstance(protocol, dict):
+                continue
+            paper_id = str(protocol.get("paper_id", "")).strip()
+            if paper_id and paper_id not in refs:
+                refs.append(paper_id)
+        return refs[:12]
+
+    def _evidence_packet(self, state: ResearchAgentState) -> Dict[str, Any]:
+        """Compact per-call evidence view: sources + known gaps + citation rule."""
+        sources: List[Dict[str, Any]] = []
+        known_gaps: List[str] = []
+        for protocol in state.extracted_protocols[:6]:
+            if not isinstance(protocol, dict):
+                continue
+            title = str(protocol.get("source_title", "")).strip()
+            verification = str(
+                protocol.get("verification_status", "unregistered_local")
+            )
+            sources.append(
+                {
+                    "source_title": title,
+                    "paper_id": protocol.get("paper_id", ""),
+                    "verification_status": verification,
+                    "source_file": protocol.get("source_file", ""),
+                }
+            )
+            if verification == "unverified":
+                known_gaps.append(f"{title}: 论文身份未经 DOI/arXiv 验证，引用需谨慎")
+            if str(protocol.get("full_text_status", "")) == "metadata_only":
+                known_gaps.append(f"{title}: 仅有元数据/摘要，不可用于支撑具体实验参数")
+            missing = protocol.get("missing_parameters") or []
+            if missing:
+                known_gaps.append(f"{title}: 文献未说明 {missing[:3]}")
+        if not sources:
+            return {}
+        return {
+            "sources": sources,
+            "known_gaps": known_gaps[:8],
+            "citation_rule": (
+                "macro plan 步骤引用文献参数时，尽量在 `来源` 字段标注 paper_id/文献题目"
+                "与页码（如 p.4）；由 agent 补全的参数标注 agent补全。"
+            ),
+        }
+
     def _run_b1(self, state: ResearchAgentState) -> ResearchAgentState:
         state.current_branch = "B1"
         if state.branch_history[-1] != "B1":
@@ -305,6 +815,7 @@ class ResearchAgent(BaseAgent):
         state.add_log("Entered B1 bootstrap")
 
         try:
+            self._maybe_acquire_literature(state)
             state.survey_queries = self._step_survey_query_generate(state)
             state.add_log(f"survey query generate completed with {len(state.survey_queries)} queries")
 
@@ -343,6 +854,7 @@ class ResearchAgent(BaseAgent):
             state.add_log(
                 f"paper protocol extract completed with {len(state.extracted_protocols)} protocols"
             )
+            self._attach_protocol_provenance(state)
             if self._enable_memory:
                 state.memory_queries = self._step_similar_exp_search(state)
                 state.memory_hits = self._memory_query.search(state.memory_queries)
@@ -365,6 +877,7 @@ class ResearchAgent(BaseAgent):
             macro_design = self._step_macro_plan_design(state)
             state.current_stage_plan = macro_design["current_stage_plan"]
             state.macro_plan = macro_design["macro_plan"]
+            self._annotate_macro_plan_sources(state)
 
             state.persistent_outputs = state.research_layer_internal_outputs()
             state.device_adaptation_handoff = state.device_adaptation_external_handoff()
@@ -377,6 +890,16 @@ class ResearchAgent(BaseAgent):
             state.status = "completed"
             state.route_message = "B1 bootstrap completed; stage route and first macro plan are ready"
             state.add_log(state.route_message)
+            self._record_plan_revision(
+                state,
+                event="initial",
+                scope="full_plan",
+                trigger="bootstrap",
+                branch_path="B1",
+                reason=self._compose_reason(
+                    [state.stage_route_reason, state.current_stage_reason]
+                ),
+            )
             return state
 
         except Exception as exc:
@@ -387,6 +910,14 @@ class ResearchAgent(BaseAgent):
             state.next_branch = "B8"
             state.route_message = "bootstrap unresolved; manual intervention required"
             state.add_log(state.route_message)
+            self._record_plan_revision(
+                state,
+                event="abandoned",
+                scope="full_plan",
+                trigger="bootstrap_error",
+                branch_path="B1/exception",
+                reason=str(exc),
+            )
             return state
 
     def _run_b2(self, state: ResearchAgentState) -> ResearchAgentState:
@@ -452,6 +983,14 @@ class ResearchAgent(BaseAgent):
             state.next_branch = "B8"
             state.route_message = "post_observation unresolved; manual intervention required"
             state.add_log(state.route_message)
+            self._record_plan_revision(
+                state,
+                event="abandoned",
+                scope="full_plan",
+                trigger="unrecoverable_error",
+                branch_path="B2/exception",
+                reason=str(exc),
+            )
             return state
 
     def _run_b2_normal_path(self, state: ResearchAgentState) -> ResearchAgentState:
@@ -478,6 +1017,7 @@ class ResearchAgent(BaseAgent):
     def _run_b2_abnormal_path(self, state: ResearchAgentState) -> ResearchAgentState:
         state.add_log("B2 detected abnormal or inconclusive observation; starting repair path")
         query_queue = self._step_abnormal_observation_survey_query_generate(state)
+        self._maybe_acquire_repair_literature(state, query_queue)
         accumulated_hits = list(state.knowledge_hits)
         seen_queries = set()
 
@@ -625,6 +1165,22 @@ class ResearchAgent(BaseAgent):
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.route_message = "B2 post_observation could not repair automatically"
         state.add_log(state.route_message)
+        self._record_plan_revision(
+            state,
+            event="abandoned",
+            scope="full_plan",
+            trigger=self._b2_ledger_trigger(state),
+            branch_path="B2/manual_handoff",
+            reason=self._compose_reason(
+                [
+                    "三层修复(stage内计划/当前stage/stage路线)均判定不可行",
+                    internal_repair.get("repair_reason", ""),
+                    current_stage_repair.get("repair_reason", ""),
+                    route_repair.get("repair_reason", ""),
+                    str(state.manual_handoff)[:400],
+                ]
+            ),
+        )
         return state
 
     def _run_b2_device_adaptation_path(
@@ -696,6 +1252,7 @@ class ResearchAgent(BaseAgent):
         )
 
     def _complete_b2(self, state: ResearchAgentState, route_message: str) -> ResearchAgentState:
+        self._annotate_macro_plan_sources(state)
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.last_completed_branch = "B2"
@@ -706,6 +1263,14 @@ class ResearchAgent(BaseAgent):
         state.status = "completed"
         state.route_message = route_message
         state.add_log(route_message)
+        self._record_plan_revision(
+            state,
+            event=self._b2_ledger_event(state),
+            scope=self._b2_ledger_scope(state),
+            trigger=self._b2_ledger_trigger(state),
+            branch_path=f"B2/{state.post_observation_repair_path or 'normal'}",
+            reason=self._post_observation_revision_reason(state),
+        )
         return state
 
     def _extract_observation_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -3126,15 +3691,19 @@ class ResearchAgent(BaseAgent):
         for index, step in enumerate(steps, start=1):
             if not isinstance(step, dict):
                 continue
-            normalized.append(
-                {
-                    "步骤序号": step.get("步骤序号", index) or index,
-                    "操作": str(step.get("操作", "")).strip(),
-                    "试剂/对象": str(step.get("试剂/对象", "")).strip(),
-                    "参数": str(step.get("参数", "") or "文献未说明").strip(),
-                    "evidence": str(step.get("evidence", "")).strip(),
-                }
-            )
+            entry: Dict[str, Any] = {
+                "步骤序号": step.get("步骤序号", index) or index,
+                "操作": str(step.get("操作", "")).strip(),
+                "试剂/对象": str(step.get("试剂/对象", "")).strip(),
+                "参数": str(step.get("参数", "") or "文献未说明").strip(),
+                "evidence": str(step.get("evidence", "")).strip(),
+            }
+            page_value = step.get("page")
+            if isinstance(page_value, int) or (
+                isinstance(page_value, str) and page_value.strip().isdigit()
+            ):
+                entry["page"] = int(page_value)
+            normalized.append(entry)
         for index, step in enumerate(normalized, start=1):
             step["步骤序号"] = index
         return normalized
@@ -3457,13 +4026,25 @@ class ResearchAgent(BaseAgent):
         task_prompt: str,
         system_prompt: str = BOOTSTRAP_SYSTEM_PROMPT,
     ) -> Dict[str, Any]:
-        """Invoke the LLM with an explicit compact state context."""
+        """Invoke the LLM with an explicit compact state context.
+
+        When the web tool protocol is enabled, the model may answer with
+        ``{"tool_request": {...}}``; the request is executed, its output is
+        appended to the prompt, and the same task is re-invoked (bounded).
+        """
+        executor = self._web_tool_executor(state)
+        tool_instructions = (
+            WebToolExecutor.protocol_instructions(self._web_tool_max_rounds())
+            if executor is not None
+            else ""
+        )
         contextual_prompt = (
             "## 已有 workflow 上下文\n"
             "下面是当前 agent state 的压缩摘要。请把它当作本次调用的显式上下文；"
             "不要假设后端模型会记得前一次调用。\n"
             f"{self._compact_state_context(state, task_name)}\n\n"
-            "## 当前任务\n"
+            + (f"{tool_instructions}\n\n" if tool_instructions else "")
+            + "## 当前任务\n"
             f"{task_prompt}"
         )
         verbose = os.getenv("RESEARCH_AGENT_VERBOSE_STEPS", "1").strip().lower()
@@ -3471,8 +4052,43 @@ class ResearchAgent(BaseAgent):
         started_at = time.time()
         if should_print:
             print(f"[research-agent] LLM step start: {task_name}", flush=True)
+
+        tool_rounds = 0
         try:
-            result = self.invoke_json(system_prompt, contextual_prompt)
+            while True:
+                result = self.invoke_json(system_prompt, contextual_prompt)
+                tool_request = (
+                    result.get("tool_request") if isinstance(result, dict) else None
+                )
+                if (
+                    executor is None
+                    or not isinstance(tool_request, dict)
+                    or tool_rounds >= self._web_tool_max_rounds()
+                ):
+                    break
+                tool_rounds += 1
+                tool_output = executor.execute(tool_request)
+                self._record_tool_invocation(
+                    state, task_name, tool_request, tool_output
+                )
+                if should_print:
+                    print(
+                        "[research-agent] web tool executed: "
+                        f"{tool_output.get('tool')} ({tool_output.get('status')}) "
+                        f"for {task_name}",
+                        flush=True,
+                    )
+                if tool_output.get("archived"):
+                    self._knowledge_query.refresh()
+                tool_block = json.dumps(
+                    {"request": tool_request, "output": tool_output},
+                    ensure_ascii=False,
+                )[:8000]
+                contextual_prompt += (
+                    f"\n\n## 工具调用结果 {tool_rounds}\n{tool_block}\n\n"
+                    "请基于以上工具结果完成原任务并输出最终 JSON；"
+                    "除非确有必要，不要再输出 tool_request。"
+                )
         except Exception:
             if should_print:
                 print(f"[research-agent] LLM step failed: {task_name}", flush=True)
@@ -3484,6 +4100,60 @@ class ResearchAgent(BaseAgent):
                 flush=True,
             )
         return result
+
+    def _web_tool_executor(self, state: ResearchAgentState):
+        """Tool protocol rides the same gate as the acquisition web line."""
+        if not (self._use_llm and self._web_search_enabled):
+            return None
+        try:
+            executor = getattr(self, "_web_tool_executor_cache", None)
+            if executor is None or executor.campaign_id != state.campaign_id:
+                executor = WebToolExecutor(
+                    web_client=self._web_search_client,
+                    kb_dir=self._knowledge_base_dir,
+                    campaign_id=state.campaign_id,
+                )
+                self._web_tool_executor_cache = executor
+            return executor
+        except Exception as exc:  # pragma: no cover - defensive
+            state.add_error(f"web tool executor unavailable: {exc}")
+            return None
+
+    @staticmethod
+    def _web_tool_max_rounds() -> int:
+        raw_value = os.getenv("RESEARCH_WEB_TOOL_MAX_ROUNDS", "2")
+        try:
+            return max(0, min(int(raw_value), 5))
+        except ValueError:
+            return 2
+
+    def _record_tool_invocation(
+        self,
+        state: ResearchAgentState,
+        task_name: str,
+        request: Dict[str, Any],
+        output: Dict[str, Any],
+    ) -> None:
+        try:
+            state.tool_invocations.append(
+                {
+                    "task_name": task_name,
+                    "tool": output.get("tool", ""),
+                    "status": output.get("status", ""),
+                    "query": str(request.get("query", ""))[:200],
+                    "url": str(request.get("url", ""))[:300],
+                    "engine": output.get("engine", ""),
+                    "results_count": len(output.get("results", []) or []),
+                    "archived": bool(output.get("archived")),
+                    "at": datetime.now().isoformat(timespec="seconds"),
+                }
+            )
+            state.add_log(
+                f"web tool invoked in {task_name}: {output.get('tool')} "
+                f"status={output.get('status')}"
+            )
+        except Exception:  # pragma: no cover - audit must not break planning
+            pass
 
     def _compact_state_context(self, state: ResearchAgentState, task_name: str) -> str:
         if task_name.startswith("device_adaptation_macro_plan_design"):
@@ -3537,6 +4207,12 @@ class ResearchAgent(BaseAgent):
                 state.raw_llm_outputs
             ),
         }
+        campaign_memory_context = self._campaign_memory_context(state)
+        if campaign_memory_context:
+            payload["campaign_memory_context"] = campaign_memory_context
+        evidence_packet = self._evidence_packet(state)
+        if evidence_packet:
+            payload["evidence_packet"] = evidence_packet
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
     def _compact_device_adaptation_state_context(
@@ -4367,14 +5043,16 @@ class ResearchAgent(BaseAgent):
         normalized: List[Dict[str, Any]] = []
         for index, step in enumerate(steps, start=1):
             if isinstance(step, dict):
-                normalized.append(
-                    {
-                        "步骤序号": step.get("步骤序号", index) or index,
-                        "操作": str(step.get("操作", "")).strip(),
-                        "试剂/对象": str(step.get("试剂/对象", "")).strip(),
-                        "参数": str(step.get("参数", "")).strip(),
-                    }
-                )
+                entry: Dict[str, Any] = {
+                    "步骤序号": step.get("步骤序号", index) or index,
+                    "操作": str(step.get("操作", "")).strip(),
+                    "试剂/对象": str(step.get("试剂/对象", "")).strip(),
+                    "参数": str(step.get("参数", "")).strip(),
+                }
+                source = str(step.get("来源", "")).strip()
+                if source:
+                    entry["来源"] = source
+                normalized.append(entry)
             else:
                 description = str(step).strip()
                 if not description:

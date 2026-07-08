@@ -74,6 +74,12 @@ class ResearchAgentState:
     device_adaptation_handoff: Dict[str, Any] = field(default_factory=dict)
     raw_llm_outputs: Dict[str, Any] = field(default_factory=dict)
 
+    campaign_id: str = ""
+    reference_inputs: List[Dict[str, Any]] = field(default_factory=list)
+    seed_papers: List[Dict[str, Any]] = field(default_factory=list)
+    plan_revisions: List[Dict[str, Any]] = field(default_factory=list)
+    tool_invocations: List[Dict[str, Any]] = field(default_factory=list)
+
     errors: List[str] = field(default_factory=list)
     logs: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())

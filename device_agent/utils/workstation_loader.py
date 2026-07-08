@@ -128,11 +128,78 @@ class WorkstationLoader:
         self._station_alias_map = dict(self.STATION_ALIAS_MAP)
         self._old_workstation_dir = str(workstation_dir(use_new_format=False))
         self._new_workstation_dir = str(workstation_dir(use_new_format=True))
+        self._status_overlay = self._load_status_overlay()
 
         if use_new_format:
             self._load_all_new()
         else:
             self._load_all()
+
+    UNAVAILABLE_STATUS_VALUES = {
+        "offline",
+        "unavailable",
+        "down",
+        "maintenance",
+        "fault",
+        "disabled",
+        "停机",
+        "维修",
+        "故障",
+        "不可用",
+        "禁用",
+    }
+    BUSY_STATUS_VALUES = {"busy", "occupied", "占用", "忙碌"}
+
+    def _load_status_overlay(self) -> Dict[str, str]:
+        """Live station availability from $CHEM_DEVICE_STATUS_JSON (optional)."""
+        path_text = os.getenv("CHEM_DEVICE_STATUS_JSON", "").strip()
+        if not path_text:
+            return {}
+        try:
+            with open(path_text, "r", encoding="utf-8") as handle:
+                parsed = json.load(handle)
+        except Exception as exc:
+            print(f"Warning: failed to load device status file {path_text}: {exc}")
+            return {}
+        if isinstance(parsed, dict) and isinstance(parsed.get("stations"), dict):
+            parsed = parsed["stations"]
+        if not isinstance(parsed, dict):
+            return {}
+        return {
+            str(name).strip().lower(): str(status).strip()
+            for name, status in parsed.items()
+            if str(name).strip()
+        }
+
+    def _station_status(self, station_code: str, station_data: Dict) -> str:
+        if not self._status_overlay:
+            return ""
+        identity = station_data.get("station_identity")
+        identity_name = identity.get("name", "") if isinstance(identity, dict) else ""
+        for candidate in (
+            station_code,
+            station_data.get("display_name", ""),
+            identity_name,
+        ):
+            key = str(candidate or "").strip().lower()
+            if key and key in self._status_overlay:
+                return self._status_overlay[key]
+        return ""
+
+    def _availability_banner(self, station_code: str, station_data: Dict) -> str:
+        status = self._station_status(station_code, station_data)
+        if not status:
+            return ""
+        lowered = status.lower()
+        if lowered in self.UNAVAILABLE_STATUS_VALUES:
+            return (
+                f"⛔ 当前不可用（status={status}）：不得在 workflow 中选择该工作站；"
+                "若必要化学动作只有该站能实现，必须返回 device_feasibility_error "
+                "并在 blocking_constraints 中说明该工作站当前不可用。"
+            )
+        if lowered in self.BUSY_STATUS_VALUES:
+            return f"⚠️ 当前占用（status={status}）：可以选择，但在 notes 中注明可能需要等待。"
+        return f"当前状态：{status}"
 
     def _load_all(self):
         if not os.path.exists(self._old_workstation_dir):
@@ -568,6 +635,9 @@ class WorkstationLoader:
             desc = ws_data.get("description", "")
             operations = ws_data.get("supported_operations", [])
             section = [f"## {station_name}（{code}）"]
+            banner = self._availability_banner(code, ws_data)
+            if banner:
+                section.append(banner)
             if desc:
                 section.append(desc)
             for op in operations:
@@ -640,6 +710,9 @@ class WorkstationLoader:
             header += f"（{display_name}）"
         if module_name:
             header += f"\nmodule: {module_name}"
+        banner = self._availability_banner(station_code, station_data)
+        if banner:
+            header += f"\n{banner}"
         return header
 
     def _format_station_chunk(

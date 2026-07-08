@@ -68,6 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--device-status-json",
+        help=(
+            "Optional JSON file with live station availability "
+            '({"stations": {"<name-or-code>": "available|busy|offline"}} or a flat '
+            "map). Unavailable stations are flagged in the prompt and must not be "
+            "selected."
+        ),
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=int,
         default=360,
@@ -303,6 +312,10 @@ def configure_model_env(args: argparse.Namespace) -> None:
         os.environ["CHEM_WORKSTATIONS_NEW_DIR"] = str(Path(args.workstations_dir).expanduser())
     if args.full_workstations:
         os.environ["CHEM_DEVICE_AGENT_FULL_WORKSTATIONS"] = "1"
+    if getattr(args, "device_status_json", None):
+        os.environ["CHEM_DEVICE_STATUS_JSON"] = str(
+            Path(args.device_status_json).expanduser()
+        )
 
 
 def dump_json(path_text: str | None, data: Any) -> None:

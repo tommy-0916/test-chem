@@ -12,6 +12,44 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional local dependency
+    def load_dotenv(path: Any = None, *args: Any, **kwargs: Any) -> bool:
+        env_path = Path(path or default_env_file())
+        if not env_path.exists():
+            return False
+        values: Dict[str, str] = {}
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            value = re.sub(
+                r"\$\{([^}]+)\}",
+                lambda match: values.get(match.group(1), os.getenv(match.group(1), "")),
+                value,
+            )
+            values[key] = value
+            os.environ.setdefault(key, value)
+        return True
+
+
+def default_env_file() -> Path:
+    if os.getenv("CHEM_AGENT_ENV_FILE"):
+        return Path(os.environ["CHEM_AGENT_ENV_FILE"]).expanduser().resolve()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    for candidate in (
+        repo_root / ".env",
+        Path("/workspace/.env"),
+    ):
+        if candidate.exists():
+            return candidate
+    return repo_root / ".env"
+
 
 class CodexResponsesModel:
     """Small adapter for Codex CLI providers that require wire_api=responses."""
@@ -148,6 +186,10 @@ class LLMFactory:
     """Create a chat model if credentials are available, otherwise return None."""
 
     @staticmethod
+    def load_env(env_path: Optional[str] = None) -> None:
+        load_dotenv(env_path or default_env_file())
+
+    @staticmethod
     def create_or_none(
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -155,6 +197,7 @@ class LLMFactory:
         temperature: float = 0.1,
         **kwargs: Any,
     ) -> Any:
+        LLMFactory.load_env()
         provider_model = (
             model_name
             or os.getenv("REFINER_LLM_MODEL_NAME")

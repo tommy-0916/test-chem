@@ -74,6 +74,10 @@ class LocalExperimentCorpus:
         self._corpus_dir = Path(corpus_dir or default_dir)
         self._records = self._load_records()
 
+    def refresh(self) -> None:
+        """Re-scan the corpus directory; newly ingested files become searchable."""
+        self._records = self._load_records()
+
     @property
     def corpus_dir(self) -> Path:
         return self._corpus_dir
@@ -199,7 +203,7 @@ class LocalExperimentCorpus:
                         continue
                     page_segments.append(block_text)
                 if page_segments:
-                    segments.append("\n".join(page_segments))
+                    segments.append(f"[p.{page_index + 1}]\n" + "\n".join(page_segments))
                 if sum(len(segment) for segment in segments) >= max_chars:
                     break
         finally:
@@ -225,13 +229,13 @@ class LocalExperimentCorpus:
 
         segments: List[str] = []
         pages = reader.pages if max_pages is None else reader.pages[:max_pages]
-        for page in pages:
+        for page_index, page in enumerate(pages):
             try:
                 page_text = page.extract_text() or ""
             except Exception:
                 page_text = ""
             if page_text.strip():
-                segments.append(page_text.strip())
+                segments.append(f"[p.{page_index + 1}]\n" + page_text.strip())
             if sum(len(segment) for segment in segments) >= max_chars:
                 break
 
@@ -463,9 +467,12 @@ class LocalExperimentCorpus:
         if not normalized_queries:
             normalized_queries = ["普鲁士蓝 类似物 合成"]
 
+        bm25_boosts = self._bm25_boosts(normalized_queries)
         scored: List[Tuple[float, SearchHit]] = []
-        for record in self._records:
+        for index, record in enumerate(self._records):
             score, matched_terms = self._score_record(record, normalized_queries)
+            if bm25_boosts is not None:
+                score += bm25_boosts[index]
             if score <= 0:
                 continue
             scored.append(
@@ -487,6 +494,20 @@ class LocalExperimentCorpus:
 
         scored.sort(key=lambda item: (-item[0], item[1].title))
         return [item[1] for item in scored[:top_k]]
+
+    def _bm25_boosts(self, queries: Sequence[str]) -> List[float] | None:
+        """Optional BM25 boost on top of the deterministic keyword scorer.
+
+        Returns None (scoring unchanged) when rank-bm25 is not installed.
+        """
+        try:
+            from ..memory.scoring import build_bm25_boosts
+        except ImportError:  # pragma: no cover - defensive
+            return None
+        return build_bm25_boosts(
+            queries,
+            [str(record.get("search_text", "")) for record in self._records],
+        )
 
     def _score_record(self, record: Dict[str, Any], queries: Sequence[str]) -> Tuple[float, List[str]]:
         score = 0.0

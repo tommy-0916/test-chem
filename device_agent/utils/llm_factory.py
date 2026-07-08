@@ -5,6 +5,7 @@ LLM instance factory and pooled backend runtime.
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -20,8 +21,26 @@ from utils.paths import default_env_file
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - depends on optional local deps
-    def load_dotenv(*args, **kwargs):
-        return False
+    def load_dotenv(path=None, *args, **kwargs):
+        env_path = Path(path or default_env_file())
+        if not env_path.exists():
+            return False
+        values: Dict[str, str] = {}
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            value = re.sub(
+                r"\$\{([^}]+)\}",
+                lambda match: values.get(match.group(1), os.getenv(match.group(1), "")),
+                value,
+            )
+            values[key] = value
+            os.environ.setdefault(key, value)
+        return True
 
 logger = logging.getLogger(__name__)
 

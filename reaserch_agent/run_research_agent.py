@@ -15,12 +15,19 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from reaserch_agent import ResearchAgent
+from reaserch_agent.plan_ledger import (
+    PlanLedger,
+    default_ledger_path,
+    generate_campaign_id,
+)
 from reaserch_agent.tools import load_device_context
 from reaserch_agent.tools.device_context import default_workstations_dir
+from reaserch_agent.tools.ingestion import KnowledgeIngestion, classify_reference
 from reaserch_agent.utils.llm_factory import LLMFactory
 
 
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
+DEFAULT_KNOWLEDGE_DIR = Path(__file__).resolve().parent / "chem_kb"
 DEFAULT_DEVICE_WORKSTATIONS_DIR = default_workstations_dir()
 
 
@@ -62,6 +69,37 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--reference",
+        action="append",
+        default=[],
+        help=(
+            "Reference material for the campaign: a local PDF/JSON/TXT/MD path, a DOI, "
+            "an arXiv id, or a paper title. Can be repeated. Local files are ingested "
+            "into the knowledge base immediately; DOI/arXiv/title entries are recorded "
+            "for online resolution."
+        ),
+    )
+    parser.add_argument(
+        "--campaign-id",
+        help=(
+            "Campaign identifier grouping this run's plans, literature, and memory. "
+            "Bootstrap runs auto-generate one when omitted; observation runs inherit "
+            "it from --previous-state."
+        ),
+    )
+    parser.add_argument(
+        "--ledger-path",
+        help=(
+            "Path of the plan-version JSONL ledger. Defaults to "
+            "campaigns/<campaign_id>/plan_versions.jsonl at the repo root."
+        ),
+    )
+    parser.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help="Do not append this run's plan event to the plan-version ledger file.",
+    )
+    parser.add_argument(
         "--knowledge-base-dir",
         help="Directory containing knowledge-base PDF or JSON files. Defaults to reaserch_agent/chem_kb.",
     )
@@ -82,6 +120,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Load current device capabilities into B1 constraints before the first LLM call.",
     )
     parser.add_argument(
+        "--device-status-json",
+        help=(
+            "Optional JSON file with live station availability. Unavailable stations "
+            "are flagged inside device_context so research planning avoids them."
+        ),
+    )
+    parser.add_argument(
         "--memory-dir",
         help="Optional directory for memory retrieval. Defaults to the knowledge base directory.",
     )
@@ -89,6 +134,40 @@ def build_parser() -> argparse.ArgumentParser:
         "--enable-memory",
         action="store_true",
         help="Enable memory retrieval. By default memory is disabled.",
+    )
+    parser.add_argument(
+        "--online-literature",
+        action="store_true",
+        help=(
+            "Always run online literature acquisition (seed resolution + citation "
+            "snowball + keyword search) before planning. Default: auto — runs only "
+            "when --reference entries need online resolution."
+        ),
+    )
+    parser.add_argument(
+        "--no-online-literature",
+        action="store_true",
+        help="Never contact external scholarly APIs during this run.",
+    )
+    parser.add_argument(
+        "--download-pdfs",
+        action="store_true",
+        help="Download open-access PDFs during literature acquisition.",
+    )
+    parser.add_argument(
+        "--web-search",
+        action="store_true",
+        help=(
+            "Enable the open-web line during literature acquisition: search "
+            "(Tavily/Serper/Brave/SearXNG/DuckDuckGo, auto by configured keys), "
+            "read top pages via Jina Reader, and archive them as web_unverified "
+            "leads. Off by default."
+        ),
+    )
+    parser.add_argument(
+        "--no-web-search",
+        action="store_true",
+        help="Force-disable the open-web line (overrides RESEARCH_WEB_SEARCH).",
     )
     parser.add_argument(
         "--model-name",
@@ -169,6 +248,10 @@ def parse_json_dict(raw_text: str, label: str) -> Dict[str, Any]:
 
 def attach_device_context(args: argparse.Namespace, constraints: Dict[str, Any]) -> Dict[str, Any]:
     updated = dict(constraints or {})
+    if args.device_status_json:
+        updated["device_status_path"] = str(
+            Path(args.device_status_json).expanduser().resolve()
+        )
     if args.device_context_json:
         parsed = parse_json_dict(args.device_context_json, "device_context_json")
         updated["device_context"] = parsed
@@ -184,6 +267,84 @@ def attach_device_context(args: argparse.Namespace, constraints: Dict[str, Any])
         updated["device_context"] = load_device_context(workstations_dir)
 
     return updated
+
+
+def resolve_reference_inputs(
+    references: list[str],
+    knowledge_base_dir: str | None,
+) -> list[Dict[str, Any]]:
+    """Classify --reference entries and ingest local files into the KB now.
+
+    DOI / arXiv / title references are recorded with status pending_resolution;
+    the online ingestion layer resolves them into papers.
+    """
+    if not references:
+        return []
+
+    kb_dir = (
+        Path(knowledge_base_dir).expanduser().resolve()
+        if knowledge_base_dir
+        else DEFAULT_KNOWLEDGE_DIR
+    )
+    ingestion: KnowledgeIngestion | None = None
+    entries: list[Dict[str, Any]] = []
+    for raw in references:
+        entry = classify_reference(raw)
+        if entry.get("kind") in {"local_file", "local_dir"}:
+            try:
+                if ingestion is None:
+                    ingestion = KnowledgeIngestion(kb_dir)
+                written = ingestion.ingest_path(
+                    entry["path"],
+                    recursive=entry["kind"] == "local_dir",
+                )
+                entry["status"] = "ingested"
+                entry["written_records"] = [str(path) for path in written]
+            except Exception as exc:
+                entry["status"] = "ingest_failed"
+                entry["error"] = str(exc)
+        elif entry.get("kind") == "empty":
+            entry["status"] = "skipped"
+        else:
+            entry["status"] = "pending_resolution"
+        entries.append(entry)
+    return entries
+
+
+def resolve_campaign_id(
+    args: argparse.Namespace,
+    query: str,
+    previous_state: Dict[str, Any] | None,
+) -> str:
+    campaign_id = (args.campaign_id or "").strip()
+    if campaign_id:
+        return campaign_id
+    if previous_state:
+        inherited = str(previous_state.get("campaign_id", "") or "").strip()
+        if inherited:
+            return inherited
+    normalized_event = re.sub(r"[\s\-]+", "_", args.event_type.strip().lower())
+    if normalized_event == "bootstrap":
+        return generate_campaign_id(query)
+    return ""
+
+
+def append_plan_ledger(args: argparse.Namespace, state: Any) -> Path | None:
+    """Persist this run's plan event (one run = at most one plan event)."""
+    if args.no_ledger or not state.campaign_id or not state.plan_revisions:
+        return None
+    ledger_path = (
+        Path(args.ledger_path).expanduser().resolve()
+        if args.ledger_path
+        else default_ledger_path(state.campaign_id)
+    )
+    record = state.plan_revisions[-1]
+    PlanLedger(ledger_path).append(record)
+    print(
+        f"plan_ledger: {ledger_path} "
+        f"(v{record.get('plan_version')} {record.get('event')}/{record.get('scope')})"
+    )
+    return ledger_path
 
 
 def configure_model_env(args: argparse.Namespace) -> None:
@@ -299,6 +460,8 @@ def main() -> int:
     if args.observation and "observation" not in payload:
         payload["observation"] = {"summary": args.observation.strip()}
     previous_state = load_previous_state(args.previous_state)
+    campaign_id = resolve_campaign_id(args, query, previous_state)
+    reference_inputs = resolve_reference_inputs(args.reference, args.knowledge_base_dir)
 
     print(
         "starting research agent: "
@@ -306,7 +469,9 @@ def main() -> int:
         f"model={args.model_name or 'env/default'}, "
         f"wire_api={args.wire_api}, "
         f"device_context={'on' if constraints.get('device_context') else 'off'}, "
-        f"memory={'on' if args.enable_memory else 'off'}",
+        f"memory={'on' if args.enable_memory else 'off'}, "
+        f"campaign={campaign_id or 'off'}, "
+        f"references={len(reference_inputs)}",
         flush=True,
     )
     if args.wire_api == "codex_responses":
@@ -335,6 +500,15 @@ def main() -> int:
         knowledge_top_k=args.knowledge_top_k,
         memory_top_k=args.memory_top_k,
         enable_memory=args.enable_memory,
+        enable_online_literature=(
+            False
+            if args.no_online_literature
+            else (True if args.online_literature else None)
+        ),
+        literature_download_pdfs=args.download_pdfs,
+        enable_web_search=(
+            False if args.no_web_search else (True if args.web_search else None)
+        ),
     )
 
     state = agent.run(
@@ -343,9 +517,12 @@ def main() -> int:
         constraints=constraints,
         payload=payload,
         previous_state=previous_state,
+        campaign_id=campaign_id,
+        reference_inputs=reference_inputs,
     )
 
     print_summary(state)
+    append_plan_ledger(args, state)
     debug_log_path = write_debug_log(state, DEFAULT_LOG_DIR)
     print(f"\ndebug_state_log: {debug_log_path}")
 
