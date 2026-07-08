@@ -12,11 +12,14 @@ venv/
 
 logs/
 reaserch_agent/logs/
+reaserch_agent/chem_memory/
 reaserch_agent/e2e_test/
 reaserch_agent/B1_test/
 reaserch_agent/B2_test/
 chem_resources/exp_logs/
 chem_resources/knowledge_base/
+campaigns/
+chem-agent-latest/
 *.log
 
 *.zip
