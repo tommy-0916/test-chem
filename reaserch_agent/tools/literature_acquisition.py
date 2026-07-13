@@ -103,6 +103,7 @@ class LiteratureAcquisition:
         registry: Optional[PaperRegistry] = None,
         web_client: Optional[WebSearchClient] = None,
         enable_web_search: bool = False,
+        enable_scholarly_search: bool = True,
         keyword_sources: Optional[Sequence[str]] = None,
         max_keyword_results: int = 5,
         max_snowball_per_seed: int = 10,
@@ -123,7 +124,10 @@ class LiteratureAcquisition:
         self.registry = registry or PaperRegistry(self.kb_dir)
         self.web_client = web_client
         self.enable_web_search = enable_web_search
-        self.keyword_sources = list(keyword_sources or default_keyword_sources())
+        self.enable_scholarly_search = enable_scholarly_search
+        self.keyword_sources = list(
+            default_keyword_sources() if keyword_sources is None else keyword_sources
+        )
         self.max_keyword_results = max_keyword_results
         self.max_snowball_per_seed = max_snowball_per_seed
         self.max_total_new = max_total_new
@@ -151,7 +155,11 @@ class LiteratureAcquisition:
         reference_inputs: Sequence[Dict[str, Any]],
     ) -> Dict[str, Any]:
         self.errors = []
-        seeds = self._resolve_seeds(reference_inputs)
+        if self.enable_scholarly_search:
+            seeds = self._resolve_seeds(reference_inputs)
+        else:
+            seeds = []
+            self._register_local_references(reference_inputs)
 
         candidates: List[Tuple[str, ExternalPaper]] = []
         for seed in seeds:
@@ -165,7 +173,11 @@ class LiteratureAcquisition:
                 )
                 candidates.extend(("snowball", paper) for paper in linked or [])
 
-        if query.strip() and self.max_keyword_results > 0:
+        if (
+            self.enable_scholarly_search
+            and query.strip()
+            and self.max_keyword_results > 0
+        ):
             keyword_papers = self._safe(
                 lambda: self.client.search(
                     query,
@@ -195,6 +207,7 @@ class LiteratureAcquisition:
             "snowball_kept": sum(1 for role, _ in kept if role == "snowball"),
             "keyword_kept": sum(1 for role, _ in kept if role == "keyword"),
             "keyword_sources": list(self.keyword_sources),
+            "scholarly_enabled": self.enable_scholarly_search,
             "web_kept": web_summary.get("kept", 0),
             "web_engine": web_summary.get("engine", ""),
             "candidates_seen": len(candidates),
@@ -219,6 +232,8 @@ class LiteratureAcquisition:
         written_files: List[str] = []
         kept_count = 0
         for query in [q for q in queries if q and q.strip()][:2]:
+            if not self.enable_scholarly_search:
+                break
             papers = self._safe(
                 lambda: self.client.search(
                     query,
@@ -381,6 +396,14 @@ class LiteratureAcquisition:
                 entry["status"] = "resolution_failed"
         return seeds
 
+    def _register_local_references(
+        self,
+        reference_inputs: Sequence[Dict[str, Any]],
+    ) -> None:
+        for entry in reference_inputs or []:
+            if str(entry.get("kind", "")) in {"local_file", "local_dir"}:
+                self._register_local_reference(entry)
+
     def _register_local_reference(self, entry: Dict[str, Any]) -> None:
         for written in entry.get("written_records", []) or []:
             title = Path(written).stem
@@ -430,11 +453,18 @@ class LiteratureAcquisition:
         """Ingest into the corpus (once) and tag the campaign in the registry."""
         existing = self.registry.find(
             doi=paper.doi,
-            arxiv_id=paper.source_id if paper.source == "arxiv" else "",
+            arxiv_id=paper.arxiv_id,
             title=paper.title,
+            year=paper.year,
+            authors=paper.authors,
+            source=paper.source,
+            verification_status=self._verification_status(paper),
         )
         written: List[str] = []
-        if existing is None or not existing.get("corpus_files"):
+        should_ingest = existing is None or not existing.get("corpus_files")
+        if self.download_pdfs and existing is not None:
+            should_ingest = should_ingest or existing.get("full_text_status") != "parsed"
+        if should_ingest:
             paths = self._safe(
                 lambda: self.ingestion.ingest_external_papers(
                     [paper],
@@ -445,18 +475,68 @@ class LiteratureAcquisition:
             )
             written = [str(path) for path in paths or []]
 
+        full_text_status = "metadata_only"
+        pdf_file = ""
+        download_attempts: List[Dict[str, Any]] = []
+        resolved_pdf_url = paper.pdf_url
+        latest: Optional[Dict[str, Any]] = None
+        if written:
+            for candidate in reversed(
+                list(getattr(self.ingestion, "last_external_results", []) or [])
+            ):
+                if not isinstance(candidate, dict):
+                    continue
+                if str(candidate.get("title") or "") != paper.title:
+                    continue
+                if str(candidate.get("record_path") or "") not in written:
+                    continue
+                latest = candidate
+                break
+        if latest is not None:
+            full_text_status = str(
+                latest.get("full_text_status") or "metadata_only"
+            )
+            download_payload = latest.get("pdf_download") or {}
+            if isinstance(download_payload, dict):
+                pdf_file = str(download_payload.get("path") or "")
+                resolved_pdf_url = str(
+                    download_payload.get("url") or resolved_pdf_url
+                )
+                download_attempts = [
+                    dict(item)
+                    for item in download_payload.get("attempts", []) or []
+                    if isinstance(item, dict)
+                ]
+                if self.download_pdfs and full_text_status != "parsed":
+                    errors = [
+                        str(item)
+                        for item in download_payload.get("errors", []) or []
+                        if str(item).strip()
+                    ]
+                    if errors:
+                        self.errors.append(
+                            f"PDF acquisition for '{paper.title[:60]}': "
+                            + "; ".join(errors[:3])
+                        )
+        elif existing is not None:
+            full_text_status = str(
+                existing.get("full_text_status") or "metadata_only"
+            )
+
         record, created = self.registry.upsert(
             title=paper.title,
             doi=paper.doi,
-            arxiv_id=paper.source_id if paper.source == "arxiv" else "",
+            arxiv_id=paper.arxiv_id,
             source=paper.source,
             url=paper.url,
-            pdf_url=paper.pdf_url,
+            pdf_url=resolved_pdf_url,
             year=paper.year,
             authors=paper.authors,
             verification_status=self._verification_status(paper),
-            full_text_status="parsed" if written and self.download_pdfs else "metadata_only",
+            full_text_status=full_text_status,
             corpus_file=written[0] if written else "",
+            pdf_file=pdf_file,
+            download_attempts=download_attempts,
             campaign_id=self.campaign_id,
             role=role,
             stage=stage,
@@ -467,7 +547,7 @@ class LiteratureAcquisition:
     def _verification_status(paper: ExternalPaper) -> str:
         if paper.doi:
             return "verified_doi"
-        if paper.source == "arxiv" and paper.source_id:
+        if paper.arxiv_id:
             return "verified_arxiv"
         if paper.source == "semantic_scholar" and paper.source_id:
             return "verified_semantic_scholar"
@@ -477,9 +557,18 @@ class LiteratureAcquisition:
     def _paper_key(paper: ExternalPaper) -> str:
         if paper.doi:
             return f"doi:{paper.doi.lower()}"
+        if paper.arxiv_id:
+            return "arxiv:" + re.sub(r"v\d+$", "", paper.arxiv_id.lower())
         if paper.source_id:
             return f"{paper.source}:{paper.source_id.lower()}"
-        return "title:" + re.sub(r"[^0-9a-z一-鿿]+", "", paper.title.lower())
+        title_key = re.sub(r"[^0-9a-z一-鿿]+", "", paper.title.lower())
+        author_key = ""
+        if paper.authors:
+            author_tokens = re.findall(
+                r"[0-9a-z一-鿿]+", paper.authors[0].lower()
+            )
+            author_key = author_tokens[-1] if author_tokens else ""
+        return f"title:{title_key}|year:{paper.year}|author:{author_key}"
 
     def _paper_summary(self, paper: ExternalPaper) -> Dict[str, Any]:
         return {
@@ -487,8 +576,10 @@ class LiteratureAcquisition:
             "doi": paper.doi,
             "source": paper.source,
             "source_id": paper.source_id,
+            "arxiv_id": paper.arxiv_id,
             "year": paper.year,
             "url": paper.url,
+            "citation_count": paper.citation_count,
             "verification_status": self._verification_status(paper),
         }
 

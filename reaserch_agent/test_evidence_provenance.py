@@ -209,6 +209,14 @@ class MacroPlanSourceTest(ProvenanceWorkflowTestBase):
         }
         self.assertEqual(self.agent._match_step_to_protocol(unrelated, [protocol]), "")
 
+        unsafe_protocol = dict(protocol)
+        unsafe_protocol["verification_status"] = "web_unverified"
+        unsafe_protocol["full_text_status"] = "parsed"
+        self.assertEqual(
+            self.agent._match_step_to_protocol(step, [unsafe_protocol]),
+            "",
+        )
+
     def test_normalize_macro_plan_preserves_source(self) -> None:
         normalized = self.agent._normalize_macro_plan(
             [
@@ -248,6 +256,13 @@ class EvidencePacketAndRefsTest(ProvenanceWorkflowTestBase):
         self.assertIn("citation_rule", packet)
 
     def test_evidence_refs_flow_into_ledger_and_memory(self) -> None:
+        PaperRegistry(self.kb_dir).upsert(
+            title=SAMPLE_TITLE,
+            doi="10.1000/kpba",
+            verification_status="verified_doi",
+            full_text_status="parsed",
+            corpus_file=str(self.kb_dir / "sample.json"),
+        )
         state = self._bootstrap("cmp_refs")
 
         record = state.plan_revisions[-1]
@@ -264,6 +279,36 @@ class EvidencePacketAndRefsTest(ProvenanceWorkflowTestBase):
         payload = json.loads(nodes[0]["memory"])
         self.assertIn("evidence_refs", payload)
         self.assertIn("doi_10_1000_kpba", payload["evidence_refs"])
+
+    def test_web_and_parse_failed_sources_are_explicit_known_gaps(self) -> None:
+        state = self._bootstrap()
+        state.extracted_protocols = [
+            {
+                "source_title": "Unverified web page",
+                "paper_id": "web_title_x",
+                "verification_status": "web_unverified",
+                "full_text_status": "parsed",
+                "source_file": "/kb/web.json",
+                "steps": [],
+            },
+            {
+                "source_title": "Broken DOI PDF",
+                "paper_id": "doi_broken",
+                "verification_status": "verified_doi",
+                "full_text_status": "parse_failed",
+                "source_file": "/kb/broken.json",
+                "steps": [],
+            },
+        ]
+
+        packet = self.agent._evidence_packet(state)
+
+        self.assertTrue(
+            any("网页内容未经论文身份验证" in gap for gap in packet["known_gaps"])
+        )
+        self.assertTrue(
+            any("全文状态为 parse_failed" in gap for gap in packet["known_gaps"])
+        )
 
 
 if __name__ == "__main__":

@@ -10,8 +10,13 @@ from .ingestion import (
     classify_reference,
 )
 from .literature_acquisition import LiteratureAcquisition
+from .paper_download import (
+    OpenAccessPdfDownloader,
+    PdfDownloadAttempt,
+    PdfDownloadResult,
+)
 from .paper_registry import PaperRegistry
-from .web_search import WebSearchClient, WebSearchResult
+from .web_search import WebSearchAttempt, WebSearchClient, WebSearchResult
 from .web_tool import WebToolExecutor
 
 __all__ = [
@@ -21,7 +26,11 @@ __all__ = [
     "KnowledgeQuery",
     "LiteratureAcquisition",
     "MemoryQuery",
+    "OpenAccessPdfDownloader",
     "PaperRegistry",
+    "PdfDownloadAttempt",
+    "PdfDownloadResult",
+    "WebSearchAttempt",
     "WebSearchClient",
     "WebSearchResult",
     "WebToolExecutor",

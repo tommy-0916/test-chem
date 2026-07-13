@@ -20,6 +20,12 @@ chem_resources/exp_logs/
 chem_resources/knowledge_base/
 campaigns/
 chem-agent-latest/
+backend/data/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
 *.log
 
 *.zip

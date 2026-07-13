@@ -14,6 +14,7 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from reaserch_agent.tools.ingestion import ExternalKnowledgeClient, KnowledgeIngestion
+from reaserch_agent.utils.llm_factory import LLMFactory
 
 
 DEFAULT_KNOWLEDGE_DIR = Path(__file__).resolve().parent / "chem_kb"
@@ -38,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--sources",
-        default="arxiv,crossref,semantic_scholar",
+        default="semantic_scholar,openalex,arxiv,crossref",
         help=(
             "Comma-separated external sources: arxiv, crossref, semantic_scholar, "
             "openalex, pubmed, google_scholar (google_scholar needs SERPER_API_KEY)."
@@ -53,7 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--download-pdfs",
         action="store_true",
-        help="Download open PDFs when an external source exposes a PDF URL.",
+        help=(
+            "Resolve open PDFs through arXiv, Semantic Scholar, Unpaywall, CORE, "
+            "metadata URLs, and web-search fallback."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -96,6 +100,7 @@ def parse_sources(raw_sources: str) -> List[str]:
 
 def main() -> int:
     args = build_parser().parse_args()
+    LLMFactory.load_env()
     if not args.input and not args.query:
         raise SystemExit("Provide at least one --input path or an external --query.")
 
@@ -118,6 +123,7 @@ def main() -> int:
     external_written: List[Path] = []
     external_count = 0
     external_errors: List[str] = []
+    external_attempts = []
     if args.query:
         client = ExternalKnowledgeClient(
             semantic_scholar_api_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
@@ -130,6 +136,7 @@ def main() -> int:
         )
         external_count = len(papers)
         external_errors = list(client.last_errors)
+        external_attempts = list(client.last_attempts)
         external_written.extend(
             ingestion.ingest_external_papers(
                 papers,
@@ -145,6 +152,8 @@ def main() -> int:
         "external_records_found": external_count,
         "external_records_written": [str(path) for path in external_written],
         "external_errors": external_errors,
+        "external_attempts": external_attempts,
+        "pdf_downloads": list(ingestion.last_external_results),
         "add_to_memory": bool(args.add_to_memory),
     }
 

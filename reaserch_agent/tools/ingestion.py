@@ -8,21 +8,29 @@ paper metadata into the same structured JSON schema.
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import os
 import re
-import shutil
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
+
+import fcntl
 
 from ..memory import LayeredChemMemory
 from .corpus_search import LocalExperimentCorpus
+from .paper_download import (
+    OpenAccessPdfDownloader,
+    PdfDownloadAttempt,
+)
 
 
 SUPPORTED_LOCAL_SUFFIXES = {".json", ".pdf", ".txt", ".md"}
@@ -91,6 +99,9 @@ class ExternalPaper:
     year: str = ""
     authors: List[str] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
+    arxiv_id: str = ""
+    venue: str = ""
+    citation_count: int = 0
 
 
 class KnowledgeIngestion:
@@ -103,11 +114,14 @@ class KnowledgeIngestion:
         memory_root: str | Path | None = None,
         add_to_memory: bool = False,
         dry_run: bool = False,
+        pdf_downloader: Optional[OpenAccessPdfDownloader] = None,
     ) -> None:
         self.output_dir = Path(output_dir).expanduser().resolve()
         self.add_to_memory = add_to_memory
         self.dry_run = dry_run
         self._extractor = LocalExperimentCorpus(corpus_dir=self.output_dir)
+        self.pdf_downloader = pdf_downloader or OpenAccessPdfDownloader()
+        self.last_external_results: List[Dict[str, Any]] = []
         self._memory = (
             LayeredChemMemory(root_dir=memory_root) if add_to_memory else None
         )
@@ -142,20 +156,95 @@ class KnowledgeIngestion:
     ) -> List[Path]:
         """Ingest paper metadata, optionally downloading open PDFs first."""
         written: List[Path] = []
+        self.last_external_results = []
         resolved_pdf_dir = Path(pdf_dir).expanduser().resolve() if pdf_dir else self.output_dir
         for paper in papers:
-            record = self.record_from_external_paper(paper)
-            if download_pdfs and paper.pdf_url:
-                pdf_path = self._download_pdf(paper, resolved_pdf_dir)
-                if pdf_path is not None:
-                    pdf_record = self.record_from_file(pdf_path)
-                    if pdf_record is not None:
-                        pdf_record["_ingestion_metadata"]["external_metadata"] = record[
-                            "_ingestion_metadata"
-                        ]
-                        record = pdf_record
-            written.append(self.write_record(record))
+            metadata_record = self.record_from_external_paper(paper)
+            record = metadata_record
+            full_text_status = "metadata_only"
+            download_payload: Dict[str, Any] = {}
+            if download_pdfs and self.dry_run:
+                full_text_status = "download_planned"
+                download_payload = {
+                    "downloaded": False,
+                    "path": "",
+                    "provider": "",
+                    "url": "",
+                    "attempts": [],
+                    "errors": [],
+                    "status": "dry_run",
+                }
+            elif download_pdfs:
+                validated_pdf_record: Optional[Dict[str, Any]] = None
+
+                def validate_pdf(path: Path) -> bool:
+                    nonlocal validated_pdf_record
+                    candidate_record = self.record_from_file(path)
+                    if candidate_record is None:
+                        raise ValueError("PDF contained no meaningful extractable text")
+                    validated_pdf_record = candidate_record
+                    return True
+
+                download_result = self.pdf_downloader.download(
+                    paper,
+                    resolved_pdf_dir,
+                    candidate_validator=validate_pdf,
+                )
+                if download_result.path is not None:
+                    try:
+                        pdf_record = validated_pdf_record or self.record_from_file(
+                            download_result.path
+                        )
+                        if pdf_record is not None:
+                            pdf_record["_ingestion_metadata"]["external_metadata"] = dict(
+                                metadata_record["_ingestion_metadata"]
+                            )
+                            record = pdf_record
+                            full_text_status = "parsed"
+                        else:
+                            full_text_status = "parse_failed"
+                            download_result.attempts.append(
+                                PdfDownloadAttempt(
+                                    provider="pdf_parser",
+                                    status="parse_failed",
+                                    error="PDF contained no meaningful extractable text",
+                                )
+                            )
+                    except Exception as exc:
+                        full_text_status = "parse_failed"
+                        download_result.attempts.append(
+                            PdfDownloadAttempt(
+                                provider="pdf_parser",
+                                status="parse_failed",
+                                error=f"{type(exc).__name__}: {exc}",
+                            )
+                        )
+                else:
+                    full_text_status = (
+                        "parse_failed"
+                        if any(
+                            attempt.status == "parse_failed"
+                            for attempt in download_result.attempts
+                        )
+                        else "download_failed"
+                    )
+                download_payload = download_result.to_dict()
+
+            ingestion_metadata = record.setdefault("_ingestion_metadata", {})
+            ingestion_metadata["full_text_status"] = full_text_status
+            if download_payload:
+                ingestion_metadata["pdf_download"] = download_payload
+            output_path = self.write_record(record)
+            written.append(output_path)
             self._remember_record(record)
+            self.last_external_results.append(
+                {
+                    "title": paper.title,
+                    "record_path": str(output_path),
+                    "full_text_status": full_text_status,
+                    "pdf_download": download_payload,
+                }
+            )
         return written
 
     def record_from_file(self, path: str | Path) -> Dict[str, Any] | None:
@@ -167,6 +256,8 @@ class KnowledgeIngestion:
             return self._record_from_json(source_path)
         if suffix == ".pdf":
             text = self._extractor._extract_pdf_text(source_path)
+            if not self._has_meaningful_pdf_text(text):
+                return None
             title = self._title_from_pdf(source_path, text)
             source_type = "pdf"
         else:
@@ -179,6 +270,13 @@ class KnowledgeIngestion:
             source_path=str(source_path),
             source_type=source_type,
         )
+
+    @staticmethod
+    def _has_meaningful_pdf_text(text: str) -> bool:
+        without_page_markers = re.sub(r"\[p\.\d+\]", " ", text or "")
+        normalized = re.sub(r"\s+", " ", without_page_markers).strip()
+        tokens = re.findall(r"[0-9A-Za-z一-鿿]{2,}", normalized)
+        return len(normalized) >= 80 and len(tokens) >= 10
 
     def record_from_external_paper(self, paper: ExternalPaper) -> Dict[str, Any]:
         text = "\n\n".join(
@@ -205,6 +303,9 @@ class KnowledgeIngestion:
                 "doi": paper.doi,
                 "year": paper.year,
                 "authors": paper.authors,
+                "arxiv_id": paper.arxiv_id,
+                "venue": paper.venue,
+                "citation_count": paper.citation_count,
             }
         )
         return record
@@ -244,13 +345,58 @@ class KnowledgeIngestion:
     def write_record(self, record: Dict[str, Any]) -> Path:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         title = str(record.get("文献题目", "paper")).strip() or "paper"
-        output_path = self._dedupe_path(self.output_dir / f"{self._slugify(title)}.json")
-        if not self.dry_run:
-            output_path.write_text(
-                json.dumps(record, ensure_ascii=False, indent=2),
-                encoding="utf-8",
+        base_path = self.output_dir / self._record_filename(title, record)
+        if self.dry_run:
+            return self._dedupe_path(base_path)
+        payload = json.dumps(record, ensure_ascii=False, indent=2)
+        with self._output_lock():
+            output_path = self._dedupe_path(base_path)
+            descriptor, temp_name = tempfile.mkstemp(
+                prefix=f".{output_path.stem}.",
+                suffix=".tmp",
+                dir=self.output_dir,
             )
-        return output_path
+            temp_path = Path(temp_name)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp_path, output_path)
+            finally:
+                temp_path.unlink(missing_ok=True)
+            return output_path
+
+    def _record_filename(self, title: str, record: Dict[str, Any]) -> str:
+        metadata = record.get("_ingestion_metadata") or {}
+        identity = {
+            key: metadata.get(key)
+            for key in (
+                "doi",
+                "arxiv_id",
+                "source",
+                "source_id",
+                "source_path",
+                "year",
+                "authors",
+            )
+            if metadata.get(key)
+        }
+        suffix = ""
+        if identity:
+            canonical = json.dumps(identity, ensure_ascii=False, sort_keys=True)
+            suffix = "_" + hashlib.sha1(canonical.encode("utf-8")).hexdigest()[:10]
+        return f"{self._slugify(title)}{suffix}.json"
+
+    @contextmanager
+    def _output_lock(self) -> Iterator[None]:
+        lock_path = self.output_dir / ".records.lock"
+        with lock_path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _record_from_json(self, path: Path) -> Dict[str, Any] | None:
         try:
@@ -489,21 +635,10 @@ class KnowledgeIngestion:
         )
 
     def _download_pdf(self, paper: ExternalPaper, output_dir: Path) -> Path | None:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        target = self._dedupe_path(output_dir / f"{self._slugify(paper.title)}.pdf")
+        """Compatibility wrapper around the redundant OA downloader."""
         if self.dry_run:
-            return target
-        try:
-            request = urllib.request.Request(
-                paper.pdf_url,
-                headers={"User-Agent": DEFAULT_USER_AGENT},
-            )
-            with urllib.request.urlopen(request, timeout=30) as response:
-                with target.open("wb") as handle:
-                    shutil.copyfileobj(response, handle)
-            return target
-        except (OSError, urllib.error.URLError):
-            return None
+            return output_dir / f"{self._slugify(paper.title)}.pdf"
+        return self.pdf_downloader.download(paper, output_dir).path
 
     def _remember_record(self, record: Dict[str, Any]) -> None:
         if self._memory is None or self.dry_run:
@@ -550,10 +685,15 @@ class ExternalKnowledgeClient:
         timeout_seconds: int = 30,
     ) -> None:
         self.user_agent = user_agent
-        self.semantic_scholar_api_key = semantic_scholar_api_key
-        self.crossref_mailto = crossref_mailto
+        self.semantic_scholar_api_key = (
+            semantic_scholar_api_key
+            or os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
+            or os.getenv("S2_API_KEY", "")
+        )
+        self.crossref_mailto = crossref_mailto or os.getenv("CROSSREF_MAILTO", "")
         self.timeout_seconds = timeout_seconds
         self.last_errors: List[str] = []
+        self.last_attempts: List[Dict[str, Any]] = []
 
     def search(
         self,
@@ -562,30 +702,58 @@ class ExternalKnowledgeClient:
         sources: Sequence[str],
         max_results: int = 5,
     ) -> List[ExternalPaper]:
-        papers: List[ExternalPaper] = []
+        source_batches: List[List[ExternalPaper]] = []
         self.last_errors = []
+        self.last_attempts = []
         for source in sources:
             normalized = source.strip().lower()
             try:
                 if normalized == "arxiv":
-                    papers.extend(self.search_arxiv(query, max_results=max_results))
+                    source_papers = self.search_arxiv(query, max_results=max_results)
                 elif normalized == "crossref":
-                    papers.extend(self.search_crossref(query, max_results=max_results))
+                    source_papers = self.search_crossref(query, max_results=max_results)
                 elif normalized in {"semantic_scholar", "semanticscholar", "s2"}:
-                    papers.extend(self.search_semantic_scholar(query, max_results=max_results))
+                    source_papers = self.search_semantic_scholar(
+                        query, max_results=max_results
+                    )
                 elif normalized == "openalex":
-                    papers.extend(self.search_openalex(query, max_results=max_results))
+                    source_papers = self.search_openalex(query, max_results=max_results)
                 elif normalized == "pubmed":
-                    papers.extend(self.search_pubmed(query, max_results=max_results))
+                    source_papers = self.search_pubmed(query, max_results=max_results)
                 elif normalized in {"google_scholar", "scholar"}:
-                    papers.extend(
-                        self.search_google_scholar(query, max_results=max_results)
+                    source_papers = self.search_google_scholar(
+                        query, max_results=max_results
                     )
                 else:
                     raise ValueError(f"unsupported external source: {source}")
+                source_batches.append(source_papers)
+                self.last_attempts.append(
+                    {
+                        "source": normalized,
+                        "status": "success" if source_papers else "empty",
+                        "result_count": len(source_papers),
+                        "error": "",
+                    }
+                )
             except Exception as exc:
-                self.last_errors.append(f"{source}: {type(exc).__name__}: {exc}")
-        return self._dedupe_papers(papers)
+                source_batches.append([])
+                error = f"{type(exc).__name__}: {exc}"
+                self.last_errors.append(f"{source}: {error}")
+                self.last_attempts.append(
+                    {
+                        "source": normalized,
+                        "status": "error",
+                        "result_count": 0,
+                        "error": error,
+                    }
+                )
+        interleaved: List[ExternalPaper] = []
+        largest_batch = max((len(batch) for batch in source_batches), default=0)
+        for index in range(largest_batch):
+            for batch in source_batches:
+                if index < len(batch):
+                    interleaved.append(batch[index])
+        return self._dedupe_papers(interleaved)
 
     def search_arxiv(self, query: str, *, max_results: int = 5) -> List[ExternalPaper]:
         params = urllib.parse.urlencode(
@@ -629,6 +797,7 @@ class ExternalKnowledgeClient:
             source_id=source_id.rsplit("/", 1)[-1],
             url=source_id,
             pdf_url=pdf_url,
+            arxiv_id=source_id.rsplit("/", 1)[-1],
             year=published[:4],
             authors=[author for author in authors if author],
         )
@@ -657,16 +826,32 @@ class ExternalKnowledgeClient:
             for author in item.get("author", []) or []
             if isinstance(author, dict)
         ]
+        links = [link for link in item.get("link", []) or [] if isinstance(link, dict)]
+        pdf_url = next(
+            (
+                str(link.get("URL") or "")
+                for link in links
+                if "pdf" in str(link.get("content-type") or "").lower()
+                and link.get("URL")
+            ),
+            "",
+        )
         return ExternalPaper(
             title=self._clean_text(title),
             abstract=self._clean_text(abstract),
             source="crossref",
             source_id=str(item.get("DOI", "")),
             url=str(item.get("URL", "")),
+            pdf_url=pdf_url,
             doi=str(item.get("DOI", "")),
             year=self._crossref_year(item),
             authors=[author for author in authors if author],
-            raw={"container_title": self._first_text(item.get("container-title"))},
+            raw={
+                "container_title": self._first_text(item.get("container-title")),
+                "links": links,
+            },
+            venue=self._first_text(item.get("container-title")),
+            citation_count=int(item.get("is-referenced-by-count") or 0),
         )
 
     def search_semantic_scholar(
@@ -679,14 +864,14 @@ class ExternalKnowledgeClient:
             {
                 "query": query,
                 "limit": max_results,
-                "fields": "paperId,title,abstract,year,url,authors,externalIds,openAccessPdf",
+                "fields": (
+                    "paperId,title,abstract,year,url,authors,externalIds,"
+                    "openAccessPdf,venue,citationCount"
+                ),
             }
         )
         url = f"https://api.semanticscholar.org/graph/v1/paper/search?{params}"
-        headers = {}
-        if self.semantic_scholar_api_key:
-            headers["x-api-key"] = self.semantic_scholar_api_key
-        payload = json.loads(self._get_text(url, headers=headers))
+        payload = json.loads(self._get_s2_text(url))
         return [
             self._paper_from_s2_item(item)
             for item in payload.get("data", []) or []
@@ -711,6 +896,13 @@ class ExternalKnowledgeClient:
                 if isinstance(author, dict) and author.get("name")
             ],
             raw={"external_ids": external_ids},
+            arxiv_id=(
+                str(external_ids.get("ArXiv", ""))
+                if isinstance(external_ids, dict)
+                else ""
+            ),
+            venue=str(item.get("venue", "") or ""),
+            citation_count=int(item.get("citationCount") or 0),
         )
 
     # ------------------------------------------------------------------
@@ -725,6 +917,7 @@ class ExternalKnowledgeClient:
             "select": (
                 "id,title,display_name,publication_year,doi,ids,"
                 "abstract_inverted_index,authorships,primary_location,open_access"
+                ",cited_by_count"
             ),
         }
         mailto = os.getenv("OPENALEX_MAILTO", "") or self.crossref_mailto
@@ -755,6 +948,10 @@ class ExternalKnowledgeClient:
             for authorship in item.get("authorships", []) or []
             if isinstance(authorship, dict)
         ]
+        raw_arxiv = str(ids.get("arxiv") or "")
+        arxiv_match = ARXIV_URL_PATTERN.search(raw_arxiv)
+        arxiv_id = arxiv_match.group(1) + (arxiv_match.group(2) or "") if arxiv_match else ""
+        source_info = primary_location.get("source") or {}
         return ExternalPaper(
             title=self._clean_text(
                 str(item.get("title") or item.get("display_name") or "")
@@ -769,6 +966,9 @@ class ExternalKnowledgeClient:
             doi=doi,
             year=str(item.get("publication_year") or ""),
             authors=[author for author in authors if author],
+            arxiv_id=arxiv_id,
+            venue=str(source_info.get("display_name") or ""),
+            citation_count=int(item.get("cited_by_count") or 0),
         )
 
     @staticmethod
@@ -875,16 +1075,52 @@ class ExternalKnowledgeClient:
                     pdf_url=lead.get("pdf_url", ""),
                     year=str(lead.get("year", "")),
                     raw={"publication_info": lead.get("publication_info", "")},
+                    venue=str(lead.get("publication_info", "")),
                 )
             )
         return papers
 
     def lookup_doi(self, doi: str) -> Optional[ExternalPaper]:
-        """Resolve one DOI through Crossref; also verifies the DOI exists."""
+        """Resolve one DOI through Crossref, S2, then OpenAlex."""
         cleaned = (doi or "").strip()
         if not cleaned:
             return None
-        url = "https://api.crossref.org/works/" + urllib.parse.quote(cleaned, safe="")
+        cleaned = re.sub(
+            r"^https?://(?:dx\.)?doi\.org/", "", cleaned, flags=re.IGNORECASE
+        )
+        return self._first_resolved(
+            "lookup_doi",
+            [
+                ("crossref", lambda: self._lookup_crossref_doi(cleaned)),
+                (
+                    "semantic_scholar",
+                    lambda: self._lookup_s2_identifier(f"DOI:{cleaned}"),
+                ),
+                ("openalex", lambda: self._lookup_openalex_doi(cleaned)),
+            ],
+        )
+
+    def lookup_arxiv(self, arxiv_id: str) -> Optional[ExternalPaper]:
+        """Resolve one arXiv id through arXiv, S2, then OpenAlex."""
+        cleaned = (arxiv_id or "").strip()
+        cleaned = re.sub(r"^arxiv\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+        if not cleaned:
+            return None
+        normalized = re.sub(r"v\d+$", "", cleaned, flags=re.IGNORECASE)
+        return self._first_resolved(
+            "lookup_arxiv",
+            [
+                ("arxiv", lambda: self._lookup_arxiv_atom(cleaned)),
+                (
+                    "semantic_scholar",
+                    lambda: self._lookup_s2_identifier(f"ARXIV:{normalized}"),
+                ),
+                ("openalex", lambda: self._lookup_openalex_arxiv(normalized)),
+            ],
+        )
+
+    def _lookup_crossref_doi(self, doi: str) -> Optional[ExternalPaper]:
+        url = "https://api.crossref.org/works/" + urllib.parse.quote(doi, safe="")
         if self.crossref_mailto:
             url += "?" + urllib.parse.urlencode({"mailto": self.crossref_mailto})
         payload = json.loads(self._get_text(url))
@@ -893,13 +1129,8 @@ class ExternalKnowledgeClient:
             return None
         return self._paper_from_crossref_item(item)
 
-    def lookup_arxiv(self, arxiv_id: str) -> Optional[ExternalPaper]:
-        """Resolve one arXiv id through the arXiv Atom API."""
-        cleaned = (arxiv_id or "").strip()
-        cleaned = re.sub(r"^arxiv\s*:\s*", "", cleaned, flags=re.IGNORECASE)
-        if not cleaned:
-            return None
-        params = urllib.parse.urlencode({"id_list": cleaned, "max_results": 1})
+    def _lookup_arxiv_atom(self, arxiv_id: str) -> Optional[ExternalPaper]:
+        params = urllib.parse.urlencode({"id_list": arxiv_id, "max_results": 1})
         url = f"https://export.arxiv.org/api/query?{params}"
         root = ET.fromstring(self._get_text(url))
         ns = {"atom": "http://www.w3.org/2005/Atom"}
@@ -909,12 +1140,68 @@ class ExternalKnowledgeClient:
                 return paper
         return None
 
+    def _lookup_s2_identifier(self, identifier: str) -> Optional[ExternalPaper]:
+        fields = urllib.parse.urlencode(
+            {
+                "fields": (
+                    "paperId,title,abstract,year,url,authors,externalIds,"
+                    "openAccessPdf,venue,citationCount"
+                )
+            }
+        )
+        url = (
+            "https://api.semanticscholar.org/graph/v1/paper/"
+            f"{urllib.parse.quote(identifier, safe=':')}?{fields}"
+        )
+        item = json.loads(self._get_s2_text(url))
+        if not isinstance(item, dict) or not item.get("title"):
+            return None
+        return self._paper_from_s2_item(item)
+
+    def _lookup_openalex_doi(self, doi: str) -> Optional[ExternalPaper]:
+        for candidate in self.search_openalex(doi, max_results=5):
+            if candidate.doi.strip().lower() == doi.strip().lower():
+                return candidate
+        return None
+
+    def _lookup_openalex_arxiv(self, arxiv_id: str) -> Optional[ExternalPaper]:
+        wanted = re.sub(r"v\d+$", "", arxiv_id.strip().lower())
+        for candidate in self.search_openalex(arxiv_id, max_results=5):
+            candidate_id = re.sub(
+                r"v\d+$", "", candidate.arxiv_id.strip().lower()
+            )
+            if candidate_id == wanted:
+                return candidate
+        return None
+
+    def _first_resolved(
+        self,
+        operation: str,
+        resolvers: Sequence[tuple[str, Any]],
+    ) -> Optional[ExternalPaper]:
+        for source, resolver in resolvers:
+            try:
+                paper = resolver()
+            except Exception as exc:
+                self.last_errors.append(
+                    f"{operation}/{source}: {type(exc).__name__}: {exc}"
+                )
+                continue
+            if paper is not None and paper.title:
+                return paper
+        return None
+
     def lookup_title(self, title: str) -> Optional[ExternalPaper]:
-        """Resolve one paper title via Semantic Scholar, then Crossref."""
+        """Resolve one paper title across independent scholarly providers."""
         cleaned = (title or "").strip()
         if not cleaned:
             return None
-        for search_fn in (self.search_semantic_scholar, self.search_crossref):
+        for search_fn in (
+            self.search_semantic_scholar,
+            self.search_openalex,
+            self.search_crossref,
+            self.search_arxiv,
+        ):
             try:
                 candidates = search_fn(cleaned, max_results=3)
             except Exception as exc:
@@ -945,24 +1232,45 @@ class ExternalKnowledgeClient:
                 continue
             if candidate_normalized == wanted_normalized:
                 return candidate
-            if len(wanted_normalized) >= 12 and (
+            length_ratio = min(len(wanted_normalized), len(candidate_normalized)) / max(
+                len(wanted_normalized), len(candidate_normalized)
+            )
+            if length_ratio >= 0.8 and (
                 wanted_normalized in candidate_normalized
                 or candidate_normalized in wanted_normalized
             ):
                 return candidate
 
-        wanted_tokens = set(re.findall(r"[0-9a-z]{2,}", wanted.lower()))
+        wanted_tokens = self._title_tokens(wanted)
         if not wanted_tokens:
             return None
-        best: Optional[ExternalPaper] = None
-        best_ratio = 0.0
+        scored: List[tuple[float, ExternalPaper]] = []
         for candidate in candidates:
-            candidate_tokens = set(re.findall(r"[0-9a-z]{2,}", candidate.title.lower()))
-            ratio = len(wanted_tokens & candidate_tokens) / max(1, len(wanted_tokens))
-            if ratio >= 0.6 and ratio > best_ratio:
-                best = candidate
-                best_ratio = ratio
-        return best
+            candidate_tokens = self._title_tokens(candidate.title)
+            if not candidate_tokens:
+                continue
+            overlap = len(wanted_tokens & candidate_tokens)
+            f1_score = (2 * overlap) / (len(wanted_tokens) + len(candidate_tokens))
+            scored.append((f1_score, candidate))
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        if not scored or scored[0][0] < 0.8:
+            return None
+        if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.05:
+            return None
+        return scored[0][1]
+
+    @staticmethod
+    def _title_tokens(title: str) -> set[str]:
+        lowered = (title or "").lower()
+        tokens = set(re.findall(r"[0-9a-z][0-9a-z+().-]*", lowered))
+        for chunk in re.findall(r"[一-鿿]+", lowered):
+            if len(chunk) == 1:
+                tokens.add(chunk)
+            else:
+                tokens.update(
+                    chunk[index : index + 2] for index in range(len(chunk) - 1)
+                )
+        return tokens
 
     # ------------------------------------------------------------------
     # citation snowball (depth-1 references / citations)
@@ -973,8 +1281,8 @@ class ExternalKnowledgeClient:
             return paper.source_id
         if paper.doi:
             return f"DOI:{paper.doi}"
-        if paper.source == "arxiv" and paper.source_id:
-            return "ARXIV:" + re.sub(r"v\d+$", "", paper.source_id)
+        if paper.arxiv_id:
+            return "ARXIV:" + re.sub(r"v\d+$", "", paper.arxiv_id)
         return ""
 
     def fetch_references(
@@ -1005,7 +1313,10 @@ class ExternalKnowledgeClient:
             return []
         params = urllib.parse.urlencode(
             {
-                "fields": "paperId,title,abstract,year,url,authors,externalIds,openAccessPdf",
+                "fields": (
+                    "paperId,title,abstract,year,url,authors,externalIds,"
+                    "openAccessPdf,venue,citationCount"
+                ),
                 "limit": max(1, limit),
             }
         )
@@ -1013,10 +1324,7 @@ class ExternalKnowledgeClient:
             "https://api.semanticscholar.org/graph/v1/paper/"
             f"{urllib.parse.quote(identifier, safe=':')}/{endpoint}?{params}"
         )
-        headers = {}
-        if self.semantic_scholar_api_key:
-            headers["x-api-key"] = self.semantic_scholar_api_key
-        payload = json.loads(self._get_text(url, headers=headers))
+        payload = json.loads(self._get_s2_text(url))
         papers: List[ExternalPaper] = []
         for row in payload.get("data", []) or []:
             item = row.get(item_key) if isinstance(row, dict) else None
@@ -1030,6 +1338,30 @@ class ExternalKnowledgeClient:
         request = urllib.request.Request(url, headers=resolved_headers)
         with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
             return response.read().decode("utf-8", errors="replace")
+
+    def _get_s2_text(self, url: str) -> str:
+        """Use the configured S2 key, retrying anonymously if it is rejected."""
+        headers = {}
+        if self.semantic_scholar_api_key:
+            headers["x-api-key"] = self.semantic_scholar_api_key
+        try:
+            return self._get_text(url, headers=headers)
+        except urllib.error.HTTPError as exc:
+            if not headers or exc.code not in {401, 403}:
+                raise
+            try:
+                payload = self._get_text(url)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"configured credential returned HTTP {exc.code}; "
+                    "anonymous retry failed: "
+                    f"{type(fallback_exc).__name__}: {fallback_exc}"
+                ) from fallback_exc
+            self.last_errors.append(
+                f"semantic_scholar auth fallback: configured credential returned "
+                f"HTTP {exc.code}; anonymous retry succeeded"
+            )
+            return payload
 
     def _xml_text(self, node: ET.Element, path: str, ns: Dict[str, str]) -> str:
         found = node.find(path, ns)
@@ -1057,11 +1389,104 @@ class ExternalKnowledgeClient:
 
     def _dedupe_papers(self, papers: Iterable[ExternalPaper]) -> List[ExternalPaper]:
         deduped: List[ExternalPaper] = []
-        seen = set()
+        doi_index: Dict[str, int] = {}
+        arxiv_index: Dict[str, int] = {}
+        title_index: Dict[str, List[int]] = {}
         for paper in papers:
-            key = (paper.doi.lower(), paper.title.lower(), paper.source_id.lower())
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(paper)
+            doi_key = paper.doi.strip().lower()
+            arxiv_key = re.sub(r"v\d+$", "", paper.arxiv_id.strip().lower())
+            title_key = self._normalized_title(paper.title)
+            index: Optional[int] = doi_index.get(doi_key) if doi_key else None
+            if index is None and arxiv_key and arxiv_key in arxiv_index:
+                candidate_index = arxiv_index[arxiv_key]
+                if not self._paper_identity_conflicts(
+                    deduped[candidate_index], paper
+                ):
+                    index = candidate_index
+            if index is None and title_key:
+                compatible = [
+                    candidate_index
+                    for candidate_index in title_index.get(title_key, [])
+                    if self._title_fallback_compatible(
+                        deduped[candidate_index], paper
+                    )
+                ]
+                if len(compatible) == 1:
+                    index = compatible[0]
+            if index is None:
+                index = len(deduped)
+                deduped.append(paper)
+            else:
+                paper = self._merge_papers(deduped[index], paper)
+                deduped[index] = paper
+
+            if paper.doi:
+                doi_index[paper.doi.strip().lower()] = index
+            if paper.arxiv_id:
+                arxiv_index[
+                    re.sub(r"v\d+$", "", paper.arxiv_id.strip().lower())
+                ] = index
+            normalized_title = self._normalized_title(paper.title)
+            if normalized_title:
+                indexes = title_index.setdefault(normalized_title, [])
+                if index not in indexes:
+                    indexes.append(index)
         return deduped
+
+    @classmethod
+    def _title_fallback_compatible(
+        cls,
+        left: ExternalPaper,
+        right: ExternalPaper,
+    ) -> bool:
+        if cls._paper_identity_conflicts(left, right):
+            return False
+        if left.year and right.year and left.year != right.year:
+            return False
+        left_author = cls._first_author_key(left.authors)
+        right_author = cls._first_author_key(right.authors)
+        return not (left_author and right_author and left_author != right_author)
+
+    @staticmethod
+    def _paper_identity_conflicts(left: ExternalPaper, right: ExternalPaper) -> bool:
+        left_doi = left.doi.strip().lower()
+        right_doi = right.doi.strip().lower()
+        if left_doi and right_doi and left_doi != right_doi:
+            return True
+        left_arxiv = re.sub(r"v\d+$", "", left.arxiv_id.strip().lower())
+        right_arxiv = re.sub(r"v\d+$", "", right.arxiv_id.strip().lower())
+        return bool(left_arxiv and right_arxiv and left_arxiv != right_arxiv)
+
+    @staticmethod
+    def _first_author_key(authors: Sequence[str]) -> str:
+        if not authors:
+            return ""
+        tokens = re.findall(r"[0-9a-z一-鿿]+", str(authors[0]).lower())
+        return tokens[-1] if tokens else ""
+
+    @staticmethod
+    def _merge_papers(primary: ExternalPaper, incoming: ExternalPaper) -> ExternalPaper:
+        """Merge duplicate provider records without losing provenance."""
+        if len(incoming.abstract) > len(primary.abstract):
+            primary.abstract = incoming.abstract
+        for field_name in (
+            "title",
+            "source_id",
+            "url",
+            "pdf_url",
+            "doi",
+            "year",
+            "arxiv_id",
+            "venue",
+        ):
+            if not getattr(primary, field_name) and getattr(incoming, field_name):
+                setattr(primary, field_name, getattr(incoming, field_name))
+        primary.authors = list(dict.fromkeys(primary.authors + incoming.authors))
+        primary.citation_count = max(primary.citation_count, incoming.citation_count)
+        discovery_sources = list(primary.raw.get("discovery_sources", []))
+        for source in (primary.source, incoming.source):
+            if source and source not in discovery_sources:
+                discovery_sources.append(source)
+        primary.raw.update(incoming.raw)
+        primary.raw["discovery_sources"] = discovery_sources
+        return primary

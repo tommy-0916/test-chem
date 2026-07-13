@@ -27,6 +27,7 @@ class StubWebClient(WebSearchClient):
     """WebSearchClient with canned transports keyed by URL substring."""
 
     def __init__(self, *, get_map=None, post_map=None, **kwargs) -> None:
+        kwargs.setdefault("url_validator", lambda url: None)
         super().__init__(**kwargs)
         self.get_map = get_map or {}
         self.post_map = post_map or {}
@@ -136,12 +137,22 @@ class WebEngineParsingTest(unittest.TestCase):
         self.assertTrue(any("tavily" in err for err in client.last_errors))
 
     def test_available_engines_ordering(self) -> None:
-        client = StubWebClient(serper_api_key="sk", brave_api_key="bk")
-        self.assertEqual(
-            client.available_engines(), ["serper", "brave", "duckduckgo"]
-        )
-        keyless = StubWebClient()
-        self.assertEqual(keyless.available_engines(), ["duckduckgo"])
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "TAVILY_API_KEY": "",
+                "SERPER_API_KEY": "",
+                "BRAVE_API_KEY": "",
+                "SEARXNG_BASE_URL": "",
+            },
+            clear=False,
+        ):
+            client = StubWebClient(serper_api_key="sk", brave_api_key="bk")
+            self.assertEqual(
+                client.available_engines(), ["serper", "brave", "duckduckgo"]
+            )
+            keyless = StubWebClient()
+            self.assertEqual(keyless.available_engines(), ["duckduckgo"])
 
 
 class PageReadingTest(unittest.TestCase):
