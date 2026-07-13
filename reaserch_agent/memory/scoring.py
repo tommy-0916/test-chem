@@ -77,5 +77,12 @@ def build_bm25_boosts(
     raw_scores = list(index.get_scores(query_tokens))
     top = max(raw_scores) if raw_scores else 0.0
     if top <= 0:
-        return [0.0] * len(documents)
+        query_set = set(query_tokens)
+        raw_scores = [
+            float(len(query_set.intersection(document_tokens)))
+            for document_tokens in corpus_tokens
+        ]
+        top = max(raw_scores) if raw_scores else 0.0
+        if top <= 0:
+            return [0.0] * len(documents)
     return [max_boost * (score / top) for score in raw_scores]
