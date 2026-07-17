@@ -30,6 +30,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for saving only the terminal package JSON.",
     )
     parser.add_argument(
+        "--exp-id",
+        help=(
+            "Optional explicit local experiment identifier. Useful for concurrent "
+            "planning runs; this does not create or dispatch a real laboratory task."
+        ),
+    )
+    parser.add_argument(
         "--human-readable-output",
         help=(
             "Optional path for a unified user-readable extraction "
@@ -380,7 +387,7 @@ def main() -> int:
         model=model,
         use_new_format=True,
     )
-    state = workflow.run_state(device_input_package)
+    state = workflow.run_state(device_input_package, exp_id=args.exp_id)
     state_dict = state.to_dict()
     package = state.terminal_package or {}
     status = state.status
