@@ -30,6 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for saving only the terminal package JSON.",
     )
     parser.add_argument(
+        "--human-readable-output",
+        help=(
+            "Optional path for a unified user-readable extraction "
+            "(issue 2 human_readable_result.json). Read-only; never mutates "
+            "the research state or device package."
+        ),
+    )
+    parser.add_argument(
         "--model-name",
         help="Optional model name override.",
     )
@@ -79,14 +87,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout-seconds",
         type=int,
-        default=360,
-        help="LLM timeout seconds. Default: 360.",
+        default=600,
+        help="LLM timeout seconds. Default: 600.",
     )
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=4096,
-        help="Max completion tokens for each device-agent LLM call. Default: 4096.",
+        default=16384,
+        help=(
+            "Max completion tokens for each device-agent LLM call. Default: "
+            "16384 (multi-step workflows with strict validation easily exceed "
+            "the old 4096 and would truncate into JSON parse failures)."
+        ),
     )
     parser.add_argument(
         "--print-package-json",
@@ -213,6 +225,11 @@ def build_device_agent_input_package(
         research_state.get("extracted_protocols"),
         persistent.get("从知识库论文抽取的实验过程"),
     )
+    macro_action = first_dict(
+        research_state.get("macro_action"),
+        handoff.get("当前 macro action"),
+        persistent.get("当前 macro action"),
+    )
 
     return {
         "handoff_type": "research_to_device_adaptation",
@@ -249,6 +266,7 @@ def build_device_agent_input_package(
             ),
         },
         "macro_action_steps": macro_plan,
+        "macro_action": macro_action,
         "research_context": {
             "survey_report": truncate(survey_report, max_chars=2600),
             "extracted_paper_protocols": truncate(extracted_protocols, max_chars=2600),
@@ -367,20 +385,42 @@ def main() -> int:
     package = state.terminal_package or {}
     status = state.status
     verification_result = (
-        "refused" if package.get("status") == "feasibility_error" else "accepted"
+        "refused" if package.get("status") in {"feasibility_error", "failed"} else "accepted"
     )
-    verification_category = (
-        "physical_infeasible" if package.get("status") == "feasibility_error" else ""
-    )
-    exp_id = state.exp_id
-    blocking_constraints = (
-        package.get("error_package", {}).get("blocking_constraints", [])
+    error_package = (
+        package.get("error_package")
         if isinstance(package.get("error_package"), dict)
-        else []
+        else {}
     )
+    if package.get("status") == "feasibility_error":
+        verification_category = str(
+            error_package.get("type") or "physical_infeasible"
+        )
+    elif package.get("status") == "failed":
+        verification_category = str(package.get("failure_stage") or "device_internal_error")
+    else:
+        verification_category = ""
+    exp_id = state.exp_id
+    blocking_constraints = error_package.get("blocking_constraints", [])
 
     dump_json(args.output, state_dict)
     dump_json(args.package_output, package)
+    if args.human_readable_output:
+        try:
+            import sys as _sys
+
+            repo_root = str(Path(__file__).resolve().parents[1])
+            if repo_root not in _sys.path:
+                _sys.path.insert(0, repo_root)
+            from orchestrator.human_readable import build_human_readable_result
+
+            dump_json(
+                args.human_readable_output,
+                build_human_readable_result(research_state, package),
+            )
+            print(f"saved human readable result: {args.human_readable_output}", flush=True)
+        except Exception as exc:  # extraction is optional; never fail the run
+            print(f"human readable result generation failed: {exc}", flush=True)
 
     print(
         "device agent completed: "
@@ -388,6 +428,15 @@ def main() -> int:
         f"{verification_category or 'none'}, exp_id={exp_id}",
         flush=True,
     )
+    dispatch_formatting = package.get("dispatch_formatting")
+    if isinstance(dispatch_formatting, dict):
+        print(
+            "dispatch formatting: "
+            f"mapped={dispatch_formatting.get('mapped_steps', 0)}, "
+            f"unmapped={dispatch_formatting.get('unmapped_steps', 0)}, "
+            f"warnings={len(dispatch_formatting.get('warnings', []) or [])}",
+            flush=True,
+        )
     if blocking_constraints:
         print("blocking_constraints:", flush=True)
         for item in blocking_constraints:

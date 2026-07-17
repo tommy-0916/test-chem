@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from reaserch_agent.state import ResearchAgentState, ResearchEvent
 from reaserch_agent.workflow import ResearchAgent
 
 
@@ -237,6 +238,42 @@ class ResearchAgentTests(unittest.TestCase):
             )
         )
 
+    def test_b1_bootstrap_builds_observation_point_macro_action(self) -> None:
+        """Issue 6: macro actions must be observation-point-driven units.
+
+        The macro plan must carry a structured macro_action descriptor (id +
+        observation point + completion condition), each macro step must be
+        stamped with its macro_action_id / observation_point_id, and the
+        additive handoff key must appear WITHOUT dropping the 4 contract keys.
+        """
+        query = "合成 NiFe 普鲁士蓝类似物并进行 XRD 表征"
+        state = self.agent.run(event_type="bootstrap", query=query)
+
+        macro_action = state.macro_action
+        self.assertTrue(macro_action)
+        self.assertTrue(macro_action.get("macro_action_id"))
+        self.assertTrue(macro_action.get("observation_point_id"))
+        self.assertTrue(macro_action.get("observation_point"))
+        self.assertTrue(macro_action.get("completion_condition"))
+        self.assertEqual(macro_action.get("stage"), state.current_stage)
+
+        for step in state.macro_plan:
+            self.assertEqual(step.get("macro_action_id"), macro_action["macro_action_id"])
+            self.assertEqual(
+                step.get("observation_point_id"), macro_action["observation_point_id"]
+            )
+
+        handoff = state.device_adaptation_handoff
+        for contract_key in (
+            "待执行 macro plan",
+            "当前 stage",
+            "当前 stage 的完整化学语义实验计划",
+            "stage路线设计理由",
+        ):
+            self.assertIn(contract_key, handoff)
+        self.assertIn("当前 macro action", handoff)
+        self.assertTrue(state.macro_action_history)
+
     def test_custom_knowledge_base_dir_is_supported(self) -> None:
         agent = ResearchAgent(
             model=None,
@@ -346,6 +383,83 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertTrue(state.observation_stage_fit["fits_current_stage"])
         self.assertTrue(state.stage_progress_status)
         self.assertIn(state.current_branch, {"B0"})
+
+    def test_b2_records_completed_macro_action_outcome(self) -> None:
+        """Issue 6: a normal observation marks the prior macro action completed
+        in macro_action_history, not just the stage."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成 NiFe-LDH，先做 XRD 表征，再进行电化学 OER 活化测试",
+        )
+        first_id = bootstrap_state.macro_action["macro_action_id"]
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "observation": {
+                    "observation_type": "XRD",
+                    "summary": "XRD characteristic peaks matched the target phase; observation completed.",
+                    "metrics": {"phase_match": True},
+                }
+            },
+            previous_state=bootstrap_state,
+        )
+
+        history = {h["macro_action_id"]: h for h in state.macro_action_history}
+        self.assertIn(first_id, history)
+        self.assertEqual(history[first_id]["outcome"], "completed")
+        # a distinct macro action now leads the next observation point
+        self.assertNotEqual(state.macro_action.get("macro_action_id"), first_id)
+
+    def test_b2_records_needs_repair_outcome_on_abnormal(self) -> None:
+        """Issue 6: an abnormal observation marks the macro action needs_repair."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+        first_id = bootstrap_state.macro_action["macro_action_id"]
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "observation": {
+                    "observation_type": "XRD",
+                    "summary": "XRD failed: strong impurity phase appeared and target peaks were weak.",
+                    "metrics": {"phase_match": False},
+                }
+            },
+            previous_state=bootstrap_state,
+        )
+
+        history = {h["macro_action_id"]: h for h in state.macro_action_history}
+        self.assertIn(first_id, history)
+        self.assertEqual(history[first_id]["outcome"], "needs_repair")
+
+    def test_b2_records_device_rejected_outcome(self) -> None:
+        """Issue 6: a device feasibility error marks the macro action
+        device_rejected (not a whole-stage failure)."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+        first_id = bootstrap_state.macro_action["macro_action_id"]
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "feedback_type": "device_feasibility_error",
+                "status": "feasibility_error",
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "blocking_constraints": ["缺少高压反应釜"],
+                },
+            },
+            previous_state=bootstrap_state,
+        )
+
+        history = {h["macro_action_id"]: h for h in state.macro_action_history}
+        self.assertIn(first_id, history)
+        self.assertEqual(history[first_id]["outcome"], "device_rejected")
 
     def test_b2_abnormal_observation_repairs_macro_plan(self) -> None:
         bootstrap_state = self.agent.run(
@@ -498,6 +612,194 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertNotIn("液体进样站", macro_blob)
         self.assertNotIn("容器编号", macro_blob)
 
+    def test_b2_accumulates_device_constraints_across_rounds(self) -> None:
+        """Issue 4: every device blocking constraint is remembered across
+        re-planning rounds and the rejected plan is fingerprinted."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="以亚铁氰化铁为正极并通过 XRD 确认 K2Fe[Fe(CN)6]·2H2O",
+        )
+
+        def device_error(constraint: str) -> dict:
+            return {
+                "feedback_type": "device_feasibility_error",
+                "status": "feasibility_error",
+                "device_snapshot_id": "ws_snapshot_A",
+                "previous_macro_plan": [
+                    {
+                        "步骤序号": 1,
+                        "操作": "溶剂热反应",
+                        "试剂/对象": "聚四氟乙烯内衬高压反应釜",
+                        "参数": "80 C 24 h",
+                    }
+                ],
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "blocking_constraints": [constraint],
+                },
+            }
+
+        state1 = self.agent.run(
+            event_type="new observation",
+            payload=device_error("容器不兼容：进样瓶无法进入马弗炉"),
+            previous_state=bootstrap_state,
+        )
+        state2 = self.agent.run(
+            event_type="new observation",
+            payload=device_error("单容器体积超过离心上限"),
+            previous_state=state1,
+        )
+
+        self.assertIn("容器不兼容：进样瓶无法进入马弗炉", state2.cumulative_device_constraints)
+        self.assertIn("单容器体积超过离心上限", state2.cumulative_device_constraints)
+        self.assertEqual(state2.device_snapshot_id, "ws_snapshot_A")
+        self.assertTrue(state2.failed_plan_signatures)
+        plan_ids = [s["plan_id"] for s in state2.failed_plan_signatures]
+        self.assertEqual(plan_ids, sorted(set(plan_ids)))
+        handoff = state2.device_adaptation_handoff
+        self.assertIn("累计设备阻塞约束", handoff)
+        self.assertIn("单容器体积超过离心上限", handoff["累计设备阻塞约束"])
+
+    def test_plan_signature_detects_repeated_route(self) -> None:
+        """Issue 4: a regenerated plan with the same operations + key numbers
+        matches the failed signature even when wording differs."""
+        agent = self.agent
+        plan_a = [
+            {"步骤序号": 1, "操作": "磁力搅拌熟化", "试剂/对象": "混合液", "参数": "室温 700 rpm 搅拌 120 min"},
+        ]
+        plan_b = [
+            {"步骤序号": 1, "操作": "磁力搅拌熟化", "试剂/对象": "混合液", "参数": "在 700 rpm 下持续搅拌 120 min，室温"},
+        ]
+        plan_c = [
+            {"步骤序号": 1, "操作": "磁力搅拌熟化", "试剂/对象": "混合液", "参数": "室温 500 rpm 搅拌 60 min"},
+        ]
+        self.assertEqual(agent._plan_signature(plan_a), agent._plan_signature(plan_b))
+        self.assertNotEqual(agent._plan_signature(plan_a), agent._plan_signature(plan_c))
+
+    def test_repeated_failed_route_raises_warning(self) -> None:
+        """Issue 4: when the regenerated plan repeats an already-failed route,
+        a repetition warning is recorded into cumulative constraints."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="以亚铁氰化铁为正极并通过 XRD 确认 K2Fe[Fe(CN)6]·2H2O",
+        )
+
+        def device_error() -> dict:
+            return {
+                "feedback_type": "device_feasibility_error",
+                "status": "feasibility_error",
+                "previous_macro_plan": [
+                    {
+                        "步骤序号": 1,
+                        "操作": "溶剂热反应",
+                        "试剂/对象": "聚四氟乙烯内衬高压反应釜",
+                        "参数": "80 C 24 h",
+                    }
+                ],
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "blocking_constraints": ["当前设备层不支持聚四氟乙烯内衬高压反应釜容器类型。"],
+                },
+            }
+
+        state1 = self.agent.run(
+            event_type="new observation",
+            payload=device_error(),
+            previous_state=bootstrap_state,
+        )
+        # probe: learn what the next regeneration will deterministically
+        # produce, then mark exactly that plan as already failed.
+        probe = self.agent.run(
+            event_type="new observation",
+            payload=device_error(),
+            previous_state=state1,
+        )
+        self.agent._record_failed_plan_signature(
+            state1, probe.macro_plan, ["模拟：该修复方案也被设备拒绝"]
+        )
+        state2 = self.agent.run(
+            event_type="new observation",
+            payload=device_error(),
+            previous_state=state1,
+        )
+
+        # determinism: the regeneration reproduced the probe plan…
+        self.assertEqual(
+            self.agent._plan_signature(state2.macro_plan),
+            self.agent._plan_signature(probe.macro_plan),
+        )
+        # …and the repetition warning fired into cumulative constraints.
+        self.assertTrue(
+            any("已失败方案" in c for c in state2.cumulative_device_constraints),
+            state2.cumulative_device_constraints,
+        )
+
+    def test_device_boundary_doubt_marks_steps_instead_of_clearing_plan(self) -> None:
+        """Issue 5 (C02): a device-boundary doubt on some steps must demote to
+        per-step markers and keep the plan, not clear it to manual_required."""
+        agent = ResearchAgent(model=None, use_llm=False)
+        plan = [
+            {"步骤序号": 1, "操作": "称取固体配制前驱体", "试剂/对象": "NiCl2 固体", "参数": "称取 1 mmol 溶于水"},
+            {"步骤序号": 2, "操作": "磁力搅拌", "试剂/对象": "混合液", "参数": "搅拌至混合均匀，必要时延长"},
+            {"步骤序号": 3, "操作": "离线 XRD", "试剂/对象": "粉末", "参数": "送样测试"},
+        ]
+
+        class _State:
+            class _Event:
+                constraints = {"device_context": {"workstations": [{"station_name": "x"}]}}
+
+            event = _Event()
+
+        markers = agent._device_context_macro_step_markers(_State(), plan)
+        self.assertTrue(markers)
+        kept = agent._apply_device_validation_markers(plan, markers)
+
+        # the whole plan survives — no step is dropped
+        self.assertEqual(len(kept), 3)
+        # solid weighing → adaptation_required; vague stirring → needs_device_validation
+        self.assertEqual(kept[0]["device_validation"], "adaptation_required")
+        self.assertEqual(kept[1]["device_validation"], "needs_device_validation")
+        # a clean step carries no marker
+        self.assertNotIn("device_validation", kept[2])
+
+    def test_b1_keeps_plan_with_device_markers_under_device_context(self) -> None:
+        """Issue 5 end to end (heuristic): a bootstrap with device_context that
+        trips a device-boundary rule still returns a non-empty macro plan."""
+        agent = ResearchAgent(model=None, use_llm=False)
+        state = agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝类似物并通过 XRD 确认目标物相",
+            constraints={
+                "device_context": {
+                    "workstations": [
+                        {"station_name": "液体进样站", "usage_summary": "支持已装载原液加液"},
+                        {"station_name": "磁力搅拌工作站", "usage_summary": "固定转速搅拌"},
+                    ]
+                }
+            },
+        )
+
+        # plan is NOT cleared to manual_required over device-boundary doubts
+        self.assertEqual(state.status, "completed")
+        self.assertTrue(state.macro_plan)
+
+    def test_failure_category_classification(self) -> None:
+        """Issue 5: an empty macro plan carries an explicit failure category so
+        the UI can tell generation vs. quality vs. network vs. device apart."""
+        agent = ResearchAgent(model=None, use_llm=False)
+        self.assertEqual(
+            agent._classify_failure("macro plan quality check failed: 第 1 步"),
+            "macro_quality_error",
+        )
+        self.assertEqual(
+            agent._classify_failure("survey LLM failed: connection timed out"),
+            "network_or_retrieval_error",
+        )
+        self.assertEqual(
+            agent._classify_failure("could not parse JSON from response"),
+            "macro_generation_error",
+        )
+
     def test_b2_device_adaptation_retries_after_quality_gate_feedback(self) -> None:
         model = DeviceAdaptationRetryModel()
         agent = ResearchAgent(
@@ -542,6 +844,47 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertTrue(
             any("passed after quality-feedback retry" in log for log in state.logs)
         )
+
+    def test_temporal_addition_stirring_is_not_a_research_quality_block(self) -> None:
+        agent = ResearchAgent(model=None, use_llm=False)
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="合成 PBA",
+                constraints={
+                    "device_context": {
+                        "workstations": [
+                            {
+                                "station_name": "Liquid_Handling_Station_1ml_V2",
+                                "usage_summary": "支持加液",
+                            },
+                            {
+                                "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                                "usage_summary": "支持搅拌",
+                            },
+                        ]
+                    }
+                },
+            )
+        )
+        macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "共沉淀",
+                "试剂/对象": "A 液和 B 液",
+                "参数": "边滴入边搅拌 10 mL，30 min",
+            },
+            {
+                "步骤序号": 2,
+                "操作": "固定时间老化",
+                "试剂/对象": "反应悬浊液",
+                "参数": "室温静置老化 12 h",
+            },
+        ]
+
+        issues = agent._device_context_macro_quality_issues(state, macro_plan)
+
+        self.assertEqual(issues, [])
 
 
 if __name__ == "__main__":

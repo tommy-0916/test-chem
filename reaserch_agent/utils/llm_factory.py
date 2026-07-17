@@ -194,7 +194,10 @@ class LLMFactory:
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        temperature: float = 0.1,
+        # Issue 3 (repeatability): default to fully deterministic sampling so
+        # identical queries against an identical KB reproduce identical plans
+        # as far as the backend allows. Matches the device layer's default.
+        temperature: float = 0.0,
         **kwargs: Any,
     ) -> Any:
         LLMFactory.load_env()

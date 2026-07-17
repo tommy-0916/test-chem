@@ -1,0 +1,2610 @@
+{
+  "steps": [
+    {
+      "step_number": 1,
+      "workstation": "303物料-耐热",
+      "operation": "容器拿取",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "50ml耐热瓶": {
+              "min": 1,
+              "max": 50
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 2,
+      "workstation": "303物料站",
+      "operation": "物料拿取",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "西林瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 60
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 3,
+      "workstation": "X射线衍射仪_V1",
+      "operation": "XRD滴液检测全流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "XRD基底片",
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "XRD基底片": {
+              "min": 1,
+              "max": 40
+            },
+            "进样瓶": {
+              "min": 0,
+              "max": 40
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "步长",
+          "unit": "°",
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "扫描速度",
+          "unit": "°/min",
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "滴液体积",
+          "unit": "μL",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "静置晾干时间",
+          "unit": "s",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 4,
+      "workstation": "光催化工作站_V1",
+      "operation": "光催化流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "西林瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "西林瓶": {
+              "min": 1,
+              "max": 20
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "位置",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "时间",
+          "unit": "min",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 5,
+      "workstation": "光催化工作站_V2",
+      "operation": "光催化流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "孔板编号",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "光催化文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 6,
+      "workstation": "光照压膜工作站_V1",
+      "operation": "光照压膜拍照流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "孔板编号",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "光催化文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 7,
+      "workstation": "光照压膜工作站_V1",
+      "operation": "光催化拍照流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "孔板编号",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "光催化文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 8,
+      "workstation": "冷却工作站_V1",
+      "operation": "冷却流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "冷却温度",
+          "unit": "℃",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 9,
+      "workstation": "加热磁力搅拌工作站_V1",
+      "operation": "加热磁力搅拌全流程",
+      "parameters": [
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "目标温度",
+          "unit": "℃",
+          "type": "float",
+          "default_value": null
+        },
+        {
+          "parameter_name": "搅拌速度",
+          "unit": "rpm",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加热时间",
+          "unit": "min",
+          "type": "float",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 10,
+      "workstation": "十通道磁力搅拌_V1",
+      "operation": "开始搅拌",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "搅拌速度",
+          "unit": "r/min",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "搅拌时间",
+          "unit": "min",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 11,
+      "workstation": "单通道固体称量_v1",
+      "operation": "固体进样",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开门位置",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "关门位置",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "进样质量",
+          "unit": "g",
+          "type": "float",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 12,
+      "workstation": "双工位电化学_V2",
+      "operation": "电化学检测",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "西林瓶类型",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "选择电解池",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "移液枪滴涂时间间隔",
+          "unit": "秒",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "移液枪滴涂次数",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "碳纸晾干设置",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "碳纸晾干温度",
+          "unit": "摄氏度",
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "液体填充",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务一",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务二",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务三",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务四",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务五",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务六",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务七",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务八",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务九",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "电化学任务十",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "测试模板",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 13,
+      "workstation": "四通道移液平台_V1",
+      "operation": "液体加样",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 2
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "参数设置",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 14,
+      "workstation": "多通道固体称量_V1",
+      "operation": "固体进样-文件传参-机器人",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "西林瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 20
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "上传文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 15,
+      "workstation": "孔板转运AGV_V1",
+      "operation": "光催化压膜转运",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 16,
+      "workstation": "孔板转运AGV_V1",
+      "operation": "放置96孔板",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 17,
+      "workstation": "智能光催化置物平台_V1",
+      "operation": "回收96孔板和氢气膜",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 20
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 18,
+      "workstation": "智能光催化置物平台_V1",
+      "operation": "回收96孔板",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 20
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 19,
+      "workstation": "暗箱拍摄工作站_V1",
+      "operation": "暗箱光照流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "暗箱拍摄参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 20,
+      "workstation": "气液传质_接触角_张力仪_V1",
+      "operation": "接触角-张力仪实验-迭代",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "测试架"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "测试架": {
+              "min": 1,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "碳纸坐标",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "转台放置位置编号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "液体体积",
+          "unit": "mL",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "碳纸编号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "模版名字",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "碳纸文件编号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 21,
+      "workstation": "气液传质_高速摄像_V1",
+      "operation": "多样品测试-无活化",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "测试架"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "测试架": {
+              "min": 1,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "曝光时间",
+          "unit": "s",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "帧率",
+          "unit": "FPS",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "拍照时间",
+          "unit": "s",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "相机延迟时间",
+          "unit": "s",
+          "type": "float",
+          "default_value": null
+        },
+        {
+          "parameter_name": "自定义指定获取的帧数",
+          "unit": "FPS",
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "前后多少帧",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "拿取实验碳纸编号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "是否触发",
+          "unit": null,
+          "type": "boolean",
+          "default_value": null
+        },
+        {
+          "parameter_name": "测试程序上传地址",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 22,
+      "workstation": "气相色谱仪_V1",
+      "operation": "气相分析流程",
+      "parameters": [
+        {
+          "parameter_name": "新建方法文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开始分析行号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "BatchFile",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        },
+        {
+          "parameter_name": "batchFile使用次数",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 23,
+      "workstation": "气相色谱仪_V1",
+      "operation": "开启算法优化",
+      "parameters": [
+        {
+          "parameter_name": "模型优化最大次数",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "样本浓度",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 24,
+      "workstation": "气相色谱仪_V1",
+      "operation": "算法优化",
+      "parameters": [
+        {
+          "parameter_name": "最终结果文件前缀",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 25,
+      "workstation": "液相色谱仪_V1",
+      "operation": "液相分析-无机器人",
+      "parameters": [
+        {
+          "parameter_name": "新建方法",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开始分析行号",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "BatchFile",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 26,
+      "workstation": "液相色谱仪_V1",
+      "operation": "开启算法优化",
+      "parameters": [
+        {
+          "parameter_name": "模型优化最大次数",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "样本浓度",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 27,
+      "workstation": "烘干机_V1",
+      "operation": "烘干主流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "恒温温度",
+          "unit": "℃",
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "烘干时间",
+          "unit": "min",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 28,
+      "workstation": "电催化置物平台_V1",
+      "operation": "静置",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶",
+            "西林瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "静置时间",
+          "unit": "min",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 29,
+      "workstation": "电催化置物平台_V1",
+      "operation": "物料放置",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶",
+            "西林瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 30,
+      "workstation": "离心机_V1",
+      "operation": "离心-复位机制",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 2,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "转速",
+          "unit": "r/min",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "离心时间",
+          "unit": "min",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "位置",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 31,
+      "workstation": "移液平台1ml_V1",
+      "operation": "开盖",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "96孔板",
+            "西林瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开盖的瓶号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "保留瓶盖",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 32,
+      "workstation": "移液平台1ml_V1",
+      "operation": "关盖-离心管",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "96孔板",
+            "西林瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "关盖的瓶号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 33,
+      "workstation": "移液平台1ml_V1",
+      "operation": "加液_物料绑定",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "96孔板",
+            "西林瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加样方案",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 34,
+      "workstation": "移液平台1ml_V2",
+      "operation": "开盖-离心管",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开盖编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "保留瓶盖",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 35,
+      "workstation": "移液平台1ml_V2",
+      "operation": "关盖-离心管",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "关盖编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 36,
+      "workstation": "移液平台1ml_V2",
+      "operation": "加液_物料绑定",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加样方案",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 37,
+      "workstation": "移液平台1ml_V3",
+      "operation": "开盖",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开盖编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "保留瓶盖",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 38,
+      "workstation": "移液平台1ml_V3",
+      "operation": "关盖",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "关盖编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 39,
+      "workstation": "移液平台1ml_V3",
+      "operation": "加液-文件传参",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加液配置文件",
+          "unit": null,
+          "type": "file",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 40,
+      "workstation": "移液平台1ml_V3",
+      "operation": "加液_物料绑定",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加样方案",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 41,
+      "workstation": "移液平台5ml_V1",
+      "operation": "加液_物料绑定",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "加样方案",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 42,
+      "workstation": "移液平台5ml_V2",
+      "operation": "开盖",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "开盖瓶号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "是否保留瓶盖",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 43,
+      "workstation": "移液平台5ml_V2",
+      "operation": "关盖",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "关盖瓶号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 44,
+      "workstation": "移液平台5ml_V2",
+      "operation": "纯移液",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "移液方案",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 45,
+      "workstation": "紫外可见光谱仪_V1",
+      "operation": "紫外光谱进样绘图",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 46,
+      "workstation": "红外光谱仪_V1",
+      "operation": "谱学红外流程-夹具识别",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "红外基底片",
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "红外基底片": {
+              "min": 0,
+              "max": 10
+            },
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "滴液体积",
+          "unit": "μL",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "静置晾干时间",
+          "unit": "s",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 47,
+      "workstation": "纯化工作站_V1",
+      "operation": "纯化离心",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            ";留样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 20
+            },
+            ";留样瓶": {
+              "min": 0,
+              "max": 20
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "方案",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "时间",
+          "unit": "分钟",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "速度",
+          "unit": "r/min",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "清洗次数",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "清洗液设置",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "自动设置加液状态",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "手动设置加液量",
+          "unit": "mL",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "是否保留清洗液",
+          "unit": null,
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "保留清洗液参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 48,
+      "workstation": "荧光光谱仪_V1",
+      "operation": "荧光光谱进样绘图",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 1,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "光谱测定参数",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "激发光波长",
+          "unit": "nm",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "发射波开始波长",
+          "unit": "nm",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "发射波结束波长",
+          "unit": "nm",
+          "type": "int",
+          "default_value": null
+        },
+        {
+          "parameter_name": "数据间隔",
+          "unit": "nm",
+          "type": "string",
+          "default_value": null
+        },
+        {
+          "parameter_name": "扫描速度",
+          "unit": "nm/min",
+          "type": "string",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 49,
+      "workstation": "谱学磁力搅拌_V1",
+      "operation": "样品架放置-夹具识别",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 20
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 50,
+      "workstation": "谱学置物平台_V1",
+      "operation": "容器中转",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "96孔板",
+            "液相54孔板",
+            "50ml耐热瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            },
+            "液相54孔板": {
+              "min": 0,
+              "max": 1
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 51,
+      "workstation": "超声分散仪_V1",
+      "operation": "超声清洗",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 1,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "清洗时间",
+          "unit": "秒",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 52,
+      "workstation": "超声分散仪_V2",
+      "operation": "超声清洗",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "进样瓶",
+            "50ml耐热瓶",
+            "西林瓶"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "进样瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "50ml耐热瓶": {
+              "min": 0,
+              "max": 10
+            },
+            "西林瓶": {
+              "min": 0,
+              "max": 10
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "清洗时间",
+          "unit": "秒",
+          "type": "int",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 53,
+      "workstation": "超声移液平台_V1",
+      "operation": "超声加液流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 2
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 54,
+      "workstation": "酶标仪_V1",
+      "operation": "酶标仪303谱学流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 1,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "模板文件选择",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "结果文件名",
+          "unit": null,
+          "type": "string",
+          "default_value": null
+        }
+      ]
+    },
+    {
+      "step_number": 55,
+      "workstation": "马弗炉_V1",
+      "operation": "马弗炉加热流程",
+      "parameters": [
+        {
+          "parameter_name": "容器类型",
+          "unit": null,
+          "type": "string",
+          "options": [
+            "96孔板"
+          ],
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器数量",
+          "unit": null,
+          "type": "int",
+          "range": {
+            "96孔板": {
+              "min": 0,
+              "max": 1
+            }
+          },
+          "default_value": null
+        },
+        {
+          "parameter_name": "容器编号",
+          "unit": null,
+          "type": "array",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        },
+        {
+          "parameter_name": "配置参数",
+          "unit": null,
+          "type": "object",
+          "default_value": null
+        }
+      ]
+    }
+  ]
+}

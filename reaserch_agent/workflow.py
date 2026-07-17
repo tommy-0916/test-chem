@@ -38,6 +38,7 @@ from .prompts import (
 )
 from .state import ResearchAgentState, ResearchEvent, SearchHit
 from .tools import KnowledgeQuery, MemoryQuery, ensure_device_context
+from .tools.query_sanitizer import sanitize_search_queries
 from .tools.web_tool import WebToolExecutor
 from .utils import LLMFactory
 
@@ -67,22 +68,23 @@ DEVICE_ADAPTATION_UNSUPPORTED_CLOSURE_TERMS = [
     "直至上清",
     "干燥至",
     "无明显游离水",
-    "缓慢滴加",
-    "控速滴加",
-    "同步搅拌",
 ]
-DEVICE_CONTEXT_UNSUPPORTED_MACRO_TERMS = [
+# These phrases describe the desired temporal order of a reaction, not a
+# workstation capability that must be implemented atomically.  The device
+# layer can preserve the intent with an interleaved batch schedule.
+DEVICE_ADAPTATION_TEMPORAL_ADAPTATION_TERMS = [
     "持续磁力搅拌条件下加入",
     "持续磁力搅拌下加入",
     "边搅拌边加入",
     "边搅拌边滴加",
     "同步搅拌加液",
     "同步加液",
-    "控速滴加",
     "缓慢滴加",
-    "室温静置老化",
-    "静置老化",
-    "独立静置老化",
+    "控速滴加",
+    "滴入并搅拌",
+    "滴加并搅拌",
+]
+DEVICE_CONTEXT_UNSUPPORTED_MACRO_TERMS = [
     "干燥至",
     "洗涤至",
     "质量变化不明显",
@@ -96,6 +98,24 @@ PARAMETER_DETAIL_RE = re.compile(
     r"开盖|关盖|半开盖|盖子|留固|上清)",
     re.IGNORECASE,
 )
+
+
+def _has_temporal_addition_stirring_semantics(text: str) -> bool:
+    """Return whether text asks for addition and stirring in one time span."""
+    normalized = str(text or "").lower()
+    if any(term.lower() in normalized for term in DEVICE_ADAPTATION_TEMPORAL_ADAPTATION_TERMS):
+        return True
+    return bool(
+        re.search(
+            r"(?:边|持续|同步).{0,10}(?:搅拌|磁力搅拌).{0,18}(?:加入|加液|滴加|滴入)",
+            normalized,
+        )
+        or re.search(
+            r"(?:加入|加液|滴加|滴入).{0,18}(?:边|持续|同步).{0,10}(?:搅拌|磁力搅拌)",
+            normalized,
+        )
+        or re.search(r"(?:滴加|滴入).{0,12}(?:过程中|同时).{0,12}搅拌", normalized)
+    )
 
 
 class ResearchAgent(BaseAgent):
@@ -612,6 +632,18 @@ class ResearchAgent(BaseAgent):
                 state.reference_inputs,
             )
             state.seed_papers = list(summary.get("seeds", []))
+            # Issue 3: persist the auditable acquisition record (actual search
+            # query + candidate set + filter verdicts) into the state file.
+            state.literature_acquisition = {
+                "keyword_query": summary.get("keyword_query", ""),
+                "keyword_sources": summary.get("keyword_sources", []),
+                "candidates_log": summary.get("candidates_log", []),
+                "snowball_kept": summary.get("snowball_kept", 0),
+                "keyword_kept": summary.get("keyword_kept", 0),
+                "web_kept": summary.get("web_kept", 0),
+                "newly_registered": summary.get("newly_registered", 0),
+                "errors": summary.get("errors", []),
+            }
             state.add_log(
                 "literature acquisition completed: "
                 f"seeds={len(summary.get('seeds', []))}, "
@@ -770,6 +802,299 @@ class ResearchAgent(BaseAgent):
         except Exception as exc:  # pragma: no cover - must not break planning
             state.add_error(f"macro plan source annotation failed: {exc}")
 
+    def _build_macro_action_view(self, state: ResearchAgentState) -> None:
+        """Make the observation-point -> macro-action -> device-step hierarchy explicit.
+
+        Issue 6: a macro action must be an observation-point-driven unit with an
+        objective and a completion condition, not an unlabelled step list under a
+        stage. This is additive - it derives a structured `macro_action` descriptor
+        from existing stage/observation-point state and stamps each macro step with
+        `macro_action_id` + `observation_point_id` (alongside `来源`) so device
+        steps produced downstream can be traced back to the observation they serve.
+        The 4 Chinese handoff contract keys are untouched.
+        """
+        try:
+            if not state.macro_plan:
+                state.macro_action = {}
+                return
+            observation_point = self._infer_current_observation_point(state)
+            observation_point_id = self._observation_point_id(observation_point)
+            stage_index = self._current_stage_index(state)
+            # Round index (how many observations already returned) disambiguates
+            # multiple macro actions produced within one stage across B2 turns.
+            round_index = len(state.observations)
+            macro_action_id = f"MA_S{stage_index:02d}_R{round_index:02d}"
+            completion_condition = self._extract_completion_condition(
+                state, observation_point
+            )
+            objective = (
+                str(state.current_stage).strip()
+                or "推进当前实验段到目标观测点"
+            )
+
+            step_numbers: List[Any] = []
+            for step in state.macro_plan:
+                if not isinstance(step, dict):
+                    continue
+                # Unconditional: a new planning round is a new macro action
+                # instance, so carried-over steps must not keep a stale id.
+                step["macro_action_id"] = macro_action_id
+                step["observation_point_id"] = observation_point_id
+                step_numbers.append(step.get("步骤序号"))
+
+            descriptor = {
+                "macro_action_id": macro_action_id,
+                "observation_point_id": observation_point_id,
+                "observation_point": observation_point,
+                "stage": state.current_stage,
+                "stage_index": stage_index,
+                "objective": objective,
+                "completion_condition": completion_condition,
+                "expected_observation": (
+                    f"获得 {observation_point} 的有效结果" if observation_point else ""
+                ),
+                "macro_step_numbers": step_numbers,
+            }
+            state.macro_action = descriptor
+
+            # Keep a compact per-turn history so a stage can hold several macro
+            # actions and each observation can update the right one.
+            history_entry = {
+                key: descriptor[key]
+                for key in (
+                    "macro_action_id",
+                    "observation_point_id",
+                    "observation_point",
+                    "stage",
+                    "completion_condition",
+                )
+            }
+            if not state.macro_action_history or (
+                state.macro_action_history[-1].get("macro_action_id")
+                != macro_action_id
+            ):
+                state.macro_action_history.append(history_entry)
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"macro action view build failed: {exc}")
+
+    def _plan_signature(self, plan: List[Dict[str, Any]]) -> str:
+        """Stable fingerprint of a macro plan's operations + core parameters.
+
+        Issue 4: two plans with the same operation sequence and the same key
+        numeric conditions are "the same route" for convergence purposes, even
+        if wording differs. Used to detect regeneration of an already-failed
+        plan before it is handed to the device layer again.
+        """
+        import hashlib
+
+        tokens: List[str] = []
+        for step in plan or []:
+            if not isinstance(step, dict):
+                continue
+            operation = re.sub(r"\s+", "", str(step.get("操作", "")))
+            obj = re.sub(r"\s+", "", str(step.get("试剂/对象", "")))
+            params = str(step.get("参数", ""))
+            # Keep numbers + units, drop prose, so "700 rpm 120 min" is stable.
+            numeric = "".join(
+                re.findall(r"\d+(?:\.\d+)?\s*(?:mol|mmol|mg|ml|rpm|min|h|c|℃|v|m)?", params.lower())
+            )
+            tokens.append(f"{operation}|{obj}|{numeric}")
+        blob = "\n".join(tokens)
+        return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
+
+    def _record_failed_plan_signature(
+        self,
+        state: ResearchAgentState,
+        plan: List[Dict[str, Any]],
+        reasons: List[str],
+    ) -> None:
+        """Remember a device-rejected plan so it is not regenerated (issue 4)."""
+        try:
+            if not plan:
+                return
+            signature = self._plan_signature(plan)
+            for entry in state.failed_plan_signatures:
+                if isinstance(entry, dict) and entry.get("signature") == signature:
+                    return  # already recorded
+            plan_id = f"plan_v{len(state.failed_plan_signatures) + 1}"
+            state.failed_plan_signatures.append(
+                {
+                    "plan_id": plan_id,
+                    "signature": signature,
+                    "reasons": [str(r) for r in (reasons or [])][:6],
+                    "step_count": len(plan),
+                }
+            )
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"failed plan signature record failed: {exc}")
+
+    def _plan_matches_failed_signature(
+        self,
+        state: ResearchAgentState,
+        plan: List[Dict[str, Any]],
+    ) -> str:
+        """Return the failed plan_id when ``plan`` repeats a rejected route."""
+        try:
+            if not plan or not state.failed_plan_signatures:
+                return ""
+            signature = self._plan_signature(plan)
+            for entry in state.failed_plan_signatures:
+                if isinstance(entry, dict) and entry.get("signature") == signature:
+                    return str(entry.get("plan_id", "unknown"))
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"plan repetition check failed: {exc}")
+        return ""
+
+    def _accumulate_device_constraints(
+        self,
+        state: ResearchAgentState,
+        reasons: List[str],
+    ) -> None:
+        """Append new blocking constraints to the campaign-level set (issue 4).
+
+        A new re-planning round must satisfy ALL constraints ever returned, not
+        only the latest error, so we keep a de-duplicated cumulative list.
+        """
+        try:
+            existing = {c.strip() for c in state.cumulative_device_constraints}
+            for reason in reasons or []:
+                text = str(reason).strip()
+                if text and text not in existing:
+                    state.cumulative_device_constraints.append(text)
+                    existing.add(text)
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"cumulative device constraint update failed: {exc}")
+
+    def _record_macro_action_outcome(self, state: ResearchAgentState) -> None:
+        """Update the in-flight macro action's outcome from the new observation.
+
+        Issue 6: an observation resolves the *macro action* it was produced
+        for, not the whole stage. Before the next macro-action view is built,
+        stamp the previous descriptor (still in state.macro_action) with a
+        per-macro-action outcome derived from the B2 fit/repair signals.
+        """
+        try:
+            previous = state.macro_action if isinstance(state.macro_action, dict) else {}
+            previous_id = str(previous.get("macro_action_id", "")).strip()
+            if not previous_id:
+                return
+
+            repair_path = str(state.post_observation_repair_path or "").strip()
+            fit = state.observation_stage_fit if isinstance(state.observation_stage_fit, dict) else {}
+            fit_status = str(fit.get("status", "")).strip().lower()
+
+            if repair_path == "device_adaptation":
+                outcome = "device_rejected"
+            elif repair_path in {"stage_internal", "current_stage", "stage_route"}:
+                outcome = "needs_repair"
+            elif repair_path == "normal_progress":
+                outcome = "completed"
+            elif fit_status == "abnormal":
+                outcome = "needs_repair"
+            else:
+                outcome = "completed"
+
+            latest = state.latest_observation if isinstance(state.latest_observation, dict) else {}
+            observation_summary = str(latest.get("summary", ""))[:200]
+
+            updated = False
+            for entry in state.macro_action_history:
+                if isinstance(entry, dict) and entry.get("macro_action_id") == previous_id:
+                    entry.update(
+                        {
+                            "outcome": outcome,
+                            "repair_path": repair_path or "normal",
+                            "observed": observation_summary,
+                        }
+                    )
+                    updated = True
+                    break
+            if not updated:
+                state.macro_action_history.append(
+                    {
+                        "macro_action_id": previous_id,
+                        "observation_point_id": str(previous.get("observation_point_id", "")),
+                        "observation_point": str(previous.get("observation_point", "")),
+                        "stage": str(previous.get("stage", "")),
+                        "outcome": outcome,
+                        "repair_path": repair_path or "normal",
+                        "observed": observation_summary,
+                    }
+                )
+        except Exception as exc:  # pragma: no cover - must not break planning
+            state.add_error(f"macro action outcome record failed: {exc}")
+
+    def _current_stage_index(self, state: ResearchAgentState) -> int:
+        try:
+            if state.current_stage and state.current_stage in state.stage_route:
+                return state.stage_route.index(state.current_stage) + 1
+        except Exception:
+            pass
+        return 1
+
+    def _infer_current_observation_point(self, state: ResearchAgentState) -> str:
+        """The observation point that ends the current macro action."""
+        observations = self._infer_observation_points(
+            state.event.query, state.survey_report
+        )
+        # Prefer the observation named in the current stage TITLE. The stage
+        # plan prose often references prior observations (e.g. "based on the
+        # earlier XRD result"), so matching the plan text would leak the wrong
+        # observation into a later stage.
+        stage_name = str(state.current_stage or "")
+        for observation in observations:
+            if observation and observation.lower() in stage_name.lower():
+                return observation
+        # Else map by stage position in the observation-ordered route.
+        if observations:
+            index = min(self._current_stage_index(state) - 1, len(observations) - 1)
+            if index >= 0:
+                return observations[index]
+        # Else fall back to matching the fuller stage plan text.
+        stage_text = f"{stage_name} {state.current_stage_plan}"
+        for observation in observations:
+            if observation and observation.lower() in stage_text.lower():
+                return observation
+        # Else pull an explicit observation phrase out of the stage plan prose.
+        match = re.search(
+            r"(?:目标\s*observation\s*point|目标观测点|目标观察点)[：: ]*([^\n。；;]{2,40})",
+            state.current_stage_plan,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip()
+        return "首次结果观察"
+
+    @staticmethod
+    def _observation_point_id(observation_point: str) -> str:
+        text = str(observation_point or "").strip()
+        if not text:
+            return "OP_unknown"
+        ascii_slug = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+        if ascii_slug and re.search(r"[A-Za-z0-9]", ascii_slug):
+            return f"OP_{ascii_slug[:24]}"
+        # CJK-only label: keep a short readable form.
+        return f"OP_{text[:12]}"
+
+    def _extract_completion_condition(
+        self,
+        state: ResearchAgentState,
+        observation_point: str,
+    ) -> str:
+        plan = state.current_stage_plan or ""
+        patterns = [
+            r"(?:stage\s*)?completion\s*condition[：: ]*([^\n。；;]{2,80})",
+            r"(?:stage\s*)?完成条件[：: ]*([^\n。；;]{2,80})",
+            r"(?:收尾|结束|终止)条件[：: ]*([^\n。；;]{2,80})",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, plan, re.IGNORECASE)
+            if match and match.group(1).strip():
+                return match.group(1).strip()
+        if observation_point:
+            return f"获得 {observation_point} 的有效结果并可判读"
+        return "获得当前阶段目标观测结果"
+
     def _collect_evidence_refs(self, state: ResearchAgentState) -> List[str]:
         refs: List[str] = []
         for step in state.macro_plan:
@@ -926,6 +1251,7 @@ class ResearchAgent(BaseAgent):
             state.current_stage_plan = macro_design["current_stage_plan"]
             state.macro_plan = macro_design["macro_plan"]
             self._annotate_macro_plan_sources(state)
+            self._build_macro_action_view(state)
 
             state.persistent_outputs = state.research_layer_internal_outputs()
             state.device_adaptation_handoff = state.device_adaptation_external_handoff()
@@ -954,6 +1280,7 @@ class ResearchAgent(BaseAgent):
             logger.exception("B1 bootstrap failed")
             state.add_error(f"B1 bootstrap failed: {exc}")
             state.status = "manual_required"
+            state.failure_category = self._classify_failure(exc)
             state.current_branch = "B1"
             state.next_branch = "B8"
             state.route_message = "bootstrap unresolved; manual intervention required"
@@ -1266,6 +1593,32 @@ class ResearchAgent(BaseAgent):
             original_stage_plan,
         )
         state.macro_plan = macro_design["macro_plan"]
+        # Issue 4: never hand the device layer a plan whose signature already
+        # failed. Detection is deterministic; in LLM mode one forced retry with
+        # an explicit prohibition is attempted before the warning is recorded.
+        repeated_plan_id = self._plan_matches_failed_signature(state, state.macro_plan)
+        if repeated_plan_id and self._use_llm:
+            state.add_log(
+                f"regenerated plan repeats failed {repeated_plan_id}; forcing one "
+                "regeneration with an explicit prohibition"
+            )
+            retry_design = self._step_device_adaptation_macro_plan_design(
+                state,
+                original_stage_plan
+                + f"\n注意：不得重复已失败方案 {repeated_plan_id} 的容器路径、操作序列和关键参数。",
+            )
+            if retry_design.get("macro_plan"):
+                state.macro_plan = retry_design["macro_plan"]
+                repeated_plan_id = self._plan_matches_failed_signature(
+                    state, state.macro_plan
+                )
+        if repeated_plan_id:
+            warning = (
+                f"新 macro plan 与已失败方案 {repeated_plan_id} 的关键路线相同，"
+                "继续下发大概率再次失败，建议人工检查累计设备约束。"
+            )
+            state.add_log(f"plan repetition warning: {warning}")
+            state.cumulative_device_constraints.append(warning)
         return self._complete_b2(
             state,
             "B2 post_observation completed with device-adaptation repair",
@@ -1300,7 +1653,9 @@ class ResearchAgent(BaseAgent):
         )
 
     def _complete_b2(self, state: ResearchAgentState, route_message: str) -> ResearchAgentState:
+        self._record_macro_action_outcome(state)
         self._annotate_macro_plan_sources(state)
+        self._build_macro_action_view(state)
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.last_completed_branch = "B2"
@@ -1471,6 +1826,25 @@ class ResearchAgent(BaseAgent):
             raw_feedback,
             payload,
         )
+        # Issue 4: campaign-level memory — every constraint the device layer
+        # has ever returned must be satisfied by future plans, and the plan
+        # that was just rejected is fingerprinted so it is not regenerated.
+        self._accumulate_device_constraints(state, blocking_reasons)
+        self._record_failed_plan_signature(
+            state,
+            state.previous_macro_plan or state.macro_plan,
+            blocking_reasons,
+        )
+        # Adopt the device layer's snapshot id so both layers reference the
+        # same device truth (issue 4: shared device_snapshot_id).
+        snapshot_id = str(
+            raw_feedback.get("device_snapshot_id")
+            or payload.get("device_snapshot_id")
+            or (error_package or {}).get("device_snapshot_id")
+            or ""
+        ).strip()
+        if snapshot_id:
+            state.device_snapshot_id = snapshot_id
         summary = (
             "设备适应层返回 feasibility_error：当前设备层不支持上一段 macro action 的执行。"
             f"主要原因：{'；'.join(blocking_reasons) if blocking_reasons else '设备层未给出具体原因'}。"
@@ -1489,6 +1863,13 @@ class ResearchAgent(BaseAgent):
                 "not_supported": not_supported,
             },
             "device_error_package": error_package,
+            "cumulative_device_constraints": list(state.cumulative_device_constraints),
+            "previous_failed_plan_ids": [
+                entry.get("plan_id")
+                for entry in state.failed_plan_signatures
+                if isinstance(entry, dict)
+            ],
+            "device_snapshot_id": state.device_snapshot_id,
             "previous_stage_context": {
                 "stage_route": state.stage_route,
                 "current_stage": state.current_stage,
@@ -1504,6 +1885,7 @@ class ResearchAgent(BaseAgent):
                 raw_feedback.get("request")
                 or payload.get("request")
                 or "请在保留当前科学目标的前提下，只修正化学路线级不可执行项；具体容器和工作站由 device agent 映射。"
+                " 新方案必须同时满足全部累计设备阻塞约束，且不得与已失败方案相同。"
             ).strip(),
             "raw_device_feedback": self._truncate_context_value(
                 {
@@ -1670,6 +2052,31 @@ class ResearchAgent(BaseAgent):
         message = f"{step_name} LLM failed without fallback: {reason}"
         state.add_log(message)
         raise RuntimeError(message)
+
+    @staticmethod
+    def _classify_failure(reason: Any) -> str:
+        """Issue 5: map a failure into an explicit, user-readable category.
+
+        Distinguishes an empty macro plan caused by the quality gate from one
+        caused by model generation, network/retrieval, or device feasibility,
+        so the UI never shows a bare "macro plan 为空".
+        """
+        text = str(reason).lower()
+        if "quality check failed" in text or "quality" in text and "macro" in text:
+            return "macro_quality_error"
+        if any(
+            token in text
+            for token in ("network", "timeout", "timed out", "connection", "retrieval", "http", "url")
+        ):
+            return "network_or_retrieval_error"
+        if "feasibility" in text or "device" in text and "infeasible" in text:
+            return "device_feasibility_error"
+        if any(
+            token in text
+            for token in ("empty macro_plan", "returned no", "did not return", "no usable", "json")
+        ):
+            return "macro_generation_error"
+        return "macro_generation_error"
 
     def _step_observation_stage_fit_judge(self, state: ResearchAgentState) -> Dict[str, Any]:
         if self._use_llm:
@@ -2242,6 +2649,8 @@ class ResearchAgent(BaseAgent):
             "- 将这些表达改成固定次数、固定体积、固定时间、固定温度、固定转速或离线 handoff。"
             "例如不要写“洗涤至上清液澄清”，应写“去离子水洗涤 3 次，每次使用固定体积”；"
             "不要写“干燥至无明显游离水”，应写“100 C 常压干燥 overnight”或固定小时数。\n"
+            "- ‘边滴入边搅拌/缓慢滴加/同步搅拌’属于可由 device agent 采用分批加液、批次间搅拌"
+            "和固定节拍近似保留的时间语义，不要因缺少单站原子化并行能力而删除；只有明确不可中断的连续流要求才需改写。\n"
             "- 仍然不要选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。\n"
             "- 只输出 JSON，字段必须仍为 current_stage_plan、macro_plan、macro_plan_summary。"
         )
@@ -2721,8 +3130,13 @@ class ResearchAgent(BaseAgent):
                     ),
                 )
                 state.raw_llm_outputs["survey_query_generate"] = result
-                queries = self._clean_queries(result.get("queries", []))
+                # Issue 1: task/device context (自动化/工作站/实验室编号…) must
+                # never reach literature search, whatever the LLM emitted.
+                queries = sanitize_search_queries(
+                    self._clean_queries(result.get("queries", []))
+                )
                 if queries:
+                    state.add_log(f"survey queries after sanitization: {queries}")
                     return queries
                 self._raise_llm_step_failure(
                     state,
@@ -2737,7 +3151,9 @@ class ResearchAgent(BaseAgent):
                     exc,
                 )
 
-        return self._heuristic_survey_queries(state.event.query, state.event.constraints)
+        queries = self._heuristic_survey_queries(state.event.query, state.event.constraints)
+        state.add_log(f"survey queries after sanitization: {queries}")
+        return queries
 
     def _normalize_fit_judge(self, result: Dict[str, Any]) -> Dict[str, Any]:
         status = str(result.get("status", "inconclusive")).strip().lower()
@@ -3587,7 +4003,9 @@ class ResearchAgent(BaseAgent):
                     ),
                 )
                 state.raw_llm_outputs.setdefault("survey_expansion", []).append(result)
-                cleaned_queries = self._clean_queries(result.get("new_queries", []))
+                cleaned_queries = sanitize_search_queries(
+                    self._clean_queries(result.get("new_queries", []))
+                )
                 return {
                     "continue_research": bool(result.get("continue_research")),
                     "new_queries": cleaned_queries,
@@ -3995,19 +4413,32 @@ class ResearchAgent(BaseAgent):
                         state,
                         result.get("current_stage_plan", "").strip(),
                     )
-                    quality_issues = self._macro_plan_quality_issues(
+                    core_issues = self._macro_plan_quality_issues(
                         macro_plan,
                         state.event.query,
                     )
-                    quality_issues.extend(
-                        self._device_context_macro_quality_issues(state, macro_plan)
+                    device_markers = self._device_context_macro_step_markers(
+                        state, macro_plan
                     )
-                    if not quality_issues:
+                    if not core_issues:
+                        # Issue 5: core chemistry quality is fine. Any remaining
+                        # device-boundary doubts become per-step markers and the
+                        # authoritative device layer judges them — never clear a
+                        # good plan over a single adaptation question.
+                        if device_markers:
+                            macro_plan = self._apply_device_validation_markers(
+                                macro_plan, device_markers
+                            )
+                            state.add_log(
+                                "macro plan kept with device-validation markers "
+                                f"on {len(device_markers)} step(s); device layer will judge"
+                            )
                         return {
                             "current_stage_plan": current_stage_plan,
                             "macro_plan": macro_plan,
                         }
-                    previous_issues = quality_issues[:5]
+                    previous_issues = core_issues[:5]
+                # Retries exhausted with unresolved CORE quality issues.
                 raise ValueError(
                     "macro plan quality check failed: "
                     + "; ".join(previous_issues[:5])
@@ -4033,31 +4464,42 @@ class ResearchAgent(BaseAgent):
             heuristic_design["macro_plan"],
             state.event.query,
         )
-        quality_issues.extend(
-            self._device_context_macro_quality_issues(
-                state,
-                heuristic_design["macro_plan"],
-            )
+        core_issues = list(quality_issues)
+        device_markers = self._device_context_macro_step_markers(
+            state, heuristic_design["macro_plan"]
         )
-        if quality_issues:
+        if core_issues:
             reference_plan = self._best_structured_reference_macro_plan(state)
             if reference_plan:
                 repaired_plan = self._ensure_macro_plan_reaches_observation(state, reference_plan)
                 repaired_issues = self._macro_plan_quality_issues(repaired_plan, state.event.query)
-                repaired_issues.extend(
-                    self._device_context_macro_quality_issues(state, repaired_plan)
-                )
                 if not repaired_issues:
                     state.add_log(
                         "macro plan quality check replaced coarse offline draft with structured "
-                        f"reference steps: {'; '.join(quality_issues[:3])}"
+                        f"reference steps: {'; '.join(core_issues[:3])}"
                     )
                     heuristic_design["macro_plan"] = repaired_plan
+                    device_markers = self._device_context_macro_step_markers(
+                        state, repaired_plan
+                    )
+                    if device_markers:
+                        heuristic_design["macro_plan"] = self._apply_device_validation_markers(
+                            heuristic_design["macro_plan"], device_markers
+                        )
                     return heuristic_design
 
             state.add_log(
                 "macro plan quality check warning: "
-                + "; ".join(quality_issues[:5])
+                + "; ".join(core_issues[:5])
+            )
+        # Issue 5: device-boundary doubts become per-step markers, not a verdict.
+        if device_markers:
+            heuristic_design["macro_plan"] = self._apply_device_validation_markers(
+                heuristic_design["macro_plan"], device_markers
+            )
+            state.add_log(
+                "macro plan kept with device-validation markers on "
+                f"{len(device_markers)} step(s); device layer will judge"
             )
         return heuristic_design
 
@@ -4445,15 +4887,19 @@ class ResearchAgent(BaseAgent):
                     + ", ".join(repeated_terms[:4])
                 )
 
-            if re.search(
-                r"(持续|同步|边).{0,8}(磁力搅拌|搅拌).{0,16}(加入|加液|滴加)",
+            # Addition while stirring is a temporal requirement.  It is
+            # adaptable by the device layer (aliquot -> stir -> aliquot), so
+            # it must not fail the research quality gate merely because no
+            # single workstation performs both actions atomically.  Keep a
+            # hard failure only for an explicitly non-interruptible feed.
+            if _has_temporal_addition_stirring_semantics(step_blob) and re.search(
+                r"(?:连续流|恒定流速|不可中断|不可拆分|微流控|泵控).{0,20}(?:加液|滴加|进料)"
+                r"|(?:加液|滴加|进料).{0,20}(?:连续流|恒定流速|不可中断|不可拆分|微流控|泵控)",
                 step_blob,
-            ) or re.search(
-                r"(加入|加液|滴加).{0,16}(持续|同步|边).{0,8}(磁力搅拌|搅拌)",
-                step_blob,
+                re.IGNORECASE,
             ):
                 issues.append(
-                    f"第 {index} 步要求同步搅拌加液；当前设备应改为顺序/分批加液后固定转速搅拌"
+                    f"第 {index} 步明确要求不可中断的连续进料；需要设备层确认连续流能力"
                 )
 
             if "称取" in step_blob and not re.search(r"外部|预配|已装载|原液", step_blob):
@@ -4472,6 +4918,56 @@ class ResearchAgent(BaseAgent):
                 )
 
         return issues
+
+    def _device_context_macro_step_markers(
+        self,
+        state: ResearchAgentState,
+        macro_plan: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Map device-boundary issues to per-step markers instead of a verdict.
+
+        Issue 5: a single device-adaptation doubt about one step must NOT clear
+        the whole plan. This returns ``[{step, issue, marker}]`` so the caller
+        can tag those steps ``needs_device_validation`` / ``adaptation_required``
+        and let the authoritative device layer judge, keeping every other step.
+        """
+        markers: List[Dict[str, Any]] = []
+        issues = self._device_context_macro_quality_issues(state, macro_plan)
+        for issue in issues:
+            match = re.match(r"第\s*(\d+)\s*步", issue)
+            step_index = int(match.group(1)) if match else 0
+            if "连续进料" in issue or "固体称量" in issue:
+                marker = "adaptation_required"
+            else:
+                marker = "needs_device_validation"
+            markers.append({"step": step_index, "issue": issue, "marker": marker})
+        return markers
+
+    def _apply_device_validation_markers(
+        self,
+        macro_plan: List[Dict[str, Any]],
+        markers: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Stamp per-step device-validation markers on the kept macro plan."""
+        by_step: Dict[int, List[Dict[str, Any]]] = {}
+        for marker in markers:
+            by_step.setdefault(int(marker.get("step", 0)), []).append(marker)
+        for index, step in enumerate(macro_plan, start=1):
+            if not isinstance(step, dict):
+                continue
+            step_markers = by_step.get(index, [])
+            if not step_markers:
+                continue
+            marker_value = (
+                "adaptation_required"
+                if any(m["marker"] == "adaptation_required" for m in step_markers)
+                else "needs_device_validation"
+            )
+            step["device_validation"] = marker_value
+            step["device_validation_note"] = "；".join(
+                str(m["issue"]) for m in step_markers
+            )[:300]
+        return macro_plan
 
     def _best_structured_reference_macro_plan(
         self,
@@ -4695,22 +5191,32 @@ class ResearchAgent(BaseAgent):
     def _heuristic_survey_queries(
         self, query: str, constraints: Dict[str, Any] | None = None
     ) -> List[str]:
-        base_queries = [
-            query,
-            f"{query} synthesis",
-            f"{query} key parameters",
-            f"{query} structure characterization",
-            f"{query} performance",
-        ]
-        if constraints:
-            joined_constraints = " ".join(f"{key} {value}" for key, value in constraints.items())
+        # Issue 1: search from the chemistry content only; the original query
+        # (kept intact in state) may carry automation/device task context.
+        chem_queries = sanitize_search_queries([query])
+        base = chem_queries[0] if chem_queries else ""
+        base_queries = [base] if base else []
+        if base:
+            base_queries += [
+                f"{base} synthesis",
+                f"{base} key parameters",
+                f"{base} structure characterization",
+                f"{base} performance",
+            ]
+        if constraints and base:
+            # device_context is machine-capability text — never a paper topic.
+            joined_constraints = " ".join(
+                f"{key} {value}"
+                for key, value in constraints.items()
+                if key not in {"device_context", "include_device_context"}
+            )
             if joined_constraints.strip():
-                base_queries.append(f"{query} {joined_constraints}")
+                base_queries.append(f"{base} {joined_constraints}")
 
         if "普鲁士蓝" not in query and "PBA" not in query.upper():
             base_queries.append("普鲁士蓝 类似物 合成")
 
-        return self._clean_queries(base_queries)[:6]
+        return sanitize_search_queries(self._clean_queries(base_queries))[:6]
 
     def _heuristic_survey_expansion(
         self,
@@ -4725,12 +5231,14 @@ class ResearchAgent(BaseAgent):
                 "reason": "已有知识已足够支撑初始 stage 设计。",
             }
 
-        candidate_queries = self._clean_queries(
-            [
-                f"{query} mechanism",
-                f"{query} optimization route",
-                f"{query} activation process",
-            ]
+        candidate_queries = sanitize_search_queries(
+            self._clean_queries(
+                [
+                    f"{query} mechanism",
+                    f"{query} optimization route",
+                    f"{query} activation process",
+                ]
+            )
         )
         return {
             "continue_research": bool(candidate_queries),

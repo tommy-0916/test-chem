@@ -25,6 +25,7 @@ EXIT_CODES = {
     "feasibility_deadlock": 4,
     "device_error": 5,
     "research_error": 6,
+    "scientific_review_required": 7,
 }
 
 

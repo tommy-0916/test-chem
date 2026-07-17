@@ -18,12 +18,15 @@ from orchestrator.execution_adapters import (
     RealExecutionAdapter,
 )
 from orchestrator.runner import (
+    APPROVAL_FILENAME,
     STOP_FEASIBILITY_DEADLOCK,
     STOP_GOAL_REACHED,
     STOP_MANUAL_REQUIRED,
     STOP_MAX_ITERATIONS,
+    STOP_REVIEW_REQUIRED,
     CampaignConfig,
     CampaignRunner,
+    package_requires_review,
 )
 
 MACRO_STEP = {
@@ -40,6 +43,22 @@ SUCCESS_PACKAGE = {
     "workflow_json": {"steps": [{"step_number": 1}, {"step_number": 2}]},
     "workflow_txt": "1. 第1步 物料站：...",
 }
+REVIEW_FLAGGED_PACKAGE = {
+    "status": "success",
+    "requires_scientific_review": True,
+    "workflow_json": {
+        "steps": [{"step_number": 1}, {"step_number": 2}],
+        "temporal_adaptations": [
+            {
+                "original_requirement": "边滴入边搅拌",
+                "execution_fidelity": "approximated",
+                "adaptation_schedule": "加液 -> 搅拌 -> 加液",
+                "requires_scientific_review": True,
+            }
+        ],
+    },
+    "workflow_txt": "1. 第1步 液体进样站：...",
+}
 FEASIBILITY_PACKAGE = {
     "status": "feasibility_error",
     "feedback_type": "device_feasibility_error",
@@ -50,6 +69,34 @@ FEASIBILITY_PACKAGE = {
     "macro_plan": {"huge": "echoed research handoff"},
     "feasibility_assessment": {"huge": "raw llm output"},
 }
+UNVERIFIABLE_PACKAGE = {
+    "status": "feasibility_error",
+    "feedback_type": "device_feasibility_error",
+    "error_package": {
+        "type": "needs_human_review",
+        "blocking_constraints": ["XRD 辐射源无法从真源证明满足"],
+        "constraint_classification": {
+            "hard": [],
+            "adaptable": [],
+            "unverifiable": ["XRD 辐射源无法从真源证明满足"],
+        },
+    },
+}
+
+
+class BoundaryCrossingAdapter(MockExecutionAdapter):
+    """Simulates a manual/listen/real adapter that reaches the lab boundary."""
+
+    name = "boundary"
+    real_lab_boundary = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    def execute(self, package: Dict[str, Any], iteration_dir: Path) -> Dict[str, Any]:
+        self.calls += 1
+        return super().execute(package, iteration_dir)
 
 
 class CountingMockAdapter(MockExecutionAdapter):
@@ -195,6 +242,35 @@ class CampaignRunnerTest(unittest.TestCase):
             self.assertNotIn("macro_plan", feasibility_payload)
             self.assertNotIn("feasibility_assessment", feasibility_payload)
 
+    def test_deadlock_reports_cumulative_constraints(self) -> None:
+        """Issue 4: on deadlock the campaign summary lists every device
+        constraint seen, not just the last error."""
+        with tempfile.TemporaryDirectory() as tmp:
+            error_a = dict(FEASIBILITY_PACKAGE)
+            error_a["error_package"] = {
+                "type": "physical_infeasible",
+                "blocking_constraints": ["容器不兼容：进样瓶无法进入马弗炉"],
+            }
+            error_b = dict(FEASIBILITY_PACKAGE)
+            error_b["error_package"] = {
+                "type": "physical_infeasible",
+                "blocking_constraints": ["单容器体积超过离心上限"],
+            }
+            steps = FakeSteps([PLAN_STATE], [error_a, error_b])
+            runner = make_runner(tmp, steps, deadlock_limit=2)
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_FEASIBILITY_DEADLOCK)
+            summary = json.loads(
+                (Path(result.campaign_dir) / "campaign_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            cumulative = summary["cumulative_device_constraints"]
+            self.assertIn("容器不兼容：进样瓶无法进入马弗炉", cumulative)
+            self.assertIn("单容器体积超过离心上限", cumulative)
+
     def test_manual_required_stops_loop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             steps = FakeSteps([PLAN_STATE, MANUAL_STATE], [SUCCESS_PACKAGE])
@@ -215,6 +291,117 @@ class CampaignRunnerTest(unittest.TestCase):
             self.assertEqual(result.stop_reason, STOP_MANUAL_REQUIRED)
             self.assertEqual(result.iterations_run, 0)
             self.assertEqual(len(steps.device_calls), 0)
+
+
+class ReviewGateTest(unittest.TestCase):
+    """Review finding 3: review-flagged success must not auto-dispatch."""
+
+    def test_package_requires_review_detection(self) -> None:
+        self.assertFalse(package_requires_review(SUCCESS_PACKAGE))
+        self.assertTrue(package_requires_review(REVIEW_FLAGGED_PACKAGE))
+        nested_only = {
+            "status": "success",
+            "workflow_json": {
+                "steps": [],
+                "temporal_adaptations": [{"requires_scientific_review": True}],
+            },
+        }
+        self.assertTrue(package_requires_review(nested_only))
+
+    def test_review_flagged_package_blocks_boundary_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = BoundaryCrossingAdapter()
+            steps = FakeSteps([PLAN_STATE], [REVIEW_FLAGGED_PACKAGE])
+            runner = make_runner(tmp, steps, adapter=adapter)
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_REVIEW_REQUIRED)
+            self.assertEqual(adapter.calls, 0)  # never reached the adapter
+            iteration_dir = Path(result.campaign_dir) / "iteration_01"
+            self.assertTrue(
+                (iteration_dir / "AWAITING_SCIENTIFIC_REVIEW.md").exists()
+            )
+
+    def test_approval_file_releases_review_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = BoundaryCrossingAdapter()
+            steps = FakeSteps(
+                [PLAN_STATE, CLOSURE_STATE], [REVIEW_FLAGGED_PACKAGE]
+            )
+            runner = make_runner(tmp, steps, adapter=adapter)
+            approval_dir = runner.campaign_dir / "iteration_01"
+            approval_dir.mkdir(parents=True, exist_ok=True)
+            (approval_dir / APPROVAL_FILENAME).write_text(
+                json.dumps({"approved": True, "approver": "郭老师"}),
+                encoding="utf-8",
+            )
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_GOAL_REACHED)
+            self.assertEqual(adapter.calls, 1)
+
+    def test_unapproved_approval_file_still_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = BoundaryCrossingAdapter()
+            steps = FakeSteps([PLAN_STATE], [REVIEW_FLAGGED_PACKAGE])
+            runner = make_runner(tmp, steps, adapter=adapter)
+            approval_dir = runner.campaign_dir / "iteration_01"
+            approval_dir.mkdir(parents=True, exist_ok=True)
+            (approval_dir / APPROVAL_FILENAME).write_text(
+                json.dumps({"approved": False, "approver": "郭老师"}),
+                encoding="utf-8",
+            )
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_REVIEW_REQUIRED)
+            self.assertEqual(adapter.calls, 0)
+
+    def test_mock_adapter_proceeds_but_records_pending_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = CountingMockAdapter()
+            steps = FakeSteps(
+                [PLAN_STATE, CLOSURE_STATE], [REVIEW_FLAGGED_PACKAGE]
+            )
+            runner = make_runner(tmp, steps, adapter=adapter)
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_GOAL_REACHED)
+            self.assertEqual(adapter.calls, 1)
+            summary = json.loads(
+                (Path(result.campaign_dir) / "campaign_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            review_entries = [
+                entry
+                for entry in summary["trace"]
+                if entry.get("phase") == "review_gate"
+            ]
+            self.assertEqual(len(review_entries), 1)
+            self.assertEqual(
+                review_entries[0]["status"], "pending_review_simulated_execution"
+            )
+
+    def test_unverifiable_error_goes_to_manual_not_replanning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = CountingMockAdapter()
+            steps = FakeSteps([PLAN_STATE], [UNVERIFIABLE_PACKAGE])
+            runner = make_runner(tmp, steps, adapter=adapter)
+
+            result = runner.run()
+
+            self.assertEqual(result.stop_reason, STOP_MANUAL_REQUIRED)
+            self.assertEqual(adapter.calls, 0)
+            # never fed back into research as a feasibility replan
+            self.assertEqual(len(steps.research_calls), 1)
+            iteration_dir = Path(result.campaign_dir) / "iteration_01"
+            self.assertTrue(
+                (iteration_dir / "AWAITING_CONDITION_REVIEW.md").exists()
+            )
 
 
 class ExecutionAdapterTest(unittest.TestCase):

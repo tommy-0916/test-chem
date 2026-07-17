@@ -20,7 +20,30 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from utils.paths import format_reference_path
 from utils.workstation_loader import WorkstationLoader
 
+from feasibility_rules import (
+    classify_feasibility_result,
+    has_temporal_addition_stirring as _has_temporal_addition_stirring,
+    json_text as _json_text,
+    soft_temporal_mapping_error as _soft_temporal_mapping_error,
+)
+from dispatch_formatter import DispatchCatalog, format_dispatch_payload
+from workflow_validator import WorkflowValidator
+
 logger = logging.getLogger(__name__)
+
+
+def _needs_temporal_mapping_retry(result: Dict[str, Any], handoff: Dict[str, Any]) -> bool:
+    """Success result whose self-check still complains about addition timing."""
+    if str(result.get("status", "")).strip().lower() != "success":
+        return False
+    if not _has_temporal_addition_stirring(handoff):
+        return False
+    self_check = result.get("device_self_check", {})
+    return bool(
+        isinstance(self_check, dict)
+        and re.search(r"fail|失败|不通过|未通过", _json_text(self_check))
+        and re.search(r"addition|加液|滴加|搅拌|节拍|同步", _json_text(self_check))
+    )
 
 
 SINGLE_DEVICE_SYSTEM_PROMPT = """
@@ -33,6 +56,22 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
 3. 你负责选择具体工作站、容器类型、容器编号、原液编号、开盖/关盖、分瓶/配平、重复洗涤、干燥和离线 handoff。
 4. 不再调用 pre-flow agent、workflow generator、verify agent、format translate agent；你一次性完成可行性判断和 workflow 生成。
 5. 只有当当前设备真源无法实现某个必要化学动作或强制科学条件时，才返回 device_feasibility_error。
+   先把 macro action 的每个实验参数分类，再决定它是不是阻塞：
+   - device_dispatch_field（设备下发字段）：真源参数表中存在同义字段，直接映射并严格取值；
+   - fixed_device_capability（固定设备能力）：设备固有且无需下发的能力（如 XRD 的辐射源、
+     环境常温），在 parameter_disposition 中说明依据，不作为阻塞；
+   - derived_process_constraint（可派生流程约束）：可以用多个受支持步骤组合实现的过程语义
+     （如“边滴入边搅拌”→分批加液+批次间搅拌，“缓慢滴加”→小份多次加液），必须派生实现并说明；
+   - offline_condition（离线条件）：设备外/人工完成的条件，写入 offline_handoffs；
+   - uncontrollable_mandatory（不可控强制条件）：真源既不能下发、不能派生、也没有固定能力
+     覆盖，且科学上必须满足——只有这一类才可能构成阻塞；若不确定是否满足，标记
+     requires_review=true 交人工审核，而不是直接判不可行。
+   仅仅“真源参数表中没有同名字段”绝不是 feasibility_error 的理由。
+   设备 Skill 的正确解释规则（三类参数）：Skill 中列出的设备和操作**默认存在且可正常运行**；
+   (1) 论文/Research 参考参数——说明实验依据，不一定需要下发；
+   (2) 设备固定参数——设备运行时自动采用（如 XRD 的辐射源、扫描起止角），你不填写，
+       也绝不能因为它们没有出现在可下发参数表中而判定设备不可行；
+   (3) 设备开放参数——Skill 参数表列出的字段，只有这一类需要你填写并严格满足取值范围。
 6. 不要因为 macro action 缺少容器编号、工作站名、原液瓶位、开盖/关盖、偶数进样瓶配平、重复洗涤子步骤而拒绝；这些都由你补全。
 7. 如果 macro action 明确把 XRD/PXRD/SEM/TEM/Raman/XAS 等写成离线 observation/handoff/数据回传，保留为 handoff note，不作为当前设备不可执行原因。
 8. 不要改变研究目标、目标材料、当前 stage 或目标 observation point。
@@ -41,6 +80,10 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
 11. 维护体积台账：每次加液、洗涤、去上清、保留清洗液、干燥前后都要避免让任一容器的液体体积超过当前工作站/容器真源限制。若宏观体积过大，优先等比例缩小体系或拆分到多个等价样品容器，并在 device_layer_adaptations 中说明；不能静默超限。
 12. 离心/纯化需要配平时，进入同一次离心的容器数量、容器类型和液体体积必须可配平。若使用配平瓶，配平瓶体积应与主样瓶接近；若无法配平，返回 device_feasibility_error。
 13. 保留化学上有意义的加料方式：若 macro action 明确要求滴加、缓慢加入、分批加入或给出加入速率，必须映射成设备支持的分批/多次加液或在 workflow 中记录可执行的近似节拍；不要擅自改成一次性加入，除非 macro action 明确允许。
+    “边滴入边搅拌/边搅拌边滴加/同步搅拌加液”默认是可适配的时间语义：若液体进样站和磁力搅拌站支持同一容器，
+    应生成“预搅拌 -> 小份加液 -> 固定时间搅拌 -> 重复 -> 最终搅拌”的交替节拍，并在 adaptations 中标明
+    `execution_fidelity=approximated`、原始要求和分批计划；不得仅因没有单站原子化并行动作就返回 feasibility_error。
+    只有明确要求不可中断的连续流/恒定流速/微流控进料，或不存在共享容器和合法转移路径时，才可返回 feasibility_error。
 14. 如果某个 macro action 会造成“反应/静置/暂存所需容器”与“后续离心/洗涤/干燥/测试所需容器”之间没有受支持的连续路径，不能通过更改容器名称、notes 解释或跳过转移来伪装可执行；必须返回 device_feasibility_error，并在 suggested_research_revision 中说明需要 research layer 改成可连续容器路径的化学语义路线。
 15. 成功输出前必须做一次内部设备自检：工作站/操作/参数受真源支持，容器类型连续，开盖/关盖状态合理，累计体积不超限，离心配平成立，workflow_txt 与 workflow_json 一致。自检不通过时先修复，无法修复时返回 device_feasibility_error。
 16. 输出必须是一个 JSON object，不要 Markdown，不要代码块。
@@ -109,6 +152,14 @@ SINGLE_DEVICE_TASK_PROMPT = """
         "notes": "可选说明"
       }}
     ],
+    "temporal_adaptations": [
+      {{
+        "original_requirement": "边滴入边搅拌",
+        "execution_fidelity": "approximated",
+        "adaptation_schedule": "预搅拌 -> 分批加液 -> 每批固定时间搅拌 -> 最终搅拌",
+        "requires_scientific_review": true
+      }}
+    ],
     "offline_handoffs": [
       {{
         "name": "离线 XRD observation",
@@ -130,7 +181,8 @@ SINGLE_DEVICE_TASK_PROMPT = """
       {{
         "macro_step": "步骤",
         "requirement": "必须能力",
-        "reason": "为什么真源不支持",
+        "constraint_category": "hard_capability_gap | unverifiable_condition",
+        "reason": "为什么真源不支持（写明缺失的工作站/转移路径/容量上限等硬证据；若只是无法证明满足，写 unverifiable_condition）",
         "missing_device_capability": "缺失能力",
         "suggested_research_revision": "给 research agent 的化学语义改写建议"
       }}
@@ -154,10 +206,13 @@ SINGLE_DEVICE_TASK_PROMPT = """
 - 离线 observation 可以放在 workflow_json.offline_handoffs，也可以在 workflow_txt 末尾写成“离线 handoff”，但不得伪造成设备内工作站。
 - 如果无法确定某个原液编号，自己分配编号并在 reagent_slot_plan 中说明。
 - 如果需要偶数容器配平，自己选择偶数容器并贯穿后续步骤。
+- 如果 macro action 含“边滴入边搅拌/边搅拌边滴加”等时间语义，优先在同一容器上交替调用液体进样站和磁力搅拌站；
+  `workflow_json.steps` 必须显式展开至少两批加液与批次间搅拌（或记录等价固定节拍），并在 `workflow_json.temporal_adaptations`
+  中保留 `original_requirement`、`execution_fidelity`、`adaptation_schedule` 和 `requires_scientific_review`。
 - 对每个容器编号建立隐式台账：容器类型、当前体积、是否带盖、当前样品用途。后续步骤使用该容器编号时必须与台账一致；如需换容器，必须加入真源支持的转移/重新取样步骤，否则不能换。
 - 对每个加液步骤检查单次加液量、累计体积和后续工作站体积限制。若宏观计划体积超过设备真源或接近不可执行边界，可以等比例缩小所有相关试剂体积以保持摩尔比/浓度关系，或拆分为多个并行样品瓶；必须在 device_layer_adaptations 中说明缩放或拆分理由。
 - 若进入离心/纯化工作站的样品需要配平，所有参与该次离心的容器应使用同一种容器类型，并具有接近的液体体积；不能只用低体积配平瓶去配高体积主样瓶。
-- 若 macro action 包含滴加、缓慢加入、分批加入、加入速率或时间依赖混合，workflow 必须体现为多次加液、分批加液或明确的可执行节拍。若设备真源不支持连续滴加，使用保守分批近似并说明；若分批近似也不可行，返回 device_feasibility_error。
+- 若 macro action 包含滴加、缓慢加入、分批加入、加入速率或时间依赖混合，workflow 必须体现为多次加液、分批加液或明确的可执行节拍。若设备真源不支持连续滴加，使用保守分批近似并说明；只有分批近似也不可行或原始要求明确不可中断时，才返回 device_feasibility_error。
 - 不要把“建议”“范围”“上限”当作可以贴边或超过的默认值；优先选择留有余量的参数。若必须贴近边界，必须在 feasibility/device_layer_adaptations 中解释为什么仍可执行。
 - 成功输出必须包含 device_self_check，且其中任一项为 fail 时不得返回 success；应先修改 workflow，若无法修改则返回 device_feasibility_error。
 """.strip()
@@ -202,13 +257,27 @@ class SingleDeviceAgent:
         *,
         use_new_format: bool = True,
         workstation_loader: Optional[WorkstationLoader] = None,
+        workflow_validator: Optional[WorkflowValidator] = None,
     ) -> None:
         self._model = model
         self._workstation_loader = workstation_loader or WorkstationLoader(
             use_new_format=use_new_format
         )
+        self._workflow_validator = workflow_validator or WorkflowValidator(
+            self._workstation_loader
+        )
+        self._dispatch_catalog = DispatchCatalog.load(self._workstation_loader)
         self._txt_format_reference = self._read_text(format_reference_path("txt"))
         self._json_format_reference = self._read_text(format_reference_path("json"))
+
+    def _device_snapshot_id(self) -> str:
+        loader = self._workstation_loader
+        if hasattr(loader, "snapshot_id"):
+            try:
+                return loader.snapshot_id()
+            except Exception:
+                return ""
+        return ""
 
     def run_state(
         self,
@@ -241,10 +310,18 @@ class SingleDeviceAgent:
         state.add_log("SingleDeviceAgent started")
         try:
             result = self._invoke_mapping(state)
+            result = self._retry_adaptable_feedback(state, result, research_handoff)
+            result = self._repair_validation_failures(state, result)
             state.raw_llm_output = result
             package = self._normalize_terminal_package(state, result)
             state.terminal_package = package
-            state.status = "feasibility_error" if package.get("status") == "feasibility_error" else "completed"
+            package_status = str(package.get("status", ""))
+            if package_status == "feasibility_error":
+                state.status = "feasibility_error"
+            elif package_status == "failed":
+                state.status = "failed"
+            else:
+                state.status = "completed"
             state.workflow_txt = str(package.get("workflow_txt", ""))
             workflow_json = package.get("workflow_json")
             state.workflow_json = workflow_json if isinstance(workflow_json, dict) else {}
@@ -275,7 +352,12 @@ class SingleDeviceAgent:
         }
         return json.dumps(focused, ensure_ascii=False)
 
-    def _invoke_mapping(self, state: SingleDeviceAgentState) -> Dict[str, Any]:
+    def _invoke_mapping(
+        self,
+        state: SingleDeviceAgentState,
+        *,
+        extra_instruction: str = "",
+    ) -> Dict[str, Any]:
         prompt = SINGLE_DEVICE_TASK_PROMPT
         replacements = {
             "{research_handoff_json}": json.dumps(
@@ -289,6 +371,15 @@ class SingleDeviceAgent:
         }
         for placeholder, value in replacements.items():
             prompt = prompt.replace(placeholder, value)
+        if _has_temporal_addition_stirring(state.research_handoff):
+            prompt += (
+                "\n\n## 时间语义适配提示（不是硬阻塞）\n"
+                "research macro action 包含加液与搅拌的重叠时间语义。先检查液体进样站和磁力搅拌站是否"
+                "共同接受同一容器；若接受，必须用同一容器的交替节拍实现，而不是返回 physical_infeasible。"
+                "至少规划两批：小份加液 -> 固定时间搅拌 -> 下一批加液，并记录原始要求、近似等级、节拍和需科学复核。"
+            )
+        if extra_instruction:
+            prompt += f"\n\n{extra_instruction}"
         messages = [
             SystemMessage(content=SINGLE_DEVICE_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
@@ -302,33 +393,194 @@ class SingleDeviceAgent:
             raise ValueError("single device LLM did not return a JSON object")
         return result
 
+    def _retry_adaptable_feedback(
+        self,
+        state: SingleDeviceAgentState,
+        result: Dict[str, Any],
+        research_handoff: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Give any non-hard feasibility complaint one adaptation retry.
+
+        The retry is generic: whatever the exact wording of the complaint, if
+        no hard capability gap is evidenced, the model is asked once more to
+        derive the requirement from supported steps (or dispose of it as a
+        fixed capability / offline condition) instead of rejecting the plan.
+        """
+        classification = classify_feasibility_result(result, research_handoff)
+        needs_retry = (
+            classification["is_error"] and classification["overall"] != "hard"
+        ) or _needs_temporal_mapping_retry(result, research_handoff)
+        if not needs_retry:
+            return result
+
+        complaints = classification["adaptable"] + classification["unverifiable"]
+        state.add_log(
+            "device feedback contained no hard capability gap "
+            f"(buckets: adaptable={len(classification['adaptable'])}, "
+            f"unverifiable={len(classification['unverifiable'])}); "
+            "retrying with derived-constraint instructions"
+        )
+        instruction = (
+            "## 强制重试要求\n"
+            "上一轮返回的 feasibility_error 中没有任何硬设备能力缺口证据"
+            "（缺失工作站/无转移路径/容器不兼容/容量超限/站点离线/明确不可中断连续流）。\n"
+            "被拒绝的原因是：\n"
+            + "\n".join(f"- {item}" for item in complaints[:6])
+            + "\n请重新检查真源并按下列优先级处理每一条原因，然后输出 success：\n"
+            "1. 若是过程/时间语义（如边滴入边搅拌、缓慢滴加、分批），在同一兼容容器上派生为"
+            "受支持步骤的组合（分批加液、批次间固定转速搅拌等），保持总量、顺序和近似总时长，"
+            "并在 workflow_json.temporal_adaptations 中写明 original_requirement、"
+            "execution_fidelity=approximated、adaptation_schedule 和 requires_scientific_review=true。\n"
+            "2. 若是设备固有能力（如仪器固定辐射源、常温环境），在 feasibility."
+            "device_layer_adaptations 中说明依据后按固定能力处理，不作为阻塞。\n"
+            "3. 若设备外可完成（送样、人工操作、外部预配），写入 workflow_json.offline_handoffs。\n"
+            "4. 只有确认存在硬设备能力缺口时才保留 feasibility_error，并在 blocking_constraints "
+            "中写明缺失的工作站/转移路径/容量等硬证据；无法证明满足但也无硬缺口的条件，"
+            "映射后在 temporal_adaptations 或 device_layer_adaptations 中标记 requires_scientific_review=true。"
+        )
+        try:
+            retry_result = self._invoke_mapping(state, extra_instruction=instruction)
+        except Exception as exc:  # pragma: no cover - remote model dependent
+            state.add_log(
+                f"adaptation retry failed; retaining original feedback: {exc}"
+            )
+            return result
+        if isinstance(retry_result, dict):
+            return retry_result
+        return result
+
+    def _repair_validation_failures(
+        self,
+        state: SingleDeviceAgentState,
+        result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """One self-repair round when strict dispatch validation fails."""
+        if str(result.get("status", "")).strip().lower() != "success":
+            return result
+        report = self._workflow_validator.validate(result.get("workflow_json"))
+        if report["status"] != "failed":
+            result.setdefault("dispatch_validation", report)
+            return result
+
+        state.add_log(
+            "strict dispatch validation failed "
+            f"({len(report['errors'])} errors); requesting one self-repair round"
+        )
+        stations_in_errors: List[str] = []
+        for step in (result.get("workflow_json") or {}).get("steps", []):
+            if isinstance(step, dict):
+                station = str(step.get("workstation", "")).strip()
+                if station and station not in stations_in_errors:
+                    stations_in_errors.append(station)
+        allowed_lines = []
+        for station in stations_in_errors[:8]:
+            allowed = self._workflow_validator.allowed_params_for(station)
+            if allowed:
+                allowed_lines.append(f"- {station} 可下发参数：{', '.join(allowed)}")
+        instruction = (
+            "## 下发参数修复要求\n"
+            "上一轮 workflow_json 未通过确定性下发参数校验，错误如下：\n"
+            + "\n".join(f"- {item}" for item in report["errors"][:12])
+            + (
+                "\n\n各工作站真源允许的参数字段：\n" + "\n".join(allowed_lines)
+                if allowed_lines
+                else ""
+            )
+            + "\n请只使用真源参数表中列出的工作站、操作和参数字段（保持真源中的层级字段名，"
+            "不要发明聚合字段），移除臆造字段，补全必填参数，并让数值落在真源允许范围内，"
+            "然后重新输出完整 JSON。"
+        )
+        try:
+            repaired = self._invoke_mapping(state, extra_instruction=instruction)
+        except Exception as exc:  # pragma: no cover - remote model dependent
+            state.add_log(f"validation repair call failed: {exc}")
+            repaired = None
+        if isinstance(repaired, dict) and str(repaired.get("status", "")).strip().lower() == "success":
+            second_report = self._workflow_validator.validate(repaired.get("workflow_json"))
+            repaired["dispatch_validation"] = second_report
+            if second_report["status"] != "failed":
+                state.add_log("self-repair passed strict dispatch validation")
+                return repaired
+            report = second_report
+            result = repaired
+        result["dispatch_validation"] = report
+        return result
+
     def _normalize_terminal_package(
         self,
         state: SingleDeviceAgentState,
         result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        if result.get("status") == "feasibility_error" or result.get("feedback_type") == "device_feasibility_error":
+        if (
+            result.get("status") in {"feasibility_error", "unsupported", "not_feasible"}
+            or result.get("feedback_type") == "device_feasibility_error"
+        ):
             feasibility = result.get("feasibility") if isinstance(result.get("feasibility"), dict) else {}
             blocking = self._clean_list(feasibility.get("blocking_constraints", []))
             if not blocking:
                 blocking = ["single device agent 判定当前 macro action 无法映射，但未返回具体阻塞原因。"]
+            classification = classify_feasibility_result(result, state.research_handoff)
+            overall = classification["overall"] or "unverifiable"
+            if overall == "hard":
+                error_type = "physical_infeasible"
+                message = result.get("recommendation_to_research_agent", "")
+                assessment_source = "single_device_agent_llm"
+                requires_review = False
+            elif overall == "adaptable":
+                error_type = "temporal_adaptation_required"
+                message = (
+                    "当前反馈仅说明过程/时间语义无法单站原子化执行；"
+                    "应优先重试同一容器的分批/间隔节拍。"
+                )
+                assessment_source = "single_device_agent_llm_soft_temporal"
+                requires_review = True
+            else:
+                error_type = "needs_human_review"
+                message = (
+                    "设备真源无法证明相关条件被满足，但也没有硬设备能力缺口证据；"
+                    "请人工审核该条件，而不是直接判定实验不可执行。"
+                    + (
+                        f" 原始建议：{result.get('recommendation_to_research_agent', '')}"
+                        if result.get("recommendation_to_research_agent")
+                        else ""
+                    )
+                )
+                assessment_source = "single_device_agent_llm_unverifiable"
+                requires_review = True
+            macro_action = (
+                state.research_handoff.get("macro_action")
+                if isinstance(state.research_handoff.get("macro_action"), dict)
+                else {}
+            )
             return {
                 "feedback_type": "device_feasibility_error",
                 "status": "feasibility_error",
                 "exp_id": state.exp_id,
                 "iteration_id": state.iteration_id,
                 "workflow_id": state.workflow_id,
+                "device_snapshot_id": self._device_snapshot_id(),
                 "macro_plan": state.research_handoff,
                 "macro_plan_summary": result.get("macro_plan_summary", ""),
+                "macro_action": macro_action,
                 "device_capabilities": result.get("device_capability_summary", {}),
                 "feasibility_assessment": result,
+                "requires_scientific_review": requires_review,
                 "error_package": {
-                    "type": "physical_infeasible",
+                    "type": error_type,
+                    "device_snapshot_id": self._device_snapshot_id(),
+                    "macro_action_id": macro_action.get("macro_action_id", ""),
+                    "observation_point_id": macro_action.get("observation_point_id", ""),
+                    "observation_point": macro_action.get("observation_point", ""),
+                    "constraint_classification": {
+                        "hard": classification["hard"],
+                        "adaptable": classification["adaptable"],
+                        "unverifiable": classification["unverifiable"],
+                    },
                     "blocking_constraints": blocking,
-                    "message": result.get("recommendation_to_research_agent", ""),
+                    "message": message,
                     "last_workflow_txt": result.get("workflow_txt", ""),
                     "unsupported_items": feasibility.get("unsupported_items", []),
-                    "assessment_source": "single_device_agent_llm",
+                    "assessment_source": assessment_source,
                 },
             }
 
@@ -341,13 +593,68 @@ class SingleDeviceAgent:
         self_check = result.get("device_self_check", {})
         self._raise_if_self_check_failed(self_check)
 
+        dispatch_validation = result.get("dispatch_validation")
+        if not isinstance(dispatch_validation, dict):
+            dispatch_validation = self._workflow_validator.validate(workflow_json)
+        if dispatch_validation.get("status") == "failed":
+            # Never let an unvalidated dispatch payload leave as success —
+            # downgrade with the full validation report attached.
+            return {
+                "status": "failed",
+                "feedback_type": "device_internal_error",
+                "failure_stage": "dispatch_validation",
+                "exp_id": state.exp_id,
+                "iteration_id": state.iteration_id,
+                "workflow_id": state.workflow_id,
+                "macro_plan": state.research_handoff,
+                "macro_plan_summary": result.get("macro_plan_summary", ""),
+                "dispatch_validation": dispatch_validation,
+                "message": (
+                    "workflow_json 未通过严格下发参数校验（含自我修复重试），"
+                    "该 workflow 不得下发执行。"
+                ),
+                "workflow_txt": workflow_txt,
+                "workflow_json": workflow_json,
+                "agent_mode": "single_device_agent",
+            }
+
+        temporal_adaptations = workflow_json.get("temporal_adaptations", [])
+        requires_review = any(
+            isinstance(item, dict) and item.get("requires_scientific_review")
+            for item in temporal_adaptations
+            if isinstance(temporal_adaptations, list)
+        )
+
+        macro_action = self._stamp_device_steps_with_macro_action(
+            workflow_json, state.research_handoff
+        )
+
+        # Harness output → the platform's EXACT parameter form (station names,
+        # operation names, per-version parameter keys, declared types, station
+        # ids, dispatch envelope). The semantic workflow_json stays untouched.
+        try:
+            dispatch = format_dispatch_payload(
+                workflow_json,
+                self._dispatch_catalog,
+                plan_name=state.exp_id,
+            )
+        except Exception as exc:  # pragma: no cover - must not break success
+            dispatch = {
+                "payload": {},
+                "warnings": [f"dispatch formatting failed: {exc}"],
+                "mapped_steps": 0,
+                "unmapped_steps": 0,
+            }
+
         return {
             "status": "success",
             "exp_id": state.exp_id,
             "iteration_id": state.iteration_id,
             "workflow_id": state.workflow_id,
+            "device_snapshot_id": self._device_snapshot_id(),
             "macro_plan": state.research_handoff,
             "macro_plan_summary": result.get("macro_plan_summary", ""),
+            "macro_action": macro_action,
             "verification_summary": {
                 "result": "accepted",
                 "category": "",
@@ -356,12 +663,69 @@ class SingleDeviceAgent:
             },
             "feasibility": result.get("feasibility", {}),
             "device_self_check": self_check,
+            "dispatch_validation": dispatch_validation,
+            "dispatch_payload": dispatch.get("payload", {}),
+            "dispatch_formatting": {
+                "mapped_steps": dispatch.get("mapped_steps", 0),
+                "unmapped_steps": dispatch.get("unmapped_steps", 0),
+                "warnings": dispatch.get("warnings", []),
+            },
+            "requires_scientific_review": requires_review,
             "reagent_slot_plan": result.get("reagent_slot_plan", []),
             "container_plan": result.get("container_plan", []),
+            "temporal_adaptations": temporal_adaptations,
             "workflow_txt": workflow_txt,
             "workflow_json": workflow_json,
             "agent_mode": "single_device_agent",
         }
+
+    def _stamp_device_steps_with_macro_action(
+        self,
+        workflow_json: Dict[str, Any],
+        research_handoff: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Trace each device step to the observation point / macro action it serves.
+
+        Issue 6: device steps must carry observation_point_id + macro_action_id +
+        source_macro_step so the UI can show observation → macro action → device
+        steps. Ids are inherited from the source macro step (which the research
+        layer already stamped); the macro-action descriptor is echoed back.
+        """
+        macro_action = (
+            research_handoff.get("macro_action")
+            if isinstance(research_handoff.get("macro_action"), dict)
+            else {}
+        )
+        step_id_map: Dict[Any, Dict[str, str]] = {}
+        for macro_step in research_handoff.get("macro_action_steps", []) or []:
+            if not isinstance(macro_step, dict):
+                continue
+            number = macro_step.get("步骤序号")
+            ids = {}
+            if macro_step.get("macro_action_id"):
+                ids["macro_action_id"] = macro_step["macro_action_id"]
+            if macro_step.get("observation_point_id"):
+                ids["observation_point_id"] = macro_step["observation_point_id"]
+            if number is not None and ids:
+                step_id_map[number] = ids
+
+        default_ids = {}
+        if macro_action.get("macro_action_id"):
+            default_ids["macro_action_id"] = macro_action["macro_action_id"]
+        if macro_action.get("observation_point_id"):
+            default_ids["observation_point_id"] = macro_action["observation_point_id"]
+
+        try:
+            for step in workflow_json.get("steps", []) or []:
+                if not isinstance(step, dict):
+                    continue
+                source = step.get("source_macro_step")
+                ids = step_id_map.get(source, default_ids)
+                for key, value in ids.items():
+                    step.setdefault(key, value)
+        except Exception:  # pragma: no cover - stamping must not break success
+            pass
+        return macro_action
 
     def _parse_json(self, text: str) -> Any:
         stripped = text.strip()

@@ -57,6 +57,8 @@ class ResearchAgentState:
     current_stage: str = ""
     current_stage_plan: str = ""
     macro_plan: List[Dict[str, Any]] = field(default_factory=list)
+    macro_action: Dict[str, Any] = field(default_factory=dict)
+    macro_action_history: List[Dict[str, Any]] = field(default_factory=list)
     stage_route_reason: str = ""
     current_stage_reason: str = ""
 
@@ -69,6 +71,19 @@ class ResearchAgentState:
     stage_progress_status: str = ""
     post_observation_repair_path: str = ""
     manual_handoff: str = ""
+    # Issue 5: explicit failure taxonomy so an empty macro plan is never
+    # ambiguous. One of "": macro_generation_error / macro_quality_error /
+    # device_feasibility_error / network_or_retrieval_error / bootstrap_error.
+    failure_category: str = ""
+    rejected_macro_plan: List[Dict[str, Any]] = field(default_factory=list)
+    # Issue 4: campaign-level device-feasibility memory across re-planning
+    # rounds. cumulative_device_constraints accumulates every distinct
+    # blocking constraint the device layer has ever returned; failed_plan_
+    # signatures fingerprints rejected plans so the loop stops regenerating
+    # the same non-executable route.
+    cumulative_device_constraints: List[str] = field(default_factory=list)
+    failed_plan_signatures: List[Dict[str, Any]] = field(default_factory=list)
+    device_snapshot_id: str = ""
 
     persistent_outputs: Dict[str, Any] = field(default_factory=dict)
     device_adaptation_handoff: Dict[str, Any] = field(default_factory=dict)
@@ -77,6 +92,9 @@ class ResearchAgentState:
     campaign_id: str = ""
     reference_inputs: List[Dict[str, Any]] = field(default_factory=list)
     seed_papers: List[Dict[str, Any]] = field(default_factory=list)
+    # Issue 3: auditable acquisition record — the query actually sent to paper
+    # databases, the full candidate set, and each filter verdict.
+    literature_acquisition: Dict[str, Any] = field(default_factory=dict)
     plan_revisions: List[Dict[str, Any]] = field(default_factory=list)
     tool_invocations: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -98,6 +116,7 @@ class ResearchAgentState:
             "当前 stage": self.current_stage,
             "当前 stage 的完整化学语义实验计划": self.current_stage_plan,
             "待执行 macro plan": self.macro_plan,
+            "当前 macro action": self.macro_action,
             "stage路线设计理由": self.stage_route_reason,
             "当前stage设计理由": self.current_stage_reason,
             "调研报告": self.survey_report,
@@ -107,6 +126,10 @@ class ResearchAgentState:
             "当前 observation 的结构化科学解释": self.observation_interpretation,
             "当前阶段推进状态": self.stage_progress,
             "post observation 修复路径": self.post_observation_repair_path,
+            "累计设备阻塞约束": self.cumulative_device_constraints,
+            "已失败方案签名": self.failed_plan_signatures,
+            "设备能力快照ID": self.device_snapshot_id,
+            "失败类别": self.failure_category,
             "人工交接摘要": self.manual_handoff,
         }
 
@@ -118,6 +141,9 @@ class ResearchAgentState:
             "当前 stage": self.current_stage,
             "当前 stage 的完整化学语义实验计划": self.current_stage_plan,
             "待执行 macro plan": self.macro_plan,
+            "当前 macro action": self.macro_action,
+            "累计设备阻塞约束": self.cumulative_device_constraints,
+            "设备能力快照ID": self.device_snapshot_id,
             "stage路线设计理由": self.stage_route_reason,
             "当前stage设计理由": self.current_stage_reason,
             "调研报告": self.survey_report,

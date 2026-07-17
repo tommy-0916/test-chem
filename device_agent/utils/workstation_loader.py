@@ -83,6 +83,24 @@ class WorkstationLoader:
         "Spectroscopy_Container_Transfer_Station_V1": ["谱学容器", "表征中转"],
         "Intelligent_Photocatalysis_Container_Transfer_Station_V1": ["光催容器", "光催中转"],
     }
+    # Keep alternative liquid ranges visible together.  A query may say
+    # “滴加 10 mL” without using the exact “5ml 平台” keyword; hiding the
+    # larger-range station makes a valid batch mapping look infeasible.
+    LIQUID_HANDLING_STATIONS = {
+        "Liquid_Handling_Station_1ml_V1",
+        "Liquid_Handling_Station_1ml_V2",
+        "Liquid_Handling_Station_5ml_V1",
+        "Liquid_Handling_Station_5ml_V2",
+        "Liquid_Handling_Station_5ml_V3",
+        "Liquid_Handling_Station_4Channel_V1",
+        "Cleaning_and_Dispensing_Workstation_V1",
+        "Ultrasonic_Liquid_Handling_Workstation_V1",
+    }
+    STIRRING_STATIONS = {
+        "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "Heating_Magnetic_Stirring_Workstation_V1",
+        "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+    }
     STATION_ALIAS_MAP = {
         "物料站": "General_Material_Station_V1",
         "常规物料站": "General_Material_Station_V1",
@@ -368,6 +386,23 @@ class WorkstationLoader:
             return self._new_workstations.get(code)
         return self._workstations.get(code)
 
+    def snapshot_id(self) -> str:
+        """Stable id for the loaded workstation truth-source set (issue 4).
+
+        Research and device layers reference the same device reality by
+        threading this id; it changes only when the station roster or the
+        live availability overlay changes.
+        """
+        import hashlib
+
+        stations = self._new_workstations if self._use_new_format else self._workstations
+        roster = "|".join(sorted(stations.keys()))
+        overlay = "|".join(
+            f"{name}={status}" for name, status in sorted(self._status_overlay.items())
+        )
+        digest = hashlib.sha1(f"{roster}##{overlay}".encode("utf-8")).hexdigest()[:12]
+        return f"ws_{digest}"
+
     def _select_relevant_station_codes(self, query_text: str) -> List[str]:
         if not self._use_new_format:
             return list(self._workstations.keys())
@@ -402,6 +437,23 @@ class WorkstationLoader:
 
         if not selected:
             return list(self._new_workstations.keys())
+
+        query_has_addition = any(
+            marker in lowered
+            for marker in ("滴加", "滴入", "加液", "加入", "移液", "dispens", "pipet")
+        )
+        query_has_stirring = any(
+            marker in lowered
+            for marker in ("搅拌", "磁力", "stir", "mix")
+        )
+        if query_has_addition:
+            selected.update(
+                code for code in self.LIQUID_HANDLING_STATIONS if code in self._new_workstations
+            )
+        if query_has_stirring or query_has_addition:
+            selected.update(
+                code for code in self.STIRRING_STATIONS if code in self._new_workstations
+            )
 
         if "General_Material_Station_V1" in self._new_workstations and selected:
             selected.add("General_Material_Station_V1")

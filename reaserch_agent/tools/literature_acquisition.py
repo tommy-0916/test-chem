@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .ingestion import ExternalKnowledgeClient, ExternalPaper, KnowledgeIngestion
 from .paper_registry import PaperRegistry
+from .query_sanitizer import sanitize_search_queries, sanitize_search_query
 from .web_search import WebSearchClient, WebSearchResult
 
 RelevanceFn = Callable[[ExternalPaper, str], float]
@@ -137,6 +138,7 @@ class LiteratureAcquisition:
         self.relevance_threshold = relevance_threshold
         self.relevance_fn: RelevanceFn = relevance_fn or token_overlap_relevance
         self.errors: List[str] = []
+        self.last_candidate_log: List[Dict[str, Any]] = []
 
     def _resolve_web_client(self) -> Optional[WebSearchClient]:
         if not self.enable_web_search:
@@ -155,6 +157,9 @@ class LiteratureAcquisition:
         reference_inputs: Sequence[Dict[str, Any]],
     ) -> Dict[str, Any]:
         self.errors = []
+        # Issue 1: strip automation/device/lab task context before anything
+        # goes to a scholarly engine. The caller's original query is untouched.
+        search_query = sanitize_search_query(query)
         if self.enable_scholarly_search:
             seeds = self._resolve_seeds(reference_inputs)
         else:
@@ -175,12 +180,12 @@ class LiteratureAcquisition:
 
         if (
             self.enable_scholarly_search
-            and query.strip()
+            and search_query.strip()
             and self.max_keyword_results > 0
         ):
             keyword_papers = self._safe(
                 lambda: self.client.search(
-                    query,
+                    search_query,
                     sources=tuple(self.keyword_sources),
                     max_results=self.max_keyword_results,
                 ),
@@ -189,7 +194,7 @@ class LiteratureAcquisition:
             self.errors.extend(self.client.last_errors)
             candidates.extend(("keyword", paper) for paper in keyword_papers or [])
 
-        anchor_text = " ".join([query] + [seed.title for seed in seeds])
+        anchor_text = " ".join([search_query] + [seed.title for seed in seeds])
         kept = self._filter_candidates(candidates, anchor_text, seeds)
 
         written_files: List[str] = []
@@ -199,7 +204,7 @@ class LiteratureAcquisition:
             written_files.extend(paths)
             registered += 1 if was_new else 0
 
-        web_summary = self._acquire_web_knowledge(query, anchor_text)
+        web_summary = self._acquire_web_knowledge(search_query, anchor_text)
         written_files.extend(web_summary.get("written_files", []))
 
         summary = {
@@ -208,6 +213,10 @@ class LiteratureAcquisition:
             "keyword_kept": sum(1 for role, _ in kept if role == "keyword"),
             "keyword_sources": list(self.keyword_sources),
             "scholarly_enabled": self.enable_scholarly_search,
+            # the query actually sent to paper databases (auditable, issue 1)
+            "keyword_query": search_query,
+            # full candidate set + per-candidate filter verdicts (issue 3)
+            "candidates_log": list(getattr(self, "last_candidate_log", [])),
             "web_kept": web_summary.get("kept", 0),
             "web_engine": web_summary.get("engine", ""),
             "candidates_seen": len(candidates),
@@ -231,7 +240,10 @@ class LiteratureAcquisition:
         self.errors = []
         written_files: List[str] = []
         kept_count = 0
-        for query in [q for q in queries if q and q.strip()][:2]:
+        # Issue 1: repair-round queries carry stage/observation prose that may
+        # include device context — sanitize before they leave the process.
+        repair_queries = sanitize_search_queries(queries)
+        for query in repair_queries[:2]:
             if not self.enable_scholarly_search:
                 break
             papers = self._safe(
@@ -251,7 +263,6 @@ class LiteratureAcquisition:
                 kept_count += 1
 
         web_summary: Dict[str, Any] = {}
-        repair_queries = [q for q in queries if q and q.strip()]
         if repair_queries:
             web_summary = self._acquire_web_knowledge(
                 repair_queries[0],
@@ -264,6 +275,7 @@ class LiteratureAcquisition:
         return {
             "kept": kept_count,
             "web_kept": web_summary.get("kept", 0),
+            "search_queries": repair_queries[:2],
             "written_files": written_files,
             "errors": list(self.errors),
         }
@@ -424,23 +436,58 @@ class LiteratureAcquisition:
         seeds: Sequence[ExternalPaper],
     ) -> List[Tuple[str, ExternalPaper]]:
         seed_keys = {self._paper_key(seed) for seed in seeds}
-        kept: List[Tuple[str, ExternalPaper]] = []
-        seen = set(seed_keys)
+        # Issue 3 (repeatability): candidate order must not depend on network
+        # response order. Score first, then sort deterministically (relevance
+        # desc, snowball before keyword, then title) BEFORE the cap applies,
+        # and keep an auditable log of every candidate + the filter verdict.
+        role_priority = {"snowball": 0, "keyword": 1}
+        scored: List[Tuple[float, int, str, str, ExternalPaper]] = []
         for role, paper in candidates:
-            if not paper.title.strip():
+            score = self.relevance_fn(paper, anchor_text)
+            scored.append(
+                (score, role_priority.get(role, 9), role, paper.title.strip(), paper)
+            )
+        scored.sort(key=lambda item: (-item[0], item[1], item[3].lower()))
+
+        kept: List[Tuple[str, ExternalPaper]] = []
+        candidate_log: List[Dict[str, Any]] = []
+        seen = set(seed_keys)
+        for score, _, role, title, paper in scored:
+            entry = {
+                "title": title[:160],
+                "doi": paper.doi,
+                "role": role,
+                "relevance": round(float(score), 4),
+            }
+            if not title:
                 continue
             key = self._paper_key(paper)
             if key in seen:
+                entry.update({"kept": False, "reason": "duplicate_of_seed_or_earlier"})
+                candidate_log.append(entry)
                 continue
-            if self.relevance_fn(paper, anchor_text) < self.relevance_threshold:
+            if score < self.relevance_threshold:
+                entry.update(
+                    {
+                        "kept": False,
+                        "reason": f"relevance {score:.3f} < threshold {self.relevance_threshold}",
+                    }
+                )
+                candidate_log.append(entry)
+                continue
+            if len(kept) >= self.max_total_new:
+                entry.update({"kept": False, "reason": "candidate_cap_reached"})
+                candidate_log.append(entry)
                 continue
             seen.add(key)
             kept.append((role, paper))
-            if len(kept) >= self.max_total_new:
-                self.errors.append(
-                    f"candidate cap reached ({self.max_total_new}); remaining candidates dropped"
-                )
-                break
+            entry.update({"kept": True, "reason": "passed_relevance_filter"})
+            candidate_log.append(entry)
+        if len(kept) >= self.max_total_new:
+            self.errors.append(
+                f"candidate cap reached ({self.max_total_new}); remaining candidates dropped"
+            )
+        self.last_candidate_log = candidate_log[:60]
         return kept
 
     def _archive_paper(

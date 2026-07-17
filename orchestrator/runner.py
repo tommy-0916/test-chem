@@ -28,6 +28,7 @@ from reaserch_agent.plan_ledger import (  # noqa: E402
 )
 
 from .execution_adapters import BaseExecutionAdapter  # noqa: E402
+from .human_readable import write_human_readable_result  # noqa: E402
 
 ResearchStepFn = Callable[..., Dict[str, Any]]
 DeviceStepFn = Callable[..., Dict[str, Any]]
@@ -38,6 +39,41 @@ STOP_MANUAL_REQUIRED = "manual_required"
 STOP_FEASIBILITY_DEADLOCK = "feasibility_deadlock"
 STOP_DEVICE_ERROR = "device_error"
 STOP_RESEARCH_ERROR = "research_error"
+STOP_REVIEW_REQUIRED = "scientific_review_required"
+
+APPROVAL_FILENAME = "review_approval.json"
+
+
+def package_requires_review(package: Dict[str, Any]) -> bool:
+    """A success package that carries approximated/derived adaptations must be
+    scientifically reviewed before it may cross the real-lab boundary."""
+    if package.get("requires_scientific_review"):
+        return True
+    workflow_json = package.get("workflow_json")
+    adaptations = []
+    if isinstance(workflow_json, dict):
+        adaptations = workflow_json.get("temporal_adaptations") or []
+    top_level = package.get("temporal_adaptations")
+    if isinstance(top_level, list):
+        adaptations = list(adaptations) + top_level
+    return any(
+        isinstance(item, dict) and item.get("requires_scientific_review")
+        for item in adaptations
+    )
+
+
+def load_review_approval(iteration_dir: Path) -> Optional[Dict[str, Any]]:
+    """Read ``review_approval.json``; returns the dict only when approved."""
+    approval_path = iteration_dir / APPROVAL_FILENAME
+    if not approval_path.exists():
+        return None
+    try:
+        data = json.loads(approval_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict) and data.get("approved") is True:
+        return data
+    return None
 
 
 @dataclass
@@ -86,6 +122,9 @@ class CampaignRunner:
         self._research_step = research_step or self._research_step_subprocess
         self._device_step = device_step or self._device_step_subprocess
         self._trace: List[Dict[str, Any]] = []
+        # Issue 4: campaign-level cumulative device constraints for the
+        # deadlock report (every constraint the device layer ever returned).
+        self._campaign_constraints: List[str] = []
 
     # ------------------------------------------------------------------
     # main loop
@@ -123,6 +162,7 @@ class CampaignRunner:
         stop_reason = STOP_MAX_ITERATIONS
         goal_reached = False
         iterations_run = 0
+        last_package: Dict[str, Any] = {}
 
         if state.get("status") == "manual_required":
             stop_reason = STOP_MANUAL_REQUIRED
@@ -139,13 +179,39 @@ class CampaignRunner:
 
                 package = self._device_step(state_path, iteration_dir)
                 package_status = str(package.get("status", "")).strip()
+                last_package = package
+                self._write_human_readable(iteration_dir, state, package)
                 is_feasibility_error = (
                     package_status == "feasibility_error"
                     or package.get("feedback_type") == "device_feasibility_error"
                 )
 
                 if is_feasibility_error:
+                    error_package = (
+                        package.get("error_package")
+                        if isinstance(package.get("error_package"), dict)
+                        else {}
+                    )
+                    if str(error_package.get("type", "")) == "needs_human_review":
+                        stop_reason = STOP_MANUAL_REQUIRED
+                        self._trace.append(
+                            {
+                                "iteration": iteration,
+                                "phase": "device",
+                                "status": "needs_human_review",
+                            }
+                        )
+                        self._write_unverifiable_review_request(
+                            iteration_dir, error_package
+                        )
+                        self._log(
+                            f"iteration {iteration}: device reported conditions it "
+                            "cannot verify against the truth source; handing to "
+                            "human review instead of re-planning"
+                        )
+                        break
                     consecutive_feasibility += 1
+                    self._accumulate_campaign_constraints(package)
                     self._trace.append(
                         {
                             "iteration": iteration,
@@ -161,12 +227,62 @@ class CampaignRunner:
                     if consecutive_feasibility >= self.config.feasibility_deadlock_limit:
                         stop_reason = STOP_FEASIBILITY_DEADLOCK
                         self._log(
-                            "feasibility deadlock detected; handing over to manual review"
+                            "feasibility deadlock detected; handing over to manual review. "
+                            "cumulative unmet device constraints: "
+                            + (
+                                "; ".join(self._campaign_constraints)
+                                if self._campaign_constraints
+                                else "(none captured)"
+                            )
                         )
                         break
                     payload = self._feasibility_payload(package)
                 elif package_status == "success":
                     consecutive_feasibility = 0
+                    needs_review = package_requires_review(package)
+                    if needs_review and self.adapter.real_lab_boundary:
+                        approval = load_review_approval(iteration_dir)
+                        if approval is None:
+                            stop_reason = STOP_REVIEW_REQUIRED
+                            self._write_review_request(iteration_dir, package)
+                            self._trace.append(
+                                {
+                                    "iteration": iteration,
+                                    "phase": "review_gate",
+                                    "status": "blocked_awaiting_scientific_review",
+                                }
+                            )
+                            self._log(
+                                f"iteration {iteration}: workflow requires scientific "
+                                "review before dispatch; blocking execution "
+                                f"(write {APPROVAL_FILENAME} with approved=true to release)"
+                            )
+                            break
+                        self._trace.append(
+                            {
+                                "iteration": iteration,
+                                "phase": "review_gate",
+                                "status": "approved",
+                                "approver": str(approval.get("approver", "")),
+                            }
+                        )
+                        self._log(
+                            f"iteration {iteration}: scientific review approved by "
+                            f"{approval.get('approver', 'unknown')}; dispatching"
+                        )
+                    elif needs_review:
+                        self._trace.append(
+                            {
+                                "iteration": iteration,
+                                "phase": "review_gate",
+                                "status": "pending_review_simulated_execution",
+                            }
+                        )
+                        self._log(
+                            f"iteration {iteration}: workflow flagged for scientific "
+                            f"review; proceeding on simulated adapter `{self.adapter.name}` "
+                            "(review still required before any real dispatch)"
+                        )
                     observation = self.adapter.execute(package, iteration_dir)
                     observation_path = iteration_dir / "observation_in.json"
                     observation_path.write_text(
@@ -243,6 +359,17 @@ class CampaignRunner:
                     break
 
         finished_at = datetime.now().isoformat(timespec="seconds")
+        self._write_human_readable(
+            self.campaign_dir,
+            state,
+            last_package,
+            campaign_meta={
+                "campaign_id": self.config.campaign_id,
+                "stop_reason": stop_reason,
+                "goal_reached": goal_reached,
+                "iterations_run": iterations_run,
+            },
+        )
         report_path = self._write_final_report(
             stop_reason=stop_reason,
             goal_reached=goal_reached,
@@ -365,6 +492,113 @@ class CampaignRunner:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def _write_human_readable(
+        self,
+        directory: Path,
+        research_state: Dict[str, Any],
+        device_package: Optional[Dict[str, Any]],
+        *,
+        campaign_meta: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Issue 2: one user-readable extraction per iteration + per campaign.
+
+        Read-only convenience output — a failure here must never affect the
+        campaign loop itself.
+        """
+        try:
+            write_human_readable_result(
+                directory,
+                research_state,
+                device_package or None,
+                campaign_meta=campaign_meta,
+            )
+        except Exception as exc:  # pragma: no cover - must not break the loop
+            self._log(f"human readable result generation failed: {exc}")
+
+    def _write_review_request(self, iteration_dir: Path, package: Dict[str, Any]) -> None:
+        """Explain what needs review and how to release the gate."""
+        workflow_json = package.get("workflow_json")
+        adaptations = (
+            workflow_json.get("temporal_adaptations", [])
+            if isinstance(workflow_json, dict)
+            else []
+        ) or package.get("temporal_adaptations", [])
+        lines = [
+            "# 等待科学复核（scientific review required）",
+            "",
+            "本轮 device workflow 携带近似/派生适配（见同目录 device_package.json），",
+            "在进入真实/外部执行边界前必须由人工确认。",
+            "",
+            "## 待复核内容",
+        ]
+        if isinstance(adaptations, list) and adaptations:
+            for item in adaptations:
+                if isinstance(item, dict):
+                    lines.append(
+                        f"- 原始要求：{item.get('original_requirement', '')} | "
+                        f"近似方式：{item.get('adaptation_schedule', '')} | "
+                        f"保真等级：{item.get('execution_fidelity', '')}"
+                    )
+        else:
+            lines.append("- （见 device_package.json 中 requires_scientific_review 标记）")
+        lines += [
+            "",
+            "## 放行方式",
+            f"确认无误后，在本目录写入 `{APPROVAL_FILENAME}`：",
+            "",
+            '    {"approved": true, "approver": "你的姓名", "comment": "确认分批近似可接受"}',
+            "",
+            "然后重新运行 campaign（可复用同一 campaign_id 继续）。",
+        ]
+        (iteration_dir / "AWAITING_SCIENTIFIC_REVIEW.md").write_text(
+            "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+
+    def _write_unverifiable_review_request(
+        self,
+        iteration_dir: Path,
+        error_package: Dict[str, Any],
+    ) -> None:
+        classification = (
+            error_package.get("constraint_classification")
+            if isinstance(error_package.get("constraint_classification"), dict)
+            else {}
+        )
+        unverifiable = classification.get("unverifiable") or error_package.get(
+            "blocking_constraints", []
+        )
+        lines = [
+            "# 需要人工判定的条件（无法从设备真源证明）",
+            "",
+            "device agent 没有发现硬设备能力缺口，但以下条件无法从真源证明满足，",
+            "因此没有把方案判为不可执行，而是转交人工审核：",
+            "",
+        ]
+        for item in unverifiable:
+            lines.append(f"- {item}")
+        lines += [
+            "",
+            "请确认这些条件在本实验室是否成立；成立则可将该轮 macro plan 视为可执行，",
+            "否则请给 research layer 提出化学语义修改意见。",
+        ]
+        (iteration_dir / "AWAITING_CONDITION_REVIEW.md").write_text(
+            "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+
+    def _accumulate_campaign_constraints(self, package: Dict[str, Any]) -> None:
+        """Collect device blocking constraints across the whole campaign (issue 4)."""
+        error_package = package.get("error_package")
+        if not isinstance(error_package, dict):
+            return
+        existing = set(self._campaign_constraints)
+        for constraint in error_package.get("blocking_constraints", []) or []:
+            text = str(constraint).strip()
+            if text and text not in existing:
+                self._campaign_constraints.append(text)
+                existing.add(text)
+
     @staticmethod
     def _feasibility_payload(package: Dict[str, Any]) -> Dict[str, Any]:
         """Trim the device error package into a research B2 payload."""
@@ -418,6 +652,7 @@ class CampaignRunner:
             "adapter": self.adapter.name,
             "plan_versions": len(ledger_records),
             "final_state_path": str(final_state_path),
+            "cumulative_device_constraints": list(self._campaign_constraints),
             "trace": self._trace,
         }
         (self.campaign_dir / "campaign_summary.json").write_text(

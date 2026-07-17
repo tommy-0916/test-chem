@@ -23,6 +23,11 @@ class BaseExecutionAdapter:
     """Turn a successful device package into one observation dict."""
 
     name = "base"
+    # Whether executing sends the workflow toward a real laboratory.  The
+    # campaign runner's scientific-review gate blocks unapproved
+    # review-flagged workflows on any adapter that crosses this boundary.
+    # Safe default: True (only pure simulation opts out).
+    real_lab_boundary = True
 
     def execute(
         self,
@@ -40,6 +45,7 @@ class MockExecutionAdapter(BaseExecutionAdapter):
     """
 
     name = "mock"
+    real_lab_boundary = False
 
     def __init__(self, observation_file: str | Path | None = None) -> None:
         self._observations: List[Dict[str, Any]] = []
