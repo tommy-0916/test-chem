@@ -26,7 +26,11 @@ from feasibility_rules import (
     json_text as _json_text,
     soft_temporal_mapping_error as _soft_temporal_mapping_error,
 )
-from dispatch_formatter import DispatchCatalog, format_dispatch_payload
+from dispatch_formatter import (
+    DispatchCatalog,
+    complete_required_fields,
+    format_dispatch_payload,
+)
 from workflow_validator import WorkflowValidator
 
 logger = logging.getLogger(__name__)
@@ -457,6 +461,14 @@ class SingleDeviceAgent:
         """One self-repair round when strict dispatch validation fails."""
         if str(result.get("status", "")).strip().lower() != "success":
             return result
+
+        # Deterministic pre-validation completion: fill mechanically-derivable
+        # required fields (容器数量=len(容器编号), 开盖/关盖编号, SKILL 默认值 like
+        # 保留瓶盖=1) so the Device layer never fails validation — or burns an
+        # LLM self-repair round — on omissions the harness can fill itself.
+        # Never overwrites LLM-written values; never synthesizes structure.
+        self._apply_deterministic_completion(state, result)
+
         report = self._workflow_validator.validate(result.get("workflow_json"))
         if report["status"] != "failed":
             result.setdefault("dispatch_validation", report)
@@ -496,6 +508,10 @@ class SingleDeviceAgent:
             state.add_log(f"validation repair call failed: {exc}")
             repaired = None
         if isinstance(repaired, dict) and str(repaired.get("status", "")).strip().lower() == "success":
+            # the repaired output also gets deterministic completion before its
+            # validation — otherwise attempt-2 can reintroduce mechanical
+            # omissions (e.g. 保留瓶盖) that the harness can fill itself.
+            self._apply_deterministic_completion(state, repaired)
             second_report = self._workflow_validator.validate(repaired.get("workflow_json"))
             repaired["dispatch_validation"] = second_report
             if second_report["status"] != "failed":
@@ -505,6 +521,30 @@ class SingleDeviceAgent:
             result = repaired
         result["dispatch_validation"] = report
         return result
+
+    def _apply_deterministic_completion(
+        self,
+        state: SingleDeviceAgentState,
+        result: Dict[str, Any],
+    ) -> None:
+        """Fill mechanically-derivable required fields in place (audit-logged).
+
+        Runs on BOTH the first mapping and the self-repair output so neither can
+        fail validation on omissions the harness can fill deterministically.
+        Accumulates into result['dispatch_completion'] across calls.
+        """
+        completed, filled_log = complete_required_fields(
+            result.get("workflow_json"), self._workflow_validator
+        )
+        if not filled_log:
+            return
+        result["workflow_json"] = completed
+        prior = (result.get("dispatch_completion") or {}).get("filled", [])
+        result["dispatch_completion"] = {"filled": list(prior) + filled_log}
+        state.add_log(
+            f"deterministic completion filled {len(filled_log)} required "
+            "field(s) before dispatch validation"
+        )
 
     def _normalize_terminal_package(
         self,
@@ -664,6 +704,7 @@ class SingleDeviceAgent:
             "feasibility": result.get("feasibility", {}),
             "device_self_check": self_check,
             "dispatch_validation": dispatch_validation,
+            "dispatch_completion": result.get("dispatch_completion", {}),
             "dispatch_payload": dispatch.get("payload", {}),
             "dispatch_formatting": {
                 "mapped_steps": dispatch.get("mapped_steps", 0),

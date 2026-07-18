@@ -477,3 +477,106 @@ def format_dispatch_payload(
         "mapped_steps": mapped,
         "unmapped_steps": unmapped,
     }
+
+
+# ----------------------------------------------------------------------
+# Deterministic required-field completion (pre-validation)
+# ----------------------------------------------------------------------
+
+# Params whose value can be derived with ZERO ambiguity from a sibling field.
+# 容器数量 == len(容器编号); 开盖/关盖编号 default to the containers being
+# handled (容器编号) — the SKILL semantics of "开盖瓶号"/"关盖瓶号".
+_COUNT_FROM_LIST = {"容器数量": "容器编号"}
+_LIDNO_FROM_CONTAINER = {"开盖编号": "容器编号", "关盖编号": "容器编号"}
+
+
+def complete_required_fields(
+    workflow_json: Dict[str, Any],
+    validator: Any,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Fill mechanically-derivable required fields BEFORE strict validation.
+
+    Conservative by construction — only touches fields it can determine with
+    zero guessing, and never overwrites a value the LLM already wrote:
+
+    - ``容器数量`` ← ``len(容器编号)`` when 容器编号 is a list and 容器数量 missing;
+    - ``开盖编号`` / ``关盖编号`` ← ``容器编号`` when the op requires them and
+      they are missing (SKILL 开盖瓶号/关盖瓶号 default to the handled vials);
+    - any other SKILL 是否必填=是 field that has a concrete 默认值 column value
+      (e.g. ``保留瓶盖`` = 1) — filled from ``validator.defaults_for``.
+
+    ``加样方案`` and other structure-bearing fields are intentionally NOT
+    synthesized (they need real semantics — left to the LLM self-repair round).
+    Returns a DEEP COPY plus an audit log of exactly what was filled; the input
+    object is never mutated. Requires the SKILL-form station name (the form the
+    validator checks); legacy-form steps yield empty required sets and are
+    left untouched.
+    """
+    import copy
+
+    if not isinstance(workflow_json, dict):
+        return workflow_json, []
+    steps = workflow_json.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return workflow_json, []
+
+    result = copy.deepcopy(workflow_json)
+    filled_log: List[Dict[str, Any]] = []
+
+    for step in result.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        station = str(step.get("workstation", "")).strip()
+        operation = str(step.get("operation", "")).strip()
+        params = step.get("parameters")
+        if not station or not operation or not isinstance(params, dict):
+            continue
+
+        required = validator.required_params_for(station, operation)
+        if not required:
+            # not SKILL-form (legacy reference contract) or no required table
+            continue
+        provided = {_normalize_param_name(k) for k in params.keys()}
+        step_no = step.get("step_number")
+
+        for field in sorted(required):
+            if field in provided:
+                continue  # never overwrite what the LLM already wrote
+
+            # 1) count derivable from a sibling list
+            if field in _COUNT_FROM_LIST:
+                src = params.get(_COUNT_FROM_LIST[field])
+                if isinstance(src, list):
+                    params[field] = len(src)
+                    filled_log.append({
+                        "step_number": step_no, "station": station,
+                        "operation": operation, "param": field,
+                        "value": len(src), "reason": f"len({_COUNT_FROM_LIST[field]})",
+                    })
+                    continue
+
+            # 2) lid numbers default to the containers being handled
+            if field in _LIDNO_FROM_CONTAINER:
+                src = params.get(_LIDNO_FROM_CONTAINER[field])
+                if isinstance(src, list) and src:
+                    params[field] = list(src)
+                    filled_log.append({
+                        "step_number": step_no, "station": station,
+                        "operation": operation, "param": field,
+                        "value": list(src), "reason": f"defaults to {_LIDNO_FROM_CONTAINER[field]}",
+                    })
+                    continue
+
+            # 3) SKILL 默认值 column (only a concrete declared default)
+            defaults = validator.defaults_for(station, operation)
+            if field in defaults:
+                params[field] = defaults[field]
+                filled_log.append({
+                    "step_number": step_no, "station": station,
+                    "operation": operation, "param": field,
+                    "value": defaults[field], "reason": "SKILL 默认值",
+                })
+                continue
+            # otherwise: cannot determine unambiguously → leave for LLM repair
+
+    return result, filled_log

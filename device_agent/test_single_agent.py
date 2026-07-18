@@ -372,6 +372,108 @@ def test_single_device_agent_success_package():
     assert state.workflow_json["steps"][0]["workstation"] == "物料站"
 
 
+def test_deterministic_completion_avoids_llm_repair_round():
+    """Eval fix: a SKILL-form workflow missing only mechanically-derivable
+    required fields (容器数量, 开盖编号, 保留瓶盖) must be completed deterministically
+    and pass validation WITHOUT burning an LLM self-repair round (model called once)."""
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+    payload = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "macro_plan_summary": "映射成功",
+        "workflow_txt": "1. 第1步 303物料站：物料拿取",
+        "workflow_json": {
+            "steps": [
+                {"step_number": 1, "workstation": "General_Material_Station_V1",
+                 "operation": "物料拿取",
+                 "parameters": {"容器类型": "进样瓶", "容器编号": [1, 2, 3]}},
+                {"step_number": 2, "workstation": "Liquid_Handling_Station_1ml_V2",
+                 "operation": "开盖",
+                 "parameters": {"容器类型": "进样瓶", "容器编号": [1, 2, 3]}},
+            ],
+            "offline_handoffs": [],
+        },
+    }
+    model = FakeModel(payload)
+    agent = SingleDeviceAgent(
+        model=model, workstation_loader=loader, workflow_validator=validator,
+    )
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="complete_exp")
+
+    assert state.status == "completed"
+    assert state.terminal_package["status"] == "success"
+    # deterministic completion filled the mechanical fields, so NO self-repair
+    # LLM round was needed — the model was invoked exactly once.
+    assert len(model.calls) == 1
+    completion = state.terminal_package.get("dispatch_completion") or {}
+    filled_params = {e["param"] for e in completion.get("filled", [])}
+    assert {"容器数量", "开盖编号", "保留瓶盖"} <= filled_params
+    # the completed workflow_json carries the filled values
+    p1 = state.workflow_json["steps"][0]["parameters"]
+    assert p1["容器数量"] == 3
+
+
+def test_completion_applies_to_self_repair_output():
+    """Regression: deterministic completion must run on the self-repair
+    (attempt-2) output too. A bug once left attempt-2 uncompleted, so a fresh
+    LLM output could reintroduce mechanical omissions (缺 保留瓶盖) that the
+    harness can fill. Here attempt-1 has a structural error forcing a repair;
+    the repaired output omits 保留瓶盖 (mechanical) and must be completed."""
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+
+    # attempt-1: 加样方案 as string → type_mismatch (structural, forces repair)
+    attempt1 = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "x",
+        "workflow_json": {"steps": [
+            {"step_number": 1, "workstation": "Liquid_Handling_Station_1ml_V2",
+             "operation": "加液_物料绑定",
+             "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1],
+                            "加样方案": "一段自然语言"}}],
+            "offline_handoffs": []},
+    }
+    # attempt-2 (repair): fixes 加样方案 structure but OMITS 保留瓶盖 on an 开盖 step
+    attempt2 = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "x",
+        "workflow_json": {"steps": [
+            {"step_number": 1, "workstation": "Liquid_Handling_Station_1ml_V2",
+             "operation": "开盖",
+             "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1],
+                            "开盖编号": [1]}}],  # 保留瓶盖 missing → completion fills =1
+            "offline_handoffs": []},
+    }
+
+    class SequencedModel:
+        def __init__(self, payloads):
+            self.payloads = payloads
+            self.calls = []
+
+        def invoke(self, messages):
+            idx = min(len(self.calls), len(self.payloads) - 1)
+            self.calls.append(messages)
+            return types.SimpleNamespace(
+                content=json.dumps(self.payloads[idx], ensure_ascii=False))
+
+    model = SequencedModel([attempt1, attempt2])
+    agent = SingleDeviceAgent(
+        model=model, workstation_loader=loader, workflow_validator=validator,
+    )
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="repair_complete_exp")
+
+    # self-repair ran (2 mapping calls), and completion filled 保留瓶盖 on attempt-2
+    assert len(model.calls) == 2
+    filled = {e["param"] for e in
+              (state.terminal_package.get("dispatch_completion") or {}).get("filled", [])}
+    assert "保留瓶盖" in filled
+    # attempt-2 completed → passes validation → success
+    assert state.terminal_package["status"] == "success"
+
+
 def test_single_device_agent_feasibility_error_package():
     agent = build_agent(
         {

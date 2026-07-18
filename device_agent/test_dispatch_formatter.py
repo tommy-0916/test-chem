@@ -19,8 +19,10 @@ sys.path.insert(0, "device_agent")
 
 from dispatch_formatter import (  # noqa: E402
     DispatchCatalog,
+    complete_required_fields,
     format_dispatch_payload,
 )
+from workflow_validator import WorkflowValidator  # noqa: E402
 from utils.workstation_loader import WorkstationLoader  # noqa: E402
 
 
@@ -274,6 +276,86 @@ class GeneratePyAcceptanceTest(unittest.TestCase):
         )
         steps = result["payload"]["experiment_steps"]["steps"]
         self.assertTrue(gen.validate_experiment_steps(steps))
+
+
+class CompleteRequiredFieldsTest(unittest.TestCase):
+    """Deterministic pre-validation completion (eval finding: Device 0/8 success,
+    548 missing_required errors, 容器数量 alone = 221). Fills only unambiguous
+    fields; never overwrites, never synthesizes structure."""
+
+    def setUp(self) -> None:
+        self.validator = WorkflowValidator(WorkstationLoader(use_new_format=True))
+
+    def test_fills_count_default_and_lidnumber_then_validates(self) -> None:
+        wf = {
+            "steps": [
+                {"step_number": 1, "workstation": "General_Material_Station_V1",
+                 "operation": "物料拿取",
+                 "parameters": {"容器类型": "进样瓶", "容器编号": [1, 2, 3]}},
+                {"step_number": 2, "workstation": "Liquid_Handling_Station_1ml_V2",
+                 "operation": "开盖",
+                 "parameters": {"容器类型": "进样瓶", "容器编号": [1, 2, 3]}},
+            ]
+        }
+        out, log = complete_required_fields(wf, self.validator)
+        p1 = out["steps"][0]["parameters"]
+        p2 = out["steps"][1]["parameters"]
+        self.assertEqual(p1["容器数量"], 3)                 # len(容器编号)
+        self.assertEqual(p2["容器数量"], 3)
+        self.assertEqual(p2["保留瓶盖"], "1")               # SKILL 默认值
+        self.assertEqual(p2["开盖编号"], [1, 2, 3])          # defaults to 容器编号
+        self.assertTrue(log)
+        # the completed workflow now passes strict validation
+        self.assertEqual(self.validator.validate(out)["status"], "passed")
+
+    def test_never_overwrites_llm_value(self) -> None:
+        wf = {"steps": [{"step_number": 1,
+                         "workstation": "General_Material_Station_V1",
+                         "operation": "物料拿取",
+                         "parameters": {"容器类型": "进样瓶", "容器数量": 5,
+                                        "容器编号": [1, 2, 3]}}]}
+        out, log = complete_required_fields(wf, self.validator)
+        self.assertEqual(out["steps"][0]["parameters"]["容器数量"], 5)  # untouched
+        self.assertEqual(log, [])
+
+    def test_does_not_synthesize_structure_field(self) -> None:
+        wf = {"steps": [{"step_number": 1,
+                         "workstation": "Liquid_Handling_Station_1ml_V2",
+                         "operation": "加液_物料绑定",
+                         "parameters": {"容器类型": "进样瓶", "容器编号": [1]}}]}
+        _out, log = complete_required_fields(wf, self.validator)
+        self.assertNotIn("加样方案", [e["param"] for e in log])
+
+    def test_legacy_form_untouched(self) -> None:
+        wf = {"steps": [{"step_number": 1, "workstation": "物料站",
+                         "operation": "物料拿取",
+                         "parameters": {"容器类型": "进样瓶", "容器编号": [1]}}]}
+        _out, log = complete_required_fields(wf, self.validator)
+        self.assertEqual(log, [])
+
+    def test_no_source_no_fill(self) -> None:
+        wf = {"steps": [{"step_number": 1,
+                         "workstation": "General_Material_Station_V1",
+                         "operation": "物料拿取",
+                         "parameters": {"容器类型": "进样瓶"}}]}
+        out, _log = complete_required_fields(wf, self.validator)
+        self.assertNotIn("容器数量", out["steps"][0]["parameters"])
+
+    def test_input_object_not_mutated(self) -> None:
+        wf = {"steps": [{"step_number": 1,
+                         "workstation": "General_Material_Station_V1",
+                         "operation": "物料拿取",
+                         "parameters": {"容器类型": "进样瓶", "容器编号": [1, 2]}}]}
+        snapshot = copy.deepcopy(wf)
+        complete_required_fields(wf, self.validator)
+        self.assertEqual(wf, snapshot)
+
+
+class ValidatorDefaultsTest(unittest.TestCase):
+    def test_skill_default_captured(self) -> None:
+        v = WorkflowValidator(WorkstationLoader(use_new_format=True))
+        defaults = v.defaults_for("Liquid_Handling_Station_1ml_V2", "开盖")
+        self.assertEqual(defaults.get("保留瓶盖"), "1")
 
 
 if __name__ == "__main__":

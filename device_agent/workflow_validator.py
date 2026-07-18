@@ -154,6 +154,11 @@ class StationSchema:
         # 对照表 display) — legacy-form payloads keep the reference contract.
         self.required_by_operation: Dict[str, Set[str]] = {}
         self.skill_form_names: Set[str] = set()
+        # operation -> {param name: SKILL 默认值列 value}. Populated from the
+        # 默认值 (last) column of each SKILL parameter table. Used only by the
+        # deterministic completion pass to fill omitted required fields; never
+        # changes validation behaviour.
+        self.defaults_by_operation: Dict[str, Dict[str, Any]] = {}
 
     def add_param(
         self,
@@ -340,6 +345,7 @@ class WorkflowValidator:
                     unit = cells[3] if len(cells) > 3 else ""
                     type_text = cells[4] if len(cells) > 4 else ""
                     example = cells[5] if len(cells) > 5 else ""
+                    default_cell = cells[6] if len(cells) > 6 else ""
                     blob = " ".join(cells[1:])
                     range_pair = None
                     range_match = RANGE_RE.search(blob)
@@ -365,6 +371,13 @@ class WorkflowValidator:
                             schema.required_by_operation.setdefault(
                                 current_op, set()
                             ).add(name)
+                            # capture the SKILL 默认值 column for the completion
+                            # pass (only a concrete, non-empty scalar default)
+                            default_text = (default_cell or "").strip()
+                            if default_text and current_op:
+                                schema.defaults_by_operation.setdefault(
+                                    current_op, {}
+                                )[name] = default_text
             else:
                 in_table = False
 
@@ -456,6 +469,35 @@ class WorkflowValidator:
         if key is None:
             return []
         return sorted(self._schemas[key].allowed_names)
+
+    def required_params_for(self, station_name: str, operation: str) -> Set[str]:
+        """SKILL 是否必填=是 params for (station, operation). Empty when the
+        station is not in SKILL form (legacy-form payloads keep the reference
+        contract) or has no parsed required table. Read-only; for the
+        completion pass to know which required fields may need filling."""
+        key = self._resolve_station(station_name)
+        if key is None:
+            return set()
+        schema = self._schemas[key]
+        req = self._skill_required_for(schema, station_name, operation)
+        return set(req or set())
+
+    def defaults_for(self, station_name: str, operation: str) -> Dict[str, Any]:
+        """SKILL 默认值 column values for (station, operation), keyed by
+        normalized param name. Read-only; used by the completion pass to fill
+        omitted required fields with their SKILL-declared default."""
+        key = self._resolve_station(station_name)
+        if key is None:
+            return {}
+        schema = self._schemas[key]
+        table = getattr(schema, "defaults_by_operation", {})
+        if operation in table:
+            return dict(table[operation])
+        normalized = _normalize_station_form(operation)
+        for op, values in table.items():
+            if _normalize_station_form(op) == normalized:
+                return dict(values)
+        return {}
 
     def validate(self, workflow_json: Any) -> Dict[str, Any]:
         errors: List[str] = []
