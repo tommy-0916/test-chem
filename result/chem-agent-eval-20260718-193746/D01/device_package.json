@@ -1,0 +1,472 @@
+{
+  "feedback_type": "device_feasibility_error",
+  "status": "feasibility_error",
+  "exp_id": "D01-20260718-193746",
+  "iteration_id": 0,
+  "workflow_id": 0,
+  "device_snapshot_id": "ws_df1802c0c025",
+  "macro_plan": {
+    "handoff_type": "research_to_device_adaptation",
+    "task": {
+      "query": "为了探究 Co 基催化剂表面氧化态变化对碱性 EOR 活性、稳定性和液相产物选择性的影响，请围绕不同价态或不同氧化程度的 Co 基催化剂设计合理的实验方案。实验应包含 Co(OH)₂、Co₃O₄、CoOOH 或经电化学预活化后的 Co 基样品，并设置不含乙醇电解液作为对照，比较其电化学行为、表面价态变化、乙醇消耗和主要氧化产物分布。方案需覆盖催化剂制备、氧化/活化后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+      "stage_route": [
+        "合成、氧化/活化并完成 XRD 观察",
+        "基于前序结果继续推进并完成 XPS 观察",
+        "基于前序结果继续推进并完成 Raman 观察",
+        "基于前序结果继续推进并完成 电化学测试 观察"
+      ],
+      "current_stage": "合成、氧化/活化并完成 XRD 观察",
+      "current_stage_plan": "当前 stage 为“合成、氧化/活化并完成 XRD 观察”，唯一目标 observation point 是获得 Co(OH)₂、Co₃O₄ 和 CoOOH 候选样品的合法 XRD 数据及物相判定。stage goal 是以相同 Co 前驱体和统一小体积沉淀条件制得 Co(OH)₂，再通过空气煅烧和次氯酸盐氧化分别构建氧化程度更高的 Co₃O₄ 与 CoOOH 候选样品，为后续表面价态和电化学比较建立可追溯的体相结构基线。planning logic 为：使用外部预配并已装载的 Co(NO₃)₂、NaOH 和 NaClO 原液，按固定体积与固定加料节拍进行平行合成；所有含液反应体系控制在 20 mL 以内；采用固定次数的离心洗涤和低温干燥；Co₃O₄ 分支进行空气煅烧，CoOOH 分支在洗涤后的湿态 Co(OH)₂ 上实施氧化，以减少不必要的干燥—重分散过程；最终将各固体按统一固液比制成不少于 4.0 mL 的乙醇悬浊液并进行 XRD。关键变量包括前驱体浓度与 Co 投料量、OH⁻/Co 摩尔比、沉淀温度和熟化时间、NaClO/Co 摩尔比、氧化时间、煅烧温度与时间、洗涤和干燥条件以及 XRD 扫描范围。expected observation 是三个样品均获得背景和信噪比合格、可进行物相检索与峰位比较的衍射图谱，并分别显示与目标 Co(OH)₂、Co₃O₄、CoOOH 候选物相相符的主要衍射特征；若出现混相，则保留实际物相组成，不依据样品标签强行判定。stage completion condition 是每类样品至少获得一份可解析 XRD 图谱，完成主要物相、杂相、峰位及相对结晶度记录，并据此确认样品是否可进入后续 XPS stage；XRD 只用于体相结构判断，Co 表面氧化态结论留待后续离线 XPS。由于检索资料没有提供可复用的 Co 基合成参数，本 stage 的具体条件均为 agent 补全，不冒充所列知识库论文参数。",
+      "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、电化学测试，因此 stage_route 按这些观察点组织。",
+      "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+    },
+    "macro_action_steps": [
+      {
+        "步骤序号": 1,
+        "操作": "预配并核验平行合成用前驱体原液",
+        "试剂/对象": "Co(NO₃)₂·6H₂O、NaOH、NaClO、去离子水",
+        "参数": "外部预配并已装载 0.100 mol/L Co(NO₃)₂ 水溶液、0.200 mol/L NaOH 水溶液和 0.200 mol/L 有效 NaClO 水溶液；NaClO 原液在使用当日按有效氯浓度配制或核验。为 Co(OH)₂、Co₃O₄ 和 CoOOH 三条分支分别准备独立的 1.00 mmol Co 批次，每批使用 10.0 mL Co(NO₃)₂ 原液；至少设置 2 个独立合成重复。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "共沉淀制备 Co(OH)₂ 前体",
+        "试剂/对象": "0.100 mol/L Co(NO₃)₂ 原液、0.200 mol/L NaOH 原液",
+        "参数": "每个批次取 10.0 mL Co(NO₃)₂ 原液，在 25±2 ℃、600 rpm 搅拌下加入 10.0 mL NaOH 原液，OH⁻/Co 摩尔比为 2.0；按 1.0 mL/批、每批间隔 1 min 的固定节拍完成 10 批加液，总加入时间约 10 min。加液结束后继续在 25±2 ℃、600 rpm 搅拌熟化 60 min；单个反应体系总体积为 20.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "分离并洗涤 Co(OH)₂ 沉淀",
+        "试剂/对象": "各批次 Co(OH)₂ 悬浊液、去离子水",
+        "参数": "将每批悬浊液以 6000 rpm 离心 10 min，去除上清液；加入 10.0 mL 去离子水重分散并再次以 6000 rpm 离心 10 min，共执行 3 个固定洗涤循环。将其中一组洗涤后沉淀在 50 ℃干燥 12 h，所得固体标记为 Co(OH)₂-XRD 候选样品；避免在高温下长期暴露，以降低非目标空气氧化。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "湿态氧化制备 CoOOH 候选样品",
+        "试剂/对象": "洗涤后的湿态 Co(OH)₂、0.200 mol/L NaClO 原液、去离子水",
+        "参数": "取对应 1.00 mmol Co 的洗涤后湿态 Co(OH)₂，以 10.0 mL 去离子水重分散；在 25±2 ℃、600 rpm 搅拌下加入 5.0 mL 0.200 mol/L NaClO，NaClO/Co 摩尔比为 1.0。按 0.50 mL/批、每批间隔 1 min 的固定节拍完成 10 批加液，随后在 25±2 ℃、600 rpm 继续搅拌氧化 120 min；单个体系总体积为 15.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "纯化并干燥 CoOOH 候选样品",
+        "试剂/对象": "氧化后的 CoOOH 候选悬浊液、去离子水",
+        "参数": "氧化结束后以 6000 rpm 离心 10 min，去除含氯母液；每次加入 10.0 mL 去离子水重分散并以 6000 rpm 离心 10 min，固定洗涤 3 次。将所得固体在 50 ℃干燥 12 h，标记为 CoOOH-XRD 候选样品；记录氧化前后沉淀颜色，但颜色仅作为过程记录，不作为本 stage 的完成观察。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "空气煅烧制备 Co₃O₄ 候选样品",
+        "试剂/对象": "干燥的 Co(OH)₂ 前体",
+        "参数": "将独立批次的干燥 Co(OH)₂ 前体在空气中以 2 ℃/min 升温至 350 ℃，保温 2 h，再自然降温至低于 40 ℃；所得黑色固体标记为 Co₃O₄-XRD 候选样品。保留同批未煅烧 Co(OH)₂ 作为配对体相基线。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备统一浓度的 XRD 测试悬浊液",
+        "试剂/对象": "Co(OH)₂-XRD、Co₃O₄-XRD、CoOOH-XRD 候选固体，无水乙醇",
+        "参数": "每个样品称取 10.0 mg 固体，加入 5.0 mL 无水乙醇，形成 2.0 mg/mL 悬浊液；超声分散 10 min，随后搅拌 5 min 并立即送测。每份测试液总体积固定为 5.0 mL，满足 XRD 输入液量不少于 4.0 mL 的边界；不同样品采用相同固液比和分散时间。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 8,
+        "操作": "采集并判定三类 Co 基样品的 XRD 物相",
+        "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品乙醇悬浊液",
+        "参数": "采用 Cu Kα 辐射采集粉末 XRD，2θ 扫描范围 10–80°，步长 0.02°，扫描速率 2°/min；对合成重复使用同一测试参数。完成背景扣除和主要衍射峰检索，记录峰位、相对强度、峰宽、目标相匹配情况及可辨识杂相。合法 observation 要求原始图谱、处理参数和物相匹配结果齐全；不得仅凭样品名称或颜色确认 Co(OH)₂、Co₃O₄ 或 CoOOH。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "macro_action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "是每类样品至少获得一份可解析 XRD 图谱，完成主要物相、杂相、峰位及相对结晶度记录，并据此确认样品是否可进入后续 XPS stage",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "research_context": {
+      "survey_report": {
+        "summary": "现有知识库仅命中两篇元数据级资料，均未提供可复用的 Co 基碱性乙醇电氧化实验参数、性能数据或表面价态证据，不能直接支撑具体合成与测试条件。后续路线宜基于科学目标设置物相/初始价态确认、电化学重构与活性稳定性、反应后价态及液相产物定量等观察节点；统一比较 Co(OH)₂、Co₃O₄、CoOOH 和电化学预活化样品，并设置无乙醇空白。现有平台支持电化学、XRD 和液相色谱，XPS 或原位拉曼应按外部送样规划。",
+        "key_findings": [
+          "案例1研究裂化催化剂表面吸附，与 Co 基碱性 EOR 缺乏直接关联，且仅有元数据，不能支撑实验参数。",
+          "案例2属于乙醇催化氧化教学方法研究，未提供电催化剂制备、电化学测试或液相产物定量方案。",
+          "设备上下文支持双工位电化学测试、XRD、液相色谱和气相色谱，可覆盖电化学行为、晶相及液相产物观察。",
+          "设备清单未明确提供 XPS 或原位/准原位 Raman；Co 表面价态变化需规划为离线送样、受控取样和数据回传。",
+          "当前没有可验证的历史相似实验命中，也没有可直接引用的 Co(OH)₂、Co₃O₄、CoOOH 合成或预活化参数。"
+        ],
+        "candidate_precedents": [
+          "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响（低相关，仅元数据）",
+          "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例（低相关，仅教学框架）"
+        ],
+        "route_implications": [
+          "首个 stage 应以各样品初始物相、结构和表面价态获得合法观察为终点；制备、氧化后处理、洗涤、干燥和分散均作为该 stage 内的 macro action。",
+          "随后应以统一电极负载和测试条件比较含乙醇与无乙醇电解液中的 CV、EIS、预活化响应及稳定性，并记录可归一化的电流、电荷和衰减指标。",
+          "电化学预活化样品应作为独立样品组，并保留活化前后配对表征；表面价态观察需采用外部 XPS 或其他可用价态表征的送样与数据回传路径。",
+          "产物 stage 应对反应前后液相进行留样，利用标准曲线定量乙醇、乙醛、乙酸盐及可检测的其他含碳产物，计算乙醇消耗、选择性、碳平衡和法拉第效率。",
+          "应采用相同催化剂负载、电极面积、电解液碱度、乙醇浓度、电位尺度、补偿方式和电解电荷或时间，降低不同氧化态样品间比较偏差。",
+          "实验下发至 303 实验室及任务 ID 生成属于后续执行/调度环节；当前调研证据不能提供或伪造任务 ID。"
+        ],
+        "open_questions": [
+          "Co(OH)₂、Co₃O₄ 和 CoOOH 的目标晶型、粒径、载体及可复现制备参数尚未确定。",
+          "电化学预活化的电位窗口、循环次数、终止判据及参比电极换算方式尚缺直接证据。",
+          "碱浓度、乙醇浓度、催化剂负载量、工作电位和稳定性测试时长尚需通过预实验或可靠文献确定。",
+          "XPS 受控转移、准原位取样及避免空气暴露导致价态漂移的方案尚未落实。",
+          "乙醇、乙醛、乙酸盐、碳酸盐等组分的色谱适配性、标准曲线范围、淬灭稀释和保存条件尚未确定。",
+          "是否需要独立量化溶出 Co、形貌变化及电化学有效表面积，以区分价态效应与失活、负载或粗糙度效应，仍待确认。"
+        ]
+      },
+      "extracted_paper_protocols": [
+        {
+          "source_title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+          "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D01/knowledge_base/碱性氮化合物在裂化催化剂上的吸附_Ⅳ.氮化合物对废催化剂表面性质的影响_f0de3a485d.json",
+          "relevance": "本地知识库检索命中，与当前 query 的材料、方法或目标相关。",
+          "protocol_summary": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+          "steps": [
+            {
+              "步骤序号": 1,
+              "操作": "论文实验步骤",
+              "试剂/对象": "文献实验对象",
+              "参数": "文献未说明",
+              "evidence": "合成摘要: 碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周"
+            }
+          ],
+          "missing_parameters": [
+            "PDF 文本未提供可完全结构化的参数列表；缺失参数保留为 文献未说明。"
+          ],
+          "paper_id": "doi_10_1360_csb1959_4_23_797",
+          "verification_status": "verified_doi",
+          "full_text_status": "metadata_only"
+        },
+        {
+          "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+          "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+          "relevance": "本地知识库检索命中，与当前 query 的材料、方法或目标相关。",
+          "protocol_summary": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+          "steps": [
+            {
+              "步骤序号": 1,
+              "操作": "论文实验步骤",
+              "试剂/对象": "文献实验对象",
+              "参数": "文献未说明",
+              "evidence": "合成摘要: 面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。"
+            }
+          ],
+          "missing_parameters": [
+            "PDF 文本未提供可完全结构化的参数列表；缺失参数保留为 文献未说明。"
+          ],
+          "paper_id": "doi_10_61654_zzszjy2401",
+          "verification_status": "verified_doi",
+          "full_text_status": "metadata_only"
+        }
+      ],
+      "knowledge_hits": [
+        {
+          "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+          "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D01/knowledge_base/碱性氮化合物在裂化催化剂上的吸附_Ⅳ.氮化合物对废催化剂表面性质的影响_f0de3a485d.json",
+          "score": 6.0,
+          "problem": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+          "synthesis_summary": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+          "experiment_details": "合成摘要: 碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+          "steps": []
+        },
+        {
+          "title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+          "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+          "score": 4.0,
+          "problem": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+          "synthesis_summary": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+          "experiment_details": "合成摘要: 面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+          "steps": []
+        }
+      ],
+      "latest_observation": ""
+    },
+    "device_agent_contract": {
+      "research_macro_action_level": "The macro_action_steps are chemical-semantic experiment actions. They specify what experiment to do and key chemical parameters, but they may intentionally omit concrete machine containers, workstation names, container IDs, reagent bottle slots, lid operations, balancing, and repeated device sub-steps.",
+      "device_agent_responsibilities": [
+        "Select concrete supported containers and workstations from the loaded workstation truth source.",
+        "Map liquid sources to reagent/original-solution bottle slots when appropriate.",
+        "Expand macro actions into device-level operations such as lid handling, aliquoting, balancing, repeated purification, drying, and handoff notes.",
+        "Maintain one continuous, supported container path across reaction, aging/resting, purification, washing, drying, and testing; if a vessel change is required, it must be backed by an explicit supported transfer/vessel-change operation.",
+        "Return device_feasibility_error only when no legal equipment/container/workstation mapping can realize the chemical action or a mandatory scientific condition is impossible."
+      ],
+      "do_not_return_to_research_for": [
+        "missing container IDs",
+        "missing workstation names",
+        "missing reagent bottle slot numbers",
+        "missing open/close lid actions",
+        "missing even-vial balancing details",
+        "missing split/repeated wash substeps"
+      ],
+      "must_return_to_research_for": [
+        "macro routes that require an unsupported transfer or vessel change between incompatible container classes"
+      ]
+    }
+  },
+  "macro_plan_summary": "",
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、氧化/活化并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、氧化/活化并完成 XRD 观察",
+    "completion_condition": "是每类样品至少获得一份可解析 XRD 图谱，完成主要物相、杂相、峰位及相对结晶度记录，并据此确认样品是否可进入后续 XPS stage",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
+  },
+  "device_capabilities": {
+    "supported_containers": [
+      "进样瓶",
+      "50ml耐热瓶",
+      "西林瓶",
+      "留样瓶",
+      "96位石英孔板",
+      "96位塑料孔板",
+      "10ml耐压反应管",
+      "料斗"
+    ],
+    "supported_workstations": [
+      "Liquid_Handling_Station_1ml_V1",
+      "Liquid_Handling_Station_5ml_V1",
+      "Liquid_Handling_Station_5ml_V2",
+      "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "Centrifuge_V1",
+      "Purification_Workstation_V1",
+      "Liquid_Pouring_Workstation_V1",
+      "Drying_Oven_V1",
+      "Ultrasonic_Disperser_V1",
+      "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "Spectroscopy_Container_Transfer_Station_V1",
+      "Muffle_Furnace_V1",
+      "XRD_V1",
+      "Solid_Sample_Transfer_Workstation_V1",
+      "Multi_Channel_Solid_Weighing_Workstation_V2"
+    ],
+    "not_supported": [
+      "干燥固体从进样瓶或料斗转移至96位石英孔板的连续自动化路径",
+      "使用进样瓶或50ml耐热瓶进行350 ℃空气程序煅烧",
+      "在当前映射接口中实际向303实验室创建调度任务并生成真实任务ID"
+    ]
+  },
+  "feasibility_assessment": {
+    "feedback_type": "device_feasibility_error",
+    "status": "feasibility_error",
+    "feasibility": {
+      "is_feasible": false,
+      "blocking_constraints": [
+        "Co₃O₄ 分支在洗涤、干燥所用进样瓶与马弗炉要求的96位石英孔板之间不存在受支持的连续固体转移路径。Muffle_Furnace_V1 仅接受无盖96位石英孔板，而离心、纯化和50 ℃干燥后的 Co(OH)₂ 固体位于进样瓶中；当前真源没有将该固体从进样瓶或料斗定量转移到96位石英孔板的操作。",
+        "除 Muffle_Furnace_V1 外，没有支持350 ℃空气煅烧的工作站；Heating_Magnetic_Stirring_Workstation_V1 虽可使用进样瓶或50ml耐热瓶，但最高温度仅200 ℃，不能替代350 ℃煅烧。因此无法在不伪造换瓶或改变必要煅烧条件的情况下完成全部三个目标样品及其 XRD observation point。"
+      ],
+      "unsupported_items": [
+        {
+          "macro_step": "步骤6：空气煅烧制备 Co₃O₄ 候选样品",
+          "requirement": "将独立批次洗涤并在50 ℃干燥后的进样瓶内 Co(OH)₂ 固体转入可在空气中执行2 ℃/min升温至350 ℃、保温2 h的煅烧容器",
+          "constraint_category": "hard_capability_gap",
+          "reason": "Muffle_Furnace_V1（2030562790507520）的输入容器被强制限定为无盖96位石英孔板。前序 Centrifuge_V1、Purification_Workstation_V1、Liquid_Pouring_Workstation_V1 和 Drying_Oven_V1 可保持进样瓶路径，但真源未提供进样瓶到96位石英孔板的干固体转移操作。Solid_Sample_Transfer_Workstation_V1 只能把进样瓶固体转入料斗；其后明确支持料斗输入的 Multi_Channel_Solid_Weighing_Workstation_V2 只能输出10ml耐压反应管，仍不能进入马弗炉。液体移至96位孔板的操作不能合法替代宏观步骤规定的干燥固体转移。",
+          "missing_device_capability": "进样瓶/料斗中的干燥固体到96位石英孔板的受支持转移或称量操作，或者支持进样瓶/50ml耐热瓶在空气中350 ℃程序煅烧的工作站",
+          "suggested_research_revision": "请在 research layer 将 Co₃O₄ 分支改写为具有连续容器路径的化学语义路线。可选方案为：明确允许洗涤后的 Co(OH)₂ 以悬浊液形式通过受支持的液体转移进入96位石英孔板，并在石英孔板内先执行受支持的定温预干燥阶段、再执行350 ℃煅烧；该改写需确认直接孔板内干燥—煅烧不会改变研究目标。另一方案是将 Co₃O₄ 制备和装载列为离线人工前处理，向当前设备提供已在进样瓶中装载的 Co₃O₄-XRD 乙醇悬浊液。不能仅在 notes 中声称固体已从进样瓶换到石英孔板。"
+        }
+      ],
+      "device_layer_adaptations": [
+        "若容器路径问题得到 research layer 合法修订，可为三个材料分支各设置2个独立重复，共使用6只同类型进样瓶，并以相同体积成对进入离心或纯化工作站，无需额外低体积配平瓶。",
+        "可固定分配原液瓶位：1号为0.100 mol/L Co(NO₃)₂，2号为0.200 mol/L NaOH，3号为0.200 mol/L有效NaClO，4号为去离子水，5号为无水乙醇，并遵守一瓶一液。",
+        "10.0 mL NaOH 的加入可派生为10次1.0 mL加液，每次加液后在同一进样瓶中600 rpm搅拌1 min；5.0 mL NaClO 可派生为10次0.50 mL加液，每次加液后600 rpm搅拌1 min。该交替节拍属于对边加液边搅拌的可执行近似，而不是阻塞。",
+        "Co(OH)₂ 和 CoOOH 分支可在进样瓶中完成6000 rpm、10 min离心以及3个固定的10.0 mL去离子水洗涤循环，并在50 ℃干燥720 min。",
+        "XRD_V1 支持进样瓶或50ml耐热瓶内不少于4.0 mL的乙醇悬浊液；可加入5.0 mL无水乙醇，超声10 min、谱学磁力搅拌5 min，并经谱学容器中转平台进入XRD。",
+        "Cu Kα辐射属于XRD设备固有测试能力时无需另行下发，不能因其不在开放参数表中判定不可行；扫描范围、步长和速率应仅在XRD开放参数实际提供同义字段时下发，否则作为测试依据或人工审核项。",
+        "容器编号、开关盖、重复洗涤和离心配平均可由设备层补全，不构成本次错误原因。"
+      ]
+    },
+    "parameter_disposition": [
+      {
+        "macro_steps": [
+          2,
+          4
+        ],
+        "parameter": "600 rpm搅拌、60 min熟化、120 min氧化",
+        "category": "device_dispatch_field",
+        "disposition": "可映射到常温磁力搅拌工作站的搅拌速度和搅拌时间字段。"
+      },
+      {
+        "macro_steps": [
+          2,
+          4
+        ],
+        "parameter": "25±2 ℃",
+        "category": "fixed_device_capability",
+        "disposition": "常温磁力搅拌工作站用于常温操作；该环境条件无需伪造为设备开放控温字段。执行前应由实验室确认环境处于23–27 ℃。"
+      },
+      {
+        "macro_steps": [
+          2,
+          4
+        ],
+        "parameter": "分10批加入且批间隔1 min，并在搅拌下加入",
+        "category": "derived_process_constraint",
+        "disposition": "可派生为预搅拌、单批加液、搅拌1 min的交替循环，最后执行规定时间的搅拌。"
+      },
+      {
+        "macro_steps": [
+          3,
+          5
+        ],
+        "parameter": "6000 rpm离心10 min及3次固定洗涤",
+        "category": "device_dispatch_field",
+        "disposition": "可映射至离心或纯化工作站的速度、时间、清洗次数、清洗液和留固方案；参与同次离心的瓶数保持偶数且等体积。"
+      },
+      {
+        "macro_steps": [
+          3,
+          5
+        ],
+        "parameter": "50 ℃干燥12 h",
+        "category": "device_dispatch_field",
+        "disposition": "可映射至Drying_Oven_V1的恒温温度50 ℃和烘干时间720 min。"
+      },
+      {
+        "macro_steps": [
+          6
+        ],
+        "parameter": "空气中2 ℃/min升温至350 ℃并保温2 h",
+        "category": "uncontrollable_mandatory",
+        "disposition": "350 ℃程序本身可由马弗炉承载，但目标固体无法通过受支持路径进入马弗炉唯一允许的96位石英孔板，因此形成硬阻塞。"
+      },
+      {
+        "macro_steps": [
+          7
+        ],
+        "parameter": "每份10.0 mg固体与5.0 mL无水乙醇",
+        "category": "offline_condition",
+        "disposition": "若必须保持准确2.0 mg/mL，可按research handoff中的device_validation_note改为外部称量预配并装载进样瓶；但该离线适配不能用于掩盖步骤6缺失的设备内容器路径。"
+      },
+      {
+        "macro_steps": [
+          8
+        ],
+        "parameter": "Cu Kα辐射",
+        "category": "fixed_device_capability",
+        "disposition": "按XRD Skill的设备固定能力处理，无需下发。"
+      },
+      {
+        "macro_steps": [
+          8
+        ],
+        "parameter": "2θ 10–80°、步长0.02°、扫描速率2°/min",
+        "category": "device_dispatch_field",
+        "disposition": "仅在XRD_V1开放参数表存在对应字段且取值合法时映射；摘要截断导致开放字段范围未完整显示，因此需要执行系统读取完整Skill后审核，但这不是当前硬阻塞的依据。"
+      }
+    ],
+    "device_capability_summary": {
+      "supported_containers": [
+        "进样瓶",
+        "50ml耐热瓶",
+        "西林瓶",
+        "留样瓶",
+        "96位石英孔板",
+        "96位塑料孔板",
+        "10ml耐压反应管",
+        "料斗"
+      ],
+      "supported_workstations": [
+        "Liquid_Handling_Station_1ml_V1",
+        "Liquid_Handling_Station_5ml_V1",
+        "Liquid_Handling_Station_5ml_V2",
+        "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "Centrifuge_V1",
+        "Purification_Workstation_V1",
+        "Liquid_Pouring_Workstation_V1",
+        "Drying_Oven_V1",
+        "Ultrasonic_Disperser_V1",
+        "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+        "Spectroscopy_Container_Transfer_Station_V1",
+        "Muffle_Furnace_V1",
+        "XRD_V1",
+        "Solid_Sample_Transfer_Workstation_V1",
+        "Multi_Channel_Solid_Weighing_Workstation_V2"
+      ],
+      "not_supported": [
+        "干燥固体从进样瓶或料斗转移至96位石英孔板的连续自动化路径",
+        "使用进样瓶或50ml耐热瓶进行350 ℃空气程序煅烧",
+        "在当前映射接口中实际向303实验室创建调度任务并生成真实任务ID"
+      ]
+    },
+    "recommendation_to_research_agent": "请优先修订 Co₃O₄ 分支的容器路径：要么科学上明确允许将洗涤后的湿态前体以悬浊液转入96位石英孔板后在孔板内完成预干燥和煅烧，要么把 Co₃O₄ 制备及XRD进样瓶装载定义为离线人工前处理。修订后其余两条合成分支、固定三次洗涤、50 ℃干燥、乙醇分散及XRD均可映射。当前不能生成或伪造303实验室任务ID。"
+  },
+  "requires_scientific_review": false,
+  "error_package": {
+    "type": "physical_infeasible",
+    "device_snapshot_id": "ws_df1802c0c025",
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "constraint_classification": {
+      "hard": [
+        "将独立批次洗涤并在50 ℃干燥后的进样瓶内 Co(OH)₂ 固体转入可在空气中执行2 ℃/min升温至350 ℃、保温2 h的煅烧容器 Muffle_Furnace_V1（2030562790507520）的输入容器被强制限定为无盖96位石英孔板。前序 Centrifuge_V1、Purification_Workstation_V1、Liquid_Pouring_Workstation_V1 和 Drying_Oven_V1 可保持进样瓶路径，但真源未提供进样瓶到96位石英孔板的干固体转移操作。Solid_Sample_Transfer_Workstation_V1 只能把进样瓶固体转入料斗；其后明确支持料斗输入的 Multi_Channel_Solid_Weighing_Workstation_V2 只能输出10ml耐压反应管，仍不能进入马弗炉。液体移至96位孔板的操作不能合法替代宏观步骤规定的干燥固体转移。 进样瓶/料斗中的干燥固体到96位石英孔板的受支持转移或称量操作，或者支持进样瓶/50ml耐热瓶在空气中350 ℃程序煅烧的工作站",
+        "除 Muffle_Furnace_V1 外，没有支持350 ℃空气煅烧的工作站；Heating_Magnetic_Stirring_Workstation_V1 虽可使用进样瓶或50ml耐热瓶，但最高温度仅200 ℃，不能替代350 ℃煅烧。因此无法在不伪造换瓶或改变必要煅烧条件的情况下完成全部三个目标样品及其 XRD observation point。"
+      ],
+      "adaptable": [],
+      "unverifiable": [
+        "Co₃O₄ 分支在洗涤、干燥所用进样瓶与马弗炉要求的96位石英孔板之间不存在受支持的连续固体转移路径。Muffle_Furnace_V1 仅接受无盖96位石英孔板，而离心、纯化和50 ℃干燥后的 Co(OH)₂ 固体位于进样瓶中；当前真源没有将该固体从进样瓶或料斗定量转移到96位石英孔板的操作。"
+      ]
+    },
+    "blocking_constraints": [
+      "Co₃O₄ 分支在洗涤、干燥所用进样瓶与马弗炉要求的96位石英孔板之间不存在受支持的连续固体转移路径。Muffle_Furnace_V1 仅接受无盖96位石英孔板，而离心、纯化和50 ℃干燥后的 Co(OH)₂ 固体位于进样瓶中；当前真源没有将该固体从进样瓶或料斗定量转移到96位石英孔板的操作。",
+      "除 Muffle_Furnace_V1 外，没有支持350 ℃空气煅烧的工作站；Heating_Magnetic_Stirring_Workstation_V1 虽可使用进样瓶或50ml耐热瓶，但最高温度仅200 ℃，不能替代350 ℃煅烧。因此无法在不伪造换瓶或改变必要煅烧条件的情况下完成全部三个目标样品及其 XRD observation point。"
+    ],
+    "message": "请优先修订 Co₃O₄ 分支的容器路径：要么科学上明确允许将洗涤后的湿态前体以悬浊液转入96位石英孔板后在孔板内完成预干燥和煅烧，要么把 Co₃O₄ 制备及XRD进样瓶装载定义为离线人工前处理。修订后其余两条合成分支、固定三次洗涤、50 ℃干燥、乙醇分散及XRD均可映射。当前不能生成或伪造303实验室任务ID。",
+    "last_workflow_txt": "",
+    "unsupported_items": [
+      {
+        "macro_step": "步骤6：空气煅烧制备 Co₃O₄ 候选样品",
+        "requirement": "将独立批次洗涤并在50 ℃干燥后的进样瓶内 Co(OH)₂ 固体转入可在空气中执行2 ℃/min升温至350 ℃、保温2 h的煅烧容器",
+        "constraint_category": "hard_capability_gap",
+        "reason": "Muffle_Furnace_V1（2030562790507520）的输入容器被强制限定为无盖96位石英孔板。前序 Centrifuge_V1、Purification_Workstation_V1、Liquid_Pouring_Workstation_V1 和 Drying_Oven_V1 可保持进样瓶路径，但真源未提供进样瓶到96位石英孔板的干固体转移操作。Solid_Sample_Transfer_Workstation_V1 只能把进样瓶固体转入料斗；其后明确支持料斗输入的 Multi_Channel_Solid_Weighing_Workstation_V2 只能输出10ml耐压反应管，仍不能进入马弗炉。液体移至96位孔板的操作不能合法替代宏观步骤规定的干燥固体转移。",
+        "missing_device_capability": "进样瓶/料斗中的干燥固体到96位石英孔板的受支持转移或称量操作，或者支持进样瓶/50ml耐热瓶在空气中350 ℃程序煅烧的工作站",
+        "suggested_research_revision": "请在 research layer 将 Co₃O₄ 分支改写为具有连续容器路径的化学语义路线。可选方案为：明确允许洗涤后的 Co(OH)₂ 以悬浊液形式通过受支持的液体转移进入96位石英孔板，并在石英孔板内先执行受支持的定温预干燥阶段、再执行350 ℃煅烧；该改写需确认直接孔板内干燥—煅烧不会改变研究目标。另一方案是将 Co₃O₄ 制备和装载列为离线人工前处理，向当前设备提供已在进样瓶中装载的 Co₃O₄-XRD 乙醇悬浊液。不能仅在 notes 中声称固体已从进样瓶换到石英孔板。"
+      }
+    ],
+    "assessment_source": "single_device_agent_llm"
+  }
+}

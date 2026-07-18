@@ -1,0 +1,30 @@
+{
+  "文献题目": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+  "1. 解决的问题": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+  "2. 具体的合成步骤": {
+    "描述性总结": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+    "参数列表": []
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://doi.org/10.1360/csb1959-4-23-797",
+    "source_type": "crossref",
+    "ingested_at": "2026-07-18T17:08:28+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "crossref",
+    "source_id": "10.1360/csb1959-4-23-797",
+    "url": "https://doi.org/10.1360/csb1959-4-23-797",
+    "pdf_url": "",
+    "doi": "10.1360/csb1959-4-23-797",
+    "year": "1959",
+    "authors": [
+      "光琰 肖",
+      "学文 金",
+      "樑模 周"
+    ],
+    "arxiv_id": "",
+    "venue": "Chinese Science Bulletin",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

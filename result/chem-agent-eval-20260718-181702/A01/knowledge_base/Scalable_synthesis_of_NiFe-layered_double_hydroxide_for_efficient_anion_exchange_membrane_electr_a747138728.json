@@ -1,0 +1,79 @@
+{
+  "文献题目": "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+  "1. 解决的问题": "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis The alkaline oxygen evolution reaction is a key step in producing green hydrogen through water electrolysis, but its large-scale industrial application remains limited due to challenges with current electrocatalysts—particularly in terms of scalability, efficiency, and long-term stability. Here we show an industrially scalable synthesis of an active NiFe layered double hydroxide (NiFe-LDH) catalyst using a room-temperature, atmospheric-pressure route. The process involves homogeneous alkalinization, where chloride ions nucleophilically attack an epoxide ring, producing a low-dimensional, defect-rich NiFe-LDH with pronounced iron clustering. In-situ spectroscopy and ab-initio calculations reveal that these structural features maximize the conversion of the NiFe-LDH to the catalytic active phase and minimize the energy barrier, improving catalytic efficiency. When used as the anode in an anion exchange membrane water electrolyzer operating at 70 °C, our material delivers 1 A cm⁻² at 1.69 V in a 5 cm2 full-cell setup, with notable durability compared to conventional NiFe-LDHs. This scalable approach could considerably lower the cost of green hydrogen production by enabling more efficient alkaline electrolyzers. Green hydrogen production via water electrolysis requires a low-cost solution to provide efficient catalysts. Here, the authors report an industrially scalable method for synthesizing NiFe layered double hydroxide at room temperature and atmospheric pressure, enhancing",
+  "2. 具体的合成步骤": {
+    "描述性总结": "synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis The alkaline oxygen evolution reaction is a key step in producing green hydrogen through water electrolysis, but its large-scale industrial application remains limited due to challenges with current electrocatalysts—particularly in terms of scalability, efficiency, and long-term stability. Here we show an industrially scalable synthesis of an active NiFe layered double hydroxide (NiFe-LDH) catalyst using a room-temperature, atmospheric-pressure route. Green hydrogen production via water electrolysis requires a low-cost solution to provide efficient catalysts. Here, the authors report an industrially scalable method for synthesizing NiFe layered double hydroxide at room temperature and atmospheric pressure, enhancing alkaline electrolysis.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "论文实验步骤",
+        "试剂/对象": "NiFe-layered",
+        "参数": "文献未说明",
+        "evidence": "synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis The alkaline oxygen evolution reaction is a key step in producing green hydrogen through water electrolysis, but its large-scale industrial application remains limited due to challenges with current electrocatalysts—particularly in terms of scalability, efficiency, and long-term stability."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "表征/测试",
+        "试剂/对象": "Here, NiFe, NiFe-LDH)",
+        "参数": "文献未说明",
+        "evidence": "Here we show an industrially scalable synthesis of an active NiFe layered double hydroxide (NiFe-LDH) catalyst using a room-temperature, atmospheric-pressure route."
+      },
+      {
+        "步骤序号": 3,
+        "操作": "配制溶液",
+        "试剂/对象": "Green",
+        "参数": "文献未说明",
+        "evidence": "Green hydrogen production via water electrolysis requires a low-cost solution to provide efficient catalysts."
+      },
+      {
+        "步骤序号": 4,
+        "操作": "表征/测试",
+        "试剂/对象": "Here, NiFe",
+        "参数": "Here, the authors report an industrially scalable method for synthesizing NiFe layered double hydroxide at room temperature and atmospheric pressure, enhancing alkaline electrolysis.",
+        "evidence": "Here, the authors report an industrially scalable method for synthesizing NiFe layered double hydroxide at room temperature and atmospheric pressure, enhancing alkaline electrolysis."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://openalex.org/W4411983897",
+    "source_type": "openalex",
+    "ingested_at": "2026-07-18T18:18:11+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "openalex",
+    "source_id": "https://openalex.org/W4411983897",
+    "url": "https://openalex.org/W4411983897",
+    "pdf_url": "https://www.nature.com/articles/s41467-025-61356-2.pdf",
+    "doi": "10.1038/s41467-025-61356-2",
+    "year": "2025",
+    "authors": [
+      "Álvaro Seijas‐Da Silva",
+      "Adrian Hartert",
+      "Víctor Oestreicher",
+      "Jorge Romero",
+      "Camilo Jaramillo‐Hernández",
+      "Luuk J.J. Muris",
+      "Grégoire Thorez",
+      "Bruno J. C. Vieira",
+      "Guillaume Ducourthial",
+      "Alice Fiocco",
+      "Sébastien Legendre",
+      "Cristián Huck‐Iriart",
+      "Martín Mizrahi",
+      "Diego López‐Alcalá",
+      "Anna T.S. Freiberg",
+      "Karl J. J. Mayrhofer",
+      "João C. Waerenborgh",
+      "José J. Baldoví",
+      "Serhiy Cherevko",
+      "M. Varela",
+      "Simon Thiele",
+      "Vicent Lloret",
+      "Gonzalo Abellán"
+    ],
+    "arxiv_id": "",
+    "venue": "Nature Communications",
+    "citation_count": 75,
+    "full_text_status": "metadata_only"
+  }
+}

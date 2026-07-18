@@ -1,0 +1,45 @@
+{
+  "文献题目": "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation",
+  "1. 解决的问题": "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation Highly active, durable and cost-effective electrocatalysts for water oxidation to evolve oxygen gas hold a key to a range of renewable energy solutions including water splitting and rechargeable metal-air batteries. Here, we report the synthesis of ultrathin nickel iron layered double hydroxide nanoplates on mildly oxidized multi-walled carbon nanotubes. Incorporation of Fe into the nickel hydroxide induced the formation of NiFe-layered double hydroxide. The nanoplates were covalently attached to a network of nanotubes, affording excellent electrical wiring to the nanoplates. The ultra-thin Ni-Fe layered double hydroxide nanoplates/carbon nanotube complex was found to exhibit unusually high electro-catalytic activity and stability for oxygen evolution and outperformed commercial precious metal Ir catalysts. Ming Gong Yanguang Li Hailiang Wang Yongye Liang Justin Zachary Wu Jigang Zhou Jian Wang Tom Regier Fei Wei Hongjie Dai",
+  "2. 具体的合成步骤": {
+    "描述性总结": "synthesis of ultrathin nickel iron layered double hydroxide nanoplates on mildly oxidized multi-walled carbon nanotubes.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "论文实验步骤",
+        "试剂/对象": "文献实验对象",
+        "参数": "文献未说明",
+        "evidence": "synthesis of ultrathin nickel iron layered double hydroxide nanoplates on mildly oxidized multi-walled carbon nanotubes."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "http://arxiv.org/abs/1303.3308v2",
+    "source_type": "arxiv",
+    "ingested_at": "2026-07-18T18:18:11+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "arxiv",
+    "source_id": "1303.3308v2",
+    "url": "http://arxiv.org/abs/1303.3308v2",
+    "pdf_url": "https://arxiv.org/pdf/1303.3308v2",
+    "doi": "",
+    "year": "2013",
+    "authors": [
+      "Ming Gong",
+      "Yanguang Li",
+      "Hailiang Wang",
+      "Yongye Liang",
+      "Justin Zachary Wu",
+      "Jigang Zhou",
+      "Jian Wang",
+      "Tom Regier",
+      "Fei Wei",
+      "Hongjie Dai"
+    ],
+    "arxiv_id": "1303.3308v2",
+    "venue": "",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

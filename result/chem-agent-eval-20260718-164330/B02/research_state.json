@@ -1,0 +1,1459 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究硫化处理对 CoMo 基催化剂结构转变、活性位点形成和碱性 HER 性能的影响，请围绕 CoMo 基催化剂设计合理的对照实验方案。实验应包含未硫化 CoMo 氧化物/氢氧化物、不同硫化程度 CoMo-S 样品以及单金属 Co 或 Mo 对照样品，比较其晶相、形貌、元素分布、表面价态和 HER 反应动力学差异。方案需覆盖催化剂制备、硫化后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够判断硫化诱导活性位点形成与性能提升关系的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "CoMo 氧化物 氢氧化物 共沉淀或水热合成 碱性析氢催化剂 Co/Mo 比例",
+    "CoMo 氧化物 硫脲或硫化钠液相硫化 不同硫化温度时间 CoMo-S 相变",
+    "CoMo-S 未硫化 CoMo 前驱体 单金属 Co Mo 对照 碱性 HER 活性位点",
+    "CoMo-S 晶相形貌元素分布 XRD SEM TEM EDS 硫化程度结构演变",
+    "CoMo-S 表面价态 Co-S Mo-S 界面 XPS Raman 活性位点形成机制",
+    "CoMo-S 碱性 HER 极化曲线 Tafel 斜率 EIS 双电层电容 稳定性 动力学"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "CoMo 氧化物 氢氧化物 共沉淀或水热合成 碱性析氢催化剂 Co/Mo 比例",
+        "CoMo 氧化物 硫脲或硫化钠液相硫化 不同硫化温度时间 CoMo-S 相变",
+        "CoMo-S 未硫化 CoMo 前驱体 单金属 Co Mo 对照 碱性 HER 活性位点",
+        "CoMo-S 晶相形貌元素分布 XRD SEM TEM EDS 硫化程度结构演变",
+        "CoMo-S 表面价态 Co-S Mo-S 界面 XPS Raman 活性位点形成机制",
+        "CoMo-S 碱性 HER 极化曲线 Tafel 斜率 EIS 双电层电容 稳定性 动力学"
+      ],
+      "hit_titles": []
+    },
+    {
+      "round": 2,
+      "queries": [
+        "CoMo oxide hydroxide precursor controlled sulfidation thiourea Na2S alkaline HER synthesis conditions partial sulfidation",
+        "CoMoS Co9S8 MoS2 heterointerface alkaline hydrogen evolution XPS active sites Tafel EIS Cdl",
+        "CoMo catalyst unsulfided precursor different sulfurization degree single-metal Co Mo controls XRD SEM TEM EDS XPS HER",
+        "CoMo-S alkaline HER electrode preparation catalyst loading iR correction stability Faradaic efficiency experimental protocol"
+      ],
+      "hit_titles": []
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [],
+  "memory_hits": [],
+  "extracted_protocols": [],
+  "survey_report": {
+    "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+    "key_findings": [
+      "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+      "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+      "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+      "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+      "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+    ],
+    "candidate_precedents": [],
+    "route_implications": [
+      "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+      "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+      "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+      "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+      "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+      "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+    ],
+    "open_questions": [
+      "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+      "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+      "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+      "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+      "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+      "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+      "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+    ]
+  },
+  "stage_route": [
+    "合成、硫化并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 Raman 观察",
+    "基于前序结果继续推进并完成 SEM 观察",
+    "基于前序结果继续推进并完成 TEM 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、硫化并完成 XRD 观察",
+  "current_stage_plan": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "外部预配并装载前驱体及硫化原液",
+      "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+      "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+      "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+      "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+      "来源": "agent补全",
+      "device_validation": "needs_device_validation",
+      "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "分离、洗涤并干燥 CoMo 前驱体",
+      "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+      "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "建立单金属 Co 和 Mo 端元对照",
+      "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+      "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+      "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+      "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "纯化并干燥硫化梯度和空白处理样品",
+      "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+      "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+      "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+      "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、硫化并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、硫化并完成 XRD 观察",
+    "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、硫化并完成 XRD 观察",
+      "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、硫化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 SEM 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、硫化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "外部预配并装载前驱体及硫化原液",
+        "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+        "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+        "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+        "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "分离、洗涤并干燥 CoMo 前驱体",
+        "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+        "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "建立单金属 Co 和 Mo 端元对照",
+        "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+        "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+        "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "纯化并干燥硫化梯度和空白处理样品",
+        "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+        "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+        "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、硫化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、硫化并完成 XRD 观察",
+      "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+      "key_findings": [
+        "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+        "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+        "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+        "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+        "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+        "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+        "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+        "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+        "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+        "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+      ],
+      "open_questions": [
+        "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+        "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+        "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+        "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+        "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+        "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+        "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究硫化处理对 CoMo 基催化剂结构转变、活性位点形成和碱性 HER 性能的影响，请围绕 CoMo 基催化剂设计合理的对照实验方案。实验应包含未硫化 CoMo 氧化物/氢氧化物、不同硫化程度 CoMo-S 样品以及单金属 Co 或 Mo 对照样品，比较其晶相、形貌、元素分布、表面价态和 HER 反应动力学差异。方案需覆盖催化剂制备、硫化后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够判断硫化诱导活性位点形成与性能提升关系的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、硫化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 SEM 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、硫化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "外部预配并装载前驱体及硫化原液",
+        "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+        "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+        "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+        "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "分离、洗涤并干燥 CoMo 前驱体",
+        "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+        "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "建立单金属 Co 和 Mo 端元对照",
+        "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+        "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+        "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "纯化并干燥硫化梯度和空白处理样品",
+        "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+        "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+        "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、硫化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、硫化并完成 XRD 观察",
+      "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+      "key_findings": [
+        "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+        "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+        "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+        "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+        "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+        "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+        "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+        "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+        "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+        "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+      ],
+      "open_questions": [
+        "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+        "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+        "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+        "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+        "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+        "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+        "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "CoMo 氧化物 氢氧化物 共沉淀或水热合成 碱性析氢催化剂 Co/Mo 比例",
+        "CoMo 氧化物 硫脲或硫化钠液相硫化 不同硫化温度时间 CoMo-S 相变",
+        "CoMo-S 未硫化 CoMo 前驱体 单金属 Co Mo 对照 碱性 HER 活性位点",
+        "CoMo-S 晶相形貌元素分布 XRD SEM TEM EDS 硫化程度结构演变",
+        "CoMo-S 表面价态 Co-S Mo-S 界面 XPS Raman 活性位点形成机制",
+        "CoMo-S 碱性 HER 极化曲线 Tafel 斜率 EIS 双电层电容 稳定性 动力学"
+      ],
+      "reason": "这些检索词覆盖了CoMo前驱体与单金属对照的制备、可调硫化路线、晶相与形貌及元素分布、表面价态和界面活性位点，以及碱性HER动力学与稳定性评价等关键知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "CoMo oxide hydroxide precursor controlled sulfidation thiourea Na2S alkaline HER synthesis conditions partial sulfidation",
+          "CoMoS Co9S8 MoS2 heterointerface alkaline hydrogen evolution XPS active sites Tafel EIS Cdl",
+          "CoMo catalyst unsulfided precursor different sulfurization degree single-metal Co Mo controls XRD SEM TEM EDS XPS HER",
+          "CoMo-S alkaline HER electrode preparation catalyst loading iR correction stability Faradaic efficiency experimental protocol"
+        ],
+        "reason": "当前无知识命中，尚不足以可靠确定CoMo前驱体的可复现实验配方、不同硫化程度的控制变量及单金属对照的等价制备条件，也缺少晶相—形貌—元素分布—表面价态与HER动力学关联的判据和标准化电化学测试参数。下一轮应优先检索可复现的受控硫化方案、Co–S/Mo–S异质界面活性位点证据、完整对照体系以及电极制备与HER测试规范，以支撑后续按关键观察点划分stage。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "cobalt molybdenum oxide hydroxide precursor hydrothermal synthesis molar ratio exact quantities alkaline HER supporting information",
+          "controlled partial sulfurization CoMo oxide thiourea sodium sulfide temperature time sulfur content phase evolution CoMoS",
+          "CoMoS cobalt sulfide molybdenum sulfide monometallic controls identical synthesis XRD XPS TEM EDS alkaline hydrogen evolution",
+          "CoMo sulfide operando ex situ Raman XPS Co-S Mo-S active site correlation Tafel EIS Cdl alkaline HER"
+        ],
+        "reason": "当前累计知识仍为零命中，不足以可靠设计可复现的 stage。尤其缺少：CoMo 氧化物/氢氧化物前驱体及单金属对照的等价配方；以单一变量调节硫化程度的温度、时间或硫源条件；区分部分硫化与完全硫化的 XRD、XPS、Raman 和元素含量判据；以及将 Co–S/Mo–S 键合、异质界面或缺陷位点与碱性 HER 的 Tafel、EIS、Cdl 和稳定性变化关联起来的证据。应继续检索包含具体实验条件和补充信息的原始论文，再据关键结构观察点和电化学观察点划分 stage。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [],
+      "missing_parameters": [
+        "当前知识库没有命中论文文本，无法抽取论文实际报告的实验过程",
+        "CoMo 氧化物或氢氧化物前驱体的试剂名称、化学计量比、浓度和用量",
+        "CoMo 前驱体的反应温度、反应时间、混合方式及气氛",
+        "前驱体分离、洗涤、干燥和煅烧条件",
+        "硫源种类、硫源用量及其与 CoMo 前驱体的比例",
+        "不同硫化程度样品的控制变量及具体硫化温度、时间和气氛",
+        "单金属 Co 和 Mo 对照样品的组成与制备条件",
+        "XRD、形貌成像、元素分布和表面价态表征的制样及测试参数",
+        "电极基底、催化剂墨水组成、分散条件、催化剂负载量和干燥条件",
+        "碱性 HER 测试的电解液组成与浓度、参比电极、对电极和电极面积",
+        "极化曲线扫描范围、扫描速率、iR 补偿方式及电位换算方法",
+        "Tafel、EIS、双电层电容、稳定性和产氢定量测试条件"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+      "key_findings": [
+        "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+        "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+        "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+        "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+        "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+        "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+        "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+        "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+        "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+        "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+      ],
+      "open_questions": [
+        "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+        "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+        "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+        "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+        "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+        "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+        "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：获得硫化梯度与单金属对照样品的晶相、形貌、元素分布及表面价态观察",
+        "stage 2：获得统一条件下各样品的碱性 HER 性能与反应动力学观察",
+        "stage 3：获得结构—活性关联判断及代表性电极反应后结构观察"
+      ],
+      "current_stage": "stage 1：获得硫化梯度与单金属对照样品的晶相、形貌、元素分布及表面价态观察",
+      "stage_route_reason": "识别出三个依次更新科学判断的关键 observation point：第一，未硫化 CoMo 氧化物/氢氧化物、低/中/高硫化程度 CoMo-S 及单金属 Co 或 Mo 对照的晶相、形貌、元素共定位、硫含量和表面价态观察，用于实测确认硫化程度、结构转变及潜在 Co–S/Mo–S 界面特征；第二，各样品在统一电极负载和碱性测试条件下的极化行为、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值和稳定性观察，用于比较 HER 活性与动力学；第三，将前两类数据联合分析，并对代表性高活性样品及必要对照进行反应后结构/价态观察，用于判断性能提升是否与硫化诱导的位点或界面形成一致。催化剂制备、受控硫化、分离洗涤、干燥、电极制备和送检均是到达相应 observation point 的 macro action，不单独构成 stage。平台支持 XRD 和电化学观察；形貌、元素分布、XPS 及必要的 Raman 或反应后显微分析应作为离线送样与数据回传。",
+      "current_stage_reason": "必须先制备完整对照矩阵并获得合法的结构与界面观察，才能确认按处理条件设定的低、中、高硫化样品确实具有可区分的硫含量、物相和化学态，进而避免在 HER 测试后仅凭性能差异倒推活性位点。因此首先进入 stage 1；其中同批前驱体分样、单变量硫化、纯化干燥以及表征制样均隶属于该 stage。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "外部预配并装载前驱体及硫化原液",
+          "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+          "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+          "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+          "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "分离、洗涤并干燥 CoMo 前驱体",
+          "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+          "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "建立单金属 Co 和 Mo 端元对照",
+          "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+          "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+          "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+          "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "纯化并干燥硫化梯度和空白处理样品",
+          "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+          "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+          "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+          "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+          "来源": "agent补全"
+        }
+      ],
+      "macro_plan_summary": "该 macro plan 以同源 CoMo 前驱体、单变量 Na2S 梯度和匹配的单金属空白/硫化端元组成8样品对照矩阵，覆盖从原液准备、前驱体形成、硫化后处理和纯化干燥到统一 XRD 制样与晶相观察的完整路径，所有步骤均服务于当前 stage 的唯一 XRD observation point。"
+    }
+  },
+  "campaign_id": "B02-20260718-164330",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究硫化处理对 CoMo 基催化剂结构转变、活性位点形成和碱性 HER 性能的影响，请围绕 CoMo 基催化剂设计合理的对照实验方案。实验应包含未硫化 CoMo 氧化物/氢氧化物、不同硫化程度 CoMo-S 样品以及单金属 Co 或 Mo 对照样品，比较其晶相、形貌、元素分布、表面价态和 HER 反应动力学差异。方案需覆盖催化剂制备、硫化后处理、结构/界面表征、电极制备和电化学 测试等关键环节，并获得能够判断硫化诱导活性位点形成与性能提升关系的结果。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "COMO: Compact Mapping and Odometry",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0312,
+        "kept": false,
+        "reason": "relevance 0.031 < threshold 0.1"
+      },
+      {
+        "title": "COMO: A Pipeline for Multi-Omics Data Integration in Metabolic Modeling and Drug Discovery",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "CoMo: Controllable Motion Generation through Language Guided Pose Code Editing",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "CoMoE: Collaborative Optimization of Expert Aggregation and Offloading for MoE-based LLMs at Edge",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "On the Multiple Access Channel with Asymmetric Noisy State Information at the Encoders",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 0,
+    "web_kept": 0,
+    "newly_registered": 0,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+      "crossref: HTTPError: HTTP Error 429: Too Many Requests"
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "B02-20260718-164330",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、硫化并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 Raman 观察",
+          "基于前序结果继续推进并完成 SEM 观察",
+          "基于前序结果继续推进并完成 TEM 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、硫化并完成 XRD 观察",
+        "current_stage_plan": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "外部预配并装载前驱体及硫化原液",
+            "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+            "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+            "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+            "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+            "来源": "agent补全",
+            "device_validation": "needs_device_validation",
+            "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "分离、洗涤并干燥 CoMo 前驱体",
+            "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+            "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "建立单金属 Co 和 Mo 端元对照",
+            "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+            "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+            "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+            "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "纯化并干燥硫化梯度和空白处理样品",
+            "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+            "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+            "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+            "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T16:48:51"
+    }
+  ],
+  "tool_invocations": [],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 16:43:31] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 16:43:31] B0 waiting received event: bootstrap",
+    "[2026-07-18 16:43:31] bootstrap event received; routing to B1",
+    "[2026-07-18 16:43:31] Entered B1 bootstrap",
+    "[2026-07-18 16:43:36] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=0, web_kept=0, written=0, errors=2",
+    "[2026-07-18 16:43:36] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 16:43:36] literature acquisition warning: crossref: HTTPError: HTTP Error 429: Too Many Requests",
+    "[2026-07-18 16:44:32] survey queries after sanitization: ['CoMo 氧化物 氢氧化物 共沉淀或水热合成 碱性析氢催化剂 Co/Mo 比例', 'CoMo 氧化物 硫脲或硫化钠液相硫化 不同硫化温度时间 CoMo-S 相变', 'CoMo-S 未硫化 CoMo 前驱体 单金属 Co Mo 对照 碱性 HER 活性位点', 'CoMo-S 晶相形貌元素分布 XRD SEM TEM EDS 硫化程度结构演变', 'CoMo-S 表面价态 Co-S Mo-S 界面 XPS Raman 活性位点形成机制', 'CoMo-S 碱性 HER 极化曲线 Tafel 斜率 EIS 双电层电容 稳定性 动力学']",
+    "[2026-07-18 16:44:32] survey query generate completed with 6 queries",
+    "[2026-07-18 16:44:32] Survey round 1 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 16:44:45] Survey round 2 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 16:45:15] paper_protocol_extract: LLM returned no usable protocols; degrading to heuristic extraction and continuing without citation-grade protocols",
+    "[2026-07-18 16:45:15] paper protocol extract completed with 0 protocols",
+    "[2026-07-18 16:45:15] memory disabled; skipped similar exp search",
+    "[2026-07-18 16:48:51] macro plan kept with device-validation markers on 5 step(s); device layer will judge",
+    "[2026-07-18 16:48:51] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 16:48:51] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T16:43:31.239697",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、硫化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 SEM 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、硫化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "外部预配并装载前驱体及硫化原液",
+        "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+        "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+        "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+        "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "分离、洗涤并干燥 CoMo 前驱体",
+        "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+        "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "建立单金属 Co 和 Mo 端元对照",
+        "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+        "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+        "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "纯化并干燥硫化梯度和空白处理样品",
+        "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+        "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+        "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、硫化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、硫化并完成 XRD 观察",
+      "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+      "key_findings": [
+        "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+        "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+        "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+        "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+        "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+        "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+        "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+        "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+        "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+        "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+      ],
+      "open_questions": [
+        "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+        "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+        "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+        "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+        "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+        "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+        "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究硫化处理对 CoMo 基催化剂结构转变、活性位点形成和碱性 HER 性能的影响，请围绕 CoMo 基催化剂设计合理的对照实验方案。实验应包含未硫化 CoMo 氧化物/氢氧化物、不同硫化程度 CoMo-S 样品以及单金属 Co 或 Mo 对照样品，比较其晶相、形貌、元素分布、表面价态和 HER 反应动力学差异。方案需覆盖催化剂制备、硫化后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够判断硫化诱导活性位点形成与性能提升关系的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、硫化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 SEM 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、硫化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、硫化并完成 XRD 观察”，目标 observation point 是获得完整对照矩阵的合法 XRD 衍射数据。stage goal 是在保持 Co/Mo 比、前驱体原液批次、固液比、处理温度和处理时间一致的前提下，制备未硫化 CoMo 氧化物/氢氧化物、操作性低/中/高硫化 CoMo-S，以及未硫化和代表性硫化的单金属 Co、Mo 对照，并判断硫化处理是否引起可由 XRD 检出的晶相生成、消失、峰位变化、结晶度变化或无定形化。planning logic 是先以同一批外部预配原液并行制备四份 CoMo 前驱体，避免对单一大体积母批进行设备不支持的换瓶分样；再以 Na2S 浓度作为唯一硫化梯度变量，对未硫化样实施等温等时水处理，对单金属氧化物实施相同的空白处理或中等硫化处理；随后统一分离、洗涤和干燥，并以不少于 4.0 mL 的乙醇悬浊液完成平台支持的 XRD 制样和测试。关键变量为 Co/Mo 原子比 1:1、Na2S 浓度 0、0.025、0.075 和 0.150 mol/L、固体投料 40 mg、处理液体积 8.0 mL、70 ℃和4 h；“低/中/高硫化”仅为处理条件标签，不在本 stage 中预设真实硫含量或确定物相。预期 observation 是取得 CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M 共8个样品的可比较 XRD 图谱，并形成峰位、相对峰强、峰宽及候选物相对照表；即使样品呈低结晶或无定形特征，只要信噪比和背景满足判读要求，也属于合法观察。stage completion condition 是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果。本方案没有可核验论文 protocol，所列合成和硫化参数均为 agent 基于对照设计与设备边界补全，需将 XRD 结论限定为晶相证据，不能仅凭处理条件或 XRD 单独确认实际硫化程度。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "外部预配并装载前驱体及硫化原液",
+        "试剂/对象": "Co(NO3)2 水溶液、Na2MoO4 水溶液、NaOH 水溶液、Na2S 水溶液、去离子水",
+        "参数": "外部预配0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH和新鲜0.600 mol/L Na2S原液；各原液分别储存并已装载，Na2S原液密闭并在配制当日使用；后续单个反应体系总液体体积固定为8.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "并行制备四份同配方 CoMo 氧化物/氢氧化物前驱体",
+        "试剂/对象": "0.100 mol/L Co(NO3)2、0.100 mol/L Na2MoO4、0.500 mol/L NaOH、去离子水",
+        "参数": "为CoMo-O、CoMo-S-L、CoMo-S-M和CoMo-S-H分别建立一份独立但同配方体系：加入2.00 mL Co(NO3)2原液、2.00 mL Na2MoO4原液和3.20 mL去离子水，在室温600-700 rpm搅拌下，将0.80 mL NaOH原液分8批加入，每批0.10 mL、间隔1 min；加完后继续搅拌30 min，再于70 ℃、700 rpm搅拌熟化240 min。每份体系含Co 0.200 mmol、Mo 0.200 mmol，Co/Mo原子比为1:1，总体积8.0 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "分离、洗涤并干燥 CoMo 前驱体",
+        "试剂/对象": "四份 CoMo 前驱体悬浊液、去离子水、无水乙醇",
+        "参数": "反应结束后冷却至室温，以6000 rpm离心10 min收集沉淀并去除上清；每份沉淀依次用6.0 mL去离子水重分散、离心洗涤3次，再用6.0 mL无水乙醇重分散、离心洗涤1次；每次重分散采用600-700 rpm搅拌5 min或超声5 min，离心条件均为6000 rpm、10 min。洗涤后的固体于60 ℃干燥12 h，冷却后轻柔研散；每份称取40.0 mg进入后续处理，剩余固体密闭留存。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 3 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "建立单金属 Co 和 Mo 端元对照",
+        "试剂/对象": "分析纯 Co3O4 粉末、分析纯 MoO3 粉末",
+        "参数": "分别为Co-O、Co-S-M、Mo-O和Mo-S-M称取40.0 mg对应单金属氧化物粉末；粉末预先在60 ℃干燥4 h并冷却至室温，以降低吸附水差异。Co-O与Mo-O作为未硫化空白处理对照，Co-S-M与Mo-S-M采用与CoMo-S-M相同的中等Na2S处理条件；单金属样品用于提供Co端元和Mo端元的晶相参照，不假定其形貌与CoMo前驱体完全等价。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 4 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "实施 CoMo 硫化梯度及单金属匹配后处理",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M，0.600 mol/L Na2S原液及去离子水",
+        "参数": "每个体系使用40.0 mg固体和8.0 mL处理液，均在70 ℃、700 rpm下搅拌处理240 min。CoMo-O、Co-O和Mo-O使用8.0 mL去离子水进行无硫空白处理；CoMo-S-L使用0.333 mL 0.600 mol/L Na2S原液加7.667 mL水，最终Na2S为0.025 mol/L；CoMo-S-M、Co-S-M和Mo-S-M各使用1.000 mL Na2S原液加7.000 mL水，最终Na2S为0.075 mol/L；CoMo-S-H使用2.000 mL Na2S原液加6.000 mL水，最终Na2S为0.150 mol/L。各处理液按固定体积分批加入固体分散液，并在批次间持续搅拌；不要求不可中断的连续滴加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 5 步明确要求不可中断的连续进料；需要设备层确认连续流能力",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "纯化并干燥硫化梯度和空白处理样品",
+        "试剂/对象": "8份处理后的催化剂悬浊液、去离子水、无水乙醇",
+        "参数": "处理结束后冷却至室温，以6000 rpm离心10 min收集固体并去除含硫上清；每份固体用6.0 mL去离子水重分散并离心洗涤3次，再用6.0 mL无水乙醇洗涤1次，每次重分散5 min、离心6000 rpm 10 min。随后于60 ℃干燥12 h，冷却后轻柔研散并密闭保存；记录各样品干燥后质量、颜色及是否出现明显团聚，但这些记录仅作为过程质控，不替代本 stage 的 XRD observation。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇悬浊液并获得晶相观察",
+        "试剂/对象": "CoMo-O、CoMo-S-L、CoMo-S-M、CoMo-S-H、Co-O、Co-S-M、Mo-O、Mo-S-M干燥粉末，无水乙醇",
+        "参数": "每个样品称取10.0 mg粉末，加入5.0 mL无水乙醇，超声分散10 min后以600 rpm搅拌5 min，形成均匀悬浊液；每份进入XRD测试前总液量保持为5.0 mL，不低于平台要求的4.0 mL。采用统一测试条件采集图谱：Cu Kα辐射，2θ范围10-80°，步长0.02°，扫描速率1°/min；若平台固定方法与上述扫描参数不同，则8份样品必须使用同一固定方法。完成背景扣除、峰位和峰宽提取，并将各图谱与标准衍射数据库进行候选物相匹配；不得将弱峰或宽峰强行归属为确定硫化物相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、硫化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、硫化并完成 XRD 观察",
+      "completion_condition": "是8个样品均获得覆盖统一角度范围的有效衍射图谱、完成样品身份与图谱对应核验，并记录可检出的晶相变化或“未检出明确晶相变化”的结果",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索未获得可核验论文协议或历史案例，因此调研报告不指定具体文献配方、硫化温度及确定性物相。后续宜采用同批 CoMo 氧化物/氢氧化物前驱体，以单一硫化变量构建未硫化、低/中/高硫化程度序列，并设置等金属量的单金属 Co、Mo 对照。先通过 XRD 及离线形貌、元素分布和表面价态表征确认结构演变，再统一制备电极并比较碱性 HER 极化、Tafel、EIS、Cdl 与稳定性，最终以硫含量、Co–S/Mo–S 化学态及界面特征和动力学指标的协同变化判断活性位点形成。实验下发及任务 ID 返回需由后续执行层完成。",
+      "key_findings": [
+        "当前无知识命中，不能据此声称特定 CoMo 前驱体配方、硫化条件、晶相组成或活性位点机制已获文献支持。",
+        "对照设计的核心是保持 Co/Mo 比、前驱体批次、催化剂负载量和电化学条件一致，仅以硫化强度作为 CoMo 系列的主要变量。",
+        "不同硫化程度不能仅按处理条件命名，需由硫含量、XRD 物相及 XPS 中 Co–S/Mo–S 与氧化态组分等实测结果确认。",
+        "结构—性能关系应联合晶相、形貌、元素共定位、表面价态与 HER 动力学分析，避免仅凭过电位变化归因于新活性位点。",
+        "303 实验室现有上下文支持 XRD 和电化学测试；SEM/TEM/EDS、XPS、Raman 等未显示为平台能力，应规划为离线送样与数据回传。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按关键观察点划分：首先获得前驱体与硫化梯度样品的合法结构/界面观察，随后再获得统一条件下的 HER 动力学观察；制备、硫化、洗涤和电极制备均为对应 stage 内的 macro action。",
+        "为减少批次差异，优先制备一批均一 CoMo 前驱体后等分硫化，并保留未硫化分样；单金属对照采用尽可能等价的沉淀、后处理和硫化逻辑。",
+        "硫化梯度应优先只改变一个因素，如硫源剂量、处理时间或处理温度，其他条件固定；具体水平须经预实验或可靠文献补充后确定。",
+        "首个 observation point 应同时覆盖 XRD 与离线 XPS/显微元素分析，以确认样品确实形成可区分的硫化程度和界面状态，再进入性能归因。",
+        "HER 比较应统一催化剂质量负载、电极面积、电解液、参比换算和 iR 处理，并至少输出极化曲线、特征电流密度过电位、Tafel 斜率、EIS、Cdl 代理值及稳定性。",
+        "任务下发到 303 实验室及返回实验任务 ID 不属于调研证据整理，应在研究规划完成后由具备任务创建接口的执行层完成。"
+      ],
+      "open_questions": [
+        "Co/Mo 原子比、前驱体合成路线及目标形貌尚未确定。",
+        "硫源种类、硫化梯度变量及各水平的温度、时间和剂量缺少可核验依据。",
+        "单金属对照应同时包含未硫化与硫化后的 Co、Mo 样品，还是仅设置代表性端元，需结合样品通量确认。",
+        "SEM/TEM/EDS、XPS 和 Raman 的离线送样渠道、样品量及数据回传格式尚未明确。",
+        "碱性 HER 的电解液浓度、参比与对电极、扫描参数、iR 补偿、EIS 频率范围及稳定性时长尚待标准化。",
+        "是否进行产氢定量与法拉第效率测定，以及是否具备电化学气体收集和分析能力尚未确认。",
+        "当前未提供可调用的实验任务下发接口，因此无法生成真实的 303 实验任务 ID。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

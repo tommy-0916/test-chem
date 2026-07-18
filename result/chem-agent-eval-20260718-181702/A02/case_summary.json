@@ -1,0 +1,36 @@
+{
+  "case_id": "A02",
+  "local_run_id": "A02-20260718-181702",
+  "query_sha256": "8fd945a8bba4221754ba774fe82178333f1332d12bfb656b1896b2e6578169a4",
+  "query_exact_match": true,
+  "research_return_code": 0,
+  "research_elapsed_seconds": 205.259,
+  "research_timed_out": false,
+  "research_status": "completed",
+  "paper_hits": 1,
+  "macro_steps": 6,
+  "device_return_code": 0,
+  "device_elapsed_seconds": 1382.325,
+  "device_attempts": [
+    {
+      "attempt": 1,
+      "return_code": 0,
+      "elapsed_seconds": 686.529,
+      "timed_out": false,
+      "valid_terminal_package": false,
+      "status": "failed"
+    },
+    {
+      "attempt": 2,
+      "return_code": 0,
+      "elapsed_seconds": 695.796,
+      "timed_out": false,
+      "valid_terminal_package": false,
+      "status": "failed"
+    }
+  ],
+  "device_status": "not_produced",
+  "online_literature_required": true,
+  "web_search_enabled": false,
+  "download_pdfs_enabled": false
+}

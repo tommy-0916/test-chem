@@ -1,0 +1,1439 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究 Ni 基催化剂在碱性 UOR 过程中 NiOOH 活性物种生成能力对尿素氧化活性、动力学和稳定性的影响，请围绕不同结构 Ni 基催化剂设计合理的实验方案。实验应包含 Ni(OH)₂、NiO、NiFe 或 NiCo 改性样品等对照，比较其在不含尿素和含尿素碱性电解液中的氧化还原行为、UOR 起始电位、电流响应和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和反应前后电解液检测等关键环节，并获得能够评价尿素消耗和主要液相产物变化的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "Ni(OH)2 NiO NiFe NiCo 催化剂 共沉淀 水热合成 煅烧后处理 尿素氧化反应",
+    "Ni(OH)2 NiO NiFe NiCo 碱性尿素氧化 NiOOH 生成 Ni2+/Ni3+ 氧化还原循环伏安",
+    "Ni基催化剂 尿素氧化 起始电位 电流密度 Tafel斜率 电化学阻抗 动力学对比",
+    "NiOOH 尿素氧化机理 原位拉曼 原位红外 XPS XRD 活性物种与结构演变",
+    "Ni基尿素氧化催化剂 电极制备 催化剂墨水 载量 碳纸 镍泡沫 稳定性 计时电流",
+    "碱性尿素电氧化 尿素消耗 液相产物 亚硝酸盐 硝酸盐 碳酸盐 液相色谱 比色定量"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "Ni(OH)2 NiO NiFe NiCo 催化剂 共沉淀 水热合成 煅烧后处理 尿素氧化反应",
+        "Ni(OH)2 NiO NiFe NiCo 碱性尿素氧化 NiOOH 生成 Ni2+/Ni3+ 氧化还原循环伏安",
+        "Ni基催化剂 尿素氧化 起始电位 电流密度 Tafel斜率 电化学阻抗 动力学对比",
+        "NiOOH 尿素氧化机理 原位拉曼 原位红外 XPS XRD 活性物种与结构演变",
+        "Ni基尿素氧化催化剂 电极制备 催化剂墨水 载量 碳纸 镍泡沫 稳定性 计时电流",
+        "碱性尿素电氧化 尿素消耗 液相产物 亚硝酸盐 硝酸盐 碳酸盐 液相色谱 比色定量"
+      ],
+      "hit_titles": []
+    },
+    {
+      "round": 2,
+      "queries": [
+        "comparative synthesis Ni(OH)2 NiO NiFe NiCo catalysts alkaline urea oxidation co-precipitation hydrothermal calcination protocol",
+        "NiOOH formation capability Ni2+ Ni3+ redox peak charge alkaline electrolyte with and without urea operando Raman XPS urea oxidation",
+        "alkaline urea oxidation electrocatalysis onset potential Tafel EIS chronoamperometry stability standardized testing protocol Ni-based catalyst",
+        "urea electrooxidation electrolyte product analysis urea consumption nitrate nitrite carbonate ammonia HPLC ion chromatography colorimetric quantification"
+      ],
+      "hit_titles": []
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [],
+  "memory_hits": [],
+  "extracted_protocols": [],
+  "survey_report": {
+    "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+    "key_findings": [
+      "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+      "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+      "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+      "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+      "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+    ],
+    "candidate_precedents": [],
+    "route_implications": [
+      "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+      "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+      "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+      "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+      "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+      "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+    ],
+    "open_questions": [
+      "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+      "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+      "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+      "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+      "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+      "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+      "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+    ]
+  },
+  "stage_route": [
+    "合成、必要并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 FTIR 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、必要并完成 XRD 观察",
+  "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "预配并装载金属盐与沉淀剂原液",
+      "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+      "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+      "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+      "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "共沉淀制备 NiFe 改性样品",
+      "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+      "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "共沉淀制备 NiCo 改性样品",
+      "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+      "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+      "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+      "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+      "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+      "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+      "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+      "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、必要并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、必要并完成 XRD 观察",
+    "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配并装载金属盐与沉淀剂原液",
+        "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+        "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备 NiFe 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "共沉淀制备 NiCo 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+        "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+        "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+        "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+        "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+        "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+        "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+      "key_findings": [
+        "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+        "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+        "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+        "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+        "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+        "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+        "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+        "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+        "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+        "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+      ],
+      "open_questions": [
+        "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+        "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+        "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+        "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+        "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+        "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+        "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Ni 基催化剂在碱性 UOR 过程中 NiOOH 活性物种生成能力对尿素氧化活性、动力学和稳定性的影响，请围绕不同结构 Ni 基催化剂设计合理的实验方案。实验应包含 Ni(OH)₂、NiO、NiFe 或 NiCo 改性样品等对照，比较其在不含尿素和含尿素碱性电解液中的氧化还原行为、UOR 起始电位、电流响应和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和反应前后电解液检测等关键环节，并获得能够评价尿素消耗和主要液相产物变化的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配并装载金属盐与沉淀剂原液",
+        "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+        "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备 NiFe 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "共沉淀制备 NiCo 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+        "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+        "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+        "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+        "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+        "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+        "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+      "key_findings": [
+        "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+        "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+        "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+        "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+        "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+        "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+        "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+        "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+        "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+        "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+      ],
+      "open_questions": [
+        "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+        "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+        "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+        "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+        "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+        "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+        "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "Ni(OH)2 NiO NiFe NiCo 催化剂 共沉淀 水热合成 煅烧后处理 尿素氧化反应",
+        "Ni(OH)2 NiO NiFe NiCo 碱性尿素氧化 NiOOH 生成 Ni2+/Ni3+ 氧化还原循环伏安",
+        "Ni基催化剂 尿素氧化 起始电位 电流密度 Tafel斜率 电化学阻抗 动力学对比",
+        "NiOOH 尿素氧化机理 原位拉曼 原位红外 XPS XRD 活性物种与结构演变",
+        "Ni基尿素氧化催化剂 电极制备 催化剂墨水 载量 碳纸 镍泡沫 稳定性 计时电流",
+        "碱性尿素电氧化 尿素消耗 液相产物 亚硝酸盐 硝酸盐 碳酸盐 液相色谱 比色定量"
+      ],
+      "reason": "这些关键词覆盖了不同结构Ni基对照催化剂的可适配合成与后处理、NiOOH生成和界面结构表征、电极与电化学活性/动力学/稳定性评价，以及尿素消耗和主要液相产物定量等关键知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "comparative synthesis Ni(OH)2 NiO NiFe NiCo catalysts alkaline urea oxidation co-precipitation hydrothermal calcination protocol",
+          "NiOOH formation capability Ni2+ Ni3+ redox peak charge alkaline electrolyte with and without urea operando Raman XPS urea oxidation",
+          "alkaline urea oxidation electrocatalysis onset potential Tafel EIS chronoamperometry stability standardized testing protocol Ni-based catalyst",
+          "urea electrooxidation electrolyte product analysis urea consumption nitrate nitrite carbonate ammonia HPLC ion chromatography colorimetric quantification"
+        ],
+        "reason": "当前没有知识命中，尚不足以形成有证据支撑的 stage 设计。仍缺少四类关键信息：可获得且彼此可比的 Ni(OH)₂、NiO、NiFe/NiCo 样品制备与后处理条件；NiOOH 生成能力与 Ni²⁺/Ni³⁺氧化还原特征的判据及结构/界面表征方法；无尿素和含尿素碱性电解液中起始电位、电流、Tafel、EIS 与稳定性的可比测试规范；以及尿素消耗和硝酸盐、亚硝酸盐、碳酸盐、氨等主要液相组分的定量方法与标准曲线要求。下一轮应优先检索可提取具体实验参数和评价指标的论文。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "β-Ni(OH)2 NiO NiFe layered double hydroxide NiCo hydroxide comparative preparation protocol urea electrooxidation catalyst loading",
+          "quantification of NiOOH formation redox charge Ni(II) Ni(III) cyclic voltammetry operando Raman alkaline urea oxidation",
+          "standardized urea oxidation electrocatalysis protocol onset potential Tafel EIS chronoamperometry electrolyte sampling Ni catalyst",
+          "post-electrolysis urea quantification diacetyl monoxime HPLC nitrate nitrite ammonia carbonate analysis urea oxidation"
+        ],
+        "reason": "当前累计知识没有任何命中，尚不足以用证据支撑 observation point、stage 路线及完整实验参数设计。仍需获得：不同结构 Ni(OH)₂、NiO、NiFe 和 NiCo 样品的可比制备与后处理条件；NiOOH 生成能力的定量判据及其与 Ni²⁺/Ni³⁺氧化还原电荷、原位或反应后结构变化的关联方法；无尿素与含尿素碱性电解液中起始电位、电流响应、Tafel、EIS 和稳定性测试的统一规范；以及尿素消耗和硝酸盐、亚硝酸盐、氨、碳酸盐等主要液相组分的标准曲线与定量方法。建议继续检索具体实验论文或方法学资料后再进行 stage 设计。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [],
+      "missing_parameters": [
+        "当前知识库没有命中论文文本，无法抽取论文实际报告的实验过程",
+        "Ni(OH)₂、NiO、NiFe 或 NiCo 改性样品的前驱体名称、组成与用量",
+        "各催化剂的合成方法、溶剂体积、反应温度与反应时间",
+        "固液分离、洗涤、干燥及煅烧等后处理条件",
+        "结构与界面表征的制样方法及测试条件",
+        "催化剂墨水组成、催化剂用量、溶剂与黏结剂比例、分散条件和电极载量",
+        "工作电极、参比电极、对电极及电位换算方法",
+        "无尿素和含尿素碱性电解液的组成、浓度与体积",
+        "循环伏安、线性扫描伏安、交流阻抗和计时电流测试参数",
+        "Ni(II)/Ni(III)氧化还原峰及NiOOH生成能力的定量方法",
+        "UOR起始电位和电流响应的判定方法",
+        "稳定性测试时长、控制电位或电流及重复测试条件",
+        "反应前后电解液的取样、稀释与保存条件",
+        "尿素及主要液相产物的检测方法、标准曲线范围和定量条件"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+      "key_findings": [
+        "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+        "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+        "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+        "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+        "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+        "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+        "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+        "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+        "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+        "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+      ],
+      "open_questions": [
+        "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+        "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+        "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+        "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+        "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+        "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+        "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：Ni(OH)₂、NiO、NiFe与NiCo对照样品的物相、组成及界面结构确认",
+        "stage 2：无尿素与含尿素碱液中的Ni(II)/Ni(III)氧化还原、NiOOH生成能力及UOR活性动力学比较",
+        "stage 3：受控UOR稳定性、反应后催化剂变化及电解液尿素与主要液相产物定量评价"
+      ],
+      "current_stage": "stage 1：Ni(OH)₂、NiO、NiFe与NiCo对照样品的物相、组成及界面结构确认",
+      "stage_route_reason": "识别出的关键observation point依次为：第一，四类对照样品制备和必要后处理后获得可比较的物相、组成与界面结构观察；第二，在统一电极载量和测试条件下获得无尿素及含尿素碱液中的Ni(II)/Ni(III)峰位、积分电荷、含尿素电流增益、UOR起始电位、动力学与阻抗等观察，用于评价NiOOH生成能力及其与活性的关系；第三，受控长期电解后获得电流或电位保持情况、反应后催化剂结构变化，以及尿素消耗和可检测主要液相产物浓度变化的联合观察。合成、后处理、电极制备、取样和样品前处理均只是到达这些观察点的macro action，因此不单独拆分为stage。平台支持XRD、红外、电化学、液相色谱和酶标检测；形貌、表面价态及直接NiOOH鉴定若需要电子显微镜、XPS或原位拉曼，应作为离线送样与数据回传，不假定平台具备在线能力。",
+      "current_stage_reason": "必须先获得并确认Ni(OH)₂、NiO、NiFe和NiCo样品的实际物相、组成与界面差异，才能建立有效对照并统一后续电极载量和测试条件；若样品身份或结构未确认，后续NiOOH生成、电化学活性、动力学和稳定性差异将无法可靠归因。因此最先进入stage 1。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "预配并装载金属盐与沉淀剂原液",
+          "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+          "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+          "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+          "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "共沉淀制备 NiFe 改性样品",
+          "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+          "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "共沉淀制备 NiCo 改性样品",
+          "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+          "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+          "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+          "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+          "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+          "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+          "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+          "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+          "来源": "agent补全"
+        }
+      ],
+      "macro_plan_summary": "该 macro plan 以统一小体积共沉淀路线构建 Ni(OH)₂、NiO、NiFe 和 NiCo 对照，通过固定洗涤、干燥及选择性煅烧控制变量，并将每类样品的独立批次完整推进至 XRD 制样、数据采集和物相比较这一当前 stage 的唯一 observation point。"
+    }
+  },
+  "campaign_id": "C01-20260718-181702",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究 Ni 基催化剂在碱性 UOR 过程中 NiOOH 活性物种生成能力对尿素氧化活性、动力学和稳定性的影响，请围绕不同结构 Ni 基催化剂设计合理的实验方案。实验应包含 Ni(OH)₂、NiO、NiFe 或 NiCo 改性样品等对照，比较其在不含尿素和含尿素碱性电解液中的氧化还原行为、UOR 起始电位、电流响应和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学 测试和反应前后电解液检测等关键环节，并获得能够评价尿素消耗和主要液相产物变化的结果。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "doi": "10.1360/csb1959-4-23-797",
+        "role": "keyword",
+        "relevance": 0.0781,
+        "kept": false,
+        "reason": "relevance 0.078 < threshold 0.1"
+      },
+      {
+        "title": "血液热解聚合物的结构变化及其氧还原反应电催化性能",
+        "doi": "10.1360/csb2014-59-23-2328",
+        "role": "keyword",
+        "relevance": 0.0312,
+        "kept": false,
+        "reason": "relevance 0.031 < threshold 0.1"
+      },
+      {
+        "title": "电梯安全性能影响因素和强化电梯检验检测的策略研究",
+        "doi": "10.37155/2717-5197-0501-48",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Importance of d-electron coupling in dual-atom catalysts for electrocatalytic CO2 reduction reaction",
+        "doi": "10.1007/s40843-025-3362-8",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Rapidly-Declining Hostless Type Ia Supernova KSP-OT-201509b from the KMTNet Supernova Program: Transitional Nature and Constraint on $^{56}$Ni Distribution and ",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Suppression of Intertwined Density Waves in La$_4$Ni$_{3-x}$Cu$_x$O$_{10+δ}$",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Surfactant-Mediated Modulation of the Microstructure and OER Catalytic Performance of Iron-Based Hydroxide Electrocatalysts",
+        "doi": "10.12677/ms.2026.165113",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Synthesis, Optical, and Magnetic Properties of Ba$_2$Ni$_3$F$_{10}$ Nanowires",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Systematics of the temperature-dependent inter-plane resistivity in Ba(Fe$_{1-x}$T$_x$)$_2$As$_2$ with T= Rh, Ni, and Pd",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Temperature-doping phase diagrams for Ba(Fe1-xTMx)2As2(TM=Ni, Cu, Cu / Co) single crystals",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 0,
+    "web_kept": 0,
+    "newly_registered": 0,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: "
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "C01-20260718-181702",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、必要并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 FTIR 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、必要并完成 XRD 观察",
+        "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "预配并装载金属盐与沉淀剂原液",
+            "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+            "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+            "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+            "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "共沉淀制备 NiFe 改性样品",
+            "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+            "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "共沉淀制备 NiCo 改性样品",
+            "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+            "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+            "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+            "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+            "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+            "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+            "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+            "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T18:26:57"
+    }
+  ],
+  "tool_invocations": [],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 18:22:49] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 18:22:49] B0 waiting received event: bootstrap",
+    "[2026-07-18 18:22:49] bootstrap event received; routing to B1",
+    "[2026-07-18 18:22:49] Entered B1 bootstrap",
+    "[2026-07-18 18:22:57] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=0, web_kept=0, written=0, errors=1",
+    "[2026-07-18 18:22:57] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 18:23:10] survey queries after sanitization: ['Ni(OH)2 NiO NiFe NiCo 催化剂 共沉淀 水热合成 煅烧后处理 尿素氧化反应', 'Ni(OH)2 NiO NiFe NiCo 碱性尿素氧化 NiOOH 生成 Ni2+/Ni3+ 氧化还原循环伏安', 'Ni基催化剂 尿素氧化 起始电位 电流密度 Tafel斜率 电化学阻抗 动力学对比', 'NiOOH 尿素氧化机理 原位拉曼 原位红外 XPS XRD 活性物种与结构演变', 'Ni基尿素氧化催化剂 电极制备 催化剂墨水 载量 碳纸 镍泡沫 稳定性 计时电流', '碱性尿素电氧化 尿素消耗 液相产物 亚硝酸盐 硝酸盐 碳酸盐 液相色谱 比色定量']",
+    "[2026-07-18 18:23:10] survey query generate completed with 6 queries",
+    "[2026-07-18 18:23:10] Survey round 1 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:23:54] Survey round 2 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:24:20] paper_protocol_extract: LLM returned no usable protocols; degrading to heuristic extraction and continuing without citation-grade protocols",
+    "[2026-07-18 18:24:20] paper protocol extract completed with 0 protocols",
+    "[2026-07-18 18:24:20] memory disabled; skipped similar exp search",
+    "[2026-07-18 18:26:57] macro plan kept with device-validation markers on 1 step(s); device layer will judge",
+    "[2026-07-18 18:26:57] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 18:26:57] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T18:22:49.866102",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配并装载金属盐与沉淀剂原液",
+        "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+        "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备 NiFe 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "共沉淀制备 NiCo 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+        "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+        "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+        "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+        "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+        "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+        "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+      "key_findings": [
+        "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+        "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+        "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+        "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+        "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+        "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+        "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+        "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+        "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+        "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+      ],
+      "open_questions": [
+        "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+        "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+        "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+        "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+        "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+        "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+        "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Ni 基催化剂在碱性 UOR 过程中 NiOOH 活性物种生成能力对尿素氧化活性、动力学和稳定性的影响，请围绕不同结构 Ni 基催化剂设计合理的实验方案。实验应包含 Ni(OH)₂、NiO、NiFe 或 NiCo 改性样品等对照，比较其在不含尿素和含尿素碱性电解液中的氧化还原行为、UOR 起始电位、电流响应和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和反应前后电解液检测等关键环节，并获得能够评价尿素消耗和主要液相产物变化的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得 Ni(OH)₂、NiO、NiFe 和 NiCo 四类对照样品的有效、可比较 XRD 衍射图谱。Stage goal 是在统一总金属投料、共沉淀条件、洗涤和干燥条件下制备四类样品，并以独立批次重复验证其晶相重现性；其中 NiO 由与 Ni(OH)₂ 相同路线得到的前驱体经空气煅烧获得，以突出后处理造成的结构差异，NiFe 和 NiCo 样品采用相同 Ni:M=3:1 原子投料比以控制改性变量。Planning logic 为先使用外部预配并已装载的金属硝酸盐和 NaOH 原液完成小体积沉淀及固定时间搅拌熟化，再统一离心洗涤、低温干燥，对 NiO 前驱体单独煅烧，最后将各批次粉体以固定固液比重新分散于乙醇并完成 XRD。关键变量包括样品组成、Ni:M 投料比、是否煅烧、沉淀加液节拍、熟化时间、洗涤次数、干燥和煅烧温度；除这些设计变量外其余条件保持一致。预期 observation 包括各样品的衍射峰位置、相对强度、峰宽、结晶度及可能的多相或无定形特征；不预设任何样品必然形成特定晶相，也不以 XRD 单独证明元素价态或 NiOOH。Stage completion condition 为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相。由于没有可用论文 protocol，以下具体配方和参数均为 agent 基于常规共沉淀化学补全，需以实际 XRD observation 决定后续是否需要返工或调整；XPS、FTIR、电极制备及电化学测试属于后续 stage，不在本 macro plan 中执行。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配并装载金属盐与沉淀剂原液",
+        "试剂/对象": "Ni(NO₃)₂·6H₂O、Fe(NO₃)₃·9H₂O、Co(NO₃)₂·6H₂O、NaOH、去离子水",
+        "参数": "在外部人工配液环节分别配制并标定 0.50 mol L⁻¹ Ni(NO₃)₂、0.50 mol L⁻¹ Fe(NO₃)₃、0.50 mol L⁻¹ Co(NO₃)₂ 和 1.00 mol L⁻¹ NaOH 水溶液，室温使用；每种原液独立盛装并预先装载。所有样品使用同批去离子水和原液；为 Ni(OH)₂、NiO 前驱体、NiFe 和 NiCo 各安排 2 个独立合成批次。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "共沉淀制备 Ni(OH)₂ 对照及 NiO 前驱体",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "分别建立 Ni(OH)₂-final 和 Ni(OH)₂-to-NiO 两组前驱体，每组制备 2 个独立批次。每批先加入 4.00 mL Ni(NO₃)₂ 原液（2.00 mmol Ni），在室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液；NaOH 分 10 等份加入，每份间隔 60 s，总加入时间约 10 min。加完后继续在室温 600 rpm 搅拌熟化 120 min；每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备 NiFe 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Fe(NO₃)₃ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Fe(NO₃)₃ 原液（0.50 mmol Fe），Ni:Fe 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 5.00 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 9.00 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "共沉淀制备 NiCo 改性样品",
+        "试剂/对象": "0.50 mol L⁻¹ Ni(NO₃)₂ 原液、0.50 mol L⁻¹ Co(NO₃)₂ 原液、1.00 mol L⁻¹ NaOH 原液",
+        "参数": "制备 2 个独立批次；每批混合 3.00 mL Ni(NO₃)₂ 原液（1.50 mmol Ni）与 1.00 mL Co(NO₃)₂ 原液（0.50 mmol Co），Ni:Co 投料原子比为 3:1、总金属量为 2.00 mmol。室温 600 rpm 搅拌下加入 4.40 mL NaOH 原液，分 10 等份加入、每份间隔 60 s，总加入时间约 10 min；加完后继续在室温 600 rpm 搅拌熟化 120 min。每批反应总体积为 8.40 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "统一分离、洗涤并干燥全部沉淀前驱体",
+        "试剂/对象": "Ni(OH)₂-final、Ni(OH)₂-to-NiO、NiFe 和 NiCo 沉淀悬浊液，去离子水、无水乙醇",
+        "参数": "各批悬浊液以 6000 rpm 离心 5 min，移除上清液；每批加入 5.0 mL 去离子水重分散后再次以 6000 rpm 离心 5 min，共执行 3 次水洗，再以 5.0 mL 无水乙醇重分散并离心洗涤 1 次。所得固体在空气中 60 ℃干燥 12 h，冷却至室温后记录干燥样品质量并密封保存。所有批次采用完全相同的洗涤体积、次数和干燥条件。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "煅烧 NiO 前驱体并保留未煅烧对照",
+        "试剂/对象": "干燥的 Ni(OH)₂-to-NiO 前驱体、干燥的 Ni(OH)₂-final 对照",
+        "参数": "仅对两个 Ni(OH)₂-to-NiO 独立批次实施空气煅烧：由室温以 2 ℃ min⁻¹ 升至 350 ℃，恒温 120 min，再自然冷却至室温，所得样品标记为 NiO。Ni(OH)₂-final、NiFe 和 NiCo 样品不经高温处理，以 60 ℃干燥态直接进入 XRD 制样；煅烧前后分别记录样品质量。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备 XRD 乙醇分散样并采集衍射图谱",
+        "试剂/对象": "Ni(OH)₂、NiO、NiFe、NiCo 各独立批次粉体，无水乙醇",
+        "参数": "每个独立批次称取 20.0 mg 粉体，加入无水乙醇使总液体体积达到 4.00 mL；超声分散 10 min，随后室温 500 rpm 搅拌 5 min，在保持悬浊液均匀的条件下进行滴液制样。采用 Cu Kα 辐射采集 2θ=10–80° 范围的 XRD 图谱，步长 0.02°、扫描速率 5° min⁻¹；同步采集空白基底背景。对全部 8 个独立批次记录峰位、相对强度、半峰宽、背景、候选物相和未归属峰，并比较同类样品两个批次的一致性；若样品呈宽峰或低结晶特征，应作为合法 observation 如实记录，不强制判定为单一晶相。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为四类样品的两个独立批次均获得通过背景和信噪比质量检查的 XRD 图谱，完成峰位、峰宽、物相候选和批间一致性记录，并明确标记无法可靠归属的宽峰或杂相",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前检索未获得可引用论文协议，历史案例亦为空，因此不能给出文献已验证的具体合成配方或预判性能排序。后续方案应以统一载量和测试条件构建 Ni(OH)₂、NiO、NiFe、NiCo 对照，并依次获得物相/界面、无尿素与含尿素电化学响应、稳定性及电解液组成等观察。现有设备支持 XRD、红外、电化学、液相色谱和酶标检测，但形貌、元素价态及原位 NiOOH 鉴定能力未明确，应采用离线送样或以氧化还原电荷等间接指标补充。实验下发及任务 id 需由后续调度层完成。",
+      "key_findings": [
+        "无知识命中和历史案例，不能把任何具体制备参数、NiOOH 判据或催化性能排序表述为已有证据结论。",
+        "核心比较变量应为催化剂结构或掺杂组成；电极基底、催化剂载量、粘结剂、电解液浓度、尿素浓度、参比换算、补偿方式和测试程序需统一。",
+        "NiOOH 生成能力至少需要结合无尿素碱液中的 Ni(II)/Ni(III) 氧化还原峰位与积分电荷，以及含尿素后峰形、电流增益和峰位变化进行评价。",
+        "设备上下文支持双工位电化学测试及液相留样，并支持 XRD、红外、液相色谱和酶标检测；XPS、电子显微镜和原位拉曼未见明确支持。",
+        "尿素消耗和主要液相产物必须通过反应前后定量及标准曲线获得，不能仅依据电流或电荷推断。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "按观察点保守划分为：样品结构与界面确认、无尿素/含尿素氧化还原及 UOR 性能比较、稳定性后结构与电解液组成评价，而非按合成、洗涤、制膜等操作拆分 stage。",
+        "首个 stage 应覆盖四类样品的制备、必要后处理和统一表征，完成条件为获得可比较的物相、组成及界面观察；制备与后处理均作为该 stage 内 macro action。",
+        "电化学 stage 应在相同电极载量和电解液体系下设置无尿素空白与含尿素测试，输出氧化还原峰位/电荷、UOR 起始电位、电流响应、Tafel 或等效动力学指标、阻抗和重复性数据。",
+        "稳定性与产物评价可共享受控电解后的取样节点，记录电荷量、时间、体积和取样稀释关系，再定量尿素及可检测的含氮、含碳液相组分。",
+        "平台未明确支持的价态、形貌及原位活性物种表征应规划为离线送样和数据回传，不得映射为平台内在线动作。",
+        "实验下发至 303 实验室并返回任务 id 属于调度执行结果，当前调研报告只能提供规划依据，不能生成或伪造 id。"
+      ],
+      "open_questions": [
+        "Ni(OH)₂、NiO、NiFe 和 NiCo 样品采用粉体涂覆还是基底原位生长，且如何控制可比的 Ni 含量、表面积和载量？",
+        "NiFe、NiCo 的目标原子比、结构类型及后处理温度尚未确定。",
+        "碱浓度、尿素浓度、扫描速率、电位窗口、iR 补偿和起始电位判据尚未统一。",
+        "稳定性测试采用恒电位还是恒电流、持续时长及失活阈值尚未明确。",
+        "NiOOH 是否必须通过原位拉曼或 XAS 直接确认，还是允许以电化学氧化电荷结合反应后 XPS 等离线证据评价？",
+        "主要液相产物清单及检测方法尚待确认，尤其是尿素、氨、亚硝酸盐、硝酸盐和碳酸盐的分离、标准曲线与基质干扰控制。",
+        "303 实验室的任务下发接口及任务 id 返回机制未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "created_at": "2026-07-18T18:17:02.197878",
+  "repo": "/Users/jyxc-dz-0100374/Desktop/chemagent",
+  "docx": "/Users/jyxc-dz-0100374/Desktop/chemagent/测试题目.docx",
+  "model": "gpt-5.6-sol",
+  "endpoint": "https://subworker.bestony.com/v1",
+  "wire_api": "chat",
+  "reasoning_effort": "ultra",
+  "online_literature": true,
+  "web_search": false,
+  "download_pdfs": false,
+  "real_device_dispatch": false,
+  "workstations_source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+  "workstation_directory_count": 45,
+  "case_ids": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "D01",
+    "D02"
+  ],
+  "local_run_ids": {
+    "A01": "A01-20260718-181702",
+    "A02": "A02-20260718-181702",
+    "B01": "B01-20260718-181702",
+    "B02": "B02-20260718-181702",
+    "C01": "C01-20260718-181702",
+    "C02": "C02-20260718-181702",
+    "D01": "D01-20260718-181702",
+    "D02": "D02-20260718-181702"
+  },
+  "api_key_count": 1,
+  "api_key_env": "REFINER_LLM_API_KEY",
+  "api_keys_recorded": false,
+  "requested_workers": 4,
+  "effective_workers": 4,
+  "dry_run": false
+}

@@ -1,0 +1,1397 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究 Mo 价态变化对 NiMo 基催化剂碱性 HER 活性和水解离动力学的影响，请围绕 NiMo 基催化剂设计合理的实验方案。实验应包含不同 Mo 价态或不同还原/氧化处理程度样品的设计，并设置 Ni 基催化剂和 Mo 基催化剂作为对照，比较其组成、表面价态、界面电子结构和 HER 性能差异。方案需覆盖催化剂制备、后处理调控、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "NiMo 基催化剂 碱性析氢反应 溶液法制备 低温氢气还原 氧化处理 Mo 价态调控",
+    "NiMo 催化剂 不同还原程度 Mo4+ Mo5+ Mo6+ XPS XANES 界面电荷转移 电子结构",
+    "NiMo Ni 对照 Mo 对照 碱性 HER 过电位 Tafel 斜率 EIS 双电层电容 电化学活性面积 稳定性",
+    "NiMo 碱性 HER 水解离动力学 Volmer 步 同位素效应 pH 依赖性 EIS 活化能",
+    "NiMo 纳米催化剂 共沉淀 水热 合成 洗涤干燥 电极墨水 碳纸负载 碱性电解液",
+    "NiMo 催化剂 Mo 价态 晶相组成 XRD 表面价态 XPS Ni-Mo 界面电子耦合 HER 构效关系"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "NiMo 基催化剂 碱性析氢反应 溶液法制备 低温氢气还原 氧化处理 Mo 价态调控",
+        "NiMo 催化剂 不同还原程度 Mo4+ Mo5+ Mo6+ XPS XANES 界面电荷转移 电子结构",
+        "NiMo Ni 对照 Mo 对照 碱性 HER 过电位 Tafel 斜率 EIS 双电层电容 电化学活性面积 稳定性",
+        "NiMo 碱性 HER 水解离动力学 Volmer 步 同位素效应 pH 依赖性 EIS 活化能",
+        "NiMo 纳米催化剂 共沉淀 水热 合成 洗涤干燥 电极墨水 碳纸负载 碱性电解液",
+        "NiMo 催化剂 Mo 价态 晶相组成 XRD 表面价态 XPS Ni-Mo 界面电子耦合 HER 构效关系"
+      ],
+      "hit_titles": []
+    },
+    {
+      "round": 2,
+      "queries": [
+        "NiMo alkaline HER catalyst controlled oxidation reduction Mo valence synthesis annealing XPS electrochemical performance",
+        "Ni Mo oxide heterointerface alkaline HER water dissociation kinetics Volmer step isotope effect activation energy",
+        "NiMo Ni-only Mo-only control catalysts matched synthesis loading XRD XPS work function charge transfer HER",
+        "NiMo alkaline HER electrochemical protocol overpotential Tafel EIS Cdl ECSA chronoamperometry iR correction"
+      ],
+      "hit_titles": []
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [],
+  "memory_hits": [],
+  "extracted_protocols": [],
+  "survey_report": {
+    "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+    "key_findings": [
+      "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+      "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+      "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+      "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+      "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+    ],
+    "candidate_precedents": [],
+    "route_implications": [
+      "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+      "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+      "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+      "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+      "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+      "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+      "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+    ],
+    "open_questions": [
+      "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+      "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+      "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+      "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+      "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+      "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+      "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+      "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+    ]
+  },
+  "stage_route": [
+    "合成、并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 TEM 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、并完成 XRD 观察",
+  "current_stage_plan": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "准备并核对络合前驱体原液",
+      "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+      "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+      "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+      "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "干燥并空气煅烧获得同源氧化物母体",
+      "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+      "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+      "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+      "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+      "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+      "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "制备八组 XRD 乙醇分散样",
+      "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+      "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "完成 XRD 测试并形成晶相观察",
+      "试剂/对象": "八组乙醇分散样及空白制样基底",
+      "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、并完成 XRD 观察",
+    "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、并完成 XRD 观察",
+      "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "准备并核对络合前驱体原液",
+        "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+        "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+        "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+        "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "干燥并空气煅烧获得同源氧化物母体",
+        "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+        "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+        "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+        "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+        "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+        "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备八组 XRD 乙醇分散样",
+        "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+        "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "完成 XRD 测试并形成晶相观察",
+        "试剂/对象": "八组乙醇分散样及空白制样基底",
+        "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、并完成 XRD 观察",
+      "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+      "key_findings": [
+        "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+        "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+        "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+        "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+        "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+        "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+        "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+        "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+        "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+        "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+        "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+      ],
+      "open_questions": [
+        "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+        "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+        "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+        "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+        "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+        "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+        "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+        "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Mo 价态变化对 NiMo 基催化剂碱性 HER 活性和水解离动力学的影响，请围绕 NiMo 基催化剂设计合理的实验方案。实验应包含不同 Mo 价态或不同还原/氧化处理程度样品的设计，并设置 Ni 基催化剂和 Mo 基催化剂作为对照，比较其组成、表面价态、界面电子结构和 HER 性能差异。方案需覆盖催化剂制备、后处理调控、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "准备并核对络合前驱体原液",
+        "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+        "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+        "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+        "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "干燥并空气煅烧获得同源氧化物母体",
+        "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+        "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+        "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+        "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+        "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+        "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备八组 XRD 乙醇分散样",
+        "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+        "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "完成 XRD 测试并形成晶相观察",
+        "试剂/对象": "八组乙醇分散样及空白制样基底",
+        "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、并完成 XRD 观察",
+      "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+      "key_findings": [
+        "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+        "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+        "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+        "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+        "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+        "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+        "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+        "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+        "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+        "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+        "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+      ],
+      "open_questions": [
+        "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+        "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+        "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+        "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+        "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+        "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+        "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+        "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "NiMo 基催化剂 碱性析氢反应 溶液法制备 低温氢气还原 氧化处理 Mo 价态调控",
+        "NiMo 催化剂 不同还原程度 Mo4+ Mo5+ Mo6+ XPS XANES 界面电荷转移 电子结构",
+        "NiMo Ni 对照 Mo 对照 碱性 HER 过电位 Tafel 斜率 EIS 双电层电容 电化学活性面积 稳定性",
+        "NiMo 碱性 HER 水解离动力学 Volmer 步 同位素效应 pH 依赖性 EIS 活化能",
+        "NiMo 纳米催化剂 共沉淀 水热 合成 洗涤干燥 电极墨水 碳纸负载 碱性电解液",
+        "NiMo 催化剂 Mo 价态 晶相组成 XRD 表面价态 XPS Ni-Mo 界面电子耦合 HER 构效关系"
+      ],
+      "reason": "这些检索词覆盖了NiMo及Ni、Mo对照样品的可适配制备与氧化还原调控、Mo价态和界面电子结构表征、水解离机理判据以及碱性HER性能评价方法等关键知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "NiMo alkaline HER catalyst controlled oxidation reduction Mo valence synthesis annealing XPS electrochemical performance",
+          "Ni Mo oxide heterointerface alkaline HER water dissociation kinetics Volmer step isotope effect activation energy",
+          "NiMo Ni-only Mo-only control catalysts matched synthesis loading XRD XPS work function charge transfer HER",
+          "NiMo alkaline HER electrochemical protocol overpotential Tafel EIS Cdl ECSA chronoamperometry iR correction"
+        ],
+        "reason": "当前没有知识命中，尚不足以用证据支撑样品体系、Mo价态调控窗口、同批次Ni基/Mo基对照、界面电子结构判据及水解离动力学测试的stage设计。下一轮应重点检索可复现的氧化/还原后处理与价态验证方法、匹配对照样品设计，以及包含iR校正、Tafel、EIS、Cdl/ECSA、稳定性和Volmer步骤动力学判据的标准化测试条件。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "NiMoO4 partial reduction series H2 Ar temperature Mo6+ Mo5+ Mo4+ XPS alkaline hydrogen evolution",
+          "Ni MoO2 Ni4Mo heterointerface alkaline HER XPS binding energy shift XANES charge transfer water dissociation",
+          "NiMo alkaline HER water dissociation kinetics H2O D2O kinetic isotope effect pH dependence activation energy impedance",
+          "NiMo catalyst matched Ni-only Mo-only controls synthesis protocol electrode loading iR-corrected polarization Tafel EIS Cdl stability"
+        ],
+        "reason": "当前累计知识仍为零命中，不足以用可追溯证据确定可复现的NiMo母体制备路线、分级还原或氧化窗口及其对应Mo价态，也缺少同批次Ni基和Mo基对照的匹配制备方法、界面电子结构判据，以及区分HER总体活性与水解离动力学的测试方案。下一轮应围绕可产生Mo6+/Mo5+/Mo4+梯度的具体NiMo氧化物或合金前驱体、XPS/XANES价态与电荷转移证据、H2O/D2O同位素效应和温度/pH依赖动力学，以及统一负载量和iR校正条件下的过电位、Tafel、EIS、Cdl/ECSA与稳定性测试协议进行检索。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [],
+      "missing_parameters": [
+        "当前没有知识库命中论文文本，无法抽取论文实际报告的催化剂制备步骤及参数",
+        "不同Mo价态或不同还原/氧化程度样品的后处理气氛、温度、时间和升降温条件",
+        "Ni基催化剂与Mo基催化剂对照样品的制备条件",
+        "催化剂组成、晶相、表面价态及界面电子结构的表征条件",
+        "电极墨水组成、催化剂用量、溶剂、离聚物比例、分散条件、基底及负载量",
+        "碱性HER测试的电解液、参比电极、对电极、扫描速率、电位范围和iR校正条件",
+        "过电位与Tafel斜率的测定和拟合条件",
+        "EIS测试的电位、频率范围及交流扰动幅值",
+        "双电层电容与电化学活性面积的测试及换算条件",
+        "稳定性测试的恒电流或恒电位条件、持续时间及测试后表征条件",
+        "水解离动力学测试的同位素、电解液pH或温度依赖条件"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+      "key_findings": [
+        "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+        "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+        "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+        "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+        "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+        "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+        "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+        "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+        "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+        "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+        "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+      ],
+      "open_questions": [
+        "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+        "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+        "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+        "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+        "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+        "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+        "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+        "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：样品矩阵组成与晶相确认观察",
+        "stage 2：Mo表面价态与Ni–Mo界面电子结构确认观察",
+        "stage 3：碱性HER性能与水解离动力学综合观察"
+      ],
+      "current_stage": "stage 1：样品矩阵组成与晶相确认观察",
+      "stage_route_reason": "识别出的关键 observation point 依次为：第一，同源NiMo母体经分级还原、基准和分级氧化处理后，以及匹配的Ni基、Mo基对照和空白基底，其元素组成、Ni/Mo比例与晶相是否可比且可确认；第二，各处理样品实际Mo表面价态分布、Ni化学态及Ni–Mo界面结合能位移或其他电子耦合证据是否形成可辨别梯度；第三，统一电极负载和测试规则下获得过电位、Tafel斜率、EIS、Cdl及ECSA估算、稳定性和水解离动力学辅助结果，并建立价态—界面电子结构—HER性能关联。因此将母体制备、分样后处理、洗涤、分离、干燥和表征制样保留为相应观察点之前的macro action，而不单独拆成stage。平台支持的XRD可用于第一观察点；未明确支持的元素定量、XPS及其他界面电子结构表征应采用离线送样和数据回传。电化学与水解离动力学结果合并为同一最终观察点，因为这些测试共同用于更新对Mo价态影响HER机理的科学判断。",
+      "current_stage_reason": "当前尚无已制备并经表征确认的样品，也不能依据处理条件直接假定Mo价态。应首先进入stage 1，建立同源NiMo分级处理样品及匹配Ni基、Mo基对照，获得组成与晶相的合法观察，排除明显的配比或物相不可比因素；在此基础上才能进入表面价态和界面电子结构确认，并最终开展具有可解释性的统一电化学比较。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "准备并核对络合前驱体原液",
+          "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+          "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+          "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+          "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "干燥并空气煅烧获得同源氧化物母体",
+          "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+          "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+          "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+          "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+          "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+          "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "制备八组 XRD 乙醇分散样",
+          "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+          "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "完成 XRD 测试并形成晶相观察",
+          "试剂/对象": "八组乙醇分散样及空白制样基底",
+          "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+          "来源": "agent补全"
+        }
+      ],
+      "macro_plan_summary": "该 macro plan 以同源 NiMo 母体分样和匹配的 Ni、Mo 单金属对照控制组成与制备历史，通过分级还原及再氧化建立处理梯度，并将全部样品推进至统一条件下的 XRD observation point，以首先确认后处理是否造成可比较的晶相变化或明显杂相。"
+    }
+  },
+  "campaign_id": "B01-20260718-181702",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究 Mo 价态变化对 NiMo 基催化剂碱性 HER 活性和水解离动力学的影响，请围绕 NiMo 基催化剂设计合理的实验方案。实验应包含不同 Mo 价态或不同还原/氧化处理程度样品的设计，并设置 Ni 基催化剂和 Mo 基催化剂作为对照，比较其组成、表面价态、界面电子结构和 HER 性能差异。方案需覆盖催化剂制备、后处理调控、结构/界面表征、电极制备和电化学 测试等关键环节，并获得能够评价 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性的结果。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "Hidden one-dimensional electronic structure and non-Fermi liquid angle resolved photoemission line shapes of $η$-Mo$_4$O$_{11}$",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Luttinger liquid ARPES spectra from samples of Li$_{0.9}$Mo$_6$O$_{17}$ grown by the temperature gradient flux technique",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "New Luttinger liquid physics from photoemission on Li$_{0.9}$Mo$_6$O$_{17}$",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Assessment of a nonempirical semilocal density functional on solids and surfaces",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Double Beta Decays of Mo-100 and Nd-150",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 0,
+    "web_kept": 0,
+    "newly_registered": 0,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+      "crossref: HTTPError: HTTP Error 429: Too Many Requests"
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "B01-20260718-181702",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 TEM 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、并完成 XRD 观察",
+        "current_stage_plan": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "准备并核对络合前驱体原液",
+            "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+            "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+            "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+            "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "干燥并空气煅烧获得同源氧化物母体",
+            "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+            "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+            "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+            "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+            "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+            "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "制备八组 XRD 乙醇分散样",
+            "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+            "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "完成 XRD 测试并形成晶相观察",
+            "试剂/对象": "八组乙醇分散样及空白制样基底",
+            "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T18:20:47"
+    }
+  ],
+  "tool_invocations": [],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 18:17:03] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 18:17:03] B0 waiting received event: bootstrap",
+    "[2026-07-18 18:17:03] bootstrap event received; routing to B1",
+    "[2026-07-18 18:17:03] Entered B1 bootstrap",
+    "[2026-07-18 18:17:10] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=0, web_kept=0, written=0, errors=2",
+    "[2026-07-18 18:17:10] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 18:17:10] literature acquisition warning: crossref: HTTPError: HTTP Error 429: Too Many Requests",
+    "[2026-07-18 18:17:21] survey queries after sanitization: ['NiMo 基催化剂 碱性析氢反应 溶液法制备 低温氢气还原 氧化处理 Mo 价态调控', 'NiMo 催化剂 不同还原程度 Mo4+ Mo5+ Mo6+ XPS XANES 界面电荷转移 电子结构', 'NiMo Ni 对照 Mo 对照 碱性 HER 过电位 Tafel 斜率 EIS 双电层电容 电化学活性面积 稳定性', 'NiMo 碱性 HER 水解离动力学 Volmer 步 同位素效应 pH 依赖性 EIS 活化能', 'NiMo 纳米催化剂 共沉淀 水热 合成 洗涤干燥 电极墨水 碳纸负载 碱性电解液', 'NiMo 催化剂 Mo 价态 晶相组成 XRD 表面价态 XPS Ni-Mo 界面电子耦合 HER 构效关系']",
+    "[2026-07-18 18:17:21] survey query generate completed with 6 queries",
+    "[2026-07-18 18:17:21] Survey round 1 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:17:32] Survey round 2 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:17:56] paper_protocol_extract: LLM returned no usable protocols; degrading to heuristic extraction and continuing without citation-grade protocols",
+    "[2026-07-18 18:17:56] paper protocol extract completed with 0 protocols",
+    "[2026-07-18 18:17:56] memory disabled; skipped similar exp search",
+    "[2026-07-18 18:20:47] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 18:20:47] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T18:17:03.235540",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "准备并核对络合前驱体原液",
+        "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+        "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+        "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+        "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "干燥并空气煅烧获得同源氧化物母体",
+        "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+        "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+        "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+        "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+        "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+        "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备八组 XRD 乙醇分散样",
+        "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+        "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "完成 XRD 测试并形成晶相观察",
+        "试剂/对象": "八组乙醇分散样及空白制样基底",
+        "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、并完成 XRD 观察",
+      "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+      "key_findings": [
+        "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+        "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+        "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+        "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+        "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+        "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+        "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+        "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+        "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+        "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+        "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+      ],
+      "open_questions": [
+        "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+        "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+        "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+        "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+        "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+        "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+        "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+        "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Mo 价态变化对 NiMo 基催化剂碱性 HER 活性和水解离动力学的影响，请围绕 NiMo 基催化剂设计合理的实验方案。实验应包含不同 Mo 价态或不同还原/氧化处理程度样品的设计，并设置 Ni 基催化剂和 Mo 基催化剂作为对照，比较其组成、表面价态、界面电子结构和 HER 性能差异。方案需覆盖催化剂制备、后处理调控、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、并完成 XRD 观察”，目标 observation point 是获得完整样品矩阵的有效 XRD 图谱并确认各样品的晶相组成、结晶性及后处理引起的物相变化。由于没有可追溯论文 protocol，本阶段具体配方和处理参数均为 agent 基于常规柠檬酸络合前驱体路线补全，不将处理条件直接等同于确定的 Mo 价态。规划逻辑是先由同一批 NiMo 氧化物母体分样，形成未还原、两级氢气还原及还原后再氧化四种 NiMo 样品，以尽量固定初始 Ni/Mo 比和合成历史；同时制备 Ni 基、Mo 基母体并分别保留氧化态基准和强还原处理对照。关键变量为材料组成、还原温度和是否再氧化，固定变量包括 nominal Ni:Mo=1:1、柠檬酸/总金属摩尔比、前驱体干燥与煅烧程序、处理时间、XRD 分散浓度和扫描条件。采用外部预配并已装载的液体原液，利用低于 50 mL 的小体积体系完成络合、蒸发浓缩和干燥，避免依赖合成平台内 mmol 级固体配液；干燥固体经可支持的固体 handoff 进入常压空气煅烧或小规模气氛处理。预期获得 NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O 和 Mo-R200 八个样品的 XRD 图谱，但不预设其具体物相或 Mo 价态。每个样品均以不少于 10 mg 固体分散于 4.5 mL 无水乙醇中完成平台支持的滴液 XRD 制样。stage 完成条件为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较；实际 Mo 表面价态、界面电子结构和形貌不在本 stage 判定，分别留待后续 XPS 与 TEM observation point。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "准备并核对络合前驱体原液",
+        "试剂/对象": "外部预配并已装载的 0.20 mol/L Ni(NO3)2 水溶液、以 Mo 原子浓度计 0.20 mol/L (NH4)6Mo7O24 水溶液、0.60 mol/L 柠檬酸水溶液和去离子水",
+        "参数": "各原液在室温下使用；记录批号、实际浓度和配制日期。NiMo 母体使用 Ni 原液 15.0 mL、Mo 原液 15.0 mL和柠檬酸原液 15.0 mL，对应 Ni 3.0 mmol、Mo 3.0 mmol、柠檬酸 9.0 mmol，nominal Ni:Mo=1:1且柠檬酸/总金属=1.5。Ni 基和 Mo 基母体分别使用相应金属原液 15.0 mL、柠檬酸原液 7.5 mL并以去离子水补至 25.0 mL，对应每种对照总金属 3.0 mmol、柠檬酸/金属=1.5。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备 NiMo、Ni 基和 Mo 基柠檬酸络合前驱体",
+        "试剂/对象": "NiMo 混合液、Ni 基对照液、Mo 基对照液",
+        "参数": "分别将各体系在室温下以 600 rpm 搅拌 30 min；随后在 70 ℃、600 rpm 下继续搅拌并蒸发浓缩 240 min，形成均匀黏稠前驱体。NiMo 体系的各原液允许按每次 3.0 mL、批次间搅拌 2 min 的节拍顺序加入，以保留加料与混合关系而不要求不可中断连续流；全过程记录是否出现分层、异常沉淀或颜色不均。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "干燥并空气煅烧获得同源氧化物母体",
+        "试剂/对象": "NiMo、Ni 基和 Mo 基黏稠络合前驱体",
+        "参数": "先在 80 ℃下干燥 12 h，得到无明显流动液相的干燥前驱体；随后在空气气氛下以 2 ℃/min 升温至 350 ℃，恒温 120 min，再自然冷却至低于 40 ℃。分别收集并充分混匀所得 NiMo、Ni 基和 Mo 基母体粉末，记录煅烧前后质量；该条件仅定义统一氧化处理历史，不预先指定所得晶相或 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "构建 NiMo 分级还原与再氧化样品矩阵",
+        "试剂/对象": "同一批 NiMo 母体粉末、氢气和空气",
+        "参数": "将 NiMo 母体充分混匀后等质量分为 4 份，每份不少于 40 mg：NiMo-O 不再处理；NiMo-R150 在氢气气氛下于 150 ℃处理 120 min；NiMo-R200 在氢气气氛下于 200 ℃处理 120 min；NiMo-RO 先按 NiMo-R200 条件还原，再在空气中以 2 ℃/min 升至 200 ℃并恒温 60 min。氢气处理采用小规模密闭气氛预处理，初始氢气压力设为 0.20 MPa并在冷却至低于 40 ℃后卸压取样。所有样品密封保存并记录实际温度、时间和气氛；样品名称表示处理程度，不代表已经由 XPS 确认的 Mo 价态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备匹配处理历史的 Ni 基和 Mo 基对照",
+        "试剂/对象": "Ni 基母体粉末、Mo 基母体粉末和氢气",
+        "参数": "将每种单金属母体充分混匀后分为两份，每份不少于 40 mg：分别保留未经还原的 Ni-O、Mo-O，并将另一份在氢气气氛下于 200 ℃处理 120 min，得到 Ni-R200、Mo-R200；初始氢气压力为 0.20 MPa，处理后冷却至低于 40 ℃再卸压。对照样品采用与 NiMo-R200 相同的升温、恒温和冷却规则，以比较单组分材料和 Ni–Mo 共存体系的物相响应。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备八组 XRD 乙醇分散样",
+        "试剂/对象": "NiMo-O、NiMo-R150、NiMo-R200、NiMo-RO、Ni-O、Ni-R200、Mo-O、Mo-R200及无水乙醇",
+        "参数": "每个样品准确取 10.0 mg，加入 4.5 mL 无水乙醇，超声分散 10 min后于室温以 600 rpm 搅拌 5 min；XRD 测试前再次搅拌 2 min，确保总液体体积不低于平台要求的 4.0 mL并形成可重复滴液制样的均匀悬浊液。每组至少保留 20 mg未分散粉末，供后续 XPS 和 TEM stage 使用。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "完成 XRD 测试并形成晶相观察",
+        "试剂/对象": "八组乙醇分散样及空白制样基底",
+        "参数": "采用 Cu Kα 辐射进行 XRD 测试，建议扫描范围 2θ=10–80°、步长 0.02°、等效扫描速率约 2°/min；所有样品使用相同滴液体积、干燥方式和扫描参数。进行背景扣除和统一峰拟合，输出原始图谱、处理后图谱、主要峰位、半峰宽、可匹配物相及未归属峰清单；比较各 NiMo 后处理样品与 Ni、Mo 对照的峰位变化、结晶性和新生或消失物相。若图谱信噪比不足或出现明显制样不均，同一样品按相同参数重新分散并复测一次，不依据 XRD 单独指认 Mo 氧化态。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、并完成 XRD 观察",
+      "completion_condition": "为八个样品均返回具有样品编号、处理历史和扫描参数的合法 XRD 数据，可完成峰位、相组成、峰宽及杂相的统一比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "当前知识检索与历史案例均无命中，尚无可追溯文献支撑具体前驱体配方、氧化还原温度及其对应 Mo 价态，因此不宜预设处理条件与价态映射。可依据任务需求构建同源 NiMo 母体的分级还原/氧化样品，并设置匹配的 Ni 基、Mo 基对照；依次通过组成与物相、表面价态和界面电子结构表征确认样品差异，再在统一负载量、电解液和数据校正规则下评价碱性 HER、水解离动力学及稳定性。平台可承担部分合成、XRD 和电化学测试，XPS 等能力未列出时应采用离线送样与数据回传。",
+      "key_findings": [
+        "任务明确要求的样品矩阵至少包括多个不同还原/氧化程度的 NiMo 样品，以及 Ni 基和 Mo 基对照；各组应尽量保持前驱体来源、处理历史和测试负载量可比。",
+        "关键证据链应连接后处理程度、实际 Mo 表面价态、Ni–Mo 界面电子结构、水解离动力学和 HER 性能，不能仅凭处理条件推定 Mo 价态。",
+        "目标性能指标包括 HER 过电位、Tafel 斜率、EIS、电化学活性面积和稳定性；为区分本征活性与表面积效应，还需同时报告几何面积归一化和 ECSA 相关结果。",
+        "设备上下文支持溶液处理、固液分离、干燥、部分气氛热处理、XRD 及电化学测试，但未明确提供 XPS、XANES、TEM 或功函数测试能力，相关界面与价态表征应规划为离线送样。",
+        "当前没有知识或历史案例命中，无法给出有文献依据的具体 NiMo 合成配方、后处理窗口、Mo 价态比例或预期活性排序。"
+      ],
+      "candidate_precedents": [],
+      "route_implications": [
+        "stage 应按观察点划分：先获得组成/物相观察，再获得表面价态与界面电子结构观察，最后获得统一条件下的 HER 与水解离动力学观察；制备、洗涤、干燥和后处理均应作为对应观察点前的 macro action。",
+        "首个样品设计宜采用同一批 NiMo 母体分样后实施分级还原、基准处理和分级氧化，以降低组成与形貌差异对 Mo 价态效应判断的干扰。",
+        "Ni 基与 Mo 基对照应采用尽可能匹配的制备和后处理历史，并设置空白基底，以分辨 Ni、Mo、Ni–Mo 界面及基底贡献。",
+        "结构与界面表征应至少覆盖元素组成、晶相、表面 Ni/Mo 化学态及结合能位移；XRD 可在平台内完成，XPS 等应作为离线表征 observation point，并在数据回传后再决定是否调整处理窗口。",
+        "电化学测试应统一催化剂负载量、电极面积、碱性电解液、参比换算和 iR 校正规则，依次获得极化曲线、Tafel、EIS、非法拉第区 CV/Cdl、ECSA 估算及恒电流或恒电位稳定性结果。",
+        "水解离动力学不能仅由 Tafel 斜率单独判定；可在 H2O/D2O 同位素效应、温度依赖或碱浓度依赖中选择平台可实施且可比的一组辅助测试。",
+        "任务下发至 303 实验室并返回任务 id 属于执行编排层职责；当前调研报告不能伪造实验任务 id。"
+      ],
+      "open_questions": [
+        "NiMo 母体采用氧化物、氢氧化物、合金还是磷化物体系尚未确定，直接影响可实现的 Mo 价态范围和后处理策略。",
+        "缺少可追溯文献确定分级还原/氧化的温度、时间、气氛和压力窗口，以及这些条件与 Mo6+/Mo5+/Mo4+/低价 Mo 比例的对应关系。",
+        "离线 XPS、XANES、TEM/EDS、UPS 或 Kelvin probe 的可用性、送样量和数据回传格式尚未确认。",
+        "电极基底、催化剂负载量、粘结剂、碱性电解液浓度、参比电极及 iR 校正比例尚未指定。",
+        "ECSA 换算所需的比电容 Cs 缺少体系特异依据；若无法可靠确定，应优先报告 Cdl 并将 ECSA 标记为估算值。",
+        "稳定性测试采用恒电流还是恒电位、目标电流密度、持续时间及测试后价态复测条件尚待确定。",
+        "水解离动力学采用 H2O/D2O、温度依赖、pH/碱浓度依赖还是组合方案尚未确定。",
+        "303 实验室任务下发接口及任务 id 返回机制未在当前上下文中提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

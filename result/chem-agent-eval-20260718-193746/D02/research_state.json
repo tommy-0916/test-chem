@@ -1,0 +1,1829 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究 NiCo 双金属协同作用对碱性 EOR 活性、反应动力学和抗失活能力的影响，请围绕 NiCo 基催化剂设计合理的平行对照实验方案。实验应包含不同 Ni/Co 比例样品、单金属 Ni 基和 Co 基样品以及物理混合对照样品，比较其结构、元素分布、表面价态、电化学活性、稳定性和液相产物分布差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节，并获得能够判断 NiCo 协同效应是否改善 EOR 反应路径和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "NiCo 双金属催化剂 碱性乙醇氧化反应 EOR 不同 Ni/Co 摩尔比 共沉淀合成 后处理",
+    "NiCo Ni Co 单金属与物理混合对照 乙醇电氧化 协同效应 平行实验设计",
+    "NiCo 基 EOR 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 Ni-Co 界面电子结构",
+    "NiCo 碱性乙醇氧化 循环伏安 线性扫描 Tafel 电化学阻抗 ECSA 反应动力学",
+    "NiCo 乙醇电氧化 计时电流 加速耐久性 抗中毒失活 测试前后结构价态表征",
+    "NiCo 碱性 EOR 液相色谱 乙酸盐 乙醛 碳酸盐 产物定量 法拉第效率 C1 C2 反应路径"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "NiCo 双金属催化剂 碱性乙醇氧化反应 EOR 不同 Ni/Co 摩尔比 共沉淀合成 后处理",
+        "NiCo Ni Co 单金属与物理混合对照 乙醇电氧化 协同效应 平行实验设计",
+        "NiCo 基 EOR 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 Ni-Co 界面电子结构",
+        "NiCo 碱性乙醇氧化 循环伏安 线性扫描 Tafel 电化学阻抗 ECSA 反应动力学",
+        "NiCo 乙醇电氧化 计时电流 加速耐久性 抗中毒失活 测试前后结构价态表征",
+        "NiCo 碱性 EOR 液相色谱 乙酸盐 乙醛 碳酸盐 产物定量 法拉第效率 C1 C2 反应路径"
+      ],
+      "hit_titles": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用"
+      ]
+    },
+    {
+      "round": 2,
+      "queries": [
+        "NiCo bimetallic electrocatalyst alkaline ethanol oxidation Ni Co ratio synthesis monometallic physical mixture control",
+        "NiCo ethanol oxidation reaction alkaline electrolyte CV ECSA Tafel EIS chronoamperometry CO stripping durability protocol",
+        "NiCo electrocatalyst XRD HAADF-STEM EDS mapping XPS operando Raman ethanol oxidation electronic interaction",
+        "alkaline ethanol electrooxidation liquid products HPLC ion chromatography acetate acetaldehyde carbonate Faradaic efficiency C1 C2 pathway"
+      ],
+      "hit_titles": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用"
+      ]
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [
+    {
+      "title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+      "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+      "score": 9.0,
+      "problem": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 Alaa Mohammed Afaf Desouky Raafat R. Mohammed Hussein Abdel-Maksoud",
+      "synthesis_summary": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。",
+      "experiment_details": "合成摘要: 实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 结构化实验步骤: 1. 论文实验步骤 | 试剂/对象: AChE, TAC, TNF-, GPx, SOD, CBC | 参数: 文献未说明",
+      "steps": [
+        {
+          "步骤序号": 1,
+          "操作": "论文实验步骤",
+          "试剂/对象": "AChE, TAC, TNF-, GPx, SOD, CBC",
+          "参数": "文献未说明",
+          "evidence": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后"
+        }
+      ],
+      "performance": [],
+      "matched_terms": [
+        "碱性"
+      ]
+    }
+  ],
+  "memory_hits": [],
+  "extracted_protocols": [
+    {
+      "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+      "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+      "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+      "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+      "steps": [
+        {
+          "步骤序号": 1,
+          "操作": "对一天龄雏鸡喂食商品开食料。",
+          "试剂/对象": "一天龄雏鸡；商品开食料",
+          "参数": "喂食10天；其他饲养参数文献未说明",
+          "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "将雏鸡平均分为对照组和试验组。",
+          "试剂/对象": "雏鸡；对照组；试验组",
+          "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+          "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+          "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+          "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+          "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "每周对所有雏鸡称重并记录体重差异。",
+          "试剂/对象": "所有雏鸡；体重记录",
+          "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+          "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+          "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+          "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+          "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+          "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+          "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+          "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+          "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+          "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+          "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+        }
+      ],
+      "missing_parameters": [],
+      "paper_id": "doi_10_18686_zhfnc_v1i2_71",
+      "verification_status": "verified_doi",
+      "full_text_status": "metadata_only"
+    }
+  ],
+  "survey_report": {
+    "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+    "key_findings": [
+      "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+      "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+      "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+    ],
+    "candidate_precedents": [
+      "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+    ],
+    "route_implications": [
+      "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+      "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+      "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+      "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+    ],
+    "open_questions": [
+      "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+      "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+      "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+      "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+      "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+      "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+    ]
+  },
+  "stage_route": [
+    "合成、必要并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、必要并完成 XRD 观察",
+  "current_stage_plan": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+      "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+      "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+      "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+      "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+      "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+      "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "按名义金属原子比制备物理混合对照样品",
+      "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+      "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "固液分离、洗涤并干燥全部催化剂样品",
+      "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+      "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+      "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+      "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+      "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+      "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、必要并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、必要并完成 XRD 观察",
+    "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+        "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+        "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+        "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+        "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+        "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+        "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "按名义金属原子比制备物理混合对照样品",
+        "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+        "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "固液分离、洗涤并干燥全部催化剂样品",
+        "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+        "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+        "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+        "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+        "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+        "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+      "key_findings": [
+        "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+        "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+        "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+      ],
+      "candidate_precedents": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+      ],
+      "route_implications": [
+        "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+        "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+        "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+        "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+      ],
+      "open_questions": [
+        "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+        "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+        "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+        "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+        "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+        "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+        "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "对一天龄雏鸡喂食商品开食料。",
+            "试剂/对象": "一天龄雏鸡；商品开食料",
+            "参数": "喂食10天；其他饲养参数文献未说明",
+            "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "将雏鸡平均分为对照组和试验组。",
+            "试剂/对象": "雏鸡；对照组；试验组",
+            "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+            "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+            "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+            "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+            "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "每周对所有雏鸡称重并记录体重差异。",
+            "试剂/对象": "所有雏鸡；体重记录",
+            "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+            "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+            "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+            "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+            "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+            "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+            "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+            "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+            "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+            "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+            "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_18686_zhfnc_v1i2_71",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 NiCo 双金属协同作用对碱性 EOR 活性、反应动力学和抗失活能力的影响，请围绕 NiCo 基催化剂设计合理的平行对照实验方案。实验应包含不同 Ni/Co 比例样品、单金属 Ni 基和 Co 基样品以及物理混合对照样品，比较其结构、元素分布、表面价态、电化学活性、稳定性和液相产物分布差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节，并获得能够判断 NiCo 协同效应是否改善 EOR 反应路径和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+        "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+        "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+        "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+        "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+        "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+        "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "按名义金属原子比制备物理混合对照样品",
+        "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+        "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "固液分离、洗涤并干燥全部催化剂样品",
+        "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+        "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+        "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+        "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+        "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+        "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+      "key_findings": [
+        "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+        "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+        "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+      ],
+      "candidate_precedents": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+      ],
+      "route_implications": [
+        "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+        "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+        "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+        "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+      ],
+      "open_questions": [
+        "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+        "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+        "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+        "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+        "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+        "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+        "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "对一天龄雏鸡喂食商品开食料。",
+            "试剂/对象": "一天龄雏鸡；商品开食料",
+            "参数": "喂食10天；其他饲养参数文献未说明",
+            "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "将雏鸡平均分为对照组和试验组。",
+            "试剂/对象": "雏鸡；对照组；试验组",
+            "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+            "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+            "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+            "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+            "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "每周对所有雏鸡称重并记录体重差异。",
+            "试剂/对象": "所有雏鸡；体重记录",
+            "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+            "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+            "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+            "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+            "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+            "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+            "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+            "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+            "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+            "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+            "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_18686_zhfnc_v1i2_71",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "知识库命中摘要": [
+      {
+        "title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "score": 9.0,
+        "problem": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 Alaa Mohammed Afaf Desouky Raafat R. Mohammed Hussein Abdel-Maksoud",
+        "synthesis_summary": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。",
+        "experiment_details": "合成摘要: 实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 结构化实验步骤: 1. 论文实验步骤 | 试剂/对象: AChE, TAC, TNF-, GPx, SOD, CBC | 参数: 文献未说明",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "论文实验步骤",
+            "试剂/对象": "AChE, TAC, TNF-, GPx, SOD, CBC",
+            "参数": "文献未说明",
+            "evidence": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后"
+          }
+        ],
+        "performance": [],
+        "matched_terms": [
+          "碱性"
+        ]
+      }
+    ],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "NiCo 双金属催化剂 碱性乙醇氧化反应 EOR 不同 Ni/Co 摩尔比 共沉淀合成 后处理",
+        "NiCo Ni Co 单金属与物理混合对照 乙醇电氧化 协同效应 平行实验设计",
+        "NiCo 基 EOR 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 Ni-Co 界面电子结构",
+        "NiCo 碱性乙醇氧化 循环伏安 线性扫描 Tafel 电化学阻抗 ECSA 反应动力学",
+        "NiCo 乙醇电氧化 计时电流 加速耐久性 抗中毒失活 测试前后结构价态表征",
+        "NiCo 碱性 EOR 液相色谱 乙酸盐 乙醛 碳酸盐 产物定量 法拉第效率 C1 C2 反应路径"
+      ],
+      "reason": "这些检索词覆盖了可并行制备的Ni/Co比例与对照体系、结构和界面证据、电化学活性与动力学、耐久抗失活评价以及液相产物和反应路径判定等关键知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "NiCo bimetallic electrocatalyst alkaline ethanol oxidation Ni Co ratio synthesis monometallic physical mixture control",
+          "NiCo ethanol oxidation reaction alkaline electrolyte CV ECSA Tafel EIS chronoamperometry CO stripping durability protocol",
+          "NiCo electrocatalyst XRD HAADF-STEM EDS mapping XPS operando Raman ethanol oxidation electronic interaction",
+          "alkaline ethanol electrooxidation liquid products HPLC ion chromatography acetate acetaldehyde carbonate Faradaic efficiency C1 C2 pathway"
+        ],
+        "reason": "当前唯一命中内容与NiCo催化剂和碱性乙醇氧化无关，不能为stage设计提供可靠证据。仍缺少：可保持形貌、负载量和热处理一致的不同Ni/Co比例、Ni单金属、Co单金属及物理混合对照的制备方法；用于证明双金属界面和电子耦合的XRD、元素分布及XPS等表征依据；活性、ECSA归一化、Tafel/EIS动力学、计时稳定性和失活前后对比的标准测试条件；以及乙醛、乙酸盐、碳酸盐等液相产物的定量、法拉第效率和C1/C2路径判据。因此当前知识不足以稳定确定各observation point及其验收标准，需要继续检索。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "\"NiCo\" ethanol electrooxidation alkaline monometallic Ni Co physical mixture composition-dependent activity stability",
+          "\"NiCo hydroxide\" ethanol oxidation coprecipitation Ni/Co ratio XRD XPS STEM EDS synthesis protocol",
+          "\"ethanol oxidation\" alkaline electrolyte product analysis acetate acetaldehyde carbonate HPLC ion chromatography Faradaic efficiency",
+          "\"NiCo\" ethanol oxidation chronoamperometry Tafel EIS ECSA post-mortem XPS degradation poisoning"
+        ],
+        "reason": "当前累计知识仅包含与任务无关的动物营养研究，不能支撑NiCo碱性EOR的observation point、对照体系、实验参数或验收判据设计。前两轮检索也未获得有效命中。仍需获得至少以下证据：采用相同前驱体化学、金属总量、载体和后处理条件制备不同Ni/Co比例、Ni单金属、Co单金属及按对应质量比例物理混合对照的方法；用XRD、元素分布和XPS区分真实双金属界面与简单混合并判断电子耦合的判据；在统一负载量、电解液和乙醇浓度下开展CV/LSV、ECSA归一化、Tafel、EIS、计时电流及循环耐久性测试的可比方案；以及乙醛、乙酸盐、碳酸盐等液相产物的定量方法、法拉第效率和C1/C2路径判据。还需明确失活前后结构与价态复测条件，才能稳定划分结构确认、电化学活性/动力学、稳定性和产物路径等关键observation point。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [
+        {
+          "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+          "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+          "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+          "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+          "steps": [
+            {
+              "步骤序号": 1,
+              "操作": "对一天龄雏鸡喂食商品开食料。",
+              "试剂/对象": "一天龄雏鸡；商品开食料",
+              "参数": "喂食10天；其他饲养参数文献未说明",
+              "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+            },
+            {
+              "步骤序号": 2,
+              "操作": "将雏鸡平均分为对照组和试验组。",
+              "试剂/对象": "雏鸡；对照组；试验组",
+              "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+              "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+            },
+            {
+              "步骤序号": 3,
+              "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+              "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+              "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+              "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+            },
+            {
+              "步骤序号": 4,
+              "操作": "每周对所有雏鸡称重并记录体重差异。",
+              "试剂/对象": "所有雏鸡；体重记录",
+              "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+              "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+            },
+            {
+              "步骤序号": 5,
+              "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+              "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+              "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+              "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+            },
+            {
+              "步骤序号": 6,
+              "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+              "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+              "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+              "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+            },
+            {
+              "步骤序号": 7,
+              "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+              "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+              "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+              "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+            }
+          ]
+        }
+      ],
+      "missing_parameters": [
+        "该论文未提供NiCo双金属或单金属催化剂的制备方法。",
+        "该论文未提供Ni/Co比例、金属前驱体、载体、沉淀剂、溶剂、用量、浓度、体积、温度、时间或后处理条件。",
+        "该论文未提供催化剂结构、晶相、元素分布、界面或表面价态表征方法。",
+        "该论文未提供电极制备方法、催化剂负载量、粘结剂组成或电极基底信息。",
+        "该论文未提供碱性乙醇氧化反应的电解液组成、乙醇浓度、扫描范围、扫描速率、电位或电流条件。",
+        "该论文未提供循环伏安、线性扫描、Tafel、电化学阻抗、计时电流或耐久性测试参数。",
+        "该论文未提供液相产物检测方法，也未涉及乙醛、乙酸盐、碳酸盐、法拉第效率或C1/C2产物路径。",
+        "该论文未提供样品处理、洗涤、干燥、离心、过滤或纯化条件。",
+        "该论文中AChE、TAC、TNF-α、GPx、SOD及血液指标的具体分析方法和定量参数均未说明。"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+      "key_findings": [
+        "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+        "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+        "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+      ],
+      "candidate_precedents": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+      ],
+      "route_implications": [
+        "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+        "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+        "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+        "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+      ],
+      "open_questions": [
+        "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+        "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+        "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+        "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+        "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+        "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：平行催化剂库结构、元素分布与表面价态确认",
+        "stage 2：碱性 EOR 电化学活性与反应动力学观察",
+        "stage 3：长期稳定性、抗失活及测试后结构变化观察",
+        "stage 4：液相产物分布、法拉第效率与反应路径观察"
+      ],
+      "current_stage": "stage 1：平行催化剂库结构、元素分布与表面价态确认",
+      "stage_route_reason": "识别出的关键 observation point 依次为：第一，不同 Ni/Co 比例、Ni 单金属、Co 单金属及对应物理混合对照在统一金属总量、载体、负载量和后处理条件下制得后，对其物相、元素空间分布和表面价态进行关键观察，以确认样品可比性并区分真实双金属界面与简单物理混合；第二，在统一电极负载量、电解液和乙醇浓度下获得活性与动力学观察，包括起始电位、电流密度、质量或 ECSA 归一化活性、Tafel 行为和阻抗差异；第三，经统一耐久性方案后观察电流保持率、循环前后活性衰减以及测试后物相、元素分布和价态变化，用于判断抗失活能力及失活机制；第四，在受控电位或电流和统一电量条件下获得液相产物定量结果，比较乙醛、乙酸盐及可检测 C1 产物的选择性、法拉第效率和碳平衡，以判断 NiCo 是否改变 EOR 路径。催化剂配制、反应、洗涤、分离、干燥、必要后处理、电极制备和取样均属于到达相应 observation point 前的 macro action，不单独构成 stage。平台可支持 XRD、电化学测试及液相色谱相关观察；元素分布和 XPS 表面价态因现有设备能力未明确，应采用离线送样与数据回传。",
+      "current_stage_reason": "必须先制备完整且可比的平行样品库，并通过结构、元素分布和表面价态观察确认目标组成、双金属共存及界面差异；否则后续活性、动力学、稳定性和产物差异无法可靠归因于 NiCo 协同作用。因此首先进入 stage 1。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+          "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+          "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+          "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+          "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+          "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+          "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "按名义金属原子比制备物理混合对照样品",
+          "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+          "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "固液分离、洗涤并干燥全部催化剂样品",
+          "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+          "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+          "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+          "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+          "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+          "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。"
+        }
+      ],
+      "macro_plan_summary": "本组 macro action 将在统一载体、名义总金属量和后处理条件下制备三种 Ni/Co 比例双金属样品、Ni/Co 单金属样品及对应物理混合对照，并完成小体积洗涤、干燥、乙醇分散和 XRD 观察；全部步骤只服务于当前 stage 的物相与结晶结构 observation point，不提前执行 XPS、电化学、稳定性或液相产物分析。"
+    }
+  },
+  "campaign_id": "D02-20260718-193746",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究 NiCo 双金属协同作用对碱性 EOR 活性、反应动力学和抗失活能力的影响，请围绕 NiCo 基催化剂设计合理的平行对照实验方案。实验应包含不同 Ni/Co 比例样品、单金属 Ni 基和 Co 基样品以及物理混合对照样品，比较其结构、元素分布、表面价态、电化学活性、稳定性和液相产物分布差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学 测试和液相产物检测等关键环节，并获得能够判断 NiCo 协同效应是否改善 EOR 反应路径和稳定性的结果。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "doi": "10.18686/zhfnc.v1i2.71",
+        "role": "keyword",
+        "relevance": 0.1094,
+        "kept": true,
+        "reason": "passed_relevance_filter"
+      },
+      {
+        "title": "实验室金属样品前处理技术及其对检测结果的影响",
+        "doi": "10.37155/2717-5197-0622-4",
+        "role": "keyword",
+        "relevance": 0.0781,
+        "kept": false,
+        "reason": "relevance 0.078 < threshold 0.1"
+      },
+      {
+        "title": "图 2γ-氨基丁酸衍生物对实验性子痫前期大鼠8（A）和14月龄子代（B）红细胞伸长指数值的影响（M ± m）。 注：* 与阳性对照组的数据相比，p < 0.05（学生t检验）；#与阴性对照组的数据相比，p < 0.05（Newman-Keuls检验）。",
+        "doi": "10.17816/pavlovj75789-59866",
+        "role": "keyword",
+        "relevance": 0.0625,
+        "kept": false,
+        "reason": "relevance 0.062 < threshold 0.1"
+      },
+      {
+        "title": "NICO++: Towards Better Benchmarking for Domain Generalization",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Physical and Electrochemical Area Determination of Electrodeposited Ni, Co, and NiCo Thin Films",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "亚稳态γ-Mn与GaAs(100)界面的形成:扩散和化学反应",
+        "doi": "10.7498/aps.44.115",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Mn/GaAs(100)界面电子结构的同步辐射光电子能谱研究",
+        "doi": "10.7498/aps.44.145",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Stepwise Verification and Remediation of Student Reasoning Errors with Large Language Model Tutors",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "SWAG: Survey of Water and Ammonia in the Galactic Center",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Towards quantitative understanding of quantum dot ensemble capacitance-voltage spectroscopy",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 1,
+    "web_kept": 0,
+    "newly_registered": 1,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: "
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "D02-20260718-193746",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全(未直接引用文献)"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、必要并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、必要并完成 XRD 观察",
+        "current_stage_plan": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+            "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+            "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+            "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+            "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+            "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+            "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "按名义金属原子比制备物理混合对照样品",
+            "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+            "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "固液分离、洗涤并干燥全部催化剂样品",
+            "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+            "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+            "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+            "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+            "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+            "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T20:04:41"
+    }
+  ],
+  "tool_invocations": [],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 20:01:14] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 20:01:14] B0 waiting received event: bootstrap",
+    "[2026-07-18 20:01:14] bootstrap event received; routing to B1",
+    "[2026-07-18 20:01:14] Entered B1 bootstrap",
+    "[2026-07-18 20:01:24] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=1, web_kept=0, written=1, errors=1",
+    "[2026-07-18 20:01:24] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 20:01:37] survey queries after sanitization: ['NiCo 双金属催化剂 碱性乙醇氧化反应 EOR 不同 Ni/Co 摩尔比 共沉淀合成 后处理', 'NiCo Ni Co 单金属与物理混合对照 乙醇电氧化 协同效应 平行实验设计', 'NiCo 基 EOR 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 Ni-Co 界面电子结构', 'NiCo 碱性乙醇氧化 循环伏安 线性扫描 Tafel 电化学阻抗 ECSA 反应动力学', 'NiCo 乙醇电氧化 计时电流 加速耐久性 抗中毒失活 测试前后结构价态表征', 'NiCo 碱性 EOR 液相色谱 乙酸盐 乙醛 碳酸盐 产物定量 法拉第效率 C1 C2 反应路径']",
+    "[2026-07-18 20:01:37] survey query generate completed with 6 queries",
+    "[2026-07-18 20:01:38] Survey round 1 produced 1 hits; 1 unique hits accumulated",
+    "[2026-07-18 20:01:57] Survey round 2 produced 1 hits; 1 unique hits accumulated",
+    "[2026-07-18 20:02:54] paper protocol extract completed with 1 protocols",
+    "[2026-07-18 20:02:54] protocol provenance attached from paper registry",
+    "[2026-07-18 20:02:54] memory disabled; skipped similar exp search",
+    "[2026-07-18 20:04:41] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 20:04:41] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T20:01:14.963583",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+        "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+        "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+        "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+        "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+        "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+        "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "按名义金属原子比制备物理混合对照样品",
+        "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+        "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "固液分离、洗涤并干燥全部催化剂样品",
+        "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+        "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+        "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+        "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+        "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+        "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+      "key_findings": [
+        "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+        "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+        "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+      ],
+      "candidate_precedents": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+      ],
+      "route_implications": [
+        "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+        "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+        "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+        "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+      ],
+      "open_questions": [
+        "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+        "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+        "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+        "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+        "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+        "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+        "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "对一天龄雏鸡喂食商品开食料。",
+            "试剂/对象": "一天龄雏鸡；商品开食料",
+            "参数": "喂食10天；其他饲养参数文献未说明",
+            "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "将雏鸡平均分为对照组和试验组。",
+            "试剂/对象": "雏鸡；对照组；试验组",
+            "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+            "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+            "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+            "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+            "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "每周对所有雏鸡称重并记录体重差异。",
+            "试剂/对象": "所有雏鸡；体重记录",
+            "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+            "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+            "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+            "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+            "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+            "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+            "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+            "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+            "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+            "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+            "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_18686_zhfnc_v1i2_71",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 NiCo 双金属协同作用对碱性 EOR 活性、反应动力学和抗失活能力的影响，请围绕 NiCo 基催化剂设计合理的平行对照实验方案。实验应包含不同 Ni/Co 比例样品、单金属 Ni 基和 Co 基样品以及物理混合对照样品，比较其结构、元素分布、表面价态、电化学活性、稳定性和液相产物分布差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节，并获得能够判断 NiCo 协同效应是否改善 EOR 反应路径和稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、必要后处理并完成 XRD 观察。目标 observation point：获得所有平行样品的有效 XRD 图谱，用于确认不同 Ni/Co 名义比例样品、Ni 单金属、Co 单金属及物理混合对照的物相组成、结晶性和可能的晶格参数差异。stage goal：在统一载体、名义总金属量、制备和后处理条件下建立可比较的 NiCo 催化剂样品库，并先通过 XRD 判断样品是否形成可区分的晶相、是否存在金属或氧化物相以及双金属样品与单金属/物理混合样品之间的衍射差异。planning logic：采用小体积、外部预配的 Ni 和 Co 前驱体原液，按 Ni:Co = 3:1、1:1、1:3 制备三种双金属样品，同时制备 Ni 单金属和 Co 单金属样品；物理混合对照由相同条件制得的单金属样品按名义金属原子比混合。所有样品使用相同载体质量、名义总金属投料、还原/后处理、洗涤和干燥条件。由于检索结果不含相关 NiCo 化学实验参数，前驱体浓度、载体量、还原剂比例、洗涤次数、干燥条件和 XRD 扫描条件均为 agent 补全的起始条件，需由下游实验人员根据实际材料体系和安全规程复核。key variables：Ni/Co 名义原子比、单金属或双金属制备方式、物理混合方式、载体质量、名义总金属投料、还原剂过量倍数、后处理温度与时间以及 XRD 样品分散浓度。expected observation：获得各样品的可比衍射图谱，并记录物相归属、峰位、峰宽、相对强度、是否出现双相或合金化相关峰位变化及结晶度差异；不预设具体峰位变化或协同效应结论。stage completion condition：全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据；若某样品未形成可分辨晶相，应记录为合法的低结晶或无定形观察，而不是据此伪造物相判定。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "建立平行样品矩阵并配制 Ni、Co 前驱体原液",
+        "试剂/对象": "Ni(NO3)2·6H2O、Co(NO3)2·6H2O、去离子水、导电碳载体、NaBH4 还原剂；样品组包括 Ni3Co1、Ni1Co1、Ni1Co3、Ni 单金属、Co 单金属及对应物理混合对照",
+        "参数": "外部预配并已装载 0.10 mol/L Ni(NO3)2 和 0.10 mol/L Co(NO3)2 水溶液；每个样品使用 10.0 mg 导电碳载体，名义总金属投料固定为 0.10 mmol。双金属样品分别使用 Ni/Co = 0.075/0.025 mmol、0.050/0.050 mmol 和 0.025/0.075 mmol；Ni 单金属和 Co 单金属分别使用 0.100 mmol 对应金属盐。每个反应体系前驱体溶液与洗涤前总液体体积控制在 6 mL 以内。上述配方为 agent 补全的统一起始设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "制备不同 Ni/Co 比例及单金属负载催化剂前驱体悬浊液",
+        "试剂/对象": "步骤1所得 Ni/Co 前驱体溶液、10.0 mg 导电碳载体、去离子水",
+        "参数": "将各组预定体积的 Ni 和 Co 前驱体原液加入含 10.0 mg 碳载体的水相体系中；室温下持续搅拌 30 min，使载体充分润湿和金属离子均匀吸附。双金属组、Ni 单金属组和 Co 单金属组均采用相同的总液量、搅拌时间和载体质量；加料与混合可由下游改写为固定体积分批加入，保持总量、顺序和约 30 min 的混合时间。该步骤的具体前驱体体系和时间为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "化学还原并熟化形成 NiCo/C、Ni/C 和 Co/C 粉体",
+        "试剂/对象": "步骤2所得金属离子/碳载体悬浊液、NaBH4 水溶液、去离子水",
+        "参数": "预配 0.20 mol/L NaBH4 水溶液，按名义总金属摩尔数的 4 倍加入各反应体系；室温下分批加入，加入总时长约 10 min，随后继续搅拌 60 min，再进行室温搅拌熟化 120 min。所有样品使用相同的 NaBH4/总金属摩尔比、加料节拍、搅拌时间和熟化条件；反应过程避免密闭积气，具体气体释放和碱性还原操作由下游安全层复核。NaBH4 比例、时间和熟化条件均为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "按名义金属原子比制备物理混合对照样品",
+        "试剂/对象": "步骤3中独立制得的 Ni/C 和 Co/C 单金属粉体",
+        "参数": "在 Ni/C 与 Co/C 均已完成相同洗涤和干燥后，按名义金属原子比制备 Ni3Co1-PM、Ni1Co1-PM 和 Ni1Co3-PM；优先依据单金属样品的实际金属含量进行质量折算，使物理混合物的总金属量和双金属对应组一致。每组混合后在室温下轻柔研混或分散混合 30 min，避免引入不同的热处理历史。若实际金属含量尚未测得，则先按投料金属量进行名义配比，并在后续元素定量后记录修正值。该步骤为 agent 补全的物理混合控制设计。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "固液分离、洗涤并干燥全部催化剂样品",
+        "试剂/对象": "Ni3Co1/C、Ni1Co1/C、Ni1Co3/C、Ni/C、Co/C 及物理混合粉体；去离子水和无水乙醇",
+        "参数": "对步骤3所得各悬浊液进行固液分离，使用去离子水洗涤 3 次、无水乙醇洗涤 1 次；每次洗涤后重新分散并混合 5 min，再分离并保留固体。将洗净固体在 60 ℃下干燥 12 h 至质量基本恒定。物理混合样品仅在各单金属粉体完成同样洗涤和干燥后进行混合。单批悬浊液体积保持在 6 mL 以内，以便下游进行小体积连续分离；洗涤次数和干燥条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备 XRD 测试用均匀样品分散液并完成样品登记",
+        "试剂/对象": "干燥后的全部催化剂粉体、无水乙醇、XRD 样品分散液",
+        "参数": "每个样品取约 5 mg 干燥粉体，加入无水乙醇使总分散液体积为 4.0-5.0 mL；室温超声分散 10 min，随后轻柔搅拌 5 min。统一记录样品代码、名义 Ni/Co 比、制备方式、载体质量、名义总金属投料、实际取样质量和分散液体积。XRD 进样前保持样品处于均匀悬浊状态，确保满足 XRD 对样品总液量不少于 4.0 mL 的设备边界。取样和分散条件为 agent 补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "对全部平行样品进行 XRD 观察并建立物相比较表",
+        "试剂/对象": "步骤6所得各样品乙醇分散液；NiCo 双金属样品、Ni 单金属、Co 单金属和物理混合对照",
+        "参数": "对每个样品采用一致的 XRD 测量条件：2θ 扫描范围建议为 10-80°，步长 0.02°，扫描速率保持一致；记录原始衍射图、主要峰位、峰宽、相对强度、背景和可分辨物相。重点比较双金属样品与单金属及物理混合样品是否出现不同相组成、峰位偏移、峰宽变化或结晶度变化；不预设合金化、氧化物相或协同效应一定存在。XRD 扫描范围和步长为 agent 补全，最终条件需按实际仪器方法复核。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "全部计划样品均完成合成、后处理和足量乙醇分散制样，且获得可用于横向比较的 XRD 数据",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索仅命中一篇关于雏鸡营养不良及血液、脑组织指标的论文，与NiCo催化剂制备、碱性乙醇氧化、电化学测试和液相产物分析无直接相关性，不能作为本实验路线、参数或性能判据的有效依据。当前缺乏可验证的Ni/Co比例设计、单金属与物理混合对照制备、结构界面表征、电化学评价、耐久性及产物定量方案，因此应保守规划观察点，避免将未获证据的具体条件写成确定事实。",
+      "key_findings": [
+        "唯一检索案例研究雏鸡营养不良，报告了AChE、TAC、TNF-α、GPx、SOD及血液指标变化，但不涉及NiCo材料或EOR。",
+        "该案例未提供催化剂合成、后处理、结构表征、电极制备、电化学测试或液相产物检测参数。",
+        "当前知识结果无法支撑NiCo双金属协同效应、反应路径改善或抗失活能力的具体实验判据。"
+      ],
+      "candidate_precedents": [
+        "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用（仅为检索命中案例，与当前化学任务不具备有效方法学相关性）"
+      ],
+      "route_implications": [
+        "由于缺少可靠化学先例，应将平行样品制备、结构与界面确认、电化学性能、稳定性及液相产物分析作为待验证的连续研究模块，而不引用该论文的实验参数。",
+        "stage边界应依据可更新科学判断的观察点划分；在证据不足时可保守设置较少观察点，并把同一观察点之前的制备、后处理和测试准备组织为同一stage内的macro action。",
+        "设备上下文显示XRD、XPS替代能力未明确，结构、元素分布和表面价态相关结果应规划为离线表征或送样回传；电化学测试及液相产物检测可分别考虑电化学工作站与液相色谱，但具体映射留给下游设备层。",
+        "后续路线需优先确认不同Ni/Co比例、Ni单金属、Co单金属和物理混合样品能否在统一金属总量、载体、负载量及后处理条件下制备，以保证平行比较有效。"
+      ],
+      "open_questions": [
+        "不同Ni/Co比例及各类对照样品的具体前驱体、载体、金属总量、负载量和后处理条件是什么？",
+        "如何用XRD、元素分布和表面价态表征区分真实双金属界面、电子耦合与简单物理混合？",
+        "碱性EOR的电解液组成、乙醇浓度、电极负载量、活化程序、CV/LSV、Tafel、EIS和计时电流条件如何统一？",
+        "稳定性和抗失活应采用何种时间尺度、循环方案及失活前后结构与价态复测标准？",
+        "乙醛、乙酸盐、碳酸盐等产物的定量方法、标准曲线、取样与过滤流程以及法拉第效率和C1/C2路径判据是什么？",
+        "303实验室的任务下发接口、任务创建能力和任务id返回机制在当前研究层上下文中均未提供。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "relevance": "该论文研究对象为雏鸡营养不良及其脑组织和血液指标，与NiCo催化剂制备、碱性乙醇氧化反应、电化学测试和液相产物分析无直接相关性，不能作为本query中NiCo基催化剂实验方案的有效文献依据。",
+        "protocol_summary": "论文以一天龄雏鸡为对象，先喂食商品开食料10天，随后平均分为对照组和试验组并饲养6周。对照组在生长期和育成期分别喂食商品生长料和育成料，试验组持续喂食黄玉米。实验期间每周称重，并每两周从每组10只雏鸡采集全血样和脑匀浆，用于检测脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "对一天龄雏鸡喂食商品开食料。",
+            "试剂/对象": "一天龄雏鸡；商品开食料",
+            "参数": "喂食10天；其他饲养参数文献未说明",
+            "evidence": "文献材料和方法指出，雏鸡先喂食商品开食料10天。"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "将雏鸡平均分为对照组和试验组。",
+            "试剂/对象": "雏鸡；对照组；试验组",
+            "参数": "研究对象总数为60只；分组后每组数量及随机化方式文献未说明",
+            "evidence": "文献指出，雏鸡喂食商品开食料10天后平均分成两组。"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "按照分组饲料方案饲养雏鸡：对照组在生长期和育成期分别喂食商品生长料和育成料，试验组在生长期和育成期持续喂食黄玉米。",
+            "试剂/对象": "对照组雏鸡；商品生长料；商品育成料；试验组雏鸡；黄玉米",
+            "参数": "饲养6周；生长期和育成期的具体划分、饲料用量、饲养环境和喂食频率文献未说明",
+            "evidence": "文献材料和方法明确描述了两组的饲料类型及持续饲养时间。"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "每周对所有雏鸡称重并记录体重差异。",
+            "试剂/对象": "所有雏鸡；体重记录",
+            "参数": "称重频率为每周一次；称量仪器、称量时间和数据处理方式文献未说明",
+            "evidence": "文献指出，所有雏鸡在六周内每周称重一次，以记录体重差异。"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "每两周从每组10只雏鸡中采集全血样和脑匀浆。",
+            "试剂/对象": "各组雏鸡；全血样；脑组织匀浆",
+            "参数": "采样频率为每两周一次；每组每次采集10只；采样和脑匀浆制备方法文献未说明",
+            "evidence": "文献指出，每两周从每组的10只雏鸡中采集全血样和脑匀浆。"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "检测脑组织匀浆中的AChE、TAC、TNF-α、GPx和SOD等指标。",
+            "试剂/对象": "脑组织匀浆；乙酰胆碱酯酶（AChE）；总抗氧化能力（TAC）；肿瘤坏死因子-α（TNF-α）；谷胱甘肽过氧化物酶（GPx）；超氧化物歧化酶（SOD）",
+            "参数": "检测方法、试剂浓度、样品体积、仪器、反应温度、反应时间和计算方法文献未说明",
+            "evidence": "文献结果部分报告了脑组织匀浆中AChE、TAC、TNF-α、GPx和SOD的检测与组间比较。"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "对全血样进行白细胞计数差异、全血细胞计数和血液指数分析。",
+            "试剂/对象": "全血样；白细胞（WBCs）；嗜酸性粒细胞；淋巴细胞；中性粒细胞；单核细胞；嗜碱性粒细胞；分段中性粒细胞；血红蛋白（Hb）；红细胞（RBCs）；包装细胞容积（PCV）；平均体细胞容积（MCV）；血小板；平均体细胞血红蛋白（MCH）；平均体细胞血红蛋白浓度（MCHC）",
+            "参数": "检测时间点为每两周一次，持续6周；具体检测方法、抗凝剂、样品体积、仪器和分析条件文献未说明",
+            "evidence": "文献材料和方法说明采集全血样以评估白细胞计数差异、全血细胞计数和血液指数；结果部分列出了相关血液指标。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_18686_zhfnc_v1i2_71",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "知识库命中摘要": [
+      {
+        "title": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-193746/D02/knowledge_base/实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用_3875f17a8d.json",
+        "score": 9.0,
+        "problem": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 Alaa Mohammed Afaf Desouky Raafat R. Mohammed Hussein Abdel-Maksoud",
+        "synthesis_summary": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。",
+        "experiment_details": "合成摘要: 实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后明显升高，六周后两组差异不明显；淋巴细胞在对照组第二周后明显升高，四周后差异不明显，六周后缺食组则明显升高。缺食组的中性粒细胞计数在第六周后明显偏高，单核细胞浓度在缺食组中两周后明显升高，四周后无明显差异，在对照组中六周后明显升高。嗜碱性粒细胞和分段中性粒细胞在食物缺乏组两周后明显增加，两组在四周和六周后差异不明显。此外，对照组的血红蛋白（Hb）、红细胞（RBCs）、包装细胞容积（PCV）、平均体细胞容积（MCV）和血小板计数在整个持续时间内均显著增加，对照组的平均体细胞血红蛋白（MCH）和平均体细胞血红蛋白浓度（MCHC）在四周和六周后显著增加。结论：营养不良会对大脑功能和血液参数产生很大影响。 结构化实验步骤: 1. 论文实验步骤 | 试剂/对象: AChE, TAC, TNF-, GPx, SOD, CBC | 参数: 文献未说明",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "论文实验步骤",
+            "试剂/对象": "AChE, TAC, TNF-, GPx, SOD, CBC",
+            "参数": "文献未说明",
+            "evidence": "实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用 背景：营养缺乏和营养不良会引起周期性嗜睡、情绪低落和贫血。因此，在本研究中，我们通过实验诱导鸡营养不良，以跟踪鸡的脑功能和贫血状况（血液指数）。材料和方法：本研究以两组60只一天龄的雏鸡为研究对象，这些雏鸡喂食商品开食料10天，然后平均分成两组，饲养6周。第一对照组在生长期和育成期饲喂商品生长料和育成料，而第二试验组在生长期和育成期持续饲喂黄玉米。所有雏鸡在六周内每周称重一次，以记录体重差异。每两周从每组的10只雏鸡中采集全血样和脑匀浆，以评估脑组织匀浆参数、白细胞计数差异、全血细胞计数和血液指数。结果：比较两组雏鸡的脑组织匀浆发现，缺食组的乙酰胆碱酯酶（AChE）和总抗氧化能力（TAC）在整个饲养过程中显著增加，而肿瘤坏死因子-α（TNF-α）在缺食组第二周和第四周后增加，第六周后两组无显著差异。对照组的谷胱甘肽过氧化物酶（GPx）和超氧化物歧化酶（SOD）在整个实验期间都明显增加，而全血细胞计数（CBC）和细胞差异计数显示，食物缺乏组的白细胞（WBCs）在整个实验期间都明显增加、嗜酸性粒细胞浓度在缺食组两周和四周后"
+          }
+        ],
+        "performance": [],
+        "matched_terms": [
+          "碱性"
+        ]
+      }
+    ],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

@@ -1,0 +1,1706 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究 Co 基催化剂表面氧化态变化对碱性 EOR 活性、稳定性和液相产物选择性的影响，请围绕不同价态或不同氧化程度的 Co 基催化剂设计合理的实验方案。实验应包含 Co(OH)₂、Co₃O₄、CoOOH 或经电化学预活化后的 Co 基样品，并设置不含乙醇电解液作为对照，比较其电化学行为、表面价态变化、乙醇消耗和主要氧化产物分布。方案需覆盖催化剂制备、氧化/活化后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "Co(OH)2 Co3O4 CoOOH 可控合成 氧化后处理 物相与形貌表征 碱性乙醇氧化反应",
+    "Co(OH)2 电化学氧化预活化 CoOOH Co2+/Co3+ 表面重构 碱性乙醇氧化",
+    "Co3O4 CoOOH 碱性乙醇电氧化 循环伏安 计时电流 电化学阻抗 活性稳定性",
+    "Co基催化剂 碱性电解液 有无乙醇对照 Co氧化还原峰 表面价态变化 XPS Raman",
+    "Co(OH)2 Co3O4 CoOOH 电极制备 催化剂负载量 粘结剂 碳纸 碱性EOR",
+    "Co基催化剂 乙醇电氧化 液相产物 乙醇消耗 乙醛 乙酸盐 碳酸盐 液相色谱 定量选择性"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "Co(OH)2 Co3O4 CoOOH 可控合成 氧化后处理 物相与形貌表征 碱性乙醇氧化反应",
+        "Co(OH)2 电化学氧化预活化 CoOOH Co2+/Co3+ 表面重构 碱性乙醇氧化",
+        "Co3O4 CoOOH 碱性乙醇电氧化 循环伏安 计时电流 电化学阻抗 活性稳定性",
+        "Co基催化剂 碱性电解液 有无乙醇对照 Co氧化还原峰 表面价态变化 XPS Raman",
+        "Co(OH)2 Co3O4 CoOOH 电极制备 催化剂负载量 粘结剂 碳纸 碱性EOR",
+        "Co基催化剂 乙醇电氧化 液相产物 乙醇消耗 乙醛 乙酸盐 碳酸盐 液相色谱 定量选择性"
+      ],
+      "hit_titles": [
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例"
+      ]
+    },
+    {
+      "round": 2,
+      "queries": [
+        "Co(OH)2 Co3O4 CoOOH alkaline ethanol electrooxidation operando Raman XPS surface reconstruction Co2+ Co3+",
+        "cobalt hydroxide oxide oxyhydroxide electrocatalyst synthesis phase controlled oxidation electrochemical activation protocol",
+        "alkaline ethanol oxidation cobalt catalyst CV chronoamperometry EIS ethanol-free control stability electrolysis protocol",
+        "alkaline ethanol electrooxidation liquid products acetate acetaldehyde carbonate ethanol conversion HPLC NMR ion chromatography quantification"
+      ],
+      "hit_titles": []
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [
+    {
+      "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+      "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/碱性氮化合物在裂化催化剂上的吸附_Ⅳ.氮化合物对废催化剂表面性质的影响_f0de3a485d.json",
+      "score": 10.0,
+      "problem": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+      "synthesis_summary": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+      "experiment_details": "合成摘要: 碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+      "steps": [],
+      "performance": [],
+      "matched_terms": [
+        "碱性"
+      ]
+    },
+    {
+      "title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+      "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+      "score": 4.0,
+      "problem": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+      "synthesis_summary": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+      "experiment_details": "合成摘要: 面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+      "steps": [],
+      "performance": [],
+      "matched_terms": []
+    }
+  ],
+  "memory_hits": [],
+  "extracted_protocols": [
+    {
+      "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+      "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+      "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+      "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+      "steps": [
+        {
+          "步骤序号": 1,
+          "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+          "试剂/对象": "乙醇催化氧化实验体系",
+          "参数": "文献未说明",
+          "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+        }
+      ],
+      "missing_parameters": [],
+      "paper_id": "doi_10_61654_zzszjy2401",
+      "verification_status": "verified_doi",
+      "full_text_status": "metadata_only"
+    }
+  ],
+  "survey_report": {
+    "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+    "key_findings": [
+      "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+      "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+      "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+      "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+      "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+    ],
+    "candidate_precedents": [
+      "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+      "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+    ],
+    "route_implications": [
+      "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+      "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+      "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+      "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+      "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+      "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+    ],
+    "open_questions": [
+      "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+      "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+      "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+      "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+      "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+      "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+      "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+      "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+    ]
+  },
+  "stage_route": [
+    "合成、氧化/活化并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 Raman 观察",
+    "基于前序结果继续推进并完成 FTIR 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、氧化/活化并完成 XRD 观察",
+  "current_stage_plan": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+      "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+      "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+      "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+      "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+      "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+      "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "空气热氧化制备 Co₃O₄",
+      "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+      "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "化学氧化制备 CoOOH 候选样品",
+      "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+      "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+      "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+      "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "回收预活化样品并完成 XRD 制样",
+      "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+      "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 8,
+      "操作": "采集并整理各样品 XRD 观察",
+      "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+      "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+      "来源": "agent补全(未直接引用文献)",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、氧化/活化并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、氧化/活化并完成 XRD 观察",
+    "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、氧化/活化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、氧化/活化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+        "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+        "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+        "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+        "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+        "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+        "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "空气热氧化制备 Co₃O₄",
+        "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+        "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "化学氧化制备 CoOOH 候选样品",
+        "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+        "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+        "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+        "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "回收预活化样品并完成 XRD 制样",
+        "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+        "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 8,
+        "操作": "采集并整理各样品 XRD 观察",
+        "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+        "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+      "key_findings": [
+        "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+        "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+        "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+        "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+        "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+      ],
+      "route_implications": [
+        "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+        "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+        "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+        "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+        "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+        "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+      ],
+      "open_questions": [
+        "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+        "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+        "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+        "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+        "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+        "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+        "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+        "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+        "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+            "试剂/对象": "乙醇催化氧化实验体系",
+            "参数": "文献未说明",
+            "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_61654_zzszjy2401",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Co 基催化剂表面氧化态变化对碱性 EOR 活性、稳定性和液相产物选择性的影响，请围绕不同价态或不同氧化程度的 Co 基催化剂设计合理的实验方案。实验应包含 Co(OH)₂、Co₃O₄、CoOOH 或经电化学预活化后的 Co 基样品，并设置不含乙醇电解液作为对照，比较其电化学行为、表面价态变化、乙醇消耗和主要氧化产物分布。方案需覆盖催化剂制备、氧化/活化后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、氧化/活化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、氧化/活化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+        "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+        "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+        "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+        "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+        "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+        "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "空气热氧化制备 Co₃O₄",
+        "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+        "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "化学氧化制备 CoOOH 候选样品",
+        "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+        "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+        "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+        "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "回收预活化样品并完成 XRD 制样",
+        "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+        "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 8,
+        "操作": "采集并整理各样品 XRD 观察",
+        "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+        "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+      "key_findings": [
+        "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+        "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+        "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+        "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+        "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+      ],
+      "route_implications": [
+        "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+        "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+        "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+        "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+        "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+        "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+      ],
+      "open_questions": [
+        "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+        "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+        "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+        "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+        "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+        "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+        "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+        "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+        "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+            "试剂/对象": "乙醇催化氧化实验体系",
+            "参数": "文献未说明",
+            "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_61654_zzszjy2401",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "知识库命中摘要": [
+      {
+        "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/碱性氮化合物在裂化催化剂上的吸附_Ⅳ.氮化合物对废催化剂表面性质的影响_f0de3a485d.json",
+        "score": 10.0,
+        "problem": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "synthesis_summary": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "experiment_details": "合成摘要: 碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "steps": [],
+        "performance": [],
+        "matched_terms": [
+          "碱性"
+        ]
+      },
+      {
+        "title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "score": 4.0,
+        "problem": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "synthesis_summary": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "experiment_details": "合成摘要: 面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "steps": [],
+        "performance": [],
+        "matched_terms": []
+      }
+    ],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "Co(OH)2 Co3O4 CoOOH 可控合成 氧化后处理 物相与形貌表征 碱性乙醇氧化反应",
+        "Co(OH)2 电化学氧化预活化 CoOOH Co2+/Co3+ 表面重构 碱性乙醇氧化",
+        "Co3O4 CoOOH 碱性乙醇电氧化 循环伏安 计时电流 电化学阻抗 活性稳定性",
+        "Co基催化剂 碱性电解液 有无乙醇对照 Co氧化还原峰 表面价态变化 XPS Raman",
+        "Co(OH)2 Co3O4 CoOOH 电极制备 催化剂负载量 粘结剂 碳纸 碱性EOR",
+        "Co基催化剂 乙醇电氧化 液相产物 乙醇消耗 乙醛 乙酸盐 碳酸盐 液相色谱 定量选择性"
+      ],
+      "reason": "这些关键词覆盖了不同氧化态Co基材料的制备与活化、结构和表面价态判定、电极构筑、有无乙醇对照下的电化学活性与稳定性测试，以及乙醇消耗和主要液相产物的定量分析等知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "Co(OH)2 Co3O4 CoOOH alkaline ethanol electrooxidation operando Raman XPS surface reconstruction Co2+ Co3+",
+          "cobalt hydroxide oxide oxyhydroxide electrocatalyst synthesis phase controlled oxidation electrochemical activation protocol",
+          "alkaline ethanol oxidation cobalt catalyst CV chronoamperometry EIS ethanol-free control stability electrolysis protocol",
+          "alkaline ethanol electrooxidation liquid products acetate acetaldehyde carbonate ethanol conversion HPLC NMR ion chromatography quantification"
+        ],
+        "reason": "当前两个命中案例与Co基碱性乙醇电氧化缺乏直接关联，未提供可用于stage设计的合成、活化、电化学测试或产物定量协议，因而知识不足。仍需获得四类关键证据：Co(OH)2、Co3O4、CoOOH及电化学预活化样品的可比制备与氧化条件；反应前后或原位/准原位表面价态和物相变化的判据；有无乙醇对照下CV、EIS、恒电位稳定性及定量电解的可比测试条件；乙醇消耗以及乙醛、乙酸盐、碳酸盐等液相产物的分离、校准、定量和选择性/碳平衡计算方法。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "\"Co(OH)2\" \"CoOOH\" ethanol oxidation reaction alkaline operando Raman XPS surface reconstruction",
+          "\"Co3O4\" ethanol electrooxidation alkaline electrolyte acetate acetaldehyde product analysis",
+          "cobalt oxyhydroxide electrochemical preactivation protocol Co2+ Co3+ redox CV chronoamperometry EIS ethanol-free control",
+          "alkaline ethanol electrooxidation quantitative electrolysis HPLC ion chromatography ethanol acetate acetaldehyde carbonate carbon balance"
+        ],
+        "reason": "当前累计知识与目标体系基本无关，无法可靠支撑按 observation point 划分 stage，也没有可复用的 Co 基催化剂制备、氧化/预活化、电极构筑、电化学评价或液相产物定量协议。下一轮应集中补齐四类证据：一是 Co(OH)2、Co3O4、CoOOH 的可比制备及物相确认条件；二是电化学预活化导致 Co2+/Co3+ 表面重构的操作窗口和准原位/原位 Raman、XPS 等判据；三是有无乙醇对照下 CV、EIS、恒电位电解和稳定性测试的统一条件；四是乙醇、乙醛、乙酸盐及碳酸盐的校准、定量、选择性和碳平衡方法。现有设备支持电化学测试、XRD、IR、LC 和 GC，但 XPS/Raman 若作为关键表面价态观察点，可能需要规划为离线送样与数据回传。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [
+        {
+          "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+          "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+          "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+          "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+          "steps": [
+            {
+              "步骤序号": 1,
+              "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+              "试剂/对象": "乙醇催化氧化实验体系",
+              "参数": "文献未说明",
+              "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+            }
+          ]
+        }
+      ],
+      "missing_parameters": [
+        "Co(OH)2、Co3O4、CoOOH或其他Co基样品的制备方法与原料",
+        "催化剂氧化或电化学预活化的具体条件",
+        "催化剂用量、负载量、溶剂、电解液组成及浓度",
+        "电极基底、粘结剂和电极制备方法",
+        "循环伏安、计时电流、电化学阻抗及稳定性测试参数",
+        "不含乙醇电解液对照的具体组成和测试条件",
+        "表面价态、物相、结构和界面表征方法及参数",
+        "乙醇消耗的检测方法、校准方法和定量条件",
+        "乙醛、乙酸盐、碳酸盐等液相产物的检测方法、标准曲线和定量条件",
+        "产物选择性、乙醇转化率及碳平衡的计算方法",
+        "所有实验步骤的温度、时间、体积、浓度、气氛和后处理条件"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+      "key_findings": [
+        "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+        "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+        "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+        "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+        "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+      ],
+      "route_implications": [
+        "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+        "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+        "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+        "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+        "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+        "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+      ],
+      "open_questions": [
+        "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+        "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+        "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+        "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+        "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+        "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+        "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+        "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：Co(OH)₂、Co₃O₄、CoOOH及统一基准样品的初始物相与氧化态确认",
+        "stage 2：电化学预活化后Co基样品的表面氧化态与结构重构观察",
+        "stage 3：不同初始/活化状态Co基电极在无乙醇与含乙醇碱性电解液中的电化学活性和稳定性观察",
+        "stage 4：含乙醇电解后的乙醇消耗、液相产物分布与碳平衡观察"
+      ],
+      "current_stage": "stage 1：Co(OH)₂、Co₃O₄、CoOOH及统一基准样品的初始物相与氧化态确认",
+      "stage_route_reason": "先识别的关键observation point包括：初始催化剂的晶相、形貌和可比较的Co氧化态；电化学预活化后表面Co²⁺/Co³⁺比例及结构重构；无乙醇和含乙醇条件下的氧化还原行为、EOR活性与稳定性；电解后乙醇消耗及乙醛、乙酸盐、碳酸盐等主要液相产物的定量分布。由此按相邻observation point划分四个stage。各stage内部的催化剂制备、氧化处理、电极制备、混合、洗涤、分离、干燥、测试和取样均属于到达对应observation point之前的macro action，不单独构成stage。初始物相观察可结合XRD、红外和形貌/界面表征；表面价态的XPS或Raman若当前平台不具备，则规划为离线送样与数据回传。液相产物观察优先采用现有LC/GC能力，并将标准曲线、内标、取样时间和碳平衡作为执行前待补齐的方法学条件。",
+      "current_stage_reason": "当前处于从未确认样品状态出发的bootstrap阶段，必须先制备或获得Co(OH)₂、Co₃O₄、CoOOH及必要的统一基准样品，并确认其初始物相、形貌和氧化态，才能将后续电化学预活化造成的表面变化与初始状态区分开，并保证不同催化剂的电极负载和结构比较具有可解释性。现有检索结果不提供可直接复现的具体合成参数，因此本stage应以待验证的化学语义方案执行，而不宣称文献复现。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+          "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+          "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+          "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+          "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+          "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+          "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "空气热氧化制备 Co₃O₄",
+          "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+          "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "化学氧化制备 CoOOH 候选样品",
+          "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+          "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+          "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+          "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "回收预活化样品并完成 XRD 制样",
+          "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+          "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。"
+        },
+        {
+          "步骤序号": 8,
+          "操作": "采集并整理各样品 XRD 观察",
+          "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+          "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。"
+        }
+      ],
+      "macro_plan_summary": "该 macro plan 将小体积前驱体制备、平行氧化/预活化、固体后处理和统一乙醇分散制样组织在同一个以 XRD 为终点的 stage 内，最终只输出初始及处理后 Co 基样品的物相观察，不提前执行后续表面价态、电化学性能或液相产物分析。"
+    }
+  },
+  "campaign_id": "D01-20260718-181702",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究 Co 基催化剂表面氧化态变化对碱性 EOR 活性、稳定性和液相产物选择性的影响，请围绕不同价态或不同氧化程度的 Co 基催化剂设计合理的实验方案。实验应包含 Co(OH)₂、Co₃O₄、CoOOH 或经电化学预活化后的 Co 基样品，并设置不含乙醇电解液作为对照，比较其电化学行为、表面价态变化、乙醇消耗和主要氧化产物分布。方案需覆盖催化剂制备、氧化/活化后处理、结构/界面表征、电极制备、电化学 测试和液相产物检测等关键环节。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "doi": "10.61654/zzszjy2401",
+        "role": "keyword",
+        "relevance": 0.125,
+        "kept": true,
+        "reason": "passed_relevance_filter"
+      },
+      {
+        "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "doi": "10.1360/csb1959-4-23-797",
+        "role": "keyword",
+        "relevance": 0.1094,
+        "kept": true,
+        "reason": "passed_relevance_filter"
+      },
+      {
+        "title": "聚硫堇/过氧化氢光致电化学敏感界面的构建及其对葡萄糖氧化酶催化活性的测定",
+        "doi": "10.1360/032010-828",
+        "role": "keyword",
+        "relevance": 0.0938,
+        "kept": false,
+        "reason": "relevance 0.094 < threshold 0.1"
+      },
+      {
+        "title": "不同乙氧基链段的非离子型表面活性剂在电极表面的电化学行为",
+        "doi": "10.1360/zb2012-42-2-192",
+        "role": "keyword",
+        "relevance": 0.0781,
+        "kept": false,
+        "reason": "relevance 0.078 < threshold 0.1"
+      },
+      {
+        "title": "Jacobian Regularization for Mitigating Universal Adversarial Perturbations",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Machine learning configuration interaction for ab initio potential energy curves",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Multireference X-Ray Emission and Absorption Spectroscopy calculations from Monte Carlo Configuration Interaction",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Surfactant-Mediated Modulation of the Microstructure and OER Catalytic Performance of Iron-Based Hydroxide Electrocatalysts",
+        "doi": "10.12677/ms.2026.165113",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Towards half-metallic interfaces: the Co$_2$CrAl/InP contacts",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Universal Adversarial Robustness of Texture and Shape-Biased Models",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 2,
+    "web_kept": 0,
+    "newly_registered": 2,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: "
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "D01-20260718-181702",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全(未直接引用文献)"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、氧化/活化并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 Raman 观察",
+          "基于前序结果继续推进并完成 FTIR 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、氧化/活化并完成 XRD 观察",
+        "current_stage_plan": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+            "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+            "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+            "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+            "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+            "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+            "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "空气热氧化制备 Co₃O₄",
+            "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+            "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "化学氧化制备 CoOOH 候选样品",
+            "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+            "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+            "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+            "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "回收预活化样品并完成 XRD 制样",
+            "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+            "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 8,
+            "操作": "采集并整理各样品 XRD 观察",
+            "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+            "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+            "来源": "agent补全(未直接引用文献)",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T18:46:16"
+    }
+  ],
+  "tool_invocations": [],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 18:43:30] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 18:43:30] B0 waiting received event: bootstrap",
+    "[2026-07-18 18:43:30] bootstrap event received; routing to B1",
+    "[2026-07-18 18:43:30] Entered B1 bootstrap",
+    "[2026-07-18 18:43:38] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=2, web_kept=0, written=2, errors=1",
+    "[2026-07-18 18:43:38] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 18:43:52] survey queries after sanitization: ['Co(OH)2 Co3O4 CoOOH 可控合成 氧化后处理 物相与形貌表征 碱性乙醇氧化反应', 'Co(OH)2 电化学氧化预活化 CoOOH Co2+/Co3+ 表面重构 碱性乙醇氧化', 'Co3O4 CoOOH 碱性乙醇电氧化 循环伏安 计时电流 电化学阻抗 活性稳定性', 'Co基催化剂 碱性电解液 有无乙醇对照 Co氧化还原峰 表面价态变化 XPS Raman', 'Co(OH)2 Co3O4 CoOOH 电极制备 催化剂负载量 粘结剂 碳纸 碱性EOR', 'Co基催化剂 乙醇电氧化 液相产物 乙醇消耗 乙醛 乙酸盐 碳酸盐 液相色谱 定量选择性']",
+    "[2026-07-18 18:43:52] survey query generate completed with 6 queries",
+    "[2026-07-18 18:43:52] Survey round 1 produced 2 hits; 2 unique hits accumulated",
+    "[2026-07-18 18:44:05] Survey round 2 produced 0 hits; 2 unique hits accumulated",
+    "[2026-07-18 18:44:30] paper protocol extract completed with 1 protocols",
+    "[2026-07-18 18:44:30] protocol provenance attached from paper registry",
+    "[2026-07-18 18:44:30] memory disabled; skipped similar exp search",
+    "[2026-07-18 18:46:16] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 18:46:16] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T18:43:30.700495",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、氧化/活化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、氧化/活化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+        "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+        "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+        "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+        "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+        "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+        "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "空气热氧化制备 Co₃O₄",
+        "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+        "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "化学氧化制备 CoOOH 候选样品",
+        "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+        "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+        "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+        "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "回收预活化样品并完成 XRD 制样",
+        "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+        "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 8,
+        "操作": "采集并整理各样品 XRD 观察",
+        "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+        "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+      "key_findings": [
+        "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+        "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+        "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+        "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+        "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+      ],
+      "route_implications": [
+        "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+        "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+        "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+        "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+        "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+        "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+      ],
+      "open_questions": [
+        "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+        "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+        "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+        "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+        "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+        "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+        "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+        "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+        "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+            "试剂/对象": "乙醇催化氧化实验体系",
+            "参数": "文献未说明",
+            "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_61654_zzszjy2401",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Co 基催化剂表面氧化态变化对碱性 EOR 活性、稳定性和液相产物选择性的影响，请围绕不同价态或不同氧化程度的 Co 基催化剂设计合理的实验方案。实验应包含 Co(OH)₂、Co₃O₄、CoOOH 或经电化学预活化后的 Co 基样品，并设置不含乙醇电解液作为对照，比较其电化学行为、表面价态变化、乙醇消耗和主要氧化产物分布。方案需覆盖催化剂制备、氧化/活化后处理、结构/界面表征、电极制备、电化学工作站测试和液相产物检测等关键环节。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、氧化/活化并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 Raman 观察",
+      "基于前序结果继续推进并完成 FTIR 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、氧化/活化并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage：合成、氧化/活化并完成 XRD 观察。目标 observation point：对 Co(OH)₂、Co₃O₄、CoOOH 以及至少一种经电化学预活化的 Co 基样品获得可比较的 XRD 观察，确认其主要晶相、是否存在明显杂相及处理前后物相变化。stage goal：在统一钴源、尽可能一致的样品批次和相近固体处理条件下建立不同氧化程度 Co 基样品，并为后续表面价态、电化学行为和产物选择性比较提供初始结构基线。planning logic：先由已预配并已装载的钴盐溶液和碱性沉淀剂制备 Co(OH)₂，再将平行 aliquot 分别进行空气热氧化得到 Co₃O₄、温和化学氧化得到 CoOOH，并将另一 aliquot 制成统一负载量的碳纸电极后进行限定窗口的电化学预活化；各样品均完成固液分离、固定次数洗涤和低温干燥后，采用足量乙醇分散制样并进行 XRD。由于检索文献未提供该体系的可复现实验参数，本计划中的配比、温度、时间、预活化窗口和负载量均为 agent 补全的待验证条件，不作为文献复现声明。为适配设备边界，前驱体采用外部预配小体积溶液，单个沉淀体系控制在约 4 mL，总体积不依赖大体积离心；高温空气氧化和电化学预活化后的样品回收若不能在现有容器路径内连续完成，则作为外部/人工 handoff 后重新装载的化学步骤处理。key variables：Co²⁺前驱体浓度、OH⁻/Co 摩尔比、沉淀与熟化时间、热氧化温度和时间、化学氧化剂当量、预活化电位窗口与循环数、碳纸电极负载量、洗涤次数、干燥温度和 XRD 制样分散体积。expected observation：Co(OH)₂、Co₃O₄、CoOOH 和预活化样品应产生可用于物相比较的衍射图谱；可能观察到初始 Co(OH)₂ 向氧化物/羟基氧化物相转变、峰形或相对强度变化，但具体晶相比例、结晶度和杂相必须以实测 XRD 数据判定。stage completion condition：所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较；在此之前不进入后续 XPS、Raman、FTIR 或电化学性能观察 stage。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "配制并分装 Co(OH)₂ 沉淀前驱体体系",
+        "试剂/对象": "已预配并已装载的 Co(NO₃)₂ 水溶液、NaOH 水溶液、去离子水",
+        "参数": "以 Co²⁺浓度 0.10 mol/L 的前驱体溶液为钴源；每个平行样品使用 Co²⁺溶液 2.00 mL，并加入去离子水使初始液相体积为 3.00 mL；NaOH 采用 1.0 mol/L 溶液，按 OH⁻/Co²⁺=2.2 的摩尔比加入，总加液量控制在约 0.45 mL；在室温下分批加入，每批间隔 30 s，持续搅拌 10 min，记录沉淀颜色和均匀性。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀熟化并获得 Co(OH)₂ 基准样品",
+        "试剂/对象": "步骤1所得 Co(OH)₂ 悬浊液",
+        "参数": "在室温、约 600 rpm 条件下搅拌熟化 60 min；随后停止加热和加料，仅在原反应体系中继续熟化，避免依赖不可达的静置容器切换；将所得悬浊液分为四个等体积 aliquot，分别标记为 Co(OH)₂、空气氧化前驱体、化学氧化前驱体和电化学预活化前驱体。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "固液分离、洗涤和干燥制备 Co(OH)₂ 基准粉体",
+        "试剂/对象": "Co(OH)₂ 悬浊液 aliquot、去离子水、乙醇",
+        "参数": "对 Co(OH)₂ 基准 aliquot 进行固液分离；使用去离子水洗涤 3 次，再用乙醇洗涤 1 次，每次加入约 2 mL 洗液并充分重分散后分离；将湿固体在 60 ℃下干燥 12 h，冷却后密封保存。单批液相体积保持在下游固液分离可接受的小体积范围内。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "空气热氧化制备 Co₃O₄",
+        "试剂/对象": "步骤2所得空气氧化前驱体 aliquot 或干燥 Co(OH)₂ 基准粉体",
+        "参数": "将等质量 Co(OH)₂ 前驱体在空气气氛中以 2 ℃/min 升温至 300 ℃，恒温 2 h，随后自然冷却；若当前设备无法完成高温样品从反应体系到热处理环节的连续转移，则由外部/人工 handoff 完成热氧化后重新装载样品。热处理温度和时间为 agent补全，需通过后续 XRD 确认是否形成目标 Co₃O₄ 相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "化学氧化制备 CoOOH 候选样品",
+        "试剂/对象": "步骤2所得化学氧化前驱体 aliquot、1.0 mol/L NaOH、稀 NaClO 水溶液",
+        "参数": "将 aliquot 调整至碱性条件，加入 1.0 mol/L NaOH 使最终 OH⁻浓度约为 0.5 mol/L；在室温、约 600 rpm 搅拌下分批加入新鲜稀释的 NaClO，使有效氧化剂/Co 摩尔比约为 1.0，分 5 批加入、每批间隔 1 min；继续搅拌 60 min。之后用去离子水洗涤 3 次、乙醇洗涤 1 次，并在 40–60 ℃下干燥 12 h。该条件为 agent补全，所得物相须以 XRD 判定为 CoOOH 候选或其他氧化羟基钴相。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备统一负载量的 Co(OH)₂ 电极并进行电化学预活化",
+        "试剂/对象": "Co(OH)₂ 粉体、异丙醇/去离子水混合溶剂、稀 Nafion 粘结剂、碳纸、碱性电解液",
+        "参数": "配制催化剂墨水：Co(OH)₂ 5.0 mg、异丙醇/去离子水体积比 3:1 的混合溶剂 0.95 mL、5 wt% Nafion 溶液 50 μL；超声分散 20 min。将墨水均匀涂覆于约 1 cm² 碳纸上，使 Co 物种总负载量为 0.50 mg·cm⁻²，在 60 ℃干燥 2 h。以无乙醇碱性电解液为预活化介质，在固定参比电极条件下于 0.20–0.60 V（vs Hg/HgO）范围循环伏安 20 圈，扫描速率 50 mV·s⁻¹；停止判据为完成规定循环数，记录每圈曲线。该步骤只制备预活化样品，不开展后续 EOR 活性、稳定性或产物测试；参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "回收预活化样品并完成 XRD 制样",
+        "试剂/对象": "Co₃O₄、CoOOH、Co(OH)₂ 和电化学预活化 Co 基样品、无水乙醇",
+        "参数": "将干燥粉体及预活化电极样品分别保留独立样品身份；预活化样品在外部/人工 handoff 后刮取或转移催化层，避免把未确认支持的在线电极拆解动作作为设备必需步骤。每份固体加入无水乙醇至总分散液体积 5.0 mL，超声分散 10 min；XRD 制样前确保样品分散液体积不低于 4.0 mL，并记录样品质量、乙醇体积、处理状态和是否来自电化学预活化。参数为 agent补全。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 8,
+        "操作": "采集并整理各样品 XRD 观察",
+        "试剂/对象": "Co(OH)₂、Co₃O₄、CoOOH 候选样品及电化学预活化 Co 基样品的乙醇分散液",
+        "参数": "对每类样品采用相同制样体积、相同干燥/滴样历史和一致的 XRD 扫描范围、步长与重复策略；至少采集未处理 Co(OH)₂、热氧化样品、化学氧化样品和电化学预活化样品的原始衍射图谱。输出主要峰位、相对强度、结晶度变化、可指认物相及明显杂相，并将结果作为本 stage 的 observation。具体扫描范围和步长由 XRD 方法文件及下游适配层确认，未将其伪装为已知文献参数。",
+        "来源": "agent补全(未直接引用文献)",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、氧化/活化并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、氧化/活化并完成 XRD 观察",
+      "completion_condition": "所有目标样品均具有样品身份、处理历史和批次记录，完成 XRD 图谱采集并回传原始数据、主要峰位/物相指认及处理前后相变比较",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、FTIR、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "现有检索结果不足以直接支撑 Co(OH)₂、Co₃O₄、CoOOH 或电化学预活化 Co 基催化剂的制备、氧化处理、电极构筑、电化学测试及液相产物定量。唯一与乙醇氧化相关的案例仅为教学实验设计摘要，确认包含预实验和方案迭代，但未提供可复用的化学参数或分析方法；另一案例与目标体系无直接关联。因而可据任务需求保守构建以关键观察点为边界的实验路线，但具体条件应标为待验证或由实验人员补充。",
+      "key_findings": [
+        "检索到的乙醇氧化教学案例仅支持“开展预实验并迭代方案”这一一般性事实，不包含 Co 基催化剂或碱性电化学乙醇氧化协议。",
+        "现有资料未提供 Co(OH)₂、Co₃O₄、CoOOH 的可比合成、氧化后处理或电化学预活化参数。",
+        "现有资料未提供有无乙醇对照下的循环伏安、阻抗、恒电位稳定性和定量电解条件。",
+        "乙醇消耗、乙醛、乙酸盐、碳酸盐等产物的校准、定量、选择性及碳平衡方法均缺失。",
+        "设备上下文显示电化学测试、XRD、红外、GC 和 LC 可作为候选观察手段；XPS、Raman 等表面价态方法未明确具备，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响"
+      ],
+      "route_implications": [
+        "应围绕样品结构与初始氧化态确认、活化后表面价态观察、电化学行为比较、稳定性与液相产物分析等明确观察点组织 stage；同一观察点前的制备、处理和测试动作应保留在同一 stage 内。",
+        "由于文献缺少具体参数，合成和活化条件只能作为待验证的化学语义计划，不能声称为文献复现实验。",
+        "初始样品和处理后样品应尽量采用可连续衔接的同类反应容器路径；需要固液分离、洗涤或干燥时，应优先规划为设备支持的连续化学路线，避免无依据地要求不可达换瓶。",
+        "电化学比较应至少包含各催化剂在无乙醇碱性电解液中的基线测试，以及含乙醇电解液中的活性、稳定性和定量电解测试。",
+        "液相产物检测应作为独立关键观察点，优先使用设备支持的 LC/GC；检测对象、标准曲线、取样时间和碳平衡计算需在执行前补齐。",
+        "若目标是确认 Co²⁺/Co³⁺表面变化，应将 XRD、红外等可执行表征与 XPS/Raman 离线表征结合，而不能把未确认存在的在线表征能力写成设备动作。"
+      ],
+      "open_questions": [
+        "如何在统一前驱体、负载量和基底条件下制备并确认 Co(OH)₂、Co₃O₄ 和 CoOOH，且保证样品间可比性？",
+        "电化学预活化的电位窗口、循环次数、时间及停止判据是什么？",
+        "如何区分初始晶相变化、表面 Co²⁺/Co³⁺ 重构与运行过程中进一步氧化之间的贡献？",
+        "电极制备所需的催化剂负载量、粘结剂比例、碳纸面积和干燥条件应如何确定？",
+        "无乙醇与含乙醇电解液的组成、乙醇浓度、参比体系和测试时间如何统一？",
+        "乙醇消耗及乙醛、乙酸盐、碳酸盐等产物能否由现有 LC/GC 方法充分分离和定量，是否需要离线 NMR 或离子色谱？",
+        "如何设计取样、内标、标准曲线和碳平衡，以避免挥发、取样稀释或液相转移造成的定量偏差？",
+        "XPS 或 Raman 是否可由 303 实验室之外的表征平台完成，样品如何在规定活化状态下送样并回传数据？"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [
+      {
+        "source_title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "relevance": "论文涉及乙醇催化氧化实验及预实验、方案迭代，但知识库命中文本未提供Co基催化剂、碱性电化学乙醇氧化、催化剂制备、电化学测试或液相产物定量的具体实验步骤。",
+        "protocol_summary": "知识库文本仅说明本文以乙醇催化氧化实验改进为案例，包含预实验与方案迭代，并讨论乙醇催化氧化断键机理；未提供可直接抽取的具体实验操作、试剂用量、浓度、温度、时间、电化学测试条件或产物分析条件。",
+        "steps": [
+          {
+            "步骤序号": 1,
+            "操作": "开展乙醇催化氧化实验的预实验并进行方案迭代。",
+            "试剂/对象": "乙醇催化氧化实验体系",
+            "参数": "文献未说明",
+            "evidence": "实验相关全文摘要明确提到“通过预实验与方案迭代”，但未给出具体实验段或操作参数。"
+          }
+        ],
+        "missing_parameters": [],
+        "paper_id": "doi_10_61654_zzszjy2401",
+        "verification_status": "verified_doi",
+        "full_text_status": "metadata_only"
+      }
+    ],
+    "知识库命中摘要": [
+      {
+        "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/碱性氮化合物在裂化催化剂上的吸附_Ⅳ.氮化合物对废催化剂表面性质的影响_f0de3a485d.json",
+        "score": 10.0,
+        "problem": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "synthesis_summary": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "experiment_details": "合成摘要: 碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响 光琰 肖 学文 金 樑模 周",
+        "steps": [],
+        "performance": [],
+        "matched_terms": [
+          "碱性"
+        ]
+      },
+      {
+        "title": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+        "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/D01/knowledge_base/面向科学探究思维的实验教学六步框架设计与应用_乙醇催化氧化实验改进的说课案例_fff72d98e2.json",
+        "score": 4.0,
+        "problem": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "synthesis_summary": "面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "experiment_details": "合成摘要: 面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例 本文以《乙醇催化氧化实验改进》实验说课为例,提出探、辩、点、做、评、延六步实验教学模式,研究该模式在高中化学实验课的通用操作方法,将教学内容融入真实情境,构建生本课堂,推行项目式学习。通过预实验与方案迭代,让学生经历完整探究过程,落实化学核心素养;借助乙醇催化氧化断键机理,构建醇催化氧化机理模型,发展模型认知素养。本文探索\"三新\"背景下高中化学实验教学有效策略,为化学实验教学改革提供实践参考与理论支撑。 宇君 肖",
+        "steps": [],
+        "performance": [],
+        "matched_terms": []
+      }
+    ],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

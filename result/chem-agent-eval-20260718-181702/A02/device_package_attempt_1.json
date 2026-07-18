@@ -1,0 +1,1296 @@
+{
+  "status": "failed",
+  "feedback_type": "device_internal_error",
+  "failure_stage": "dispatch_validation",
+  "exp_id": "A02-20260718-181702",
+  "iteration_id": 0,
+  "workflow_id": 0,
+  "macro_plan": {
+    "handoff_type": "research_to_device_adaptation",
+    "task": {
+      "query": "为了探究 NiFe LDH 催化剂在碱性 OER 条件下的表面重构行为及其对催化活性和稳定性的影响，请围绕 NiFe LDH 设计合理的原位或反应前后对比实验方案。实验应包含未反应样品、不同 OER 活化时间样品和长时间稳定性测试后样品的对照，分析催化剂在反应过程中晶相、形貌、表面价态和界面组成的变化。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备、电化学活化和电化学工作站测试等关键环节，并获得能够关联结构演化与 OER 性能变化的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+      "stage_route": [
+        "合成、必要并完成 XRD 观察",
+        "基于前序结果继续推进并完成 XPS 观察",
+        "基于前序结果继续推进并完成 Raman 观察",
+        "基于前序结果继续推进并完成 SEM 观察",
+        "基于前序结果继续推进并完成 TEM 观察",
+        "基于前序结果继续推进并完成 电化学测试 观察"
+      ],
+      "current_stage": "合成、必要并完成 XRD 观察",
+      "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得未经历 OER 的 NiFe LDH 基线 XRD 数据。stage goal 是以同一批次、Ni:Fe 摩尔比 3:1 的材料建立后续结构演化比较所需的晶相基线。planning logic 为：使用外部预配并已装载的 Ni、Fe、NaOH 和碳酸盐原液，在小体积体系中按固定节拍加碱共沉淀；随后在原反应悬浊液中进行固定时间的搅拌熟化，经离心洗涤和低温干燥获得未反应 NiFe LDH；保留批次身份后，将代表性固体按固定浓度分散于不少于 4.0 mL 的乙醇中完成 XRD。key variables 包括 Ni:Fe=3:1、金属总量 1.20 mmol、固定加碱量及加入节拍、60 ℃搅拌熟化 720 min、洗涤次数、60 ℃干燥 720 min，以及 XRD 制样浓度和扫描范围。expected observation 为获得可归属于层状双氢氧化物的基线衍射图、峰位和相对峰强，并记录是否存在明显晶态杂相；不预设一定得到纯相结论。stage completion condition 为 XRD 原始数据、背景校正图谱、主要峰位表和物相判读均已形成并与样品批次唯一对应。现有知识命中与 NiFe LDH 无关且未提供参数，因此本 stage 的具体参数均为 agent 补全；本 stage 不提前实施 OER 活化、电化学性能测试或后续 XPS、Raman、SEM、TEM 观察。",
+      "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、Raman、SEM、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+      "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+    },
+    "macro_action_steps": [
+      {
+        "步骤序号": 1,
+        "操作": "准备 NiFe LDH 共沉淀前驱体原液",
+        "试剂/对象": "外部预配并已装载的 Ni(NO3)2、Fe(NO3)3、NaOH、Na2CO3 水溶液",
+        "参数": "使用 0.30 mol/L Ni(NO3)2 原液 3.00 mL、0.10 mol/L Fe(NO3)3 原液 3.00 mL、2.0 mol/L NaOH 原液 1.50 mL 和 0.20 mol/L Na2CO3 原液 0.50 mL；对应 Ni 0.90 mmol、Fe 0.30 mmol，Ni:Fe 摩尔比为 3:1，计划反应总体积为 8.00 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "小体积共沉淀形成 NiFe LDH 前驱体",
+        "试剂/对象": "Ni(NO3)2 原液、Fe(NO3)3 原液、Na2CO3 原液和 NaOH 原液",
+        "参数": "先混合 3.00 mL Ni(NO3)2 原液、3.00 mL Fe(NO3)3 原液和 0.50 mL Na2CO3 原液，在室温、700 rpm 下搅拌 5 min；随后将 1.50 mL NaOH 原液分为 10 个等体积批次，在约 10 min 内加入，每批加入后维持 700 rpm 搅拌约 1 min；全部加入后继续在室温、700 rpm 下搅拌 30 min，获得均匀悬浊液。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "搅拌熟化 NiFe LDH 沉淀",
+        "试剂/对象": "共沉淀得到的 NiFe 含水悬浊液",
+        "参数": "将完整悬浊体系在 60 ℃、600 rpm 下连续搅拌熟化 720 min；熟化结束后自然降至室温。采用反应体系内连续搅拌熟化，不设置必须换瓶的独立静置老化步骤。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "离心分离并洗涤 NiFe LDH",
+        "试剂/对象": "熟化后的 NiFe LDH 悬浊液、去离子水、无水乙醇",
+        "参数": "先以 6000 rpm 离心 10 min 并除去上清液；每次加入 5.0 mL 去离子水重分散沉淀，再以 6000 rpm 离心 10 min，共进行 3 次水洗；随后加入 5.0 mL 无水乙醇重分散并以 6000 rpm 离心 10 min，完成 1 次乙醇洗。每轮处理的单体系液体体积不超过 5.0 mL，最终保留固体沉淀。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "低温干燥并建立未反应样品留样",
+        "试剂/对象": "洗涤后的 NiFe LDH 湿沉淀",
+        "参数": "将湿沉淀在 60 ℃下干燥 720 min，避免采用高温煅烧以免主动破坏 LDH 层状结构；干燥后轻柔分散结块并记录样品批次。取 10.0 mg 作为当前 stage 的基线 XRD 样品，其余材料密封、干燥保存为同批未反应留样。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "制备乙醇悬浊液并完成基线 XRD 观察",
+        "试剂/对象": "未反应 NiFe LDH 干燥粉末、无水乙醇",
+        "参数": "将 10.0 mg NiFe LDH 加入 5.0 mL 无水乙醇中，超声分散 10 min 后再搅拌 5 min，形成约 2.0 mg/mL 的均匀悬浊液；在沉降前滴加制样并开展 XRD。建议采用 Cu Kα 辐射，2θ 扫描范围 5–80°、步长 0.02°；输出原始衍射数据、背景校正图谱、主要峰位及相对峰强，判断是否呈现 LDH 层状结构特征并筛查明显晶态杂相。只有获得可解析且与该批次对应的有效图谱后，才视为到达本 stage 的 observation point。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "macro_action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "为 XRD 原始数据、背景校正图谱、主要峰位表和物相判读均已形成并与样品批次唯一对应",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "research_context": {
+      "survey_report": {
+        "summary": "现有检索仅命中一篇 Cu-Sb/SiO2 催化剂研究，且只有元数据，材料体系、反应目标及表征对象均与 NiFe LDH 碱性 OER 表面重构不匹配，不能支撑具体合成、电极制备、活化时间或表征参数。后续 stage 设计应以未反应、不同活化时间和长期稳定性后样品的关键观察节点为主线；平台支持电化学测试与 XRD，XPS、SEM/TEM、界面元素分析及金属溶出分析需按离线送样和数据回传规划。",
+        "key_findings": [
+          "唯一知识命中仅因通用词“O”匹配，未提供 NiFe LDH 合成、碱性 OER 活化或表面重构的可迁移证据。",
+          "该命中为 metadata_only，缺少可解析实验步骤、测试参数、性能数据和结构—活性关联结果，不能作为参数来源。",
+          "设备上下文支持 CV、计时电流、EIS 等电化学测试以及乙醇悬浊液形式的 XRD；未显示 XPS、SEM/TEM、Raman、XAS 或 ICP-MS 能力。",
+          "任务明确要求的有效对照至少包括未反应样品、多个 OER 活化时间样品和长时间稳定性测试后样品，并需采用一致的电极负载和测试条件。"
+        ],
+        "candidate_precedents": [],
+        "route_implications": [
+          "应按能够更新科学判断的观察节点划分 stage：先获得未反应 NiFe LDH 的基线结构与界面数据，再获得时间分辨活化样品的结构—性能数据，最后获得长期稳定性后样品的失活或稳定机制数据。",
+          "催化剂合成、洗涤、干燥、分散和电极制备均属于到达相应观察节点前的 macro action，不应被单独拆成 stage。",
+          "活化时间序列应使用同批催化剂、相同负载量、电解液和电化学条件，并通过独立平行电极或可审计的中断测试取样，避免重复拆卸造成样品历史不一致。",
+          "XRD 可在平台内规划；形貌、表面价态和界面组成应规划为离线 SEM/TEM、XPS 及必要的 STEM-EDS/EELS 或 ICP 类分析，并设置送样、数据回传和样品身份对应关系。",
+          "结构演化需与过电位、Tafel 斜率、EIS、电化学活性面积代理指标及长期活性保持率按同一时间点关联，但具体参数应标注为待验证或 agent 补全，不能归因于现有文献。",
+          "“下发至303实验室并返回任务id”属于后续任务调度结果；当前调研证据不能生成或伪造实验任务 id。"
+        ],
+        "open_questions": [
+          "NiFe LDH 的目标 Ni/Fe 比、合成路线、前驱体浓度、老化温度与时间及后处理条件尚无可靠文献依据。",
+          "不同 OER 活化时间点、活化方式以及长期稳定性测试时长和电流密度尚未确定。",
+          "中断电解后如何清洗、淬灭、干燥或湿态保存以最大限度保留重构表面，尚缺少证据。",
+          "是否需要原位或操作态 Raman、XAS 或原位 XRD，以区分真实工作态结构与反应后松弛结构，尚待确认。",
+          "XPS、SEM/TEM、界面元素分析和金属溶出分析的离线实验室能力、送样规格及数据回传接口尚未给出。",
+          "303实验室的实际任务下发接口及任务 id 返回机制未包含在当前上下文中。"
+        ]
+      },
+      "extracted_paper_protocols": [
+        {
+          "source_title": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究",
+          "source_file": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/A02/knowledge_base/Cu-Sb_SiO2催化剂的表面特征和催化活性的研究_b8f3fa9c06.json",
+          "relevance": "本地知识库检索命中，与当前 query 的材料、方法或目标相关。",
+          "protocol_summary": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+          "steps": [
+            {
+              "步骤序号": 1,
+              "操作": "论文实验步骤",
+              "试剂/对象": "Cu-Sb, SiO2",
+              "参数": "文献未说明",
+              "evidence": "合成摘要: Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党"
+            }
+          ],
+          "missing_parameters": [
+            "PDF 文本未提供可完全结构化的参数列表；缺失参数保留为 文献未说明。"
+          ],
+          "paper_id": "doi_10_3724_j_issn_1000_0518_1986_3_5555",
+          "verification_status": "verified_doi",
+          "full_text_status": "metadata_only"
+        }
+      ],
+      "knowledge_hits": [
+        {
+          "title": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究",
+          "file_path": "/Users/jyxc-dz-0100374/Desktop/chemagent/result/chem-agent-eval-20260718-181702/A02/knowledge_base/Cu-Sb_SiO2催化剂的表面特征和催化活性的研究_b8f3fa9c06.json",
+          "score": 10.0,
+          "problem": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+          "synthesis_summary": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+          "experiment_details": "合成摘要: Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+          "steps": []
+        }
+      ],
+      "latest_observation": ""
+    },
+    "device_agent_contract": {
+      "research_macro_action_level": "The macro_action_steps are chemical-semantic experiment actions. They specify what experiment to do and key chemical parameters, but they may intentionally omit concrete machine containers, workstation names, container IDs, reagent bottle slots, lid operations, balancing, and repeated device sub-steps.",
+      "device_agent_responsibilities": [
+        "Select concrete supported containers and workstations from the loaded workstation truth source.",
+        "Map liquid sources to reagent/original-solution bottle slots when appropriate.",
+        "Expand macro actions into device-level operations such as lid handling, aliquoting, balancing, repeated purification, drying, and handoff notes.",
+        "Maintain one continuous, supported container path across reaction, aging/resting, purification, washing, drying, and testing; if a vessel change is required, it must be backed by an explicit supported transfer/vessel-change operation.",
+        "Return device_feasibility_error only when no legal equipment/container/workstation mapping can realize the chemical action or a mandatory scientific condition is impossible."
+      ],
+      "do_not_return_to_research_for": [
+        "missing container IDs",
+        "missing workstation names",
+        "missing reagent bottle slot numbers",
+        "missing open/close lid actions",
+        "missing even-vial balancing details",
+        "missing split/repeated wash substeps"
+      ],
+      "must_return_to_research_for": [
+        "macro routes that require an unsupported transfer or vessel change between incompatible container classes"
+      ]
+    }
+  },
+  "macro_plan_summary": "以进样瓶1完成8.00 mL共沉淀、分批加碱、60 ℃熟化、三次水洗、一次乙醇洗和60 ℃干燥，以进样瓶2全程配平；离线定量取得10.0 mg同批固体至进样瓶3后，制成5.0 mL乙醇悬浊液并完成平台内基线XRD。",
+  "dispatch_validation": {
+    "status": "failed",
+    "errors": [
+      "第 3 步（Liquid_Handling_Station_5ml_V1/加液）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 7 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 9 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 11 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 13 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 15 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 17 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 19 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 21 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 23 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 25 步（Liquid_Handling_Station_1ml_V2/加液_物料绑定）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 31 步（Purification_Workstation_V1/纯化离心）参数 `清洗液`=`去离子水` 不在真源枚举 ['1', '2', '3', '双氧水', '水', '酒精'] 中（invalid_enum_value）。",
+      "第 31 步（Purification_Workstation_V1/纯化离心）参数 `清洗液设置` 应为数组（type_mismatch）。",
+      "第 31 步（Purification_Workstation_V1/纯化离心）参数 `保留清洗液数量`=0 超出真源允许范围 [1,50] ml（value_out_of_range）。",
+      "第 33 步（Liquid_Handling_Station_5ml_V1/加液）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 34 步（Ultrasonic_Disperser_V1/超声清洗）缺少 SKILL 必填参数 `容器数量`（missing_required_parameter）。",
+      "第 36 步（Purification_Workstation_V1/纯化离心）参数 `清洗液`=`无水乙醇` 不在真源枚举 ['1', '2', '3', '双氧水', '水', '酒精'] 中（invalid_enum_value）。",
+      "第 36 步（Purification_Workstation_V1/纯化离心）参数 `清洗液设置` 应为数组（type_mismatch）。",
+      "第 36 步（Purification_Workstation_V1/纯化离心）参数 `保留清洗液数量`=0 超出真源允许范围 [1,50] ml（value_out_of_range）。",
+      "第 38 步（Drying_Oven_V1/烘干主流程）缺少 SKILL 必填参数 `容器数量`（missing_required_parameter）。",
+      "第 41 步（Liquid_Handling_Station_5ml_V1/加液）参数 `加样方案` 应为数组（type_mismatch）。",
+      "第 42 步（Ultrasonic_Disperser_V1/超声清洗）缺少 SKILL 必填参数 `容器数量`（missing_required_parameter）。",
+      "第 43 步（Spectroscopy_Magnetic_Stirrer_Workstation_V1/样品架放置-夹具识别）参数 `搅拌时间` 不在该工作站可下发参数中（unknown_parameter）。",
+      "第 43 步（Spectroscopy_Magnetic_Stirrer_Workstation_V1/样品架放置-夹具识别）缺少 SKILL 必填参数 `容器数量`（missing_required_parameter）。",
+      "第 44 步（Spectroscopy_Container_Transfer_Station_V1/容器中转）缺少 SKILL 必填参数 `容器数量`（missing_required_parameter）。"
+    ],
+    "warnings": [],
+    "checked_steps": 44
+  },
+  "message": "workflow_json 未通过严格下发参数校验（含自我修复重试），该 workflow 不得下发执行。",
+  "workflow_txt": "1. 第1步 常规物料站：\n   - 操作：物料拿取\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n\n2. 第2步 移液平台_1ml_V2：\n   - 操作：开盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 开盖编号：[1,2]\n   - 保留瓶盖：是\n\n3. 第3步 移液平台_5ml_V1：\n   - 操作：加液\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - N号原液瓶：[1,2,3,5]\n   - 加样方案：按瓶定量加样\n   - 加样瓶号：[1,2]\n   - 原液用量：[[3.00,3.00,0.50,0.00],[0.00,0.00,0.00,6.50]]\n   - 配料名称：[Ni(NO3)2水溶液,Fe(NO3)3水溶液,Na2CO3水溶液,去离子水]\n\n4. 第4步 移液平台_1ml_V2：\n   - 操作：关盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 关盖编号：[1,2]\n\n5. 第5步 常温磁力搅拌工作站_V1：\n   - 操作：开始搅拌\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[1]\n   - 搅拌速度：700 rpm\n   - 搅拌时间：5 min\n\n6. 第6步 移液平台_1ml_V2：\n   - 操作：开盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 开盖编号：[1,2]\n   - 保留瓶盖：是\n\n7. 第7步 移液平台_1ml_V2：\n   - 操作：加液_物料绑定\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - N号原液瓶：[4,5]\n   - 加样方案：第1批等体积配平加样\n   - 加样瓶号：[1,2]\n   - 原液用量：[[0.15,0.00],[0.00,0.15]]\n   - 配料名称：[NaOH水溶液,去离子水]\n\n8. 第8步 常温磁力搅拌工作站_V1：\n   - 操作：开始搅拌\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[1]\n   - 搅拌速度：700 rpm\n   - 搅拌时间：1 min\n\n9. 第9步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第2批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n10. 第10步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n11. 第11步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第3批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n12. 第12步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n13. 第13步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第4批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n14. 第14步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n15. 第15步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第5批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n16. 第16步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n17. 第17步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第6批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n18. 第18步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n19. 第19步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第7批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n20. 第20步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n21. 第21步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第8批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n22. 第22步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n23. 第23步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第9批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n24. 第24步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n25. 第25步 移液平台_1ml_V2：操作加液_物料绑定；容器类型进样瓶；容器数量2；容器编号[1,2]；N号原液瓶[4,5]；加样方案第10批等体积配平加样；加样瓶号[1,2]；原液用量[[0.15,0.00],[0.00,0.15]]；配料名称[NaOH水溶液,去离子水]。\n26. 第26步 常温磁力搅拌工作站_V1：操作开始搅拌；容器类型进样瓶；容器数量1；容器编号[1]；搅拌速度700 rpm；搅拌时间1 min。\n\n27. 第27步 移液平台_1ml_V2：\n   - 操作：关盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 关盖编号：[1,2]\n\n28. 第28步 常温磁力搅拌工作站_V1：\n   - 操作：开始搅拌\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[1]\n   - 搅拌速度：700 rpm\n   - 搅拌时间：30 min\n\n29. 第29步 加热磁力搅拌工作站_V1：\n   - 操作：加热磁力搅拌全流程\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[1]\n   - 加热温度：60 ℃\n   - 搅拌速度：600 rpm\n   - 搅拌时间：720 min\n\n30. 第30步 容器置放平台_V1：\n   - 操作：静置\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 静置时间：60 min\n\n31. 第31步 纯化工作站_V1：\n   - 操作：纯化离心\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 方案：留固\n   - 时间：10 min\n   - 速度：6000 rpm\n   - 清洗次数：3\n   - 清洗液：去离子水\n   - 清洗液设置：手动\n   - 自动设置加液状态：否\n   - 手动设置加液量：5.0 mL\n   - 是否保留清洗液：否\n   - 保留清洗液数量：0\n   - 保留清洗液参数：不保留\n\n32. 第32步 移液平台_1ml_V2：\n   - 操作：开盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 开盖编号：[1,2]\n   - 保留瓶盖：是\n\n33. 第33步 移液平台_5ml_V1：\n   - 操作：加液\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - N号原液瓶：[6]\n   - 加样方案：乙醇重分散\n   - 加样瓶号：[1,2]\n   - 原液用量：[[5.0],[5.0]]\n   - 配料名称：[无水乙醇]\n\n34. 第34步 超声分散仪_V1：\n   - 操作：超声清洗\n   - 容器类型：进样瓶\n   - 容器编号：[1,2]\n   - 清洗时间：60 s\n\n35. 第35步 移液平台_1ml_V2：\n   - 操作：关盖\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 关盖编号：[1,2]\n\n36. 第36步 纯化工作站_V1：\n   - 操作：纯化离心\n   - 容器类型：进样瓶\n   - 容器数量：2\n   - 容器编号：[1,2]\n   - 方案：留固\n   - 时间：10 min\n   - 速度：6000 rpm\n   - 清洗次数：1\n   - 清洗液：无水乙醇\n   - 清洗液设置：手动\n   - 自动设置加液状态：否\n   - 手动设置加液量：5.0 mL\n   - 是否保留清洗液：否\n   - 保留清洗液数量：0\n   - 保留清洗液参数：不保留\n\n37. 第37步 移液平台_1ml_V2：\n   - 操作：开盖\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[1]\n   - 开盖编号：[1]\n   - 保留瓶盖：是\n\n38. 第38步 烘干机_V1：\n   - 操作：烘干主流程\n   - 容器类型：进样瓶\n   - 容器编号：[1]\n   - 恒温温度（℃）：60\n   - 烘干时间（分钟）：720\n\n39. 离线 handoff：\n   - 对象：进样瓶1内NI3FE1-LDH-B01干燥固体\n   - 操作：轻柔解聚；称取10.0 mg装入有盖进样瓶3；剩余固体密封干燥留样\n   - 强制记录：原批次编号、进样瓶3编号、称样质量、操作人和时间戳\n\n40. 第40步 移液平台_1ml_V2：\n   - 操作：开盖\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[3]\n   - 开盖编号：[3]\n   - 保留瓶盖：是\n\n41. 第41步 移液平台_5ml_V1：\n   - 操作：加液\n   - 容器类型：进样瓶\n   - 容器数量：1\n   - 容器编号：[3]\n   - N号原液瓶：[6]\n   - 加样方案：XRD乙醇分散制样\n   - 加样瓶号：[3]\n   - 原液用量：[[5.0]]\n   - 配料名称：[无水乙醇]\n\n42. 第42步 超声分散仪_V1：\n   - 操作：超声清洗\n   - 容器类型：进样瓶\n   - 容器编号：[3]\n   - 清洗时间：600 s\n\n43. 第43步 谱学磁力搅拌工作站_V1：\n   - 操作：样品架放置-夹具识别\n   - 容器类型：进样瓶\n   - 容器编号：[3]\n   - 搅拌时间：5 min\n\n44. 第44步 谱学容器中转平台_V1：\n   - 操作：容器中转\n   - 容器类型：进样瓶\n   - 容器编号：[3]\n\n45. 第45步 X射线衍射仪_V1：\n   - 操作：XRD测试流程\n   - 容器类型：进样瓶\n   - 容器编号：[3]\n   - 说明：容器内为10.0 mg NiFe LDH/5.0 mL无水乙醇悬浊液；按设备已配置XRD方法滴液制样并采集原始数据。\n\n药品清单：1号（0.30 mol/L Ni(NO3)2）、2号（0.10 mol/L Fe(NO3)3）、3号（0.20 mol/L Na2CO3）、4号（2.0 mol/L NaOH）、5号（去离子水）、6号（无水乙醇）。",
+  "workflow_json": {
+    "steps": [
+      {
+        "step_number": 1,
+        "workstation": "General_Material_Station_V1",
+        "operation": "物料拿取",
+        "id": 1427568512205824,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ]
+        },
+        "source_macro_step": 1
+      },
+      {
+        "step_number": 2,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "开盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "开盖编号": [
+            1,
+            2
+          ],
+          "保留瓶盖": true
+        },
+        "source_macro_step": 1
+      },
+      {
+        "step_number": 3,
+        "workstation": "Liquid_Handling_Station_5ml_V1",
+        "operation": "加液",
+        "id": 1435269745574912,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            1,
+            2,
+            3,
+            5
+          ],
+          "加样方案": "按瓶定量加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              3.0,
+              3.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              6.5
+            ]
+          ],
+          "配料名称": [
+            "Ni(NO3)2水溶液",
+            "Fe(NO3)3水溶液",
+            "Na2CO3水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 1
+      },
+      {
+        "step_number": 4,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "关盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "关盖编号": [
+            1,
+            2
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 5,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 5
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 6,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "开盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "开盖编号": [
+            1,
+            2
+          ],
+          "保留瓶盖": true
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 7,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第1批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 8,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 9,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第2批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 10,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 11,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第3批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 12,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 13,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第4批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 14,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 15,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第5批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 16,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 17,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第6批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 18,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 19,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第7批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 20,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 21,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第8批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 22,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 23,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第9批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 24,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 25,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "加液_物料绑定",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            4,
+            5
+          ],
+          "加样方案": "第10批等体积配平加样",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              0.15,
+              0.0
+            ],
+            [
+              0.0,
+              0.15
+            ]
+          ],
+          "配料名称": [
+            "NaOH水溶液",
+            "去离子水"
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 26,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 1
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 27,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "关盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "关盖编号": [
+            1,
+            2
+          ]
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 28,
+        "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "operation": "开始搅拌",
+        "id": 2114846484726785,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "搅拌速度": 700,
+          "搅拌时间": 30
+        },
+        "source_macro_step": 2
+      },
+      {
+        "step_number": 29,
+        "workstation": "Heating_Magnetic_Stirring_Workstation_V1",
+        "operation": "加热磁力搅拌全流程",
+        "id": 2270587971011585,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "加热温度": 60,
+          "搅拌速度": 600,
+          "搅拌时间": 720
+        },
+        "source_macro_step": 3
+      },
+      {
+        "step_number": 30,
+        "workstation": "Container_storaging_Station_V1",
+        "operation": "静置",
+        "id": 1421325849887744,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "静置时间": 60
+        },
+        "source_macro_step": 3,
+        "notes": "在常温置放平台自然冷却；进样瓶2同时进入后续配平流程。"
+      },
+      {
+        "step_number": 31,
+        "workstation": "Purification_Workstation_V1",
+        "operation": "纯化离心",
+        "id": 1327807622448128,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "方案": "留固",
+          "时间": 10,
+          "速度": 6000,
+          "清洗次数": 3,
+          "清洗液": "去离子水",
+          "清洗液设置": "手动",
+          "自动设置加液状态": false,
+          "手动设置加液量": 5.0,
+          "是否保留清洗液": false,
+          "保留清洗液数量": 0,
+          "保留清洗液参数": "不保留"
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 32,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "开盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "开盖编号": [
+            1,
+            2
+          ],
+          "保留瓶盖": true
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 33,
+        "workstation": "Liquid_Handling_Station_5ml_V1",
+        "operation": "加液",
+        "id": 1435269745574912,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "N号原液瓶": [
+            6
+          ],
+          "加样方案": "乙醇重分散",
+          "加样瓶号": [
+            1,
+            2
+          ],
+          "原液用量": [
+            [
+              5.0
+            ],
+            [
+              5.0
+            ]
+          ],
+          "配料名称": [
+            "无水乙醇"
+          ]
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 34,
+        "workstation": "Ultrasonic_Disperser_V1",
+        "operation": "超声清洗",
+        "id": 1526864804185088,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1,
+            2
+          ],
+          "清洗时间": 60
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 35,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "关盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "关盖编号": [
+            1,
+            2
+          ]
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 36,
+        "workstation": "Purification_Workstation_V1",
+        "operation": "纯化离心",
+        "id": 1327807622448128,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 2,
+          "容器编号": [
+            1,
+            2
+          ],
+          "方案": "留固",
+          "时间": 10,
+          "速度": 6000,
+          "清洗次数": 1,
+          "清洗液": "无水乙醇",
+          "清洗液设置": "手动",
+          "自动设置加液状态": false,
+          "手动设置加液量": 5.0,
+          "是否保留清洗液": false,
+          "保留清洗液数量": 0,
+          "保留清洗液参数": "不保留"
+        },
+        "source_macro_step": 4
+      },
+      {
+        "step_number": 37,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "开盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            1
+          ],
+          "开盖编号": [
+            1
+          ],
+          "保留瓶盖": true
+        },
+        "source_macro_step": 5
+      },
+      {
+        "step_number": 38,
+        "workstation": "Drying_Oven_V1",
+        "operation": "烘干主流程",
+        "id": 1213184425559040,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            1
+          ],
+          "恒温温度（℃）": 60,
+          "烘干时间（分钟）": 720
+        },
+        "source_macro_step": 5
+      },
+      {
+        "step_number": 40,
+        "workstation": "Liquid_Handling_Station_1ml_V2",
+        "operation": "开盖",
+        "id": 2002186824385539,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            3
+          ],
+          "开盖编号": [
+            3
+          ],
+          "保留瓶盖": true
+        },
+        "source_macro_step": 6,
+        "notes": "进样瓶3由离线固体分样handoff返回，内含与进样瓶1同批的10.0 mg NiFe LDH。"
+      },
+      {
+        "step_number": 41,
+        "workstation": "Liquid_Handling_Station_5ml_V1",
+        "operation": "加液",
+        "id": 1435269745574912,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器数量": 1,
+          "容器编号": [
+            3
+          ],
+          "N号原液瓶": [
+            6
+          ],
+          "加样方案": "XRD乙醇分散制样",
+          "加样瓶号": [
+            3
+          ],
+          "原液用量": [
+            [
+              5.0
+            ]
+          ],
+          "配料名称": [
+            "无水乙醇"
+          ]
+        },
+        "source_macro_step": 6
+      },
+      {
+        "step_number": 42,
+        "workstation": "Ultrasonic_Disperser_V1",
+        "operation": "超声清洗",
+        "id": 1526864804185088,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            3
+          ],
+          "清洗时间": 600
+        },
+        "source_macro_step": 6
+      },
+      {
+        "step_number": 43,
+        "workstation": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+        "operation": "样品架放置-夹具识别",
+        "id": 1656241422599168,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            3
+          ],
+          "搅拌时间": 5
+        },
+        "source_macro_step": 6
+      },
+      {
+        "step_number": 44,
+        "workstation": "Spectroscopy_Container_Transfer_Station_V1",
+        "operation": "容器中转",
+        "id": 1654567694238720,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            3
+          ]
+        },
+        "source_macro_step": 6
+      },
+      {
+        "step_number": 45,
+        "workstation": "XRD_V1",
+        "operation": "XRD测试流程",
+        "id": 1664870018155520,
+        "parameters": {
+          "容器类型": "进样瓶",
+          "容器编号": [
+            3
+          ]
+        },
+        "source_macro_step": 6,
+        "notes": "10.0 mg NiFe LDH分散于5.0 mL无水乙醇；采用设备已配置方法完成滴液制样和XRD采集，并回传实际辐射源、扫描范围、步长及原始数据元数据。"
+      }
+    ],
+    "temporal_adaptations": [
+      {
+        "original_requirement": "将1.50 mL NaOH分为10个等体积批次，在约10 min内加入，每批加入后维持700 rpm搅拌约1 min。",
+        "execution_fidelity": "approximated",
+        "adaptation_schedule": "700 rpm预搅拌5 min -> 0.15 mL NaOH加液 -> 700 rpm搅拌1 min，重复10批 -> 关盖 -> 700 rpm最终搅拌30 min；配平瓶同步每批加入0.15 mL去离子水。",
+        "requires_scientific_review": false
+      }
+    ],
+    "offline_handoffs": [
+      {
+        "name": "干燥固体定量分样与同批留样",
+        "sample": "进样瓶1内NI3FE1-LDH-B01未反应NiFe LDH干燥固体",
+        "required_actions": [
+          "轻柔解聚干燥结块，不研磨至可能改变晶体结构的程度",
+          "称取10.0 mg装入有盖进样瓶3",
+          "将剩余材料装入密封干燥留样容器",
+          "继承批次编号NI3FE1-LDH-B01并记录称样质量、操作者和时间戳",
+          "将有盖进样瓶3返回自动化线"
+        ],
+        "required_return_data": [
+          "实际称样质量",
+          "进样瓶3条码",
+          "剩余留样容器条码",
+          "批次关联记录"
+        ]
+      },
+      {
+        "name": "XRD结果数据回传和阶段完成判定",
+        "sample": "进样瓶3对应的NI3FE1-LDH-B01基线XRD样品",
+        "required_return_data": [
+          "XRD原始衍射数据",
+          "实际辐射源、2θ扫描范围和步长元数据",
+          "背景校正图谱",
+          "主要峰位表",
+          "相对峰强",
+          "LDH层状结构特征判读",
+          "明显晶态杂相筛查结果",
+          "样品批次与数据文件唯一对应关系"
+        ]
+      },
+      {
+        "name": "303实验室任务下发回执",
+        "sample": "本workflow及批次NI3FE1-LDH-B01",
+        "required_return_data": [
+          "303实验室实验任务id",
+          "下发时间",
+          "任务状态"
+        ],
+        "notes": "当前上下文未提供303实验室任务调度接口，不能伪造任务id；由外部调度系统下发后回填。"
+      }
+    ]
+  },
+  "agent_mode": "single_device_agent"
+}

@@ -1,0 +1,26 @@
+{
+  "文献题目": "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+  "1. 解决的问题": "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+  "2. 具体的合成步骤": {
+    "描述性总结": "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+    "参数列表": []
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://doi.org/10.1021/acs.inorgchem.1c02903.s001",
+    "source_type": "crossref",
+    "ingested_at": "2026-07-18T18:18:11+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "crossref",
+    "source_id": "10.1021/acs.inorgchem.1c02903.s001",
+    "url": "https://doi.org/10.1021/acs.inorgchem.1c02903.s001",
+    "pdf_url": "",
+    "doi": "10.1021/acs.inorgchem.1c02903.s001",
+    "year": "",
+    "authors": [],
+    "arxiv_id": "",
+    "venue": "",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

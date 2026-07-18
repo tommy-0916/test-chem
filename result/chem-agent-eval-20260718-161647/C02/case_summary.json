@@ -1,0 +1,19 @@
+{
+  "case_id": "C02",
+  "local_run_id": "C02-20260718-161647",
+  "query_sha256": "9adf7cb095269edd0c192b9ab1992c5358b7788a573fe0a22f5de735518cdcf5",
+  "query_exact_match": true,
+  "research_return_code": 1,
+  "research_elapsed_seconds": 57.14,
+  "research_timed_out": false,
+  "research_status": "manual_required",
+  "paper_hits": 0,
+  "macro_steps": 0,
+  "device_return_code": null,
+  "device_elapsed_seconds": 0.0,
+  "device_attempts": [],
+  "device_status": "not_produced",
+  "online_literature_required": true,
+  "web_search_enabled": false,
+  "download_pdfs_enabled": false
+}

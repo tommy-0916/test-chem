@@ -1,0 +1,43 @@
+{
+  "文献题目": "Fe-S dually modulated adsorbate evolution and lattice oxygen compatible mechanism for water oxidation",
+  "1. 解决的问题": "Fe-S dually modulated adsorbate evolution and lattice oxygen compatible mechanism for water oxidation Simultaneously activating metal and lattice oxygen sites to construct a compatible multi-mechanism catalysis is expected for the oxygen evolution reaction (OER) by providing highly available active sites and mediate catalytic activity/stability, but significant challenges remain. Herein, Fe and S dually modulated NiFe oxyhydroxide (R-NiFeOOH@SO4) is conceived by complete reconstruction of NiMoO4·xH2O@Fe,S during OER, and achieves compatible adsorbate evolution mechanism and lattice oxygen oxidation mechanism with simultaneously optimized metal/oxygen sites, as substantiated by in situ spectroscopy/mass spectrometry and chemical probe. Further theoretical analyses reveal that Fe promotes the OER kinetics under adsorbate evolution mechanism, while S excites the lattice oxygen activity under lattice oxygen oxidation mechanism, featuring upshifted O 2p band centers, enlarged d-d Coulomb interaction, weakened metal-oxygen bond and optimized intermediate adsorption free energy. Benefiting from the compatible multi-mechanism, R-NiFeOOH@SO4 only requires overpotentials of 251 ± 5/291 ± 1 mV to drive current densities of 100/500 mA cm−2 in alkaline media, with robust stability for over 300 h. This work provides insights in understanding the OER mechanism to better design high-performance OER catalysts. The oxygen evolution reaction is crucial for energy conversion but faces challenges in catalyst optimization. Here, the authors present a dual-modulated NiFe oxyhydroxide (R-NiFeOOH@S",
+  "2. 具体的合成步骤": {
+    "描述性总结": "Fe-S dually modulated adsorbate evolution and lattice oxygen compatible mechanism for water oxidation Simultaneously activating metal and lattice oxygen sites to construct a compatible multi-mechanism catalysis is expected for the oxygen evolution reaction (OER) by providing highly available active sites and mediate catalytic activity/stability, but significant challenges remain. Herein, Fe and S dually modulated NiFe oxyhydroxide (R-NiFeOOH@SO4) is conceived by complete reconstruction of NiMoO4·xH2O@Fe,S during OER, and achieves compatible adsorbate evolution mechanism and lattice oxygen oxidation mechanism with simultaneously optimized metal/oxygen sites, as substantiated by in situ spectroscopy/mass spectrometry and chemical probe. Further theoretical analyses reveal that Fe promotes the OER kinetics under adsorbate evolution mechanism, while S excites the lattice oxygen activity under lattice oxygen oxidation mechanism, featuring upshifted O 2p band centers, enlarged d-d Coulomb interaction, weakened metal-oxygen bond and optimized intermediate adsorption free energy. Benefiting from the compatible multi-mechanism, R-NiFeOOH@SO4 only requires overpotentials of 251 ± 5/291 ± 1 mV to drive current densities of 100/500 mA cm−2 in alkaline media, with robust stability for over 300 h. This work provides insights in understanding the OER mechanism to better design high-performance OER catalysts. The oxygen evolution reaction is crucial for energy conversion but faces challenges in catalyst optimization. Here, the authors present a dual-modulated NiFe oxyhydroxide (R-NiFeOOH@SO4) that enhances OER performance through optimized metal and lattice oxygen sites, achieving a compatible multi-mechanism. Xu Luo Hongyu Zhao Xin Tan Lin Sheng Kesong Yu Xueqin Mu Zhenhua Tao Pengxia Ji Shichun Mu",
+    "参数列表": []
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "过电位/电压",
+      "数值": "1 mV",
+      "条件": "Benefiting from the compatible multi-mechanism, R-NiFeOOH@SO4 only requires overpotentials of 251 ± 5/291 ± 1 mV to drive current densities of 100/500 mA cm−2 in alkaline media, with robust stability for over 300 h."
+    }
+  ],
+  "_ingestion_metadata": {
+    "source_path": "https://openalex.org/W4402901029",
+    "source_type": "openalex",
+    "ingested_at": "2026-07-18T16:44:48+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "openalex",
+    "source_id": "https://openalex.org/W4402901029",
+    "url": "https://openalex.org/W4402901029",
+    "pdf_url": "https://www.nature.com/articles/s41467-024-52682-y.pdf",
+    "doi": "10.1038/s41467-024-52682-y",
+    "year": "2024",
+    "authors": [
+      "Xu Luo",
+      "Hongyu Zhao",
+      "Xin Tan",
+      "Lin Sheng",
+      "Kesong Yu",
+      "Xueqin Mu",
+      "Zhenhua Tao",
+      "Pengxia Ji",
+      "Shichun Mu"
+    ],
+    "arxiv_id": "",
+    "venue": "Nature Communications",
+    "citation_count": 295,
+    "full_text_status": "metadata_only"
+  }
+}

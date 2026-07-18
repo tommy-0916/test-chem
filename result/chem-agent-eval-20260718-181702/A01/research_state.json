@@ -1,0 +1,1488 @@
+{
+  "event": {
+    "event_type": "bootstrap",
+    "query": "为了探究 Fe 在 NiFe 基催化剂中的存在形式和配位环境对碱性 OER 活性、反应动力学和结构重构行为的影响，请围绕 NiFe 基催化剂设计合理的实验方案。实验应包含不同 Fe 引入方式或不同 Fe 配位环境样品的设计，并设置 Ni 基催化剂及物理混合样品作为对照，比较其晶相结构、元素分布、表面价态、OER 活性和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价过电位、Tafel 斜率、电化学活性面积、电荷转移阻抗和长期稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "constraints": {
+      "device_workstations_dir": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+      "device_context": {
+        "source": "/Users/jyxc-dz-0100374/Desktop/chemagent/chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
+        "planning_policy": "B1 research planning should prefer routes whose containers, operations, fixed-parameter steps, reaction/testing modules, characterization handoffs, and observation points are compatible with the loaded device truth source. Keep output at macro-action level; do not emit workstation pipeline/control JSON. If the loaded source exposes characterization stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported observation points; otherwise keep them as offline handoffs. Avoid macro routes that require a sample to move across incompatible container classes when the loaded device capabilities do not expose a supported transfer or vessel-change operation.",
+        "workstations": [
+          {
+            "station_name": "Centrifuge_V1",
+            "display_name": "离心机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景 操作: **离心-复位机制** 迭代放入容器，通过指定转速进行离心; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Cleaning_and_Dispensing_Workstation_V1",
+            "display_name": "批量加液工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。 操作: **输入约束**; **输出约束**; **批量加液流程**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Container_storaging_Station_V1",
+            "display_name": "容器置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **输入约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Cooling_Workstation_V1",
+            "display_name": "冷却工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "利用风扇加快容器降温。冷却温度必须大于40℃。 操作: **输入约束**; **输出约束**; **冷却流程**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Drying_Oven_V1",
+            "display_name": "烘干机_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。 操作: **烘干主流程** 烘干; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "General_Material_Station_V1",
+            "display_name": "常规物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。 操作: **物料拿取** 物料拿取; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heat_Resistant_Material_Station",
+            "display_name": "耐热瓶物料站",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。 操作: **容器拿取**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：50ml耐热瓶；容器状态：有盖；样品状态：必须无样品状态"
+          },
+          {
+            "station_name": "Heating_Magnetic_Stirring_Workstation_V1",
+            "display_name": "加热磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。 操作: **加热磁力搅拌全流程**; **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：有盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+            "display_name": "智能光催容器中转平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。 操作: **输入约束**; **输出约束**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V1",
+            "display_name": "移液平台_1ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_1ml_V2",
+            "display_name": "移液平台_1ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。 操\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_4Channel_V1",
+            "display_name": "移液平台四通道_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "按照导入模版文件参数，将1-8种液体加入容器。 操作: **液体加样** 四通道液体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V1",
+            "display_name": "移液平台_5ml_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。 操作: **加液_物料绑定** 通过选择物料进行加液操作; **输入约束**;\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V2",
+            "display_name": "移液平台_5ml_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。 操作: **输入约束**; **输出约束**; **开盖**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Handling_Station_5ml_V3",
+            "display_name": "移液平台_5ml_V3",
+            "module_name": "Synthesis Module",
+            "capability_summary": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。 操作: **输入\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Liquid_Pouring_Workstation_V1",
+            "display_name": "液体倾倒工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：有盖；样品状态：不限"
+          },
+          {
+            "station_name": "Muffle_Furnace_V1",
+            "display_name": "马弗炉_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。 操作: **输入约束**; **输出约束**; **马弗炉加热流程_96石英孔板**",
+            "input_output_summary": "输入: 容器类型：96位石英孔板；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "多通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。 操作: **固体进样-文件传参-机器人** 通过文件下发称量固体; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或西林瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Multi_Channel_Solid_Weighing_Workstation_V2",
+            "display_name": "多通道固体称量工作站_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：料斗；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Plate_storaging_Station_V1",
+            "display_name": "孔板置放平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。 操作: **输入约束**; **输出约束**; **回收96孔板和氢气膜**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Purification_Workstation_V1",
+            "display_name": "纯化工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。 操作: **纯化离心** 离心纯化流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或留样瓶；容器状态：必须有盖且数量为1-10之间的偶数；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "常温磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。 操作: **开始搅拌** 开启磁力搅拌; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Single_Channel_Solid_Weighing_Workstation_V1",
+            "display_name": "单通道固体称量工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景 操作: **固体进样** 固体进样; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：必须无溶液"
+          },
+          {
+            "station_name": "Solid_Sample_Transfer_Workstation_V1",
+            "display_name": "固体样品转移工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或50ml耐热瓶或西林瓶或进样瓶；容器状态：无盖；样品状态：固体"
+          },
+          {
+            "station_name": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+            "display_name": "谱学磁力搅拌工作站_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。 操作: **样品架放置-夹具识别**; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V1",
+            "display_name": "超声分散仪_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Disperser_V2",
+            "display_name": "超声分散仪_V2",
+            "module_name": "Synthesis Module",
+            "capability_summary": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。 操作: **超声清洗** 超声清洗; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶或西林瓶；容器状态：不限；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Ultrasonic_Liquid_Handling_Workstation_V1",
+            "display_name": "超声移液平台_V1",
+            "module_name": "Synthesis Module",
+            "capability_summary": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景 操作: **输入约束**; **输出约束**; **超声\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：不限；样品状态：不限"
+          },
+          {
+            "station_name": "Dual_Station_Electrochemical_Workstation_V2",
+            "display_name": "双工位电化学工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。 操作: **输入约束**; **输出约束**; **废液移液设置**与**\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶；容器状态：必须无盖；样品状态：大于4ml的纯液态或悬浊液"
+          },
+          {
+            "station_name": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+            "display_name": "高温高压微反应平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V1",
+            "display_name": "光催化工作站_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：西林瓶；容器状态：必须无盖；样品状态：不限"
+          },
+          {
+            "station_name": "Photocatalysis_Workstation_V2",
+            "display_name": "光催化工作站_V2",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂 操作: **输入约束**; **输出约束**; **光催化流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Post_Reaction_Processing_Platform_V1",
+            "display_name": "反应后处理平台_V1",
+            "module_name": "Reaction and Testing Module",
+            "capability_summary": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。 操作: **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：10ml耐压反应管；容器状态：无盖；样品状态：悬浊液"
+          },
+          {
+            "station_name": "Darkbox_Imaging_Workstation_V1",
+            "display_name": "暗箱拍摄工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。 操作: **输入约束**; **输出约束**; **暗箱光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Fluorescence_Spectrometer_V1",
+            "display_name": "荧光光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。 操作: **荧光光谱进样绘图** 开始荧光光谱测试; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Gas_Chromatograph_V1",
+            "display_name": "气相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。 操作: **输入约束**; **输出约束**; **读取模板文件**：references_file目录下`Gas_Chromatogr\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：气相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+            "display_name": "气液传质_高速摄像_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。 操作: **多样品测试-无活化** 多样品测试不进行活化; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "Infrared_Spectrometer_V1",
+            "display_name": "红外光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。 操作: **谱学红外流程-夹具识别** 红外光谱检测流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+            "display_name": "接触角_张力仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：测试架；容器状态：不限；样品状态：负载于碳纸的固体"
+          },
+          {
+            "station_name": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+            "display_name": "光照压膜工作站_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。 操作: **输入约束**; **输出约束**; **氢气检测膜压膜后光照流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "Liquid_Chromatograph_V1",
+            "display_name": "液相色谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。 操作: **输入约束**; **输出约束**; **读取模板文件**：refere\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：液相54孔板；容器状态：无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Microplate_Reader_V1",
+            "display_name": "酶标仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。 操作: **输入约束**; **输出约束**; **酶标仪303谱学流程**",
+            "input_output_summary": "输入: 容器类型：96位塑料孔板或96位石英孔板；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "Spectroscopy_Container_Transfer_Station_V1",
+            "display_name": "谱学容器中转平台_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转 操作: **输入约束**; **输出约束**; **容器中转**",
+            "input_output_summary": "输入: 容器类型：进样瓶或液相54孔板或50ml耐热瓶或西林瓶或96位石英孔板或96位塑料孔板或气相54孔板；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          },
+          {
+            "station_name": "UV_Vis_Spectrometer_V1",
+            "display_name": "紫外可见光谱仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。 操作: **紫外光谱进样绘图** 紫外光谱测试全流程; **输入约束**; **输出约束**",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态"
+          },
+          {
+            "station_name": "XRD_V1",
+            "display_name": "X射线衍射仪_V1",
+            "module_name": "Characterization Module",
+            "capability_summary": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。 操作: **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须\n...[truncated]",
+            "input_output_summary": "输入: 容器类型：进样瓶或50ml耐热瓶；容器状态：必须无盖；样品状态：纯液态或悬浊液"
+          }
+        ],
+        "truncated": true
+      }
+    },
+    "payload": {}
+  },
+  "status": "completed",
+  "current_branch": "B0",
+  "next_branch": "B0",
+  "last_completed_branch": "B1",
+  "route_message": "B1 bootstrap completed; stage route and first macro plan are ready",
+  "branch_history": [
+    "B0",
+    "B1",
+    "B0"
+  ],
+  "survey_queries": [
+    "NiFe 层状双氢氧化物 共沉淀合成 Fe 掺杂 配位环境 碱性析氧反应 OER",
+    "Ni(OH)2 后合成 Fe 引入 表面吸附 离子交换 Fe-Ni 配位 OER 活性",
+    "Ni 基催化剂 NiFe 共合成催化剂 Ni(OH)2与FeOOH物理混合 对照 碱性 OER",
+    "NiFe 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 XAS Fe 配位环境",
+    "NiFe oxyhydroxide 碱性 OER 原位拉曼 XAS 结构重构 Fe 活性位",
+    "NiFe OER 过电位 Tafel斜率 双电层电容 ECSA 电化学阻抗 长期稳定性 测试方法"
+  ],
+  "survey_rounds": [
+    {
+      "round": 1,
+      "queries": [
+        "NiFe 层状双氢氧化物 共沉淀合成 Fe 掺杂 配位环境 碱性析氧反应 OER",
+        "Ni(OH)2 后合成 Fe 引入 表面吸附 离子交换 Fe-Ni 配位 OER 活性",
+        "Ni 基催化剂 NiFe 共合成催化剂 Ni(OH)2与FeOOH物理混合 对照 碱性 OER",
+        "NiFe 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 XAS Fe 配位环境",
+        "NiFe oxyhydroxide 碱性 OER 原位拉曼 XAS 结构重构 Fe 活性位",
+        "NiFe OER 过电位 Tafel斜率 双电层电容 ECSA 电化学阻抗 长期稳定性 测试方法"
+      ],
+      "hit_titles": []
+    },
+    {
+      "round": 2,
+      "queries": [
+        "NiFe LDH 共沉淀 后合成 Fe 掺杂 FeOOH 物理混合 对照 合成条件 Fe 含量一致 OER",
+        "NiFe oxyhydroxide Fe 配位环境 XANES EXAFS Mössbauer XPS STEM-EDS operando Raman OER 重构",
+        "NiFe 催化剂 碱性 OER 标准测试流程 iR校正 过电位 Tafel Cdl ECSA EIS 恒电流稳定性",
+        "Ni(OH)2 Fe 表面吸附 晶格掺杂 离子交换 配位结构 活性对比 alkaline oxygen evolution"
+      ],
+      "hit_titles": []
+    }
+  ],
+  "memory_queries": [],
+  "knowledge_hits": [],
+  "memory_hits": [],
+  "extracted_protocols": [],
+  "survey_report": {
+    "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+    "key_findings": [
+      "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+      "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+      "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+      "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+      "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+    ],
+    "candidate_precedents": [
+      "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+      "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+      "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+      "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+    ],
+    "route_implications": [
+      "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+      "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+      "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+      "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+      "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+    ],
+    "open_questions": [
+      "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+      "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+      "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+      "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+      "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+    ]
+  },
+  "stage_route": [
+    "合成、必要并完成 XRD 观察",
+    "基于前序结果继续推进并完成 XPS 观察",
+    "基于前序结果继续推进并完成 TEM 观察",
+    "基于前序结果继续推进并完成 电化学测试 观察"
+  ],
+  "current_stage": "合成、必要并完成 XRD 观察",
+  "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+  "macro_plan": [
+    {
+      "步骤序号": 1,
+      "操作": "预配前驱体原液并建立平行样品矩阵",
+      "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+      "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 2,
+      "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+      "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+      "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+      "来源": "agent补全",
+      "device_validation": "needs_device_validation",
+      "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 3,
+      "操作": "共沉淀制备NiFe样品",
+      "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+      "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 4,
+      "操作": "制备后沉积Fe/Ni(OH)2样品",
+      "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+      "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 5,
+      "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+      "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+      "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+      "来源": "agent补全",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 6,
+      "操作": "统一离心洗涤、干燥并构建物理混合对照",
+      "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+      "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+      "来源": "agent补全",
+      "device_validation": "needs_device_validation",
+      "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    },
+    {
+      "步骤序号": 7,
+      "操作": "制备XRD分散样并完成晶相观察",
+      "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+      "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+      "来源": "agent补全",
+      "device_validation": "adaptation_required",
+      "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD"
+    }
+  ],
+  "macro_action": {
+    "macro_action_id": "MA_S01_R00",
+    "observation_point_id": "OP_XRD",
+    "observation_point": "XRD",
+    "stage": "合成、必要并完成 XRD 观察",
+    "stage_index": 1,
+    "objective": "合成、必要并完成 XRD 观察",
+    "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线",
+    "expected_observation": "获得 XRD 的有效结果",
+    "macro_step_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "macro_action_history": [
+    {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线"
+    }
+  ],
+  "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+  "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+  "latest_observation": {},
+  "observations": [],
+  "previous_macro_plan": [],
+  "observation_stage_fit": {},
+  "observation_interpretation": {},
+  "stage_progress": {},
+  "stage_progress_status": "",
+  "post_observation_repair_path": "",
+  "manual_handoff": "",
+  "failure_category": "",
+  "rejected_macro_plan": [],
+  "cumulative_device_constraints": [],
+  "failed_plan_signatures": [],
+  "device_snapshot_id": "",
+  "persistent_outputs": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配前驱体原液并建立平行样品矩阵",
+        "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+        "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+        "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+        "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备NiFe样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+        "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "制备后沉积Fe/Ni(OH)2样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+        "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+        "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+        "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "统一离心洗涤、干燥并构建物理混合对照",
+        "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+        "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备XRD分散样并完成晶相观察",
+        "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+        "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+      "key_findings": [
+        "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+        "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+        "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+        "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+        "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+        "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+        "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+        "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+      ],
+      "route_implications": [
+        "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+        "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+        "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+        "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+        "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+      ],
+      "open_questions": [
+        "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+        "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+        "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+        "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+        "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "device_adaptation_handoff": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Fe 在 NiFe 基催化剂中的存在形式和配位环境对碱性 OER 活性、反应动力学和结构重构行为的影响，请围绕 NiFe 基催化剂设计合理的实验方案。实验应包含不同 Fe 引入方式或不同 Fe 配位环境样品的设计，并设置 Ni 基催化剂及物理混合样品作为对照，比较其晶相结构、元素分布、表面价态、OER 活性和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价过电位、Tafel 斜率、电化学活性面积、电荷转移阻抗和长期稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配前驱体原液并建立平行样品矩阵",
+        "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+        "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+        "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+        "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备NiFe样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+        "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "制备后沉积Fe/Ni(OH)2样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+        "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+        "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+        "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "统一离心洗涤、干燥并构建物理混合对照",
+        "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+        "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备XRD分散样并完成晶相观察",
+        "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+        "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+      "key_findings": [
+        "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+        "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+        "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+        "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+        "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+        "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+        "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+        "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+      ],
+      "route_implications": [
+        "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+        "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+        "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+        "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+        "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+      ],
+      "open_questions": [
+        "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+        "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+        "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+        "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+        "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  },
+  "raw_llm_outputs": {
+    "survey_query_generate": {
+      "queries": [
+        "NiFe 层状双氢氧化物 共沉淀合成 Fe 掺杂 配位环境 碱性析氧反应 OER",
+        "Ni(OH)2 后合成 Fe 引入 表面吸附 离子交换 Fe-Ni 配位 OER 活性",
+        "Ni 基催化剂 NiFe 共合成催化剂 Ni(OH)2与FeOOH物理混合 对照 碱性 OER",
+        "NiFe 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 XAS Fe 配位环境",
+        "NiFe oxyhydroxide 碱性 OER 原位拉曼 XAS 结构重构 Fe 活性位",
+        "NiFe OER 过电位 Tafel斜率 双电层电容 ECSA 电化学阻抗 长期稳定性 测试方法"
+      ],
+      "reason": "这些检索词覆盖了不同Fe引入方式与配位环境的样品设计、Ni基及物理混合对照、晶相和元素/价态/配位表征、OER过程结构重构以及活性、动力学、界面电荷转移和稳定性评价等关键知识空缺。"
+    },
+    "survey_expansion": [
+      {
+        "continue_research": true,
+        "new_queries": [
+          "NiFe LDH 共沉淀 后合成 Fe 掺杂 FeOOH 物理混合 对照 合成条件 Fe 含量一致 OER",
+          "NiFe oxyhydroxide Fe 配位环境 XANES EXAFS Mössbauer XPS STEM-EDS operando Raman OER 重构",
+          "NiFe 催化剂 碱性 OER 标准测试流程 iR校正 过电位 Tafel Cdl ECSA EIS 恒电流稳定性",
+          "Ni(OH)2 Fe 表面吸附 晶格掺杂 离子交换 配位结构 活性对比 alkaline oxygen evolution"
+        ],
+        "reason": "当前没有任何知识命中或可提取实验协议，尚不足以有证据地确定样品矩阵、可比的Fe引入路线、关键配位表征及统一电化学评价条件。下一轮应重点补齐：共合成/后引入/物理混合及Ni基对照的可操作制备条件与Fe含量控制；区分晶格Fe、表面Fe物种和独立Fe氧羟化物的XPS、STEM-EDS、XAS或Mössbauer证据；工作态结构重构的原位或离线前后对比方法；以及过电位、Tafel斜率、Cdl/ECSA、EIS和长期稳定性的规范测试与iR校正条件。"
+      },
+      {
+        "continue_research": true,
+        "new_queries": [
+          "site-selective iron incorporation nickel hydroxide lattice Fe surface species physical mixture alkaline OER synthesis characterization",
+          "NiFe layered double hydroxide coprecipitation post-synthetic Fe incorporation FeOOH mixture matched Fe loading OER",
+          "operando XAS Raman NiFe oxyhydroxide Fe coordination structural reconstruction alkaline oxygen evolution",
+          "NiFe OER benchmarking protocol rotating disk electrode iR compensation Tafel Cdl ECSA EIS chronopotentiometry stability"
+        ],
+        "reason": "当前累计知识仍为零命中，无法基于可核验依据稳定确定样品矩阵、Fe含量匹配的共引入/后引入路线、Ni基与物理混合对照、区分晶格Fe与表面或独立Fe物种的判据，以及统一的OER测试参数，因此不足以支撑可靠的observation point与stage设计。下一轮应改用英文和更具路线指向性的检索词，重点补齐可操作制备条件、Fe配位与空间分布表征、工作态结构重构证据，以及过电位、Tafel、Cdl/ECSA、EIS和恒电流稳定性的标准化测试方法。"
+      }
+    ],
+    "paper_protocol_extract": {
+      "protocols": [],
+      "missing_parameters": [
+        "当前没有知识库命中文本，无法确定论文标题、来源文件及论文实际报告的实验步骤",
+        "无法从现有证据抽取催化剂制备所用试剂、用量、浓度、体积、温度和时间",
+        "无法从现有证据抽取后处理、结构与界面表征、电极制备及电化学测试条件"
+      ]
+    },
+    "survey_report_generate": {
+      "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+      "key_findings": [
+        "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+        "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+        "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+        "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+        "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+        "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+        "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+        "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+      ],
+      "route_implications": [
+        "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+        "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+        "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+        "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+        "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+      ],
+      "open_questions": [
+        "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+        "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+        "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+        "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+        "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+      ]
+    },
+    "stage_design": {
+      "stage_route": [
+        "stage 1：反应前晶相、Fe空间分布、表面价态与局域配位确认",
+        "stage 2：碱性OER活性、反应动力学与长期稳定性评价",
+        "stage 3：OER稳定性测试后结构重构与Fe配位变化判定"
+      ],
+      "current_stage": "stage 1：反应前晶相、Fe空间分布、表面价态与局域配位确认",
+      "stage_route_reason": "识别出三个依次更新科学判断的关键observation point：第一，确认共合成NiFe、后引入Fe、Ni基空白、FeOOH及Ni基/FeOOH物理混合对照在反应前的晶相、元素空间分布、表面价态和Fe局域配位，从而区分晶格分散Fe、表面或界面Fe物种、Fe团簇及独立FeOOH相；第二，在统一催化剂负载、电极构型和碱性测试条件下获得过电位、Tafel斜率、Cdl/ECSA、电荷转移阻抗及长期稳定性等合法电化学观察；第三，对稳定性测试后的样品进行前后对比，观察晶相、Ni/Fe价态、元素分布和局域配位变化，判定结构重构。催化剂制备、后处理、洗涤、干燥、电极制备及取样均是到达相应observation point之前的macro action，不单独构成stage。平台支持XRD和电化学观察；STEM-EDS、XPS、XAS及原位或准原位拉曼应作为离线送样与数据回传。",
+      "current_stage_reason": "必须先制备具有不同Fe引入方式或配位环境的样品及Ni基、FeOOH和物理混合对照，并取得反应前结构与Fe存在形式的基线观察，才能验证样品矩阵是否真正形成预期差异，并为后续OER性能归因及测试前后重构比较提供参照，因此首先进入stage 1。"
+    },
+    "macro_plan_design": {
+      "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+      "macro_plan": [
+        {
+          "步骤序号": 1,
+          "操作": "预配前驱体原液并建立平行样品矩阵",
+          "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+          "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 2,
+          "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+          "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+          "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 3,
+          "操作": "共沉淀制备NiFe样品",
+          "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+          "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 4,
+          "操作": "制备后沉积Fe/Ni(OH)2样品",
+          "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+          "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 5,
+          "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+          "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+          "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 6,
+          "操作": "统一离心洗涤、干燥并构建物理混合对照",
+          "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+          "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+          "来源": "agent补全"
+        },
+        {
+          "步骤序号": 7,
+          "操作": "制备XRD分散样并完成晶相观察",
+          "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+          "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+          "来源": "agent补全"
+        }
+      ],
+      "macro_plan_summary": "该 macro plan 在统一名义组成和后处理条件下，用共沉淀、后沉积及独立相物理混合三种Fe引入方式构建样品矩阵，并连贯完成小体积沉淀、搅拌熟化、离心洗涤、干燥和乙醇分散XRD测试，以获得当前 stage 所需的反应前晶相基线观察。"
+    }
+  },
+  "campaign_id": "A01-20260718-181702",
+  "reference_inputs": [],
+  "seed_papers": [],
+  "literature_acquisition": {
+    "keyword_query": "为了探究 Fe 在 NiFe 基催化剂中的存在形式和配位环境对碱性 OER 活性、反应动力学和结构重构行为的影响，请围绕 NiFe 基催化剂设计合理的实验方案。实验应包含不同 Fe 引入方式或不同 Fe 配位环境样品的设计，并设置 Ni 基催化剂及物理混合样品作为对照，比较其晶相结构、元素分布、表面价态、OER 活性和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备和电化学 测试等关键环节，并获得能够评价过电位、Tafel 斜率、电化学活性面积、电荷转移阻抗和长期稳定性的结果。请将实验 ，并返回该实验任务的 id。",
+    "keyword_sources": [
+      "semantic_scholar",
+      "crossref",
+      "arxiv",
+      "openalex"
+    ],
+    "candidates_log": [
+      {
+        "title": "含多卤代不饱和配位基钛杂环化合物的合成、结构和反应机理的研究",
+        "doi": "10.1360/csb1991-36-19-1476",
+        "role": "keyword",
+        "relevance": 0.0781,
+        "kept": false,
+        "reason": "relevance 0.078 < threshold 0.1"
+      },
+      {
+        "title": "碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+        "doi": "10.1360/csb1959-4-23-797",
+        "role": "keyword",
+        "relevance": 0.0781,
+        "kept": false,
+        "reason": "relevance 0.078 < threshold 0.1"
+      },
+      {
+        "title": "不同乙氧基链段的非离子型表面活性剂在电极表面的电化学行为",
+        "doi": "10.1360/zb2012-42-2-192",
+        "role": "keyword",
+        "relevance": 0.0469,
+        "kept": false,
+        "reason": "relevance 0.047 < threshold 0.1"
+      },
+      {
+        "title": "Study of magnetic interface and its effect in Fe/NiFe bilayers of alternating order",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0312,
+        "kept": false,
+        "reason": "relevance 0.031 < threshold 0.1"
+      },
+      {
+        "title": "大功率风电基础结构的稳定性分析与优化设计",
+        "doi": "10.37155/2717-5316-0611-41",
+        "role": "keyword",
+        "relevance": 0.0312,
+        "kept": false,
+        "reason": "relevance 0.031 < threshold 0.1"
+      },
+      {
+        "title": "Nanotube caps on Ni, Fe, and NiFe nano particles: A path to chirality selective growth",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "Surfactant-Mediated Modulation of the Microstructure and OER Catalytic Performance of Iron-Based Hydroxide Electrocatalysts",
+        "doi": "10.12677/ms.2026.165113",
+        "role": "keyword",
+        "relevance": 0.0156,
+        "kept": false,
+        "reason": "relevance 0.016 < threshold 0.1"
+      },
+      {
+        "title": "A review of Fe-chalcogenide superconductors: the simplest Fe-based superconductor",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "CME Deflection and East-West Asymmetry of ESP Intensity in Solar Cycles 23 and 24",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      },
+      {
+        "title": "Possible Superconductivity in Fe-Sb Based Materials: Density Functional Study of LiFeSb",
+        "doi": "",
+        "role": "keyword",
+        "relevance": 0.0,
+        "kept": false,
+        "reason": "relevance 0.000 < threshold 0.1"
+      }
+    ],
+    "snowball_kept": 0,
+    "keyword_kept": 0,
+    "web_kept": 0,
+    "newly_registered": 0,
+    "errors": [
+      "semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: "
+    ]
+  },
+  "plan_revisions": [
+    {
+      "campaign_id": "A01-20260718-181702",
+      "plan_version": 1,
+      "event": "initial",
+      "scope": "full_plan",
+      "trigger": "bootstrap",
+      "branch_path": "B1",
+      "reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。 | 当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+      "observation_summary": "",
+      "evidence_refs": [
+        "agent补全"
+      ],
+      "agent_status": "completed",
+      "previous_plan": null,
+      "new_plan": {
+        "stage_route": [
+          "合成、必要并完成 XRD 观察",
+          "基于前序结果继续推进并完成 XPS 观察",
+          "基于前序结果继续推进并完成 TEM 观察",
+          "基于前序结果继续推进并完成 电化学测试 观察"
+        ],
+        "current_stage": "合成、必要并完成 XRD 观察",
+        "current_stage_plan": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+        "macro_plan": [
+          {
+            "步骤序号": 1,
+            "操作": "预配前驱体原液并建立平行样品矩阵",
+            "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+            "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 2,
+            "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+            "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+            "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+            "来源": "agent补全",
+            "device_validation": "needs_device_validation",
+            "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 3,
+            "操作": "共沉淀制备NiFe样品",
+            "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+            "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 4,
+            "操作": "制备后沉积Fe/Ni(OH)2样品",
+            "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+            "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 5,
+            "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+            "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+            "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+            "来源": "agent补全",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 6,
+            "操作": "统一离心洗涤、干燥并构建物理混合对照",
+            "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+            "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+            "来源": "agent补全",
+            "device_validation": "needs_device_validation",
+            "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          },
+          {
+            "步骤序号": 7,
+            "操作": "制备XRD分散样并完成晶相观察",
+            "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+            "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+            "来源": "agent补全",
+            "device_validation": "adaptation_required",
+            "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+            "macro_action_id": "MA_S01_R00",
+            "observation_point_id": "OP_XRD"
+          }
+        ],
+        "stage_route_reason": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+        "current_stage_reason": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。"
+      },
+      "recorded_at": "2026-07-18T18:21:06"
+    }
+  ],
+  "tool_invocations": [
+    {
+      "task_name": "survey_report_generate",
+      "tool": "paper_search",
+      "status": "ok",
+      "query": "NiFe layered double hydroxide coprecipitation post-synthetic Fe incorporation physical mixture FeOOH OER operando XAS Raman coordination electrochemical benchmarking",
+      "url": "",
+      "doi": "",
+      "arxiv_id": "",
+      "engine": "",
+      "provider": "",
+      "sources": [
+        "semantic_scholar",
+        "crossref",
+        "arxiv",
+        "openalex"
+      ],
+      "results_count": 5,
+      "attempts_count": 4,
+      "full_text_status": "",
+      "archived": true,
+      "at": "2026-07-18T18:18:11"
+    }
+  ],
+  "errors": [],
+  "logs": [
+    "[2026-07-18 18:17:03] ResearchAgent started with event=bootstrap, llm_enabled=True",
+    "[2026-07-18 18:17:03] B0 waiting received event: bootstrap",
+    "[2026-07-18 18:17:03] bootstrap event received; routing to B1",
+    "[2026-07-18 18:17:03] Entered B1 bootstrap",
+    "[2026-07-18 18:17:11] literature acquisition completed: seeds=0, snowball_kept=0, keyword_kept=0, web_kept=0, written=0, errors=1",
+    "[2026-07-18 18:17:11] literature acquisition warning: semantic_scholar: RuntimeError: configured credential returned HTTP 403; anonymous retry failed: HTTPError: HTTP Error 429: ",
+    "[2026-07-18 18:17:26] survey queries after sanitization: ['NiFe 层状双氢氧化物 共沉淀合成 Fe 掺杂 配位环境 碱性析氧反应 OER', 'Ni(OH)2 后合成 Fe 引入 表面吸附 离子交换 Fe-Ni 配位 OER 活性', 'Ni 基催化剂 NiFe 共合成催化剂 Ni(OH)2与FeOOH物理混合 对照 碱性 OER', 'NiFe 催化剂 XRD STEM-EDS 元素分布 XPS 表面价态 XAS Fe 配位环境', 'NiFe oxyhydroxide 碱性 OER 原位拉曼 XAS 结构重构 Fe 活性位', 'NiFe OER 过电位 Tafel斜率 双电层电容 ECSA 电化学阻抗 长期稳定性 测试方法']",
+    "[2026-07-18 18:17:26] survey query generate completed with 6 queries",
+    "[2026-07-18 18:17:26] Survey round 1 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:17:38] Survey round 2 produced 0 hits; 0 unique hits accumulated",
+    "[2026-07-18 18:18:00] paper_protocol_extract: LLM returned no usable protocols; degrading to heuristic extraction and continuing without citation-grade protocols",
+    "[2026-07-18 18:18:00] paper protocol extract completed with 0 protocols",
+    "[2026-07-18 18:18:00] memory disabled; skipped similar exp search",
+    "[2026-07-18 18:18:11] external tool invoked in survey_report_generate: paper_search status=ok",
+    "[2026-07-18 18:21:06] macro plan kept with device-validation markers on 3 step(s); device layer will judge",
+    "[2026-07-18 18:21:06] B1 bootstrap completed; stage route and first macro plan are ready",
+    "[2026-07-18 18:21:06] plan ledger event recorded: initial/full_plan (v1)"
+  ],
+  "created_at": "2026-07-18T18:17:03.235538",
+  "A. research layer 内部持久化输出": {
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配前驱体原液并建立平行样品矩阵",
+        "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+        "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+        "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+        "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备NiFe样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+        "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "制备后沉积Fe/Ni(OH)2样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+        "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+        "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+        "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "统一离心洗涤、干燥并构建物理混合对照",
+        "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+        "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备XRD分散样并完成晶相观察",
+        "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+        "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+      "key_findings": [
+        "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+        "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+        "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+        "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+        "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+        "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+        "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+        "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+      ],
+      "route_implications": [
+        "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+        "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+        "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+        "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+        "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+      ],
+      "open_questions": [
+        "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+        "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+        "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+        "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+        "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "最新 observation": {},
+    "observation 与当前 stage 的一致性判断": {},
+    "当前 observation 的结构化科学解释": {},
+    "当前阶段推进状态": {},
+    "post observation 修复路径": "",
+    "累计设备阻塞约束": [],
+    "已失败方案签名": [],
+    "设备能力快照ID": "",
+    "失败类别": "",
+    "人工交接摘要": ""
+  },
+  "B. 发给下游 device adaptation layer agent 的外部交接输出": {
+    "handoff_type": "research_to_device_adaptation",
+    "query": "为了探究 Fe 在 NiFe 基催化剂中的存在形式和配位环境对碱性 OER 活性、反应动力学和结构重构行为的影响，请围绕 NiFe 基催化剂设计合理的实验方案。实验应包含不同 Fe 引入方式或不同 Fe 配位环境样品的设计，并设置 Ni 基催化剂及物理混合样品作为对照，比较其晶相结构、元素分布、表面价态、OER 活性和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价过电位、Tafel 斜率、电化学活性面积、电荷转移阻抗和长期稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+    "stage 路线": [
+      "合成、必要并完成 XRD 观察",
+      "基于前序结果继续推进并完成 XPS 观察",
+      "基于前序结果继续推进并完成 TEM 观察",
+      "基于前序结果继续推进并完成 电化学测试 观察"
+    ],
+    "当前 stage": "合成、必要并完成 XRD 观察",
+    "当前 stage 的完整化学语义实验计划": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得反应前样品的合法 XRD 衍射数据。stage goal 是制备并比较五类样品：Ni(OH)2 基准样品、Ni/Fe=3:1 的共沉淀 NiFe 样品、以 Ni(OH)2 为载体后沉积 Fe 物种的样品、FeOOH 相参照以及 Ni(OH)2/FeOOH 物理混合对照。planning logic 是固定名义 Ni/Fe 比、总金属投料量、沉淀碱化程度、搅拌熟化、洗涤和干燥条件，仅改变 Fe 的引入时序及其与 Ni 相的结合方式；各路线采用外部预配并已装载的液体原液、小于 8 mL 的单体系反应体积、固定节拍加碱和搅拌熟化，以便后续直接进行小体积离心洗涤。由于没有可直接转换的完整论文 protocol，以下浓度、体积、温度及时间属于 agent 补全的首轮可执行条件。key variables 包括 Fe 在共沉淀、后沉积和独立 FeOOH 相中的引入方式，名义 Ni/Fe=3:1，反应 pH 对应的固定 NaOH 当量，以及相同的熟化、洗涤、干燥和 XRD 制样条件。expected observation 是确认各样品是否呈现 Ni(OH)2/类 LDH、FeOOH 或二者叠加的衍射特征，并比较共沉淀和后沉积样品的峰位、峰宽、相对强度及附加 FeOOH 衍射峰；XRD 只能用于晶相和结晶度判断，不单独作为 Fe 局域配位的确定证据。stage completion condition 是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线。",
+    "待执行 macro plan": [
+      {
+        "步骤序号": 1,
+        "操作": "预配前驱体原液并建立平行样品矩阵",
+        "试剂/对象": "Ni(NO3)2·6H2O、Fe(NO3)3·9H2O、NaOH、去离子水；Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH和Ni(OH)2/FeOOH物理混合对照",
+        "参数": "在实验外部预配并装载0.100 M Ni(NO3)2、0.100 M Fe(NO3)3和1.00 M NaOH水溶液；所有最终样品独立制备2份。共沉淀、后沉积和物理混合样品采用名义Ni:Fe=3:1；共沉淀和后沉积样品每份分别含0.450 mmol Ni和0.150 mmol Fe，Ni基准样品每份含0.600 mmol Ni。原液使用前在室温下混匀10 min。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 2,
+        "操作": "沉淀制备Ni(OH)2基准及物理混合用Ni(OH)2组分",
+        "试剂/对象": "0.100 M Ni(NO3)2、1.00 M NaOH、去离子水",
+        "参数": "Ni(OH)2基准样品每份取6.00 mL Ni(NO3)2原液，在室温600 rpm搅拌下将1.20 mL NaOH分6批加入，每批0.20 mL、间隔1 min，加完后继续600 rpm搅拌熟化120 min。物理混合用Ni(OH)2组分每份取4.50 mL Ni(NO3)2原液，以相同节拍加入0.90 mL NaOH并搅拌熟化120 min；各体系总体积均低于8 mL。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 2 步前驱体液体体积偏大；当前设备边界下应使用小体积体系并保证反应总体积低于纯化输入上限",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 3,
+        "操作": "共沉淀制备NiFe样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH",
+        "参数": "每份先混合4.50 mL Ni(NO3)2原液和1.50 mL Fe(NO3)3原液，在室温600 rpm搅拌10 min；随后将1.35 mL NaOH分6批加入，每批0.225 mL、间隔1 min，加液期间及批次间保持搅拌。加完后继续在室温600 rpm搅拌熟化120 min，名义Ni:Fe=3:1，总液体体积7.35 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 4,
+        "操作": "制备后沉积Fe/Ni(OH)2样品",
+        "试剂/对象": "0.100 M Ni(NO3)2、0.100 M Fe(NO3)3、1.00 M NaOH、去离子水、预形成Ni(OH)2沉淀",
+        "参数": "每份取4.50 mL Ni(NO3)2原液，在室温600 rpm搅拌下分5批加入0.90 mL NaOH，每批0.18 mL、间隔1 min，继续搅拌熟化60 min；以8000 rpm离心10 min收集Ni(OH)2，并用6.0 mL去离子水洗涤2次。将湿沉淀重分散于4.05 mL去离子水和1.50 mL Fe(NO3)3原液中，超声10 min后在600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min，再于室温600 rpm搅拌熟化120 min，使0.150 mmol Fe以表面沉积或界面Fe氧羟化物方式后引入；最终悬浊液体积约6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 5,
+        "操作": "制备FeOOH相参照及物理混合用FeOOH组分",
+        "试剂/对象": "0.100 M Fe(NO3)3、1.00 M NaOH、去离子水",
+        "参数": "每份混合1.50 mL Fe(NO3)3原液和4.05 mL去离子水，在室温600 rpm搅拌下分5批加入0.45 mL NaOH，每批0.09 mL、间隔1 min；加完后继续在室温600 rpm搅拌熟化120 min。分别保留一组作为FeOOH相参照，另一组作为Ni(OH)2/FeOOH物理混合对照的Fe组分；每份总液体体积6.0 mL。",
+        "来源": "agent补全",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 6,
+        "操作": "统一离心洗涤、干燥并构建物理混合对照",
+        "试剂/对象": "Ni(OH)2、共沉淀NiFe、后沉积Fe/Ni(OH)2、FeOOH沉淀，去离子水、无水乙醇",
+        "参数": "所有最终沉淀以8000 rpm离心10 min，去除上清后依次用6.0 mL去离子水洗涤2次、6.0 mL无水乙醇洗涤1次，每次充分重分散5 min并按相同条件离心；所得固体在60 ℃干燥12 h，记录回收质量。物理混合对照将由0.450 mmol Ni前驱体制得的整份Ni(OH)2与由0.150 mmol Fe前驱体制得的整份FeOOH合并，以保持名义Ni:Fe=3:1，加入6.0 mL无水乙醇超声分散15 min、室温600 rpm搅拌30 min，再于60 ℃干燥12 h；不进行煅烧或额外化学反应。",
+        "来源": "agent补全",
+        "device_validation": "needs_device_validation",
+        "device_validation_note": "第 6 步搅拌条件不是固定参数；应写固定转速和固定时间",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      },
+      {
+        "步骤序号": 7,
+        "操作": "制备XRD分散样并完成晶相观察",
+        "试剂/对象": "五类干燥催化剂粉末、无水乙醇、XRD滴液制样基底",
+        "参数": "每份称取5.0 mg干燥粉末，加入5.00 mL无水乙醇，超声分散15 min并在测试前搅拌10 min，确保进入XRD制样环节的总液量不少于4.0 mL；采用相同滴液量和干燥条件制样。使用Cu Kα辐射采集5–80°的2θ图谱，步长0.02°，名义扫描速率2° min^-1；对全部独立样品执行背景扣除、峰位校准和叠图比较，记录Ni(OH)2/类LDH峰、FeOOH特征峰、峰位偏移、半峰宽及物理混合样品是否表现为两相衍射信号叠加。",
+        "来源": "agent补全",
+        "device_validation": "adaptation_required",
+        "device_validation_note": "第 7 步要求设备内固体称量配液；当前设备边界下应改为外部预配并已装载原液",
+        "macro_action_id": "MA_S01_R00",
+        "observation_point_id": "OP_XRD"
+      }
+    ],
+    "当前 macro action": {
+      "macro_action_id": "MA_S01_R00",
+      "observation_point_id": "OP_XRD",
+      "observation_point": "XRD",
+      "stage": "合成、必要并完成 XRD 观察",
+      "stage_index": 1,
+      "objective": "合成、必要并完成 XRD 观察",
+      "completion_condition": "是五类样品至少各获得两份独立制备样品的有效 XRD 图谱，完成背景扣除、峰位校准、物相初步指认及样品间叠图比较，并形成可供下一 stage 使用的反应前晶相基线",
+      "expected_observation": "获得 XRD 的有效结果",
+      "macro_step_numbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "累计设备阻塞约束": [],
+    "设备能力快照ID": "",
+    "stage路线设计理由": "stage 应以 observation point 为边界来划分，而不是按工艺动作切段。当前 query 识别到的 observation point 为：XRD、XPS、TEM、电化学测试，因此 stage_route 按这些观察点组织。",
+    "当前stage设计理由": "当前还没有得到第一个 observation point（XRD）的结果，所以当前 stage 应覆盖从起点到该观察点之前的完整实验流程。",
+    "调研报告": {
+      "summary": "检索结果支持以共合成 NiFe-LDH、后合成处理样品、Ni(OH)2、FeOOH 及其物理混合物构成对照矩阵，并尽量匹配 Fe 含量、形貌和电极负载量。已有研究表明 Fe 引入、Fe 团簇、缺陷和边缘位密度可能共同影响活性相形成、过电位与耐久性，但现有摘要不足以确定具体配方和因果关系。建议依次获得反应前晶相、元素分布、表面价态与 Fe 配位证据，统一测定 OER 活性和动力学，再比较测试前后结构以判断重构。",
+      "key_findings": [
+        "NiFe-LDH 可通过均相沉淀或室温均匀碱化路线制备；检索摘要提示 Fe 掺入、缺陷及 Fe 团簇与活性相转化和 OER 性能相关，但具体合成参数仍需验证。",
+        "后合成处理能够改变 NiFe-LDH 片层尺寸和边缘位密度，并可能同步改善过电位与长期活性，因此可作为不同 Fe 局域环境样品之外需要控制的形貌变量。",
+        "NiFe-LDH/FeOOH 异质结构已有文献先例，可支撑设置独立 FeOOH 相、界面型 Fe 物种及 Ni(OH)2 与 FeOOH 物理混合对照。",
+        "可靠归因需要匹配总 Fe 含量、催化剂负载量、导电添加剂和测试条件，并联合 XRD、元素成像、XPS 与 XAS 类配位表征区分晶格 Fe、团簇 Fe、表面 Fe 和独立 FeOOH。",
+        "平台可承担 XRD 与电化学测试；STEM-EDS、XPS、XAS及原位拉曼未见明确设备支持，应规划为离线送样和数据回传。"
+      ],
+      "candidate_precedents": [
+        "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+        "Scalable synthesis of NiFe-layered double hydroxide for efficient anion exchange membrane electrolysis",
+        "NiFe Layered Double Hydroxide/FeOOH Heterostructure Nanosheets as an Efficient and Durable Bifunctional Electrocatalyst for Overall Seawater Splitting",
+        "A Ni-Fe Layered Double Hydroxide-Carbon Nanotube Complex for Water Oxidation"
+      ],
+      "route_implications": [
+        "样品矩阵至少应包含 Ni 基空白、共合成 NiFe、后引入 Fe 的 Ni 基样品、FeOOH，以及按相同 Ni/Fe 比例制备的 Ni 基催化剂与 FeOOH 物理混合物。",
+        "首个 observation point 应是反应前结构与 Fe 存在形式确认，综合晶相、元素空间分布、表面价态和局域配位信息后再进入性能比较。",
+        "第二个 observation point 应为统一电极负载和碱性电解液条件下的电化学评价，输出指定电流密度过电位、Tafel 斜率、Cdl/ECSA、EIS 电荷转移阻抗及恒电流或恒电位稳定性。",
+        "第三个 observation point 应为稳定性测试后的结构重构判定，通过测试前后 XRD、XPS、显微元素分布及可获得的离线 XAS或拉曼数据比较 Ni/Fe 价态、配位和相变。",
+        "制备阶段宜采用已外部预配并装载的前驱体溶液、小体积并行沉淀、搅拌熟化、同类容器内离心洗涤和干燥路线，以满足现有平台的容器连续性。"
+      ],
+      "open_questions": [
+        "现有检索摘要未给出可直接复现的前驱体浓度、Ni/Fe 比、碱化剂、温度、熟化时间及洗涤干燥参数。",
+        "需要确定后引入 Fe 路线是表面吸附、离子交换还是沉积 FeOOH，并建立能够区分这些物种的判据。",
+        "是否能够获得 XAS、XPS、STEM-EDS 和原位或准原位拉曼等离线表征资源及其送样条件尚未明确。",
+        "物理混合对照应按总 Fe 摩尔分数、质量分数还是可接近表面的 Fe 数量匹配，仍需在实施前统一。",
+        "尚未提供任务下发接口或实验任务系统返回值，因此当前调研结果不能生成或伪造 303 实验室任务 id。"
+      ]
+    },
+    "从知识库论文抽取的实验过程": [],
+    "知识库命中摘要": [],
+    "device_agent_contract": {
+      "research_output_level": "research agent 输出化学语义 macro action：应做什么实验、关键试剂/样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平或机器人动作。",
+      "device_agent_input_should_add": "当前化学工作站描述、每个设备的 usage/audit_rules、可使用的实验器材/容器信息。",
+      "device_agent_responsibility": "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error 及无法映射的硬约束。"
+    }
+  }
+}

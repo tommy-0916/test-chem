@@ -1,0 +1,55 @@
+{
+  "文献题目": "Surface-Enhanced Raman Spectroscopy and Transfer Learning Toward Accurate Reconstruction of the Surgical Zone",
+  "1. 解决的问题": "Surface-Enhanced Raman Spectroscopy and Transfer Learning Toward Accurate Reconstruction of the Surgical Zone Raman spectroscopy, a photonic modality based on the inelastic backscattering of coherent light, is a valuable asset to the intraoperative sensing space, offering non-ionizing potential and highly-specific molecular fingerprint-like spectroscopic signatures that can be used for diagnosis of pathological tissue in the dynamic surgical field. Though Raman suffers from weakness in intensity, Surface-Enhanced Raman Spectroscopy (SERS), which uses metal nanostructures to amplify Raman signals, can achieve detection sensitivities that rival traditional photonic modalities. In this study, we outline a robotic Raman system that can reliably pinpoint the location and boundaries of a tumor embedded in healthy tissue, modeled here as a tissue-mimicking phantom with selectively infused Gold Nanostar regions. Further, due to the relative dearth of collected biological SERS or Raman data, we implement transfer learning to achieve 100% validation classification accuracy for Gold Nanostars compared to Control Agarose, thus providing a proof-of-concept for Raman-based deep learning training pipelines. We reconstruct a surgical field of 30x60mm in 10.2 minutes, and achieve 98.2% accuracy, preserving relative measurements between features in the phantom. We also achieve an 84.3% Intersection-over-Union score, which is the extent of overlap between the ground truth and predicted reconstructions. Lastly, we also demonstrate that the Raman system and classification algorithm do not disce",
+  "2. 具体的合成步骤": {
+    "描述性总结": "In this study, we outline a robotic Raman system that can reliably pinpoint the location and boundaries of a tumor embedded in healthy tissue, modeled here as a tissue-mimicking phantom with selectively infused Gold Nanostar regions. Lastly, we also demonstrate that the Raman system and classification algorithm do not discern based on sample color, but instead on presence of SERS agents. This study provides a crucial step in the translation of intelligent Raman systems in intraoperative oncological spaces.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "表征/测试",
+        "试剂/对象": "In, Raman, Gold, Nanostar",
+        "参数": "文献未说明",
+        "evidence": "In this study, we outline a robotic Raman system that can reliably pinpoint the location and boundaries of a tumor embedded in healthy tissue, modeled here as a tissue-mimicking phantom with selectively infused Gold Nanostar regions."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "表征/测试",
+        "试剂/对象": "Lastly, Raman, SERS",
+        "参数": "文献未说明",
+        "evidence": "Lastly, we also demonstrate that the Raman system and classification algorithm do not discern based on sample color, but instead on presence of SERS agents."
+      },
+      {
+        "步骤序号": 3,
+        "操作": "表征/测试",
+        "试剂/对象": "Raman",
+        "参数": "文献未说明",
+        "evidence": "This study provides a crucial step in the translation of intelligent Raman systems in intraoperative oncological spaces."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "http://arxiv.org/abs/2401.08821v1",
+    "source_type": "arxiv",
+    "ingested_at": "2026-07-18T16:44:48+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "arxiv",
+    "source_id": "2401.08821v1",
+    "url": "http://arxiv.org/abs/2401.08821v1",
+    "pdf_url": "https://arxiv.org/pdf/2401.08821v1",
+    "doi": "",
+    "year": "2024",
+    "authors": [
+      "Ashutosh Raman",
+      "Ren A. Odion",
+      "Kent K. Yamamoto",
+      "Weston Ross",
+      "Tuan Vo-Dinh",
+      "Patrick J. Codd"
+    ],
+    "arxiv_id": "2401.08821v1",
+    "venue": "",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

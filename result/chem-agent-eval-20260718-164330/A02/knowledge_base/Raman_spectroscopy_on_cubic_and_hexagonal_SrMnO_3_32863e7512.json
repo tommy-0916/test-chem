@@ -1,0 +1,47 @@
+{
+  "文献题目": "Raman spectroscopy on cubic and hexagonal SrMnO$_3$",
+  "1. 解决的问题": "Raman spectroscopy on cubic and hexagonal SrMnO$_3$ We report on the first optical characterization of both cubic and hexagonal SrMnO$_3$. Room-temperature Raman spectra collected by means of a micro-Raman spectrometer are shown. The spectrum of the cubic compound is characterized by weak and broad bands in agreement with group-theory which predicts no Raman-active phonons for this compound. On the other hand, the spectrum of the hexagonal compound shows six narrow peaks ascribed to one-phonon processes. A complete polarization analysis of the spectra collected from a single crystallite allows us to completely assign the symmetries of the six observed peaks. Atomic displacements for each phonon peaks are also proposed. A. Sacchetti M. Baldini P. Postorino C. Martin A. Maignan",
+  "2. 具体的合成步骤": {
+    "描述性总结": "We report on the first optical characterization of both cubic and hexagonal SrMnO$_3$. Room-temperature Raman spectra collected by means of a micro-Raman spectrometer are shown.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "论文实验步骤",
+        "试剂/对象": "We, SrMnO",
+        "参数": "文献未说明",
+        "evidence": "We report on the first optical characterization of both cubic and hexagonal SrMnO$_3$."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "表征/测试",
+        "试剂/对象": "Room-temperature, Raman, Raman",
+        "参数": "文献未说明",
+        "evidence": "Room-temperature Raman spectra collected by means of a micro-Raman spectrometer are shown."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "http://arxiv.org/abs/cond-mat/0509468v1",
+    "source_type": "arxiv",
+    "ingested_at": "2026-07-18T16:44:48+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "arxiv",
+    "source_id": "0509468v1",
+    "url": "http://arxiv.org/abs/cond-mat/0509468v1",
+    "pdf_url": "https://arxiv.org/pdf/cond-mat/0509468v1",
+    "doi": "",
+    "year": "2005",
+    "authors": [
+      "A. Sacchetti",
+      "M. Baldini",
+      "P. Postorino",
+      "C. Martin",
+      "A. Maignan"
+    ],
+    "arxiv_id": "0509468v1",
+    "venue": "",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

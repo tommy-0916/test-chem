@@ -1,0 +1,53 @@
+{
+  "文献题目": "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction",
+  "1. 解决的问题": "Post-Synthetic Treatment of Nickel-Iron Layered Double Hydroxides for the Optimum Catalysis of the Oxygen Evolution Reaction Nickel-iron layered double hydroxide (NiFe LDH) platelets with high morphological regularity and sub-micrometre lateral dimensions were synthesized using a homogeneous precipitation technique for highly efficient catalysis of the oxygen evolution reaction (OER). Considering edge sites are the point of activity, efforts were made to control platelet size within the synthesized dispersions. The goal is to controllably isolate and characterize size-reduced NiFe LDH particles. Synthetic approaches for size control of NiFe LDH platelets have not been transferable based on published work with other LDH materials and for that reason, we instead use post-synthetic treatment techniques to improve edge-site density. In the end, size reduced NiFe LDH/single-wall carbon nanotube (SWCNT) composites allowed to further reduce the OER overpotential to 237 plus/minus 7 mV ( L = 0.16 plus/minus 0.01 micrometres, 20 wt% SWCNT), which is one of the best values reported to date. This approach as well improved the long term activity of the catalyst in operating conditions. Daire Tyndall Sonia Jaskaniec Brian Shortall Ahin Roy Lee Gannon Katie ONeill Michelle P. Browne Joao Coelho Cormac McGuinness Georg S. Duesberg Valeria Nicolosi",
+  "2. 具体的合成步骤": {
+    "描述性总结": "materials and for that reason, we instead use post-synthetic treatment techniques to improve edge-site density.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "论文实验步骤",
+        "试剂/对象": "文献实验对象",
+        "参数": "文献未说明",
+        "evidence": "materials and for that reason, we instead use post-synthetic treatment techniques to improve edge-site density."
+      }
+    ]
+  },
+  "3. 性能": [
+    {
+      "序号": 1,
+      "指标": "过电位/电压",
+      "数值": "7 mV",
+      "条件": "In the end, size reduced NiFe LDH/single-wall carbon nanotube (SWCNT) composites allowed to further reduce the OER overpotential to 237 plus/minus 7 mV ( L = 0.16 plus/minus 0.01 micrometres, 20 wt% SWCNT), which is one of the best values reported to date."
+    }
+  ],
+  "_ingestion_metadata": {
+    "source_path": "http://arxiv.org/abs/2212.11378v1",
+    "source_type": "arxiv",
+    "ingested_at": "2026-07-18T18:18:11+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "arxiv",
+    "source_id": "2212.11378v1",
+    "url": "http://arxiv.org/abs/2212.11378v1",
+    "pdf_url": "https://arxiv.org/pdf/2212.11378v1",
+    "doi": "",
+    "year": "2022",
+    "authors": [
+      "Daire Tyndall",
+      "Sonia Jaskaniec",
+      "Brian Shortall",
+      "Ahin Roy",
+      "Lee Gannon",
+      "Katie ONeill",
+      "Michelle P. Browne",
+      "Joao Coelho",
+      "Cormac McGuinness",
+      "Georg S. Duesberg",
+      "Valeria Nicolosi"
+    ],
+    "arxiv_id": "2212.11378v1",
+    "venue": "",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

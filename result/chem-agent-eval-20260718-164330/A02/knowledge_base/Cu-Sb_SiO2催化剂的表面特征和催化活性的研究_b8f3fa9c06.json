@@ -1,0 +1,28 @@
+{
+  "文献题目": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究",
+  "1. 解决的问题": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+  "2. 具体的合成步骤": {
+    "描述性总结": "Cu-Sb/SiO2催化剂的表面特征和催化活性的研究 中远 党",
+    "参数列表": []
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://doi.org/10.3724/j.issn.1000-0518.1986.3.5555",
+    "source_type": "crossref",
+    "ingested_at": "2026-07-18T16:43:37+0800",
+    "parser": "reaserch_agent.tools.ingestion.KnowledgeIngestion",
+    "source": "crossref",
+    "source_id": "10.3724/j.issn.1000-0518.1986.3.5555",
+    "url": "https://doi.org/10.3724/j.issn.1000-0518.1986.3.5555",
+    "pdf_url": "https://engine.scichina.com/doi/pdf/E2F6D79049BB40E6AC8B65C4C1C3CDCD",
+    "doi": "10.3724/j.issn.1000-0518.1986.3.5555",
+    "year": "1986",
+    "authors": [
+      "中远 党"
+    ],
+    "arxiv_id": "",
+    "venue": "Chinese Journal of Applied Chemistry",
+    "citation_count": 0,
+    "full_text_status": "metadata_only"
+  }
+}

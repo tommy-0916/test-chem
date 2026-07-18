@@ -1,0 +1,274 @@
+[
+  {
+    "case_id": "A01",
+    "local_run_id": "A01-20260718-181702",
+    "query_sha256": "e26fb797db413fa0aa84089303621349a10e3e2ec4885d6f261925c2349453c6",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 244.62,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 0,
+    "macro_steps": 7,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 1773.394,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 878.919,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 894.475,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "A02",
+    "local_run_id": "A02-20260718-181702",
+    "query_sha256": "8fd945a8bba4221754ba774fe82178333f1332d12bfb656b1896b2e6578169a4",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 205.259,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 1,
+    "macro_steps": 6,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 1382.325,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 686.529,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 695.796,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "B01",
+    "local_run_id": "B01-20260718-181702",
+    "query_sha256": "47ecc9e5a76b2af6e5532b2606d1fe4ed5980d46d9b412b8a6d960c3f78a1a58",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 225.032,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 0,
+    "macro_steps": 7,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 121.637,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 121.637,
+        "timed_out": false,
+        "valid_terminal_package": true,
+        "status": "feasibility_error"
+      }
+    ],
+    "device_status": "feasibility_error",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "B02",
+    "local_run_id": "B02-20260718-181702",
+    "query_sha256": "555f141934cdde8cbfbb330f8ff4d761e75dbbaeee204404ed78e6ef1b3e609e",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 231.005,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 0,
+    "macro_steps": 7,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 1644.476,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 858.886,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 785.59,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "C01",
+    "local_run_id": "C01-20260718-181702",
+    "query_sha256": "9b4b5788b9a30b1db045ec71996fa41826b0ec54c7920ab3b1acab71d019f864",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 248.596,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 0,
+    "macro_steps": 7,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 91.759,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 91.759,
+        "timed_out": false,
+        "valid_terminal_package": true,
+        "status": "feasibility_error"
+      }
+    ],
+    "device_status": "feasibility_error",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "C02",
+    "local_run_id": "C02-20260718-181702",
+    "query_sha256": "9adf7cb095269edd0c192b9ab1992c5358b7788a573fe0a22f5de735518cdcf5",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 228.083,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 0,
+    "macro_steps": 7,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 1725.62,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 790.231,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 935.389,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "D01",
+    "local_run_id": "D01-20260718-181702",
+    "query_sha256": "51393fe0b579a09c3a5f731da4f4c2596f5655469948251da06d121a1c68159c",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 166.537,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 2,
+    "macro_steps": 8,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 3090.131,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 816.928,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 2273.203,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  },
+  {
+    "case_id": "D02",
+    "local_run_id": "D02-20260718-181702",
+    "query_sha256": "1d74dbfea985668a390397c9d3f279bd8760177369e2b27600498e24249bba63",
+    "query_exact_match": true,
+    "research_return_code": 0,
+    "research_elapsed_seconds": 195.246,
+    "research_timed_out": false,
+    "research_status": "completed",
+    "paper_hits": 1,
+    "macro_steps": 8,
+    "device_return_code": 0,
+    "device_elapsed_seconds": 1629.142,
+    "device_attempts": [
+      {
+        "attempt": 1,
+        "return_code": 0,
+        "elapsed_seconds": 816.405,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "return_code": 0,
+        "elapsed_seconds": 812.736,
+        "timed_out": false,
+        "valid_terminal_package": false,
+        "status": "failed"
+      }
+    ],
+    "device_status": "not_produced",
+    "online_literature_required": true,
+    "web_search_enabled": false,
+    "download_pdfs_enabled": false
+  }
+]
