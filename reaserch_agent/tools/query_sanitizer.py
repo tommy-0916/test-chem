@@ -16,6 +16,25 @@ from __future__ import annotations
 import re
 from typing import Iterable, List
 
+# Issue 8 P0-2: whole task-dispatch CLAUSES must go first — word-level removal
+# alone leaves fragments like "请将实验 ，并返回该实验任务的 id。" behind, and
+# those fragments still poison scholarly ranking. Clause patterns run before
+# word patterns and delete from the clause opener to the sentence boundary.
+_CLAUSE_PATTERNS: List[re.Pattern] = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        # 请将实验下发至 303 实验室 / 请把任务提交到工作站 …(到句末)
+        r"请?[将把]?\s*(?:该|本|此)?(?:实验|任务|方案)[^。！？!?；;]*?"
+        r"(?:下发|发送|提交|派发|部署)[^。！？!?；;]*[。！？!?；;]?",
+        # 并返回(该)实验任务的 id / 返回任务编号 …(到句末)
+        r"并?且?\s*返回[^。！？!?；;]*?(?:任务|实验|id|ID|编号)[^。！？!?；;]*[。！？!?；;]?",
+        # 请在 303 实验室(的自动化平台)上执行/运行/… — delete ONLY the
+        # prefix + verb; the verb's object is often the chemistry itself
+        # (…执行 NiCo EOR 对照实验) and must survive.
+        r"请?在[^。！？!?；;]{0,20}实验室[^。！？!?；;]{0,15}?(?:执行|运行|完成|开展|进行)",
+    )
+]
+
 # Longest-first so 自动化化学工作站 is removed as one phrase before 工作站/自动化
 # would leave fragments behind. Chemistry survives by construction: e.g.
 # 双工位电化学工作站 loses 双工位/工作站 but keeps 电化学.
@@ -107,6 +126,8 @@ def sanitize_search_query(text: str) -> str:
     cleanup, so chemistry entities (NiFe-PBA, 电化学, XRD…) survive.
     """
     cleaned = str(text or "")
+    for pattern in _CLAUSE_PATTERNS:
+        cleaned = pattern.sub(" ", cleaned)
     for pattern in _CONTEXT_PATTERNS:
         cleaned = pattern.sub(" ", cleaned)
     cleaned = _EMPTY_BRACKETS_RE.sub(" ", cleaned)

@@ -175,6 +175,66 @@ class RelevanceTest(unittest.TestCase):
         self.assertLess(irrelevant, 0.1)
 
 
+class ChemistryGateTest(unittest.TestCase):
+    """Issue 8 P0-3: material-system AND reaction joint hard gate. The three
+    false positives named in the issue (D01 cracking-catalyst + teaching-case
+    papers, D02 poultry-nutrition paper) must be refused; genuinely relevant
+    papers in either language must pass; the gate self-disables when the
+    anchor lacks the vocabulary."""
+
+    D01_ANCHOR = "Co 基催化剂 表面氧化态 碱性 EOR 乙醇氧化 Co(OH)2 Co3O4 CoOOH 液相产物"
+    D02_ANCHOR = "NiCo 双金属 碱性 EOR 乙醇电氧化 活性 抗失活"
+    A01_ANCHOR = "NiFe 层状双氢氧化物 共沉淀 Fe配位环境 碱性 OER"
+
+    def test_issue8_false_positives_are_refused(self) -> None:
+        from reaserch_agent.tools.literature_acquisition import chemistry_gate
+        from reaserch_agent.tools.ingestion import ExternalPaper
+
+        cracking = ExternalPaper(
+            title="碱性氮化合物在裂化催化剂上的吸附 Ⅳ.氮化合物对废催化剂表面性质的影响",
+            abstract="裂化催化剂 吸附 表面性质",
+        )
+        teaching = ExternalPaper(
+            title="面向科学探究思维的实验教学六步框架设计与应用——乙醇催化氧化实验改进的说课案例",
+            abstract="高中化学 教学 说课",
+        )
+        poultry = ExternalPaper(
+            title="实验性诱导营养不良对鸡脑部抑郁和情绪中等以及血液影响的生物化学作用",
+            abstract="AChE TAC TNF GPx SOD CBC 营养不良 鸡",
+        )
+        for anchor, paper in (
+            (self.D01_ANCHOR, cracking),
+            (self.D01_ANCHOR, teaching),
+            (self.D02_ANCHOR, poultry),
+        ):
+            passes, reason = chemistry_gate(paper, anchor)
+            self.assertFalse(passes, f"should refuse: {paper.title[:40]} ({reason})")
+
+    def test_relevant_papers_pass_in_both_languages(self) -> None:
+        from reaserch_agent.tools.literature_acquisition import chemistry_gate
+        from reaserch_agent.tools.ingestion import ExternalPaper
+
+        english = ExternalPaper(
+            title="NiCo bimetallic catalysts for alkaline ethanol oxidation reaction",
+            abstract="NiCo synergy EOR ethanol electrooxidation stability",
+        )
+        chinese = ExternalPaper(
+            title="NiFe层状双氢氧化物的共沉淀制备及碱性析氧性能",
+            abstract="镍铁 层状双氢氧化物 析氧 过电位",
+        )
+        self.assertTrue(chemistry_gate(english, self.D02_ANCHOR)[0])
+        self.assertTrue(chemistry_gate(chinese, self.A01_ANCHOR)[0])
+
+    def test_gate_inactive_when_anchor_lacks_vocabulary(self) -> None:
+        from reaserch_agent.tools.literature_acquisition import chemistry_gate
+        from reaserch_agent.tools.ingestion import ExternalPaper
+
+        paper = ExternalPaper(title="anything at all", abstract="no chemistry")
+        passes, reason = chemistry_gate(paper, "某个不含材料反应词的题目")
+        self.assertTrue(passes)
+        self.assertIn("gate_inactive", reason)
+
+
 class PaperRegistryTest(unittest.TestCase):
     def test_upsert_dedup_and_campaign_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

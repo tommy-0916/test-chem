@@ -48,6 +48,129 @@ def token_overlap_relevance(paper: ExternalPaper, anchor_text: str) -> float:
     return matched / len(anchor_tokens)
 
 
+# ---------------------------------------------------------------------------
+# Issue 8 P0-3: material-system AND reaction/observation joint hard gate.
+# Weak-word overlap (碱性/乙醇/氧化/实验/CV…) let a poultry-nutrition paper into
+# a NiCo EOR campaign. A candidate must now share BOTH ≥1 material token and
+# ≥1 reaction/observation token with the anchor before the score threshold is
+# even consulted. The gate self-disables when the anchor itself lacks either
+# category, so campaigns outside this vocabulary keep the old behaviour.
+# ---------------------------------------------------------------------------
+
+# element symbol → (case-sensitive symbol regex, english name, chinese name).
+# Symbol regex: literal symbol NOT followed by a lowercase letter, so `Co`
+# matches Co3O4/CoOOH/NiCo/Co-based but never Composite/copper/CO2.
+_ELEMENT_SIGNALS: Dict[str, Tuple[re.Pattern, str, str]] = {
+    symbol: (re.compile(rf"{symbol}(?![a-z])"), english, chinese)
+    for symbol, english, chinese in (
+        ("Ni", "nickel", "镍"),
+        ("Fe", "iron", "铁"),
+        ("Co", "cobalt", "钴"),
+        ("Mo", "molybdenum", "钼"),
+        ("Mn", "manganese", "锰"),
+        ("Cu", "copper", "铜"),
+        ("Zn", "zinc", "锌"),
+        ("W", "tungsten", "钨"),
+        ("V", "vanadium", "钒"),
+        ("Ru", "ruthenium", "钌"),
+        ("Ir", "iridium", "铱"),
+        ("Pt", "platinum", "铂"),
+        ("Pd", "palladium", "钯"),
+        ("Ce", "cerium", "铈"),
+        ("Ti", "titanium", "钛"),
+    )
+}
+
+# material-class names count as material signals too (paper may use the class
+# name without spelling out elements).
+_MATERIAL_CLASS_TERMS = (
+    "prussian blue", "hexacyanoferrate", "pba", "普鲁士蓝",
+    "layered double hydroxide", "ldh", "层状双氢氧化物", "水滑石",
+    "mof", "zif", "金属有机框架", "perovskite", "钙钛矿",
+    "spinel", "尖晶石", "oxyhydroxide", "羟基氧化物",
+)
+
+# target reaction / core observation vocabulary, grouped by SYNONYM: a paper
+# saying 析氧 and an anchor saying OER refer to the same reaction and must
+# intersect at the group level, not the literal-term level.
+_REACTION_GROUPS: Dict[str, Tuple[str, ...]] = {
+    "OER": ("oer", "oxygen evolution", "析氧"),
+    "HER": ("her", "hydrogen evolution", "析氢"),
+    "UOR": ("uor", "urea oxidation", "尿素氧化"),
+    "EOR": ("eor", "ethanol oxidation", "ethanol electrooxidation", "乙醇氧化", "乙醇电氧化"),
+    "MOR": ("methanol oxidation", "甲醇氧化"),
+    "ORR": ("orr", "oxygen reduction", "氧还原"),
+    "CO2RR": ("co2rr", "co2 reduction", "二氧化碳还原"),
+    "NRR": ("nrr", "nitrogen reduction", "固氮"),
+    "water_splitting": ("water splitting", "水分解", "电解水"),
+    "electrocatalysis": (
+        "electrocataly", "electrochemical", "electrooxidation",
+        "电催化", "电化学", "电氧化",
+    ),
+    "kinetics": ("overpotential", "过电位", "tafel", "塔菲尔"),
+    "reconstruction": ("surface reconstruction", "表面重构"),
+    "valence": ("valence", "价态"),
+    "battery": ("battery", "电池", "supercapacitor", "超级电容"),
+    "photocatalysis": ("photocataly", "光催化"),
+    "catalyst": ("catalyst", "催化剂"),
+}
+
+
+def _match_elements(text: str) -> set:
+    matched = set()
+    lowered = text.lower()
+    for symbol, (symbol_re, english, chinese) in _ELEMENT_SIGNALS.items():
+        if symbol_re.search(text) or english in lowered or chinese in text:
+            matched.add(symbol)
+    return matched
+
+
+def _match_material_classes(text: str) -> set:
+    lowered = text.lower()
+    return {term for term in _MATERIAL_CLASS_TERMS if term in lowered}
+
+
+def _match_reactions(text: str) -> set:
+    """Return the SYNONYM-GROUP keys the text mentions (any variant counts)."""
+    lowered = text.lower()
+    return {
+        group
+        for group, variants in _REACTION_GROUPS.items()
+        if any(term in lowered for term in variants)
+    }
+
+
+def chemistry_gate(paper: ExternalPaper, anchor_text: str) -> Tuple[bool, str]:
+    """(passes, reason). Hard AND-gate on material system + reaction terms.
+
+    Disabled (always passes) when the anchor itself lacks either category —
+    the gate must never reject candidates the anchor cannot describe.
+    """
+    anchor = str(anchor_text or "")
+    anchor_elements = _match_elements(anchor)
+    anchor_classes = _match_material_classes(anchor)
+    anchor_reactions = _match_reactions(anchor)
+    if (not anchor_elements and not anchor_classes) or not anchor_reactions:
+        return True, "gate_inactive(anchor lacks material or reaction vocabulary)"
+
+    paper_text = f"{paper.title} {paper.abstract[:800]}"
+    material_hit = (
+        (_match_elements(paper_text) & anchor_elements)
+        or (_match_material_classes(paper_text) & anchor_classes)
+    )
+    if not material_hit:
+        return False, (
+            "material gate: paper lacks anchor material system "
+            f"({'/'.join(sorted(anchor_elements | anchor_classes))})"
+        )
+    reaction_hit = _match_reactions(paper_text) & anchor_reactions
+    if not reaction_hit:
+        return False, (
+            "reaction gate: paper lacks anchor reaction/observation terms"
+        )
+    return True, f"material={'/'.join(sorted(material_hit))}"
+
+
 _RELEVANCE_STOPWORDS = {
     "and",
     "are",
@@ -155,11 +278,21 @@ class LiteratureAcquisition:
         self,
         query: str,
         reference_inputs: Sequence[Dict[str, Any]],
+        *,
+        survey_queries: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         self.errors = []
         # Issue 1: strip automation/device/lab task context before anything
         # goes to a scholarly engine. The caller's original query is untouched.
         search_query = sanitize_search_query(query)
+        # Issue 8 P0-1: when Research has already generated focused chemistry
+        # survey queries, the scholarly line MUST consume them — one short
+        # query per API call — instead of the (long) sanitized user query.
+        # The long query is only the fallback when no survey queries exist.
+        generated = [q for q in (survey_queries or []) if str(q).strip()]
+        scholarly_queries = sanitize_search_queries(generated)[:4]
+        if not scholarly_queries and search_query.strip():
+            scholarly_queries = [search_query]
         if self.enable_scholarly_search:
             seeds = self._resolve_seeds(reference_inputs)
         else:
@@ -178,24 +311,63 @@ class LiteratureAcquisition:
                 )
                 candidates.extend(("snowball", paper) for paper in linked or [])
 
-        if (
-            self.enable_scholarly_search
-            and search_query.strip()
-            and self.max_keyword_results > 0
-        ):
-            keyword_papers = self._safe(
-                lambda: self.client.search(
-                    search_query,
-                    sources=tuple(self.keyword_sources),
-                    max_results=self.max_keyword_results,
-                ),
-                "keyword search",
-            )
-            self.errors.extend(self.client.last_errors)
-            candidates.extend(("keyword", paper) for paper in keyword_papers or [])
+        attempted_queries: List[str] = []
+        if self.enable_scholarly_search and self.max_keyword_results > 0:
+            per_query = max(3, self.max_keyword_results // max(1, len(scholarly_queries) or 1))
+            for line_query in scholarly_queries:
+                attempted_queries.append(line_query)
+                keyword_papers = self._safe(
+                    lambda q=line_query: self.client.search(
+                        q,
+                        sources=tuple(self.keyword_sources),
+                        max_results=per_query,
+                    ),
+                    f"keyword search '{line_query[:50]}'",
+                )
+                self.errors.extend(self.client.last_errors)
+                candidates.extend(("keyword", paper) for paper in keyword_papers or [])
 
-        anchor_text = " ".join([search_query] + [seed.title for seed in seeds])
+        anchor_text = " ".join(
+            scholarly_queries + [search_query] + [seed.title for seed in seeds]
+        )
         kept = self._filter_candidates(candidates, anchor_text, seeds)
+
+        # Issue 8 P1: bounded zero-hit retrieval repair. When the first round
+        # keeps nothing, run at most two deterministic retry rounds (strip
+        # characterization terms → latin/english core query). Every retry
+        # query is recorded; no unbounded loops.
+        retry_rounds: List[Dict[str, Any]] = []
+        if self.enable_scholarly_search and not kept and self.max_keyword_results > 0:
+            for round_label, retry_queries in self._zero_hit_retry_plan(
+                scholarly_queries, anchor_text
+            ):
+                if not retry_queries:
+                    continue
+                new_candidates: List[Tuple[str, ExternalPaper]] = []
+                for retry_query in retry_queries[:3]:
+                    attempted_queries.append(retry_query)
+                    papers = self._safe(
+                        lambda q=retry_query: self.client.search(
+                            q,
+                            sources=tuple(self.keyword_sources),
+                            max_results=max(3, self.max_keyword_results // 2),
+                        ),
+                        f"zero-hit retry [{round_label}] '{retry_query[:40]}'",
+                    )
+                    self.errors.extend(self.client.last_errors)
+                    new_candidates.extend(("keyword", paper) for paper in papers or [])
+                retry_rounds.append(
+                    {
+                        "round": round_label,
+                        "queries": list(retry_queries[:3]),
+                        "returned": len(new_candidates),
+                    }
+                )
+                if new_candidates:
+                    candidates.extend(new_candidates)
+                    kept = self._filter_candidates(candidates, anchor_text, seeds)
+                    if kept:
+                        break
 
         written_files: List[str] = []
         registered = 0
@@ -204,8 +376,25 @@ class LiteratureAcquisition:
             written_files.extend(paths)
             registered += 1 if was_new else 0
 
-        web_summary = self._acquire_web_knowledge(search_query, anchor_text)
+        web_line_query = scholarly_queries[0] if scholarly_queries else search_query
+        web_summary = self._acquire_web_knowledge(web_line_query, anchor_text)
         written_files.extend(web_summary.get("written_files", []))
+
+        # Issue 8 P1: distinguish "provider broke" from "keywords found
+        # nothing relevant" — they demand different fixes and must never be
+        # reported as the same failure.
+        provider_failure = any(
+            marker in error.lower()
+            for error in self.errors
+            for marker in ("http 429", "http 403", "http 5", "timed out", "timeout",
+                            "credential", "connection", "unreachable")
+        )
+        if kept or seeds:
+            retrieval_status = "success"
+        elif provider_failure:
+            retrieval_status = "provider_failure"
+        else:
+            retrieval_status = "no_relevant_papers"
 
         summary = {
             "seeds": [self._paper_summary(seed) for seed in seeds],
@@ -213,8 +402,12 @@ class LiteratureAcquisition:
             "keyword_kept": sum(1 for role, _ in kept if role == "keyword"),
             "keyword_sources": list(self.keyword_sources),
             "scholarly_enabled": self.enable_scholarly_search,
-            # the query actually sent to paper databases (auditable, issue 1)
-            "keyword_query": search_query,
+            # the queries actually sent to paper databases (auditable, issue 8)
+            "keyword_query": " | ".join(attempted_queries),
+            "generated_survey_queries": list(generated),
+            "actual_scholarly_queries": list(attempted_queries),
+            "zero_hit_retry_rounds": retry_rounds,
+            "retrieval_status": retrieval_status,
             # full candidate set + per-candidate filter verdicts (issue 3)
             "candidates_log": list(getattr(self, "last_candidate_log", [])),
             "web_kept": web_summary.get("kept", 0),
@@ -229,6 +422,46 @@ class LiteratureAcquisition:
     # ------------------------------------------------------------------
     # B2 repair acquisition: bounded online round for abnormal paths
     # ------------------------------------------------------------------
+
+    _CHARACTERIZATION_TERMS = (
+        "XRD", "XPS", "SEM", "TEM", "EDS", "EIS", "CV", "LSV", "XAS",
+        "STEM", "拉曼", "Raman", "红外", "FTIR", "紫外", "表征",
+    )
+
+    def _zero_hit_retry_plan(
+        self,
+        scholarly_queries: Sequence[str],
+        anchor_text: str,
+    ) -> List[Tuple[str, List[str]]]:
+        """Deterministic, bounded retry rounds after a zero-keep first pass.
+
+        Round 1 strips characterization terms (they narrow scholarly matching
+        without changing the topic); round 2 keeps only the latin-script
+        material/reaction tokens (english/formula core, most portable across
+        scholarly APIs). Two rounds max — issue 8 forbids unbounded retries.
+        """
+        rounds: List[Tuple[str, List[str]]] = []
+
+        stripped: List[str] = []
+        for query in scholarly_queries:
+            reduced = query
+            for term in self._CHARACTERIZATION_TERMS:
+                reduced = re.sub(rf"\s*{re.escape(term)}\s*", " ", reduced)
+            reduced = re.sub(r"\s{2,}", " ", reduced).strip()
+            if reduced and reduced != query and len(reduced) >= 6:
+                stripped.append(reduced)
+        rounds.append(("strip_characterization", stripped))
+
+        latin: List[str] = []
+        seen = set()
+        for source_text in list(scholarly_queries) + [anchor_text]:
+            tokens = re.findall(r"[A-Za-z][A-Za-z0-9()\-]{1,}", source_text)
+            core = " ".join(dict.fromkeys(tokens))[:80].strip()
+            if core and core.lower() not in seen and len(core.split()) >= 2:
+                seen.add(core.lower())
+                latin.append(core)
+        rounds.append(("latin_core", latin[:2]))
+        return rounds
 
     def acquire_for_repair(
         self,
@@ -464,6 +697,14 @@ class LiteratureAcquisition:
             key = self._paper_key(paper)
             if key in seen:
                 entry.update({"kept": False, "reason": "duplicate_of_seed_or_earlier"})
+                candidate_log.append(entry)
+                continue
+            # Issue 8 P0-3: joint material+reaction hard gate BEFORE the
+            # weak-overlap threshold — poultry-nutrition papers scored above
+            # threshold on 碱性/乙醇/氧化 alone and must be refused here.
+            gate_ok, gate_reason = chemistry_gate(paper, anchor_text)
+            if not gate_ok:
+                entry.update({"kept": False, "reason": gate_reason})
                 candidate_log.append(entry)
                 continue
             if score < self.relevance_threshold:

@@ -783,6 +783,34 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertEqual(state.status, "completed")
         self.assertTrue(state.macro_plan)
 
+    def test_protocol_extract_empty_result_degrades_instead_of_aborting(self) -> None:
+        """Regression (eval run #1: 8/8 manual_required): when the LLM returns
+        no usable protocols, paper_protocol_extract must degrade to the
+        heuristic and continue — never raise and collapse the whole B1 to
+        manual_required. Protocol extraction is a reference step, not a gate."""
+
+        class EmptyProtocolModel:
+            def invoke(self, messages):
+                return SimpleNamespace(content=json.dumps({"protocols": []}, ensure_ascii=False))
+
+        agent = ResearchAgent(
+            model=EmptyProtocolModel(),
+            use_llm=True,
+            knowledge_base_dir=str(self.structured_outputs_dir),
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="probe"),
+        )
+        # No knowledge hits + empty LLM protocols → the step must return a list
+        # and NOT raise (the old code called _raise_llm_step_failure here).
+        result = agent._step_paper_protocol_extract(state)
+        self.assertIsInstance(result, list)
+        # the degradation is logged, not raised
+        self.assertTrue(
+            any("degrad" in entry.lower() or "no usable protocols" in entry.lower()
+                for entry in state.logs)
+        )
+
     def test_failure_category_classification(self) -> None:
         """Issue 5: an empty macro plan carries an explicit failure category so
         the UI can tell generation vs. quality vs. network vs. device apart."""

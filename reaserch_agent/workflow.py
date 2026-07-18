@@ -630,12 +630,22 @@ class ResearchAgent(BaseAgent):
             summary = acquisition.acquire_for_bootstrap(
                 state.event.query,
                 state.reference_inputs,
+                # Issue 8 P0-1: the scholarly line consumes the focused
+                # chemistry survey queries (generated just before this call),
+                # never the raw long user query when these exist.
+                survey_queries=state.survey_queries,
             )
             state.seed_papers = list(summary.get("seeds", []))
             # Issue 3: persist the auditable acquisition record (actual search
             # query + candidate set + filter verdicts) into the state file.
             state.literature_acquisition = {
                 "keyword_query": summary.get("keyword_query", ""),
+                "generated_survey_queries": summary.get("generated_survey_queries", []),
+                "actual_scholarly_queries": summary.get("actual_scholarly_queries", []),
+                "zero_hit_retry_rounds": summary.get("zero_hit_retry_rounds", []),
+                # Issue 8 P1: three-state retrieval outcome — provider outages
+                # must never masquerade as "keywords found nothing".
+                "retrieval_status": summary.get("retrieval_status", ""),
                 "keyword_sources": summary.get("keyword_sources", []),
                 "candidates_log": summary.get("candidates_log", []),
                 "snowball_kept": summary.get("snowball_kept", 0),
@@ -1188,9 +1198,12 @@ class ResearchAgent(BaseAgent):
         state.add_log("Entered B1 bootstrap")
 
         try:
-            self._maybe_acquire_literature(state)
+            # Issue 8 P0-1: generate the focused chemistry survey queries FIRST
+            # so online literature acquisition can consume them (short queries
+            # per API call) instead of the raw long user query.
             state.survey_queries = self._step_survey_query_generate(state)
             state.add_log(f"survey query generate completed with {len(state.survey_queries)} queries")
+            self._maybe_acquire_literature(state)
 
             accumulated_hits: List[SearchHit] = []
             query_queue = list(state.survey_queries)
@@ -1228,6 +1241,20 @@ class ResearchAgent(BaseAgent):
                 f"paper protocol extract completed with {len(state.extracted_protocols)} protocols"
             )
             self._attach_protocol_provenance(state)
+            # Issue 8 P1: explicit three-state evidence record. Planning DOES
+            # continue without a citable protocol (the plan is then honestly
+            # per-step labelled `agent补全` and gated by requires_review /
+            # dispatch_guard before any real lab boundary) — but the evidence
+            # situation must be unmistakable in the state, never inferred.
+            if isinstance(state.literature_acquisition, dict) and state.literature_acquisition:
+                state.literature_acquisition["protocol_status"] = (
+                    "success" if state.extracted_protocols else "no_usable_protocol"
+                )
+                state.literature_acquisition["planning_status"] = (
+                    "success"
+                    if state.extracted_protocols
+                    else "proceeding_on_agent_knowledge"
+                )
             if self._enable_memory:
                 state.memory_queries = self._step_similar_exp_search(state)
                 state.memory_hits = self._memory_query.search(state.memory_queries)
@@ -4106,17 +4133,25 @@ class ResearchAgent(BaseAgent):
                 )
                 if protocols:
                     return protocols
-                self._raise_llm_step_failure(
-                    state,
-                    "paper_protocol_extract",
-                    "LLM returned no usable protocols",
+                # Protocol extraction is a REFERENCE step, not a gate. Empty
+                # protocols (few/no literature hits, or a model that returned
+                # nothing usable) must NOT abort B1 — the macro plan is driven
+                # by the survey report + stage route and can proceed without a
+                # cited protocol (each macro step is then honestly marked
+                # `agent补全`). Degrade to the deterministic extractor and, if
+                # that is also empty, continue with no protocol rather than
+                # collapsing the whole plan to manual_required. (issue.md Issue
+                # 5: a single imperfect sub-step must not clear the plan.)
+                state.add_log(
+                    "paper_protocol_extract: LLM returned no usable protocols; "
+                    "degrading to heuristic extraction and continuing without "
+                    "citation-grade protocols"
                 )
             except Exception as exc:  # pragma: no cover - depends on remote model
                 logger.warning("paper protocol extract failed: %s", exc)
-                self._raise_llm_step_failure(
-                    state,
-                    "paper_protocol_extract",
-                    exc,
+                state.add_log(
+                    f"paper_protocol_extract: LLM step failed ({exc}); "
+                    "degrading to heuristic extraction and continuing"
                 )
 
         return self._heuristic_paper_protocol_extract(state.knowledge_hits)
