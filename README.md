@@ -41,18 +41,22 @@
 - **B2 post_observation（热循环）**：判断新观测是否落在当前 stage 上
   - **正常** → 推进 stage / 收束，出下一段 macro plan
   - **异常** → 增量调研 + **三层最小修复阶梯**（改 stage 内计划 → 换当前 stage → 重写整条路线 → 否则人工交接）
-  - **设备可行性打回** → 保留科学目标，只重写路线级不可执行的化学表达
-- 输出严格保持**化学语义**：不选工作站、容器编号、机器动作（那是设备层的职责）
-- 研究层规划步骤提供 `LLM 路径 + 确定性启发式路径`（`--disable-llm` 可让研究层全离线运行）
+  - **设备可行性打回** → 保留科学目标，只重写路线级不可执行的化学表达；历史阻塞约束**累计传递**（`cumulative_device_constraints`），失败方案登记**签名**（`plan_v1/v2…`）防重复生成，两层共享 `device_snapshot_id`
+- **观察点驱动的宏动作层级**：`观察点 → macro action → 设备步骤` 三级。每个 macro plan 是一个结构化 macro action（`MA_S<stage>_R<round>`,含 objective / completion_condition / expected_observation），一个 stage 可容纳多个相继的 macro action;B2 收到观测先按 macro action 记录 outcome（completed/needs_repair/device_rejected）再决策
+- 输出严格保持**化学语义**：不选工作站、容器编号、机器动作（那是设备层的职责）;设备边界疑问只给对应步骤打 `needs_device_validation` 标记,**不清空整份计划**
+- 失败显式四分类 `failure_category`（macro_generation / macro_quality / device_feasibility / network_or_retrieval）——空 macro plan 不再是黑盒
+- 研究层规划步骤提供 `LLM 路径 + 确定性启发式路径`（`--disable-llm` 可让研究层全离线运行）;protocol 抽取失败**降级续跑**而非中止（计划各步诚实标注 `agent补全`）
 
 ### 2. 设备适配层 `device_agent/` — 只回答"怎么在本实验室做"
 
-单次 LLM 调用，把 macro plan 映射为机器可执行工作流：
+单次 LLM 调用 + 三层确定性防线，把 macro plan 映射为机器可执行工作流：
 
 - 产出 `workflow_txt`（仿 `chem_resources/format_reference/reference.txt`）与 `workflow_json` 两个工作流视图
 - 自动补全容器选择、瓶位、开关盖、离心配平、洗涤子步骤等映射细节
-- 模型判定必要化学动作无法由设备真源实现时，返回 `device_feasibility_error`（附阻塞约束与修订建议），回流研究层 B2
-- Prompt 要求模型返回 `device_self_check`；当前实现会拒绝显式包含 `fail/失败/不通过` 的自检，但只做基础结构检查，尚未确定性验证工作站参数或 TXT/JSON 一致性
+- **可行性三桶分类**（`feasibility_rules.py`）：每条 `device_feasibility_error` 约束按文本证据分入 **hard**（缺站/无转移路径/容器不兼容/体积超限/离线——才允许 `physical_infeasible`）/ **adaptable**（"边滴入边搅拌"等时序语义 → 一次适配重试实现为交错批次，`requires_scientific_review`）/ **unverifiable**（默认；无同名下发字段、无法证明等价 → `needs_human_review`）。设备未开放的固定参数（Cu Kα、扫描范围等）**绝不构成不可行理由**
+- **严格下发校验**（`workflow_validator.py`）：45 个工作站 SKILL 参数表解析为机器 schema（必填/类型/枚举/范围/单位感知），成功输出先经**确定性必填补全**（`dispatch_formatter.complete_required_fields`：容器数量=len(容器编号)、开关盖编号、SKILL 默认值如保留瓶盖=1——只补缺失、绝不覆盖模型已写值、不合成结构字段）再校验；失败给一轮 LLM 自修复（补全同样作用于修复轮输出），仍失败降级 `status=failed / failure_stage=dispatch_validation`——**不合规绝不以 success 返回**
+- **平台形式下发层**（`dispatch_formatter.py`）：success 包附加 `dispatch_payload`，以平台自身 schema 导出（`0410数据转换.txt`）为真源确定性转换为平台准确形式（平台站名/操作名/按版本参数名/类型强制/`N号原液瓶` 实例化/工作站数字 id/generate.py 信封），与语义层 `workflow_json` 显式分离；转换产物必须通过 generate.py 自身校验（测试法则）
+- 每个设备步骤携带 `source_macro_step` / `macro_action_id` / `observation_point_id`，可溯源到它服务的观察点；success/error 包均带 `device_snapshot_id`（真源快照哈希，与研究层共享）
 - 设备层没有 heuristic 模式，即使研究层使用 `--disable-llm`，设备映射仍需要可用 LLM
 
 ### 3. Campaign 编排层 `orchestrator/` + `run_campaign.py` — 自动闭环
@@ -92,9 +96,12 @@
 1. `--reference` 支持本地 PDF/TXT/MD/JSON、DOI、arXiv id、论文标题（可重复）
 2. 种子解析自动降级：DOI 走 Crossref → Semantic Scholar → OpenAlex；arXiv 走 arXiv → Semantic Scholar → OpenAlex；标题跨 S2/OpenAlex/Crossref/arXiv 匹配
 3. **引文滚雪球**（深度 1、有界）+ 关键词检索线，确定性相关性过滤
-4. 候选经 DOI/arXiv/S2 **验证打标**后进 `chem_kb/registry/papers.jsonl`；学术、Web、本地文件按身份命名空间隔离，同标题仅在年份/首作者兼容且强标识不冲突时合并
-5. `--download-pdfs` 走 arXiv → Semantic Scholar OA → Unpaywall → CORE → 元数据 URL → Web PDF 线；校验 Content-Type、大小、`%PDF-` 文件头和可提取正文，损坏/扫描件会继续切换下一来源
-6. 网络失败一律降级为日志告警，保留逐供应商 attempt trail；registry 使用文件锁和原子替换，支持并发 campaign，**绝不中断规划分支**
+4. **检索词纪律（issue #1/#8）**：出站查询先经 `query_sanitizer` 双层清洗——整句删除任务下发从句（"请将实验下发至…并返回任务 id"）+ 词级删除自动化/工作站/实验室编号语义,化学实体按构造保留,原始用户 Query 永不修改;关键词线**逐条消费** Research 生成的短 survey queries（≤4 条独立检索,长 Query 仅作回退）,实发查询记录于 `actual_scholarly_queries` 供审计
+5. **材料+反应联合硬门槛**（`chemistry_gate`）：候选论文须同时命中锚文本的材料体系（元素符号防误配正则 + 中英文名 + PBA/LDH/MOF 类词）与目标反应/观测（16 组跨语言同义词,OER↔析氧）,仅命中"碱性/乙醇/氧化"等弱词的论文被拒并记录理由;锚缺词时门槛自动失效
+6. **零命中有界修复**：首轮 0 保留时最多 2 轮确定性重试（去表征词 → 拉丁核心词）,逐轮记录;检索结果三态归因 `retrieval_status ∈ success / no_relevant_papers / provider_failure`（429/403/超时 = provider_failure,与"关键词不相关"分开）,另有 `protocol_status` / `planning_status`
+7. 候选经 DOI/arXiv/S2 **验证打标**后进 `chem_kb/registry/papers.jsonl`；学术、Web、本地文件按身份命名空间隔离，同标题仅在年份/首作者兼容且强标识不冲突时合并
+8. `--download-pdfs` 走 arXiv → Semantic Scholar OA → Unpaywall → CORE → 元数据 URL → Web PDF 线；校验 Content-Type、大小、`%PDF-` 文件头和可提取正文，损坏/扫描件会继续切换下一来源
+9. 网络失败一律降级为日志告警，保留逐供应商 attempt trail；registry 使用文件锁和原子替换，支持并发 campaign，**绝不中断规划分支**
 
 **数据来源全景**（全部 stdlib urllib、密钥走环境变量；学术检索多源聚合，解析/Web/PDF 按序降级）：
 
@@ -132,6 +139,14 @@
 ### 设备可用性动态接入
 
 `--device-status-json` 支持 `{"站名": "offline|busy|available"}` 或 `{"stations": {...}}`。设备层会直接应用状态；研究层还需同时提供 `--include-device-context`、`--device-workstations-dir` 或 `--device-context-json`，才能把状态叠加到设备能力上下文并避开不可用设备。
+
+### 用户可读统一结果（human_readable_result.json）
+
+`orchestrator/human_readable.py` 只读抽取器把散落的原始产物整理为单文件结果：逐字符原始 Query、`run_status` + `failure_category`、论文清单（含 `used_in_plan`）、S01/M01/D01 稳定 ID 的 Stage/Macro/Device 三层、每个设备步骤到宏步骤的溯源、结构化证据标记（`source_type: paper_protocol | agent_generated` + `requires_review`）、平台形式 `dispatch_plan`（与规划格式分开展示）、中文阻塞原因与最终实验方案。campaign 每轮 iteration 与终态各写一份;单独跑设备层用 `--human-readable-output`。**只读抽取,绝不覆盖原始产物**。
+
+### 科学审查门（requires_scientific_review）
+
+设备层近似执行（如时序语义改为交错批次）的 success 包携带 `requires_scientific_review`;编排器在**跨真实边界的适配器**（manual/listen/real）执行前阻断,写 `AWAITING_SCIENTIFIC_REVIEW.md` 并以 `scientific_review_required`（退出码 7）停止;人工在迭代目录写 `review_approval.json`（`{"approved": true, "approver": ...}`）放行。mock 适配器直接执行但审查记录入 trace。设备 `needs_human_review` 错误停为 `manual_required`（`AWAITING_CONDITION_REVIEW.md`）,不消耗可行性死锁计数。
 
 ## 安全边界
 
@@ -186,23 +201,34 @@ cd frontend && npm test && npm run lint && npm run build          # 前端
 
 约定：测试用暴露 `.invoke()` 的假模型 mock LLM，网络客户端注入 fake，不触真实端点；研究层的 `--disable-llm` 路径无凭据可跑。
 
+## 八题评估包（chem-agent-eval-package/）
+
+可独立分发的固定八题（A01–D02,`测试题目.docx`）评估工具:`skill/chem-agent-eval-sop/` 为 Codex 评估 Skill（SOP + 离散判定 rubric:process_completion / paper_quality / plan_workstation_match / dispatch_schema_match,不打分）;`scripts/run_suite.py` 并发跑八题（每题独立 ID 与知识库,Query sha256 校验,Device 异常自动重试一次且两次产物都保留）;`scripts/preflight.py` 运行前自检;`scripts/install.py` 安装到 `~/.codex/skills/`。只做规划与格式校验,**不真实下发**。
+
+`result/` 内已入库四次完整评测运行供复核:`chem-agent-eval-20260718-161647`（修复前基线,8/8 manual_required）与 `164330/181702/193746`（修复后三次,8/8 Research completed、6–8 步 macro plan;Device 层瓶颈证据与校验错误语料）。
+
 ## 目录速览
 
 ```
 run_campaign.py            # 闭环入口
-orchestrator/              # 编排器 + 执行边界适配器
+orchestrator/              # 编排器 + 执行边界适配器 + human_readable 抽取器
 backend/                   # FastAPI、任务进程、SSE 与持久化适配层
 frontend/                  # React + TypeScript 测试控制台
 reaserch_agent/            # 研究层（目录名拼写是有意保留的）
   workflow.py              #   B0/B1/B2 状态机
   plan_ledger.py           #   计划版本台账
-  tools/                   #   检索/摄取/文献获取/注册表/设备上下文
+  tools/                   #   检索/摄取/文献获取（含 chemistry_gate）/query_sanitizer/注册表/设备上下文
   memory/                  #   两层记忆 + 三层召回 + 打分
   chem_kb/                 #   本地知识库（语料 + registry）
-device_agent/              # 设备适配层（单 agent 映射）
+device_agent/              # 设备适配层（单 agent 映射 + 三层确定性防线）
+  feasibility_rules.py     #   可行性三桶分类（hard/adaptable/unverifiable）
+  workflow_validator.py    #   SKILL schema 严格校验（必填/类型/枚举/范围）
+  dispatch_formatter.py    #   平台形式转换 + 确定性必填补全
 chem_resources/            # 工作站真源、格式契约、lab-operation 技能（含 dispatch_guard）
+chem-agent-eval-package/   # 可分发八题评估包（SOP skill + rubric + runner）
+result/                    # 已入库的评测运行产物（1 基线 + 3 修复后）
 campaigns/                 # 运行产物（gitignored）
-chem-eval/  docs/          # 设计/评测文档、调研与快速上手
+chem-eval/  docs/          # 设计/评测文档、调研与快速上手（docs/代码审查.md 为整改日志）
 ```
 
 ## 重要约定
