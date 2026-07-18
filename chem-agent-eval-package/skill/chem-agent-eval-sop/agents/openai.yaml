@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chem Agent Evaluation SOP"
+  short_description: "Run eight cases and produce discrete evaluation verdicts"
+  default_prompt: "Use $chem-agent-eval-sop to run all eight Chem Agent cases and produce non-numeric evaluation verdicts."
