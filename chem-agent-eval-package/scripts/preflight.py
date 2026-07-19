@@ -145,39 +145,21 @@ def main() -> int:
         station_dirs.extend(path for path in module_path.iterdir() if path.is_dir())
     check(modules_ok and len(station_dirs) == 45, f"workstation Skill directory count is 45 (found {len(station_dirs)})")
 
-    research_script = repo / "reaserch_agent/run_research_agent.py"
-    research_ok, research_help = help_text(python, research_script, repo)
-    research_flags = [
+    campaign_script = repo / "run_campaign.py"
+    campaign_ok, campaign_help = help_text(python, campaign_script, repo)
+    campaign_flags = [
+        "--query",
+        "--campaign-id",
+        "--campaigns-root",
         "--online-literature",
-        "--include-device-context",
-        "--device-workstations-dir",
-        "--model-name",
-        "--base-url",
-        "--wire-api",
-        "--reasoning-effort",
-        "--save-state",
     ]
-    missing_research = [flag for flag in research_flags if flag not in research_help]
-    check(research_ok and not missing_research, "Research CLI supports online retrieval, device context, custom LLM settings, and state output")
-    if missing_research:
-        print("      missing Research flags: " + ", ".join(missing_research))
-
-    device_script = repo / "device_agent/run_from_research_state.py"
-    device_ok, device_help = help_text(python, device_script, repo)
-    device_flags = [
-        "--exp-id",
-        "--full-workstations",
-        "--workstations-dir",
-        "--model-name",
-        "--base-url",
-        "--wire-api",
-        "--reasoning-effort",
-        "--package-output",
-    ]
-    missing_device = [flag for flag in device_flags if flag not in device_help]
-    check(device_ok and not missing_device, "Device CLI supports isolated IDs, all workstation Skills, custom LLM settings, and package output")
-    if missing_device:
-        print("      missing Device flags: " + ", ".join(missing_device))
+    missing_campaign = [flag for flag in campaign_flags if flag not in campaign_help]
+    check(
+        campaign_ok and not missing_campaign,
+        "Chem Agent public campaign entrypoint supports exact Query, isolated output, and online literature",
+    )
+    if missing_campaign:
+        print("      missing Campaign flags: " + ", ".join(missing_campaign))
 
     codex_home = args.codex_home.expanduser().resolve()
     installed_skill = codex_home / "skills/chem-agent-eval-sop/SKILL.md"
@@ -190,13 +172,34 @@ def main() -> int:
     runner_ok = runner.is_file()
     if runner_ok:
         source = runner.read_text(encoding="utf-8", errors="replace")
-        forbidden = [token for token in ("--dispatch", "execution_adapter", "lab_dispatch", "requests.post(", "httpx.post(") if token in source]
-        runner_ok = not forbidden
+        forbidden = [
+            token
+            for token in (
+                "reaserch_agent/run_research_agent.py",
+                "device_agent/run_from_research_state.py",
+                "--execution-adapter",
+                "--mock-observation-file",
+                "lab_dispatch",
+                "requests.post(",
+                "httpx.post(",
+            )
+            if token in source
+        ]
+        runner_ok = "run_campaign.py" in source and not forbidden
     else:
         forbidden = []
-    check(runner_ok, "evaluation runner is planning-only and contains no real device dispatch path")
+    check(
+        runner_ok,
+        "evaluation runner invokes only the Chem Agent public entrypoint and contains no internal orchestration",
+    )
     if forbidden:
         print("      suspicious runner tokens: " + ", ".join(forbidden))
+
+    check(
+        (installed_skill.parent / "scripts/audit_workflows.py").is_file()
+        and (installed_skill.parent / "scripts/llm_review_workflows.py").is_file(),
+        "deterministic and independent LLM output auditors are installed",
+    )
 
     check((PACKAGE_ROOT / ".env.example").is_file(), "share package includes a placeholder-only .env.example")
 

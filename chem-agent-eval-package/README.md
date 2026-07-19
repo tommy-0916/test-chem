@@ -1,243 +1,119 @@
-# Chem Agent 八题评估包
+# Chem Agent 黑盒八题评估包
 
-这个压缩包用于把 Chem Agent 的固定八题评估流程交给另一位使用者。对方已有基础 Chem Agent 源码和 45 个工作站 Skill，因此本包不重复携带工作站 Skill，也不会修改它们。
+该包把完整 Chem Agent 当作黑盒评估。评估器只提供八个原始 Query 和强制联网论文检索参数，不直接调用或重新编排 Research Agent、Device Agent、设备可行性反馈、observation 或修复分支。
 
-本包包含：
+## 收件人快速开始
 
-- `skill/chem-agent-eval-sop/`：Codex 评估 Skill；
-- `test-data/测试题目.docx`：A01–D02 共 8 道固定测试题；
-- `compat/device_agent/run_from_research_state.py`：支持并发实验 ID 的 Device CLI 兼容文件；
-- `scripts/install.py`：安装 Skill、测试题和必要兼容文件；
-- `scripts/preflight.py`：运行前检查；
-- `.env.example`：不含真实密钥的配置模板。
+1. 解压本包并进入目录：
 
-## 1. 使用前提
+   ```bash
+   unzip chem-agent-eval-blackbox-20260720.zip
+   cd chem-agent-eval-package
+   ```
 
-对方需要准备：
+2. 在待测 Chem Agent 项目自身的 `.env` 或 shell 环境中配置真实 API key。可参考本包的 `.env.example`，但不要把真实 key 写入或转发本包。
 
-1. 一份基础 Chem Agent 仓库；
-2. Python 环境和项目依赖，推荐仓库内已有 `.venv`；
-3. 45 个工作站 Skill，路径必须是：
+3. 安装 Skill 并复制八题测试文件：
 
-   `chem_resources/lab-design-main/skills/chemistry-experiment-workstation`
+   ```bash
+   python3 scripts/install.py --repo "/path/to/chem-agent"
+   ```
 
-4. 自己可用的模型、API endpoint、wire API 和 API key；
-5. Codex，并允许从 `~/.codex/skills/` 加载个人 Skill。
+4. 执行预检：
 
-本评估只根据工作站能力做规划和格式校验，不会向真实工作站下发任务。
+   ```bash
+   python3 scripts/preflight.py \
+     --repo "/path/to/chem-agent" \
+     --api-key-env REFINER_LLM_API_KEY
+   ```
 
-## 2. 一键安装
+5. 预检通过后，可以在 Codex 中说“使用 `chem-agent-eval-sop` 评估这个 Chem Agent”，也可以直接执行下文的 runner 命令。
 
-解压后，在本包目录运行：
+建议先在待测 Chem Agent 的副本或独立工作目录中运行。联网八题评估会真实调用模型和论文检索服务，并在待测项目的 `result/` 下写入结果。
 
-```bash
-python3 scripts/install.py --repo "/你的路径/chem-agent"
-```
-
-安装脚本只执行以下操作：
-
-- 安装或更新 `~/.codex/skills/chem-agent-eval-sop`；
-- 把 `测试题目.docx` 放到 Chem Agent 仓库根目录；
-- 如果 Device CLI 缺少 `--exp-id`，先备份原文件，再只替换 `device_agent/run_from_research_state.py`；
-- 不修改其余源码，不修改或复制 45 个工作站 Skill，不创建 `.env`。
-
-如果明确不希望安装兼容文件：
+## 安装
 
 ```bash
-python3 scripts/install.py --repo "/你的路径/chem-agent" --skip-compat
+python3 scripts/install.py --repo "/path/to/chem-agent"
 ```
 
-如果 `CODEX_HOME` 不是默认位置：
+安装器只会：
 
-```bash
-python3 scripts/install.py \
-  --repo "/你的路径/chem-agent" \
-  --codex-home "/你的路径/.codex"
-```
+- 安装 `chem-agent-eval-sop` 到 `$CODEX_HOME/skills`；
+- 将测试 DOCX 放到 Chem Agent 根目录；
+- 在覆盖不同版本时备份原文件。
 
-安装过程中如目标文件已存在且内容不同，脚本会先生成带时间戳的备份。
+安装器不会修改 Chem Agent 源码。
 
-## 3. 配置自己的模型和 API key
-
-不要把真实 API key 发给别人，也不要把 `.env` 提交到 Git。每位使用者应自行配置。
-
-可复制模板：
-
-```bash
-cp .env.example "/你的路径/chem-agent/.env"
-```
-
-然后编辑 Chem Agent 仓库中的 `.env`。单 key 最小配置示例：
-
-```env
-REFINER_LLM_MODEL_NAME=你的模型名
-REFINER_LLM_ENDPOINT_URL=https://你的服务地址/v1
-REFINER_LLM_API_KEY=你的API_KEY
-REFINER_LLM_WIRE_API=chat
-REFINER_LLM_REASONING_EFFORT=medium
-```
-
-如果服务提供 OpenAI Responses/Codex Responses 协议，使用：
-
-```env
-REFINER_LLM_WIRE_API=codex_responses
-```
-
-如果服务只支持 Chat Completions，使用：
-
-```env
-REFINER_LLM_WIRE_API=chat
-```
-
-并发时可在 `.env` 中提供多个 key：
-
-```env
-CHEM_AGENT_EVAL_API_KEYS=["key1","key2","key3","key4"]
-```
-
-也可以使用任意自定义环境变量名，运行时通过 `--api-key-env` 指定。评估脚本只记录变量名和 key 数量，不记录 key 内容。
-
-## 4. 运行前检查
-
-在本包目录执行：
+## 预检
 
 ```bash
 python3 scripts/preflight.py \
-  --repo "/你的路径/chem-agent" \
+  --repo "/path/to/chem-agent" \
   --api-key-env REFINER_LLM_API_KEY
 ```
 
-预检会检查：
+预检确认：
 
-- 八题 DOCX 能否提取出 A01–D02，且正好是 8 个唯一 Query；
-- 45 个工作站目录是否齐全；
-- Research CLI 是否支持联网论文搜索、设备上下文和自定义模型参数；
-- Device CLI 是否支持完整工作站描述与独立 `--exp-id`；
-- API key 环境变量或仓库 `.env` 是否存在，但不会打印其值；
-- 评估 runner 是否保持“只规划、不真实下发”。
+- DOCX 中包含 A01–D02 八个唯一 Query；
+- 45 个工作站 Skill 可用于输出审计；
+- `run_campaign.py` 是可调用的公开入口并支持 `--query`、`--campaign-id`、`--campaigns-root` 和 `--online-literature`；
+- evaluation runner 不直接调用 Research/Device 内部 CLI；
+- 确定性审计器和独立 LLM reviewer 已安装；
+- API key 存在但不会打印。
 
-所有项目显示 `PASS` 后再开始正式测试。
-
-## 5. 推荐运行方式：让 Codex 使用 Skill
-
-在 Codex 中打开 Chem Agent 仓库，然后提出：
-
-```text
-使用 $chem-agent-eval-sop 对当前 Chem Agent 运行完整八题评估。
-测试题使用仓库根目录的 测试题目.docx，开启联网论文检索，保留原始 Query，
-只做工作站能力规划和格式校验，不下发真实设备任务。
-模型、endpoint、wire API、reasoning effort 和 API key 使用我的 .env 配置。
-```
-
-Skill 会运行 8 个案例，并基于原始结果完成逐题评估和总报告。默认并发数为 4；每题使用 `A01-时间`、`A02-时间` 等独立 ID，不会互相覆盖。
-
-## 6. 直接运行八题 runner
-
-如果只希望先生成 Chem Agent 原始输出，可直接运行：
+## 运行
 
 ```bash
 python3 "$HOME/.codex/skills/chem-agent-eval-sop/scripts/run_suite.py" \
-  --repo "/你的路径/chem-agent" \
-  --docx "/你的路径/chem-agent/测试题目.docx" \
-  --model "你的模型名" \
-  --endpoint "https://你的服务地址/v1" \
-  --wire-api "chat" \
-  --reasoning-effort "medium" \
-  --api-key-env "REFINER_LLM_API_KEY" \
+  --repo "/path/to/chem-agent" \
+  --docx "/path/to/chem-agent/测试题目.docx" \
   --workers 4
 ```
 
-AnyRouter + Responses 协议示例：
+每题只通过公开入口调用：
 
 ```bash
-python3 "$HOME/.codex/skills/chem-agent-eval-sop/scripts/run_suite.py" \
-  --repo "/你的路径/chem-agent" \
-  --docx "/你的路径/chem-agent/测试题目.docx" \
-  --model "gpt-5.6-sol" \
-  --endpoint "https://anyrouter.top/v1" \
-  --wire-api "codex_responses" \
-  --reasoning-effort "xhigh" \
-  --api-key-env "CHEM_AGENT_EVAL_API_KEYS" \
-  --workers 4
+python run_campaign.py \
+  --query "<exact Query>" \
+  --campaign-id "<case>-<timestamp>" \
+  --campaigns-root "<isolated output root>" \
+  --online-literature
 ```
 
-`--online-literature` 在正式评估中始终开启。若还要测试开放网页检索和开放获取 PDF 下载，额外添加：
+`campaign-id` 和 `campaigns-root` 只用于隔离、定位输出。runner 不传入 `--include-device-context`、`--full-workstations`、execution adapter、mock observation 或其他内部策略参数。
 
-```bash
---deep-literature
-```
+如果 Chem Agent 输出 `AWAITING_OBSERVATION.md`，而八题没有提供 observation，runner 将其记录为 `awaiting_observation` 外部状态并停止该进程，不会生成假 observation。若要评估完整多轮闭环，测试输入必须另外提供 observation fixture。
 
-直接运行 runner 只生成原始运行产物；完整的论文质量、研究方案和工作站匹配评估应由 Codex 按 Skill 继续完成。
-
-## 7. 结果在哪里
-
-每次正式运行会新建：
+## 结果
 
 ```text
-<chem-agent>/result/chem-agent-eval-YYYYMMDD-HHMMSS/
+<repo>/result/chem-agent-eval-YYYYMMDD-HHMMSS/
+├── suite_manifest.json
+├── raw_summary.json
+├── A01/
+│   ├── input.json
+│   ├── query.sha256
+│   ├── chem_agent.log
+│   ├── case_summary.json
+│   └── blackbox/<campaign-id>/...
+└── evaluation/
+    ├── workstation_schema_audit.json
+    ├── workstation_schema_llm_review.json
+    ├── workstation_schema_verdict.json
+    ├── <case>/evaluation.md
+    ├── <case>/evaluation.json
+    ├── overall_report.md
+    └── verdict_matrix.json
 ```
 
-主要文件：
+审计器会发现并检查黑盒 campaign 暴露出的所有 `device_package.json`，而不是假定每题只有一个固定 Device 输出。
 
-- `suite_manifest.json`：模型、endpoint、协议、并发数和 8 个本地运行 ID；
-- `raw_summary.json`：8 题流程状态汇总；
-- `<case>/input.json`：从 DOCX 提取的原始 Query；
-- `<case>/query.sha256`：原始 Query 完整性校验；
-- `<case>/research_state.json`：Research Agent 原始状态；
-- `<case>/research_cli.log`：Research 运行日志；
-- `<case>/knowledge_base/`：该题独立的联网论文资料；
-- `<case>/device_state.json`、`device_package.json`：Device 规划结果；
-- `<case>/case_summary.json`：该题流程摘要；
-- `evaluation/<case>/evaluation.md` 和 `evaluation.json`：逐题评估；
-- `evaluation/overall_report.md`：八题总报告；
-- `evaluation/verdict_matrix.json`：机器可读的结论矩阵。
+每题最终给出四类离散结论，不使用数字评分：
 
-Device 首次返回异常 JSON 时，runner 最多按完全相同输入重试一次，并同时保留 attempt 1 和 attempt 2，绝不隐藏首次失败。
+1. `process_completion`；
+2. `paper_quality_summary`；
+3. `plan_workstation_match`；
+4. `dispatch_schema_match`。
 
-## 8. 评估输出
-
-每题只输出离散结论，不打分：
-
-1. `process_completion`: `yes | partial | no`；
-2. `paper_quality_summary`: `high | mixed | low`，同时列出论文是否发表、期刊/会议、年份、DOI、期刊层级、可验证影响因子和方法支持情况；
-3. `plan_workstation_match`: `yes | no | not_evaluable`；
-4. `dispatch_schema_match`: `yes | no | not_evaluable`。
-
-第 3 项判断实验操作是否能由 45 个工作站完成；第 4 项单独判断 Device JSON 的字段、类型、枚举、单位、范围和嵌套是否严格符合工作站 Skill 输入合同。
-
-## 9. 常见问题
-
-### 预检提示 Device 缺少 `--exp-id`
-
-重新运行安装脚本且不要使用 `--skip-compat`。安装器会备份并只替换 `device_agent/run_from_research_state.py`。
-
-### 工作站数量不是 45
-
-确认目录结构和模块名未改变，并确认 45 个工作站 Skill 位于指定路径。本包不包含这些 Skill。
-
-### Research 没有生成 Macro Plan
-
-这是有效测试结果，不要人工补写。保留 Research 状态和日志，Device 映射会被跳过，评估通常标为 `partial` 或 `no`。
-
-### Device 返回 `feasibility_error`
-
-不能直接等同于真实设备不可行。评估器会重新对照 45 个 Skill，区分真实能力缺失、开放参数越界、容器衔接问题、固定参数被误判、Skill 描述不足和模型映射错误。
-
-### Device JSON 格式异常
-
-runner 会按相同输入自动重试一次并保留两次结果。最终报告必须注明首次异常。
-
-### LLM 长时间没有输出或超时
-
-`codex_responses` 在当前 Chem Agent 中是非流式请求，长时间安静不一定代表卡死。默认单次 LLM 超时 7200 秒；并发数可用 `--workers` 调低。
-
-### 联网论文搜索与开放网页搜索有什么区别
-
-正式评估始终开启学术检索 `--online-literature`。`--deep-literature` 才会额外开启开放网页和 PDF 下载，因此对比不同运行时必须记录是否启用了该参数。
-
-## 10. 安全说明
-
-- 本包不包含真实 `.env`、API key、历史日志、运行结果、Git 元数据、缓存或 45 个工作站 Skill；
-- 不要把真实 key 写进命令行、README、报告或 Git；
-- 评估 ID 是本地规划 ID，不是实验室真实任务 ID；
-- runner 不调用真实执行适配器或工作站下发 API。
+确定性 schema 审计与独立 LLM review 均通过，`dispatch_schema_match` 才能为 `yes`。

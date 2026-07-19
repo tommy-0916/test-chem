@@ -1,4 +1,4 @@
 interface:
-  display_name: "Chem Agent Evaluation SOP"
-  short_description: "Run eight cases and produce discrete evaluation verdicts"
-  default_prompt: "Use $chem-agent-eval-sop to run all eight Chem Agent cases and produce non-numeric evaluation verdicts."
+  display_name: "Chem Agent Black-Box Evaluation"
+  short_description: "Evaluate eight cases through the complete Chem Agent black box"
+  default_prompt: "Use $chem-agent-eval-sop to run all eight exact Queries through the complete Chem Agent public entrypoint with online literature enabled, then evaluate its unmodified outputs."

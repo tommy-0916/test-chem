@@ -6,11 +6,11 @@ Do not assign numeric scores, percentages, rankings, or weighted totals. Produce
 
 Output exactly one value:
 
-- `yes`: Research produced a valid state and non-empty Macro Plan, and Device produced a valid terminal package with `success` or `feasibility_error`.
-- `partial`: Research produced usable artifacts, but the chain stopped before a valid Device terminal package because of `manual_required`, empty Macro Plan, timeout, malformed JSON, or Device process failure.
-- `no`: Research did not produce a readable state, the Query was modified, online literature was not attempted, or the run failed before producing a usable Research result.
+- `yes`: the documented Chem Agent public entrypoint accepted the exact Query, online literature was requested, and the black box produced a readable external boundary state such as `goal_reached`, `awaiting_observation`, `manual_required`, `feasibility_deadlock`, or another documented terminal campaign status with preserved artifacts.
+- `partial`: the black-box process crashed or timed out after producing some usable campaign artifacts, but no documented external boundary state could be established.
+- `no`: the public entrypoint could not be invoked, no readable black-box output was produced, the Query was modified, or online literature was not requested.
 
-Report the Research status, Device status, attempts, timeouts, elapsed time, and missing artifacts as supporting facts.
+Report the public entrypoint, return code, boundary status, stop reason, timeout, elapsed time, artifact inventory, and missing outputs as supporting facts. Internal Research/Device statuses may be reported as evidence but do not define process completion by themselves.
 
 ## 2. Paper quality
 
@@ -50,34 +50,63 @@ At case level, summarize paper quality as `high`, `mixed`, or `low`:
 
 Output exactly one value:
 
-- `yes`: every required experimental operation has a corresponding workstation capability; all Agent-changeable parameter values are within the Skill's legal ranges; container/sample-state transitions have a supported route.
+- `yes`: every required experimental operation exposed anywhere in the black-box campaign has a corresponding workstation capability; all Agent-changeable parameter values are within the Skill's legal ranges; container/sample-state transitions have a supported declared route.
 - `no`: at least one necessary operation has no workstation, an open parameter is outside the allowed range, or a required container/sample transfer is unsupported.
-- `not_evaluable`: Research produced no Macro Plan or there is insufficient Device/Skill evidence to perform the check.
+- `not_evaluable`: the black box exposed no plan/workflow or there is insufficient output/Skill evidence to perform the check.
 
 Important:
 
 - A parameter not exposed by the Skill is fixed/default and is not a reason for `no`.
-- A `feasibility_error` is not automatically `no`. Recheck the claimed blocker against all 45 workstation Skills.
+- An internal `feasibility_error` is not automatically `no`. Recheck the claimed blocker against the recorded workstation truth source.
 - State the exact Macro Action, workstation Skill, operation, and constraint behind every `no`.
 
 ## 4. Generated format and parameters to workstation input match
 
+Use both `scripts/audit_workflows.py` and `scripts/llm_review_workflows.py` on every workflow emitted by the black-box campaign. The tested repository's own `dispatch_validation`, self-check, formatter success, or package `status` cannot establish this verdict.
+
 Output exactly one value:
 
-- `yes`: every generated Device Step exactly follows the selected workstation operation's Skill input contract.
+- `yes`: every generated Device Step in every exposed workflow exactly follows the selected workstation operation's Skill input contract.
 - `no`: any generated step has a nonexistent workstation/operation, misses a Skill-open required field, invents an unsupported field, uses incorrect nesting/type/enum/unit/range, or violates a cross-field constraint.
 - `not_evaluable`: no Device workflow was generated.
+
+Copy the final case-level verdict from `<run>/evaluation/<case>/workstation_schema_verdict.json` without manual override. A case passes only when every exposed workflow passes. A later formatter repair does not convert a nonconforming raw `workflow_json` into `yes`.
+
+Combine the reviews using an AND gate:
+
+- deterministic `yes` + LLM `yes` -> `yes`;
+- either review `no` -> `no`;
+- no workflow -> `not_evaluable`;
+- generated workflow with failed, malformed, or incomplete LLM review -> evaluation incomplete.
+
+The independent LLM must review the raw workflow against the root workstation rules, the full Skills for the used workstations, their available audit rules, container/reagent plans, and dispatch-formatting evidence. It must cover every step and return structured findings with evidence quotes. It may add errors but may never remove deterministic errors.
 
 Check mechanically for every step:
 
 - workstation name exists;
 - operation belongs to that workstation;
+- workstation `id` exactly matches the selected Skill;
 - all open required parameters exist;
 - parameter names and nesting match exactly;
 - types, enums, units, and ranges are valid;
 - container counts match container-number arrays;
+- carrier counts match carrier-number arrays;
+- Skill-declared `file` inputs exist locally or are recorded as unverified remote references;
 - reagent/container plans agree with the workflow steps;
 - source Macro Action/step is traceable.
+- final dispatch formatting has zero unmapped steps, zero dropped parameters, and no formatting failure.
+
+Do not validate names against a station-wide parameter union. A parameter is legal only when it appears under the selected operation at the correct hierarchy. Rows prefixed by `-` and `--` in a workstation Skill define nested JSON structure. Dynamic fields such as `N号原液瓶` must be instantiated at the declared level and must retain the declared type.
+
+Treat each of the following as `no`:
+
+- missing or wrong workstation id;
+- primitive lid-number arrays when the Skill requires object arrays;
+- numeric JSON values where the Skill declares `string`;
+- a placeholder array where the Skill declares a dynamic object;
+- absent required upload files;
+- an operation known elsewhere but not on the selected workstation;
+- formatter warnings that say a step was not mapped or a parameter was omitted.
 
 Example:
 
