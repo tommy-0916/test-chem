@@ -84,6 +84,21 @@ BATCHED_SUCCESS_PAYLOAD = {
             }
         ],
     },
+    # two-stage: stage-1 plan carries temporal_adaptations at top level; the
+    # merge sources them from the plan, so the same single payload works as
+    # both plan (top-level) and translation (workflow_json.steps).
+    "temporal_adaptations": [
+        {
+            "original_requirement": "边滴入边搅拌",
+            "execution_fidelity": "approximated",
+            "adaptation_schedule": "加液 -> 搅拌 -> 加液 -> 搅拌",
+            "requires_scientific_review": True,
+        }
+    ],
+    "device_plan": [
+        {"plan_step": 1, "workstation": "液体进样站", "objective": "分批加液+搅拌",
+         "operation_intent": "加液/搅拌", "source_macro_step": 1},
+    ],
 }
 
 
@@ -955,9 +970,132 @@ def test_structure_validation_errors_parses_fields():
     assert by_code["unparsed"][0]["message"] == "一条没有已知模式的新错误。"
 
 
+def _plan_step(n, ws="General_Material_Station_V1", op="物料拿取"):
+    return {"plan_step": n, "workstation": ws, "objective": f"step {n}",
+            "operation_intent": op,
+            "containers": {"容器类型": "进样瓶", "容器编号": [n]},
+            "source_macro_step": n}
+
+
+def _material_wf_step(n):
+    return {"step_number": 1, "workstation": "General_Material_Station_V1",
+            "operation": "物料拿取",
+            "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [n]},
+            "source_macro_step": n}
+
+
+def _large_plan_result(n_steps):
+    return {"status": "device_plan",
+            "feasibility": {"is_feasible": True, "blocking_constraints": []},
+            "device_plan": [_plan_step(i) for i in range(1, n_steps + 1)],
+            "reagent_slot_plan": [], "container_plan": [],
+            "temporal_adaptations": [], "offline_handoffs": []}
+
+
+def test_chunked_translation_assembles_and_renumbers():
+    """Regression for the D02 failure: a large device_plan (15 steps,
+    chunk_size 6 → 3 chunks) is translated chunk-by-chunk and assembled into a
+    single workflow with contiguous 1..N step_numbers — no more empty JSON."""
+    import os
+    os.environ["CHEM_DEVICE_TRANSLATION_CHUNK_SIZE"] = "6"
+    try:
+        loader = WorkstationLoader(use_new_format=True)
+        validator = WorkflowValidator(loader)
+        plan = _large_plan_result(15)
+        # payload[0] = stage-1 plan; payloads[1..3] = three chunk translations
+        chunk_frag = lambda ns: {
+            "workflow_txt": "\n".join(f"第{i}步 General_Material_Station_V1：物料拿取"
+                                      for i in range(1, len(ns) + 1)),
+            "workflow_json": {"steps": [_material_wf_step(n) for n in ns]},
+        }
+        model = _SequencedModel([
+            plan,
+            chunk_frag([1, 2, 3, 4, 5, 6]),
+            chunk_frag([7, 8, 9, 10, 11, 12]),
+            chunk_frag([13, 14, 15]),
+        ])
+        agent = SingleDeviceAgent(
+            model=model, workstation_loader=loader, workflow_validator=validator,
+        )
+        state = agent.run_state(RESEARCH_HANDOFF, exp_id="chunk_exp")
+
+        assert len(model.calls) == 4  # 1 plan + 3 chunk translations
+        package = state.terminal_package
+        assert package["status"] == "success"
+        steps = package["workflow_json"]["steps"]
+        assert len(steps) == 15
+        # contiguous, unique, 1..15
+        assert [s["step_number"] for s in steps] == list(range(1, 16))
+    finally:
+        os.environ.pop("CHEM_DEVICE_TRANSLATION_CHUNK_SIZE", None)
+
+
+def test_chunked_translation_repairs_only_failing_chunk():
+    """Targeted repair: when a middle chunk carries a fabricated parameter, only
+    that chunk is re-translated — the healthy chunks are reused from cache."""
+    import os
+    os.environ["CHEM_DEVICE_TRANSLATION_CHUNK_SIZE"] = "6"
+    try:
+        loader = WorkstationLoader(use_new_format=True)
+        validator = WorkflowValidator(loader)
+        plan = _large_plan_result(12)  # 2 chunks of 6
+
+        def bad_step(n):
+            s = _material_wf_step(n)
+            s["parameters"]["不存在的危险参数"] = 999
+            return s
+
+        good_c1 = {"workflow_txt": "\n".join(f"第{i}步 General_Material_Station_V1：物料拿取"
+                                             for i in range(1, 7)),
+                   "workflow_json": {"steps": [_material_wf_step(n) for n in range(1, 7)]}}
+        bad_c2 = {"workflow_txt": "\n".join(f"第{i}步 General_Material_Station_V1：物料拿取"
+                                            for i in range(1, 7)),
+                  "workflow_json": {"steps": [bad_step(n) for n in range(7, 13)]}}
+        fixed_c2 = {"workflow_txt": "\n".join(f"第{i}步 General_Material_Station_V1：物料拿取"
+                                              for i in range(1, 7)),
+                    "workflow_json": {"steps": [_material_wf_step(n) for n in range(7, 13)]}}
+        # plan, c1(good), c2(bad) → repair → only c2 re-translated (fixed)
+        model = _SequencedModel([plan, good_c1, bad_c2, fixed_c2])
+        agent = SingleDeviceAgent(
+            model=model, workstation_loader=loader, workflow_validator=validator,
+        )
+        state = agent.run_state(RESEARCH_HANDOFF, exp_id="chunk_repair_exp")
+
+        package = state.terminal_package
+        assert package["status"] == "success"
+        # 1 plan + 2 initial chunks + 1 targeted re-translation of chunk 2 = 4
+        assert len(model.calls) == 4
+        assert len(package["workflow_json"]["steps"]) == 12
+    finally:
+        os.environ.pop("CHEM_DEVICE_TRANSLATION_CHUNK_SIZE", None)
+
+
+def test_all_chunks_empty_yields_translation_failed_reflow():
+    """If translation stays empty across rounds, the package is an honest
+    workflow_translation_failed that reflows to Research (issue #4)."""
+    import os
+    os.environ["CHEM_DEVICE_TRANSLATION_CHUNK_SIZE"] = "6"
+    try:
+        loader = WorkstationLoader(use_new_format=True)
+        validator = WorkflowValidator(loader)
+        plan = _large_plan_result(8)
+        empty = {"workflow_txt": "", "workflow_json": {"steps": []}}
+        model = _SequencedModel([plan, empty])  # every translation empty
+        agent = SingleDeviceAgent(
+            model=model, workstation_loader=loader, workflow_validator=validator,
+        )
+        state = agent.run_state(RESEARCH_HANDOFF, exp_id="chunk_empty_exp")
+
+        package = state.terminal_package
+        assert package["status"] == "failed"
+        assert package["feedback_type"] == "device_feasibility_error"
+        assert package["error_package"]["type"] == "workflow_translation_failed"
+    finally:
+        os.environ.pop("CHEM_DEVICE_TRANSLATION_CHUNK_SIZE", None)
+
+
 if __name__ == "__main__":
     test_temporal_addition_stirring_soft_error_retries_as_batches()
-    test_generic_soft_complaint_also_retries()
     test_unverifiable_condition_becomes_human_review_not_infeasible()
     test_hard_capability_gap_stays_physical_infeasible()
     test_missing_required_station_is_not_softened()
@@ -976,4 +1114,7 @@ if __name__ == "__main__":
     test_skill_required_params_enforced_for_skill_form_stations()
     test_label_value_enum_param_is_not_a_type_mismatch()
     test_structure_validation_errors_parses_fields()
+    test_chunked_translation_assembles_and_renumbers()
+    test_chunked_translation_repairs_only_failing_chunk()
+    test_all_chunks_empty_yields_translation_failed_reflow()
     print("single device agent tests passed")

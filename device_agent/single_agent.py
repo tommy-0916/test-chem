@@ -253,8 +253,14 @@ FEASIBILITY_PLAN_TASK_PROMPT = """
 TRANSLATION_TASK_PROMPT = """
 请把下面的 device_plan 忠实翻译成严格符合工作站参数表的 workflow_txt 与 workflow_json。
 
-## device_plan（第一段产出，化学决策已定，禁止更改）
+## 完整 device_plan（第一段产出，化学决策已定，禁止更改；仅作上下文，用于理解容器编排）
 {device_plan_json}
+
+## 本次只需翻译的范围
+{chunk_directive}
+
+## 前序步骤结束时的容器状态（carry-over，用于保持连续性；请勿重复已完成的开/关盖）
+{carryover_state}
 
 ## 各工作站参数表（唯一合法的参数字段来源）
 {station_parameter_tables}
@@ -266,9 +272,9 @@ TRANSLATION_TASK_PROMPT = """
 {json_format_reference}
 
 ## 输出 JSON 格式
-只输出：
+只输出本范围内 plan 步骤对应的 workflow 步骤：
 {{
-  "workflow_txt": "严格仿照 TXT 格式参考的工作流文本（第N步 工作站：…）",
+  "workflow_txt": "本范围的工作流文本片段（第N步 工作站：…；step_number 从 1 顺序编号即可，最终由程序统一重排）",
   "workflow_json": {{
     "steps": [
       {{
@@ -279,13 +285,13 @@ TRANSLATION_TASK_PROMPT = """
         "source_macro_step": 1,
         "notes": "可选说明"
       }}
-    ],
-    "temporal_adaptations": [],
-    "offline_handoffs": []
+    ]
   }}
 }}
 
 翻译要求：
+- **只输出上述范围内 plan 步骤的 workflow 步骤**，不要输出范围外的步骤，也不要输出
+  temporal_adaptations / offline_handoffs（这些由程序从 device_plan 统一附加）。
 - 每个 plan 步骤可展开为多个 workflow 步骤（如 开盖→加液→关盖），每个 workflow 步骤继承
   该 plan 步骤的 source_macro_step（以及 macro_action_id/observation_point_id，若提供）。
 - 参数字段名/嵌套/类型/枚举/单位/范围严格来自参数表；必填参数全部填写；
@@ -502,30 +508,55 @@ class SingleDeviceAgent:
             raise ValueError("feasibility-plan LLM did not return a JSON object")
         return result
 
-    def _invoke_translation(
+    def _invoke_translation_chunk(
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
+        chunk_steps: List[Dict[str, Any]],
+        chunk_index: int,
+        total_chunks: int,
+        carryover: Dict[str, Any],
         *,
         extra_instruction: str = "",
     ) -> Dict[str, Any]:
-        """Stage 2: translate the frozen device_plan into workflow_txt/json."""
+        """Translate ONE chunk of the frozen device_plan into workflow steps.
+
+        The FULL plan is passed as read-only context (compact) so cross-chunk
+        container choreography is visible, but the model only EMITS steps for
+        this chunk's plan_step ids — keeping each call's OUTPUT bounded so a
+        large plan never truncates into empty JSON (the D02 failure)."""
         plan_view = {
             "device_plan": plan_result.get("device_plan", []),
             "reagent_slot_plan": plan_result.get("reagent_slot_plan", []),
             "container_plan": plan_result.get("container_plan", []),
-            "temporal_adaptations": plan_result.get("temporal_adaptations", []),
-            "offline_handoffs": plan_result.get("offline_handoffs", []),
             "macro_action": (
                 state.research_handoff.get("macro_action")
                 if isinstance(state.research_handoff.get("macro_action"), dict)
                 else {}
             ),
         }
+        chunk_ids = [step.get("plan_step") for step in chunk_steps]
+        chunk_stations: List[str] = []
+        for step in chunk_steps:
+            name = str(step.get("workstation", "")).strip()
+            if name and name not in chunk_stations:
+                chunk_stations.append(name)
+        directive = (
+            f"本次是第 {chunk_index + 1}/{total_chunks} 块。"
+            f"只输出 plan_step 编号属于 {chunk_ids} 的那些 plan 步骤对应的 workflow 步骤，"
+            "范围外的步骤一律不要输出。"
+        )
+        carryover_text = (
+            json.dumps(carryover, ensure_ascii=False)
+            if carryover
+            else "（首块，无前序容器状态）"
+        )
         prompt = TRANSLATION_TASK_PROMPT
         replacements = {
             "{device_plan_json}": json.dumps(plan_view, ensure_ascii=False, indent=2),
-            "{station_parameter_tables}": self._station_parameter_tables(plan_result),
+            "{chunk_directive}": directive,
+            "{carryover_state}": carryover_text,
+            "{station_parameter_tables}": self._station_parameter_tables(chunk_stations),
             "{txt_format_reference}": state.txt_format_reference,
             "{json_format_reference}": state.json_format_reference,
         }
@@ -537,24 +568,33 @@ class SingleDeviceAgent:
             SystemMessage(content=TRANSLATION_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
         ]
-        print("[single-device-agent] LLM step start: workflow_translation", flush=True)
+        print(
+            f"[single-device-agent] LLM step start: workflow_translation "
+            f"(chunk {chunk_index + 1}/{total_chunks})",
+            flush=True,
+        )
         response = self._model.invoke(messages)
-        print("[single-device-agent] LLM step done: workflow_translation", flush=True)
         content = self._coerce_text(getattr(response, "content", response))
+        state.add_log(
+            f"translation chunk {chunk_index + 1}/{total_chunks}: "
+            f"raw {len(content)} chars"
+        )
         result = self._parse_json(content)
+        print(
+            f"[single-device-agent] LLM step done: workflow_translation "
+            f"(chunk {chunk_index + 1}/{total_chunks})",
+            flush=True,
+        )
         if not isinstance(result, dict):
-            raise ValueError("translation LLM did not return a JSON object")
+            raise ValueError(
+                f"translation chunk {chunk_index + 1} did not return a JSON object"
+            )
         return result
 
-    def _station_parameter_tables(self, plan_result: Dict[str, Any]) -> str:
-        """SKILL parameter-table excerpts for exactly the stations the plan
-        uses — the translation stage's only legal source of field names."""
-        stations: List[str] = []
-        for step in plan_result.get("device_plan", []) or []:
-            if isinstance(step, dict):
-                name = str(step.get("workstation", "")).strip()
-                if name and name not in stations:
-                    stations.append(name)
+    def _station_parameter_tables(self, stations: List[str]) -> str:
+        """SKILL parameter-table excerpts for a given station list — the
+        translation stage's only legal source of field names."""
+        stations = [s for s in stations if s]
         if not stations:
             return self._workstation_loader.format_for_prompt()
         sections: List[str] = []
@@ -566,7 +606,11 @@ class SingleDeviceAgent:
             }
         except Exception:
             all_stations = {}
-        for name in stations[:12]:
+        seen: List[str] = []
+        for name in stations:
+            if name in seen:
+                continue
+            seen.append(name)
             entry = all_stations.get(name)
             if entry is None:
                 for key, candidate in all_stations.items():
@@ -682,55 +726,205 @@ class SingleDeviceAgent:
             return retried
         return plan_result
 
+    def _translation_chunk_size(self) -> int:
+        raw = os.getenv("CHEM_DEVICE_TRANSLATION_CHUNK_SIZE", "").strip()
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        return 6
+
+    def _lid_and_container_state_after(
+        self, steps: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Deterministic carry-over: per-container lid state implied by the
+        already-translated steps, so the next chunk does not re-open/re-close a
+        container and the assembled lid continuity holds at chunk seams."""
+        state: Dict[str, Any] = {}
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            operation = str(step.get("operation", ""))
+            params = step.get("parameters")
+            params = params if isinstance(params, dict) else {}
+            container_type = str(params.get("容器类型", "")).strip()
+            ids = params.get("容器编号")
+            id_list = ids if isinstance(ids, list) else []
+            for cid in id_list:
+                key = f"{container_type}#{cid}"
+                if operation.startswith("开盖"):
+                    state[key] = {"lid": "无盖"}
+                elif operation.startswith("关盖"):
+                    state[key] = {"lid": "有盖"}
+        return state
+
+    def _translate_plan_in_chunks(
+        self,
+        state: SingleDeviceAgentState,
+        plan_result: Dict[str, Any],
+        chunk_cache: Dict[int, Dict[str, Any]],
+        *,
+        only_chunks: Optional[Set[int]] = None,
+        feedback_by_chunk: Optional[Dict[int, str]] = None,
+    ) -> Tuple[Dict[str, Any], str, Dict[int, int], List[List[Dict[str, Any]]]]:
+        """Translate the device_plan chunk-by-chunk and assemble.
+
+        Each chunk's OUTPUT is bounded (≤ chunk_size plan steps expanded), so a
+        large plan never truncates into empty JSON. ``chunk_cache`` holds each
+        chunk's translated steps/txt; ``only_chunks`` re-translates just those
+        chunk indices (targeted repair) and reuses the cache for the rest.
+
+        Returns (workflow_json, workflow_txt, step_number→chunk_index map,
+        chunk step groups)."""
+        device_plan = [
+            step for step in (plan_result.get("device_plan", []) or [])
+            if isinstance(step, dict)
+        ]
+        chunk_size = self._translation_chunk_size()
+        chunks = [
+            device_plan[i : i + chunk_size]
+            for i in range(0, len(device_plan), chunk_size)
+        ] or [[]]
+        total = len(chunks)
+        feedback_by_chunk = feedback_by_chunk or {}
+
+        carryover: Dict[str, Any] = {}
+        assembled_steps: List[Dict[str, Any]] = []
+        txt_fragments: List[str] = []
+        step_to_chunk: Dict[int, int] = {}
+        chunk_step_groups: List[List[Dict[str, Any]]] = [[] for _ in range(total)]
+
+        for index, chunk_steps in enumerate(chunks):
+            need = only_chunks is None or index in only_chunks
+            if need or index not in chunk_cache:
+                try:
+                    translated = self._invoke_translation_chunk(
+                        state, plan_result, chunk_steps, index, total, carryover,
+                        extra_instruction=feedback_by_chunk.get(index, ""),
+                    )
+                    wf = translated.get("workflow_json")
+                    wf = wf if isinstance(wf, dict) else {}
+                    steps = [s for s in (wf.get("steps") or []) if isinstance(s, dict)]
+                    chunk_cache[index] = {
+                        "steps": steps,
+                        "txt": str(translated.get("workflow_txt", "")),
+                    }
+                except Exception as exc:  # pragma: no cover - remote dependent
+                    state.add_log(f"translation chunk {index + 1} failed: {exc}")
+                    chunk_cache[index] = {"steps": [], "txt": ""}
+
+            cached = chunk_cache.get(index, {"steps": [], "txt": ""})
+            chunk_step_groups[index] = cached["steps"]
+            for step in cached["steps"]:
+                assembled_steps.append(dict(step))
+                step_to_chunk[len(assembled_steps)] = index  # 1-indexed final no.
+            if cached["txt"].strip():
+                txt_fragments.append(cached["txt"].strip())
+            # carry-over reflects everything translated so far, in plan order
+            carryover = self._lid_and_container_state_after(assembled_steps)
+
+        # renumber assembled steps 1..N; rebuild step_to_chunk on final numbers
+        final_map: Dict[int, int] = {}
+        for final_no, step in enumerate(assembled_steps, start=1):
+            step["step_number"] = final_no
+            final_map[final_no] = step_to_chunk.get(final_no, 0)
+
+        workflow_json = {
+            "steps": assembled_steps,
+            "temporal_adaptations": plan_result.get("temporal_adaptations", []),
+            "offline_handoffs": plan_result.get("offline_handoffs", []),
+        }
+        workflow_txt = self._renumber_txt("\n".join(txt_fragments))
+        return workflow_json, workflow_txt, final_map, chunk_step_groups
+
+    @staticmethod
+    def _renumber_txt(text: str) -> str:
+        """Renumber `第N步` blocks sequentially across concatenated fragments."""
+        counter = {"n": 0}
+
+        def _sub(_match: "re.Match") -> str:
+            counter["n"] += 1
+            return f"第{counter['n']}步"
+
+        return re.sub(r"第\s*\d+\s*步", _sub, text)
+
     def _translate_and_verify(
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Stage 2 with the bounded repair loop: translate the frozen plan,
-        run the full deterministic checks, and re-invoke ONLY the translation
-        stage on failure (issue #12 — repairs never re-roll the chemistry)."""
-        max_translation_rounds = 3  # initial + two repairs
+        """Stage 2 with chunked translation + bounded targeted repair.
+
+        The plan is translated chunk-by-chunk (bounded output per call), then
+        the full deterministic checks run on the assembled workflow. On
+        failure, only the chunks that own the erroring steps are re-translated
+        (issue #12: repairs never re-roll the chemistry, and never re-pay the
+        whole plan's translation cost)."""
+        max_rounds = 3  # initial + two repair rounds
+        chunk_cache: Dict[int, Dict[str, Any]] = {}
         report: Dict[str, Any] = {"status": "failed", "errors": [], "warnings": []}
         result: Dict[str, Any] = {}
-        instruction = ""
-        for round_index in range(1, max_translation_rounds + 1):
-            try:
-                translated = self._invoke_translation(
-                    state, plan_result, extra_instruction=instruction
+        only_chunks: Optional[Set[int]] = None
+        feedback_by_chunk: Dict[int, str] = {}
+
+        for round_index in range(1, max_rounds + 1):
+            workflow_json, workflow_txt, step_map, chunk_groups = (
+                self._translate_plan_in_chunks(
+                    state, plan_result, chunk_cache,
+                    only_chunks=only_chunks,
+                    feedback_by_chunk=feedback_by_chunk,
                 )
-            except Exception as exc:  # pragma: no cover - remote model dependent
-                state.add_log(f"translation call failed: {exc}")
-                break
-            result = self._merge_plan_and_translation(plan_result, translated)
-            # Deterministic pre-validation completion: fill mechanically-
-            # derivable required fields so translation never fails on
-            # omissions the harness can fill itself.
+            )
+            result = self._merge_plan_and_translation(
+                plan_result, {"workflow_txt": workflow_txt, "workflow_json": workflow_json}
+            )
             self._apply_deterministic_completion(state, result)
             report = self._run_full_checks(result)
             result["dispatch_validation"] = report
             if report["status"] != "failed":
                 if round_index > 1:
                     state.add_log(
-                        f"translation repair round {round_index - 1} passed "
-                        "deterministic checks"
+                        f"chunked translation repair round {round_index - 1} "
+                        "passed deterministic checks"
                     )
                 return result
+
+            # map failures back to chunks and re-translate only those
+            structured = structure_validation_errors(
+                report.get("errors", []), result.get("workflow_json")
+            )
+            erroring_chunks: Set[int] = set()
+            for record in structured:
+                step_no = record.get("step_number")
+                if isinstance(step_no, int) and step_no in step_map:
+                    erroring_chunks.add(step_map[step_no])
+            empty_chunks = {
+                idx for idx, group in enumerate(chunk_groups) if not group
+            }
+            erroring_chunks |= empty_chunks
+            if not erroring_chunks:
+                # global error with no step anchor — re-translate everything
+                erroring_chunks = set(range(len(chunk_groups)))
+
             state.add_log(
                 f"deterministic checks failed ({len(report['errors'])} errors); "
-                f"translation round {round_index}/{max_translation_rounds}"
+                f"round {round_index}/{max_rounds} re-translating chunks "
+                f"{sorted(erroring_chunks)}"
             )
             instruction = self._build_repair_instruction(result, report)
-        if not result:
-            # translation never produced output — surface a failed result so
-            # the terminal package reports the pipeline break honestly.
+            feedback_by_chunk = {idx: instruction for idx in erroring_chunks}
+            only_chunks = erroring_chunks
+            for idx in erroring_chunks:  # force re-translation of these chunks
+                chunk_cache.pop(idx, None)
+
+        if not result or not result.get("workflow_json", {}).get("steps"):
+            # exhausted repairs with empty output — honest failed result that
+            # the terminal package reflows to Research (issue #4).
             result = dict(plan_result)
             result["status"] = "success"
             result["workflow_txt"] = ""
             result["workflow_json"] = {}
-            result["dispatch_validation"] = {
+            result["dispatch_validation"] = report if report.get("errors") else {
                 "status": "failed",
-                "errors": ["workflow translation LLM 未能产出结果。"],
+                "errors": ["workflow translation 分块后仍未产出可校验的 workflow_json。"],
                 "warnings": [],
             }
         return result
@@ -973,16 +1167,23 @@ class SingleDeviceAgent:
 
         workflow_txt = str(result.get("workflow_txt", "")).strip()
         workflow_json = result.get("workflow_json")
-        if not workflow_txt:
-            raise ValueError("single device agent success output missing workflow_txt")
-        if not isinstance(workflow_json, dict) or not isinstance(workflow_json.get("steps"), list):
-            raise ValueError("single device agent success output missing workflow_json.steps")
         self_check = result.get("device_self_check", {})
-        self._raise_if_self_check_failed(self_check)
-
         dispatch_validation = result.get("dispatch_validation")
         if not isinstance(dispatch_validation, dict):
             dispatch_validation = self._workflow_validator.validate(workflow_json)
+        # A pre-computed failed report (incl. empty/truncated translation) must
+        # take the structured-reflow path below, NOT the hard-raise guards —
+        # otherwise an exhausted chunked translation would crash instead of
+        # reflowing to Research (issue #4).
+        if dispatch_validation.get("status") != "failed":
+            if not workflow_txt:
+                raise ValueError("single device agent success output missing workflow_txt")
+            if not isinstance(workflow_json, dict) or not isinstance(workflow_json.get("steps"), list):
+                raise ValueError("single device agent success output missing workflow_json.steps")
+            self._raise_if_self_check_failed(self_check)
+
+        if not isinstance(workflow_json, dict):
+            workflow_json = {}
         if dispatch_validation.get("status") == "failed":
             # Never let an unvalidated dispatch payload leave as success.
             # Issue #4: the exhausted-repair failure flows BACK to Research as
