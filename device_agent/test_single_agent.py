@@ -382,7 +382,7 @@ def test_deterministic_completion_avoids_llm_repair_round():
         "status": "success",
         "feasibility": {"is_feasible": True, "blocking_constraints": []},
         "macro_plan_summary": "映射成功",
-        "workflow_txt": "1. 第1步 303物料站：物料拿取",
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取\n第2步 Liquid_Handling_Station_1ml_V2：开盖",
         "workflow_json": {
             "steps": [
                 {"step_number": 1, "workstation": "General_Material_Station_V1",
@@ -474,6 +474,144 @@ def test_completion_applies_to_self_repair_output():
     assert state.terminal_package["status"] == "success"
 
 
+class _SequencedModel:
+    def __init__(self, payloads):
+        self.payloads = payloads
+        self.calls = []
+        self.prompts = []
+
+    def invoke(self, messages):
+        idx = min(len(self.calls), len(self.payloads) - 1)
+        self.calls.append(messages)
+        self.prompts.append(
+            "\n".join(
+                getattr(m, "content", None) or m.get("content", "")
+                for m in messages
+            )
+        )
+        return types.SimpleNamespace(
+            content=json.dumps(self.payloads[idx], ensure_ascii=False))
+
+
+def _good_material_step():
+    return {
+        "step_number": 1,
+        "workstation": "General_Material_Station_V1",
+        "operation": "物料拿取",
+        "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1]},
+    }
+
+
+def test_weighing_handoff_triggers_audit_repair_and_route_note():
+    """Issue #9: a manual-weighing offline_handoff must fail the deterministic
+    checks, the repair prompt must carry unnecessary_offline_handoff + the
+    canonical solid-weighing route, and a compliant repair round succeeds with
+    capability_audit=clean in the terminal package."""
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+
+    attempt1 = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": {
+            "steps": [_good_material_step()],
+            "offline_handoffs": [{
+                "name": "XRD定量称样与换瓶",
+                "instructions": ["分别称取5.0 mg粉末并对应装入无盖进样瓶21-30"],
+            }],
+        },
+    }
+    attempt2 = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": {"steps": [_good_material_step()], "offline_handoffs": []},
+    }
+    model = _SequencedModel([attempt1, attempt2])
+    agent = SingleDeviceAgent(
+        model=model, workstation_loader=loader, workflow_validator=validator,
+    )
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="audit_repair_exp")
+
+    assert len(model.calls) == 2
+    repair_prompt = model.prompts[1]
+    assert "unnecessary_offline_handoff" in repair_prompt or "mg 级固体定量称量" in repair_prompt
+    assert "固体样品转移" in repair_prompt  # canonical route note attached
+    package = state.terminal_package
+    assert package["status"] == "success"
+    assert package["capability_audit"]["status"] == "clean"
+
+
+def test_two_bounded_repair_rounds_then_success():
+    """Issue #12: repair → re-validate → repair → re-validate. bad, bad, good
+    = 3 mapping calls and a success package."""
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+
+    bad = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": {"steps": [{
+            "step_number": 1,
+            "workstation": "General_Material_Station_V1",
+            "operation": "物料拿取",
+            "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1],
+                           "不存在的危险参数": 999},
+        }], "offline_handoffs": []},
+    }
+    good = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": {"steps": [_good_material_step()], "offline_handoffs": []},
+    }
+    model = _SequencedModel([bad, bad, good])
+    agent = SingleDeviceAgent(
+        model=model, workstation_loader=loader, workflow_validator=validator,
+    )
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="two_round_exp")
+    assert len(model.calls) == 3
+    assert state.terminal_package["status"] == "success"
+
+
+def test_lid_conflict_and_txt_mismatch_are_deterministic_errors():
+    """Issue #12: lid-state continuity and txt↔json agreement are now
+    deterministic checks, not LLM self-check prose."""
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+
+    # 关盖 then an operation whose SKILL input demands 无盖 → proven conflict;
+    # workflow_txt also has fewer 第N步 blocks than steps → txt_json_mismatch.
+    bad = {
+        "status": "success",
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "workflow_txt": "第1步 移液平台1ml_V2：关盖",
+        "workflow_json": {"steps": [
+            {"step_number": 1, "workstation": "Liquid_Handling_Station_1ml_V2",
+             "operation": "关盖",
+             "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1],
+                            "关盖编号": [1]}},
+            {"step_number": 2,
+             "workstation": "Multi_Channel_Solid_Weighing_Workstation_V1",
+             "operation": "固体进样-文件传参-机器人",
+             "parameters": {"容器类型": "进样瓶", "容器数量": 1, "容器编号": [1],
+                            "上传文件": "recipe.csv"}},
+        ], "offline_handoffs": []},
+    }
+    model = _SequencedModel([bad, bad, bad])
+    agent = SingleDeviceAgent(
+        model=model, workstation_loader=loader, workflow_validator=validator,
+    )
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="continuity_exp")
+    package = state.terminal_package
+    assert package["status"] == "failed"
+    errors = " ".join(package["dispatch_validation"]["errors"])
+    assert "lid_state_conflict" in errors
+    assert "txt_json_mismatch" in errors
+
+
 def test_single_device_agent_feasibility_error_package():
     agent = build_agent(
         {
@@ -551,8 +689,8 @@ def test_fabricated_dispatch_parameter_is_rejected():
         "不存在的危险参数" in error
         for error in package["dispatch_validation"]["errors"]
     )
-    # one self-repair round was attempted before giving up
-    assert len(agent._model.calls) == 2
+    # two bounded self-repair rounds were attempted before giving up
+    assert len(agent._model.calls) == 3
 
 
 def test_workflow_validator_accepts_reference_and_rejects_bad_values():
@@ -743,8 +881,14 @@ if __name__ == "__main__":
     test_unconfirmable_precondition_station_is_human_review_not_hard()
     test_liquid_query_keeps_all_ranges_and_stirrer_visible()
     test_single_device_agent_success_package()
+    test_deterministic_completion_avoids_llm_repair_round()
+    test_completion_applies_to_self_repair_output()
+    test_weighing_handoff_triggers_audit_repair_and_route_note()
+    test_two_bounded_repair_rounds_then_success()
+    test_lid_conflict_and_txt_mismatch_are_deterministic_errors()
     test_single_device_agent_feasibility_error_package()
     test_fabricated_dispatch_parameter_is_rejected()
     test_workflow_validator_accepts_reference_and_rejects_bad_values()
+    test_skill_required_params_enforced_for_skill_form_stations()
     test_label_value_enum_param_is_not_a_type_mismatch()
     print("single device agent tests passed")

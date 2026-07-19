@@ -280,6 +280,7 @@ def build_human_readable_result(
             "warnings": _as_list(dispatch_formatting.get("warnings")),
         },
         "offline_handoffs": _as_list(workflow_json.get("offline_handoffs")),
+        "capability_audit": _as_dict(package.get("capability_audit")),
         "temporal_adaptations": _as_list(package.get("temporal_adaptations")),
         "blocking_constraints": _failure_reasons(research_state, device_package),
         "final_experiment_plan": _final_plan_text(research_state, device_package),

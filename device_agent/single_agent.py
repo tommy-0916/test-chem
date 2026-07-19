@@ -31,6 +31,12 @@ from dispatch_formatter import (
     complete_required_fields,
     format_dispatch_payload,
 )
+from capability_audit import (
+    SOLID_WEIGHING_ROUTE_NOTE,
+    audit_offline_handoffs,
+    scan_manual_material_operations,
+    weighing_false_hard_guard,
+)
 from workflow_validator import WorkflowValidator
 
 logger = logging.getLogger(__name__)
@@ -66,7 +72,9 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
      环境常温），在 parameter_disposition 中说明依据，不作为阻塞；
    - derived_process_constraint（可派生流程约束）：可以用多个受支持步骤组合实现的过程语义
      （如“边滴入边搅拌”→分批加液+批次间搅拌，“缓慢滴加”→小份多次加液），必须派生实现并说明；
-   - offline_condition（离线条件）：设备外/人工完成的条件，写入 offline_handoffs；
+   - offline_condition（离线条件）：仅限两类——(a) 观测数据回传（如 XRD 图谱/判读结果），
+     (b) 真源确实无容器路径的操作（如向 96位石英孔板 定量装粉）。写入 offline_handoffs。
+     **mg 级固体称量/分装永远不属于离线条件**（见下方固体称量链路规则）；
    - uncontrollable_mandatory（不可控强制条件）：真源既不能下发、不能派生、也没有固定能力
      覆盖，且科学上必须满足——只有这一类才可能构成阻塞；若不确定是否满足，标记
      requires_review=true 交人工审核，而不是直接判不可行。
@@ -78,6 +86,22 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
    (3) 设备开放参数——Skill 参数表列出的字段，只有这一类需要你填写并严格满足取值范围。
 6. 不要因为 macro action 缺少容器编号、工作站名、原液瓶位、开盖/关盖、偶数进样瓶配平、重复洗涤子步骤而拒绝；这些都由你补全。
 7. 如果 macro action 明确把 XRD/PXRD/SEM/TEM/Raman/XAS 等写成离线 observation/handoff/数据回传，保留为 handoff note，不作为当前设备不可执行原因。
+7a. **45 个工作站在物理上是联通的**，工作站之间的物料和样品转移不需要人类参与。
+    禁止生成任何 human handoff / manual handoff / 人工拿取 / 人工搬运 / 人工转移 /
+    人工称取 / 人工装载 / 人工重新装载步骤（"人工审核/复核/确认"属于审查语义，不受此限）。
+7b. **固体定量称量链路（设备内规范路径，禁止交给人工）**：
+    - 干粉定量加入 进样瓶/西林瓶/50ml耐热瓶：先用 Solid_Sample_Transfer_Workstation_V1 /
+      固体样品转移 把源容器（进样瓶/西林瓶/50ml耐热瓶/96位塑料孔板，无盖固体）中的粉末转入
+      料斗（该操作参数只有 容器类型/容器数量/容器编号）；再用
+      Multi_Channel_Solid_Weighing_Workstation_V1 / 固体进样-文件传参-机器人 定量加入目标容器，
+      配方经 上传文件 CSV（每行：瓶号, 加样量(单位 g，5 mg = 0.005 g，范围 [0,50]), 料罐号(1-30)）。
+      **料斗与料罐是同一进料接口的两种叫法**。
+    - 或用 Single_Channel_Solid_Weighing_Workstation_V1 / 固体进样 直接向 进样瓶/50ml耐热瓶
+      定量进样（参数 进样质量，单位 g，范围 (0,200)）。
+    - 10ml耐压反应管 定量装粉走 Multi_Channel_Solid_Weighing_Workstation_V2 / 固体称量
+      （--料斗编号 1-10，--加料样 单位 g，范围 (0,40]）。
+    - 只有 **96位石英孔板** 的定量装粉是当前真源的真实容器路径缺口（可保留 handoff 或按
+      hard 判定）；除此之外的 mg 级称量/分装一律必须映射为上述设备步骤。
 8. 不要改变研究目标、目标材料、当前 stage 或目标 observation point。
 9. 所有设备动作必须能从给定工作站 USAGE/AUDIT-RULES 找到依据；不要臆造不存在的工作站或参数。
 10. 维护容器身份台账：同一个容器编号在整个 workflow 中必须保持同一种容器类型，除非 workflow 中显式存在受支持的转移/换瓶操作；不能只在 notes 中声称容器仍是另一种类型。
@@ -437,7 +461,9 @@ class SingleDeviceAgent:
             "execution_fidelity=approximated、adaptation_schedule 和 requires_scientific_review=true。\n"
             "2. 若是设备固有能力（如仪器固定辐射源、常温环境），在 feasibility."
             "device_layer_adaptations 中说明依据后按固定能力处理，不作为阻塞。\n"
-            "3. 若设备外可完成（送样、人工操作、外部预配），写入 workflow_json.offline_handoffs。\n"
+            "3. 若为观测数据回传（送样测试后返回图谱/判读）或真源确实无容器路径的操作"
+            "（如向 96位石英孔板 定量装粉），写入 workflow_json.offline_handoffs；"
+            "固体称量/分装必须映射到固体转移+称量工作站，禁止写成人工步骤。\n"
             "4. 只有确认存在硬设备能力缺口时才保留 feasibility_error，并在 blocking_constraints "
             "中写明缺失的工作站/转移路径/容量等硬证据；无法证明满足但也无硬缺口的条件，"
             "映射后在 temporal_adaptations 或 device_layer_adaptations 中标记 requires_scientific_review=true。"
@@ -469,15 +495,83 @@ class SingleDeviceAgent:
         # Never overwrites LLM-written values; never synthesizes structure.
         self._apply_deterministic_completion(state, result)
 
-        report = self._workflow_validator.validate(result.get("workflow_json"))
+        report = self._run_full_checks(result)
         if report["status"] != "failed":
             result.setdefault("dispatch_validation", report)
             return result
 
-        state.add_log(
-            "strict dispatch validation failed "
-            f"({len(report['errors'])} errors); requesting one self-repair round"
+        # Bounded self-repair: up to TWO repair rounds (issue #12 — repair →
+        # re-validate → repair → re-validate; still failing → failed package).
+        max_repair_rounds = 2
+        for repair_round in range(1, max_repair_rounds + 1):
+            state.add_log(
+                f"deterministic checks failed ({len(report['errors'])} errors); "
+                f"self-repair round {repair_round}/{max_repair_rounds}"
+            )
+            instruction = self._build_repair_instruction(result, report)
+            try:
+                repaired = self._invoke_mapping(state, extra_instruction=instruction)
+            except Exception as exc:  # pragma: no cover - remote model dependent
+                state.add_log(f"validation repair call failed: {exc}")
+                break
+            if not (
+                isinstance(repaired, dict)
+                and str(repaired.get("status", "")).strip().lower() == "success"
+            ):
+                break
+            # the repaired output also gets deterministic completion before its
+            # validation — otherwise a repair round can reintroduce mechanical
+            # omissions (e.g. 保留瓶盖) that the harness can fill itself.
+            self._apply_deterministic_completion(state, repaired)
+            second_report = self._run_full_checks(repaired)
+            repaired["dispatch_validation"] = second_report
+            result = repaired
+            report = second_report
+            if report["status"] != "failed":
+                state.add_log(
+                    f"self-repair round {repair_round} passed deterministic checks"
+                )
+                return result
+        result["dispatch_validation"] = report
+        return result
+
+    def _run_full_checks(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Schema validation + txt↔json consistency + capability audit, merged
+        into one report so the repair loop sees every deterministic finding."""
+        workflow_json = result.get("workflow_json")
+        report = self._workflow_validator.validate(workflow_json)
+        errors = list(report.get("errors", []))
+        warnings = list(report.get("warnings", []))
+
+        consistency = self._workflow_validator.validate_consistency(
+            result.get("workflow_txt", ""), workflow_json
         )
+        errors.extend(consistency.get("errors", []))
+        warnings.extend(consistency.get("warnings", []))
+
+        audit_findings = audit_offline_handoffs(workflow_json)
+        audit_findings += scan_manual_material_operations(
+            workflow_json, str(result.get("workflow_txt", ""))
+        )
+        errors.extend(finding["message"] for finding in audit_findings)
+        result["capability_audit"] = (
+            {"status": "flagged", "findings": audit_findings}
+            if audit_findings
+            else {"status": "clean", "findings": []}
+        )
+
+        return {
+            "status": "failed" if errors else "passed",
+            "errors": errors,
+            "warnings": warnings,
+            "checked_steps": report.get("checked_steps", 0),
+        }
+
+    def _build_repair_instruction(
+        self,
+        result: Dict[str, Any],
+        report: Dict[str, Any],
+    ) -> str:
         stations_in_errors: List[str] = []
         for step in (result.get("workflow_json") or {}).get("steps", []):
             if isinstance(step, dict):
@@ -489,38 +583,29 @@ class SingleDeviceAgent:
             allowed = self._workflow_validator.allowed_params_for(station)
             if allowed:
                 allowed_lines.append(f"- {station} 可下发参数：{', '.join(allowed)}")
-        instruction = (
+        audit = result.get("capability_audit") or {}
+        route_note = ""
+        if any(
+            finding.get("type") == "unnecessary_offline_handoff"
+            for finding in audit.get("findings", [])
+        ):
+            route_note = "\n\n" + SOLID_WEIGHING_ROUTE_NOTE
+        return (
             "## 下发参数修复要求\n"
-            "上一轮 workflow_json 未通过确定性下发参数校验，错误如下：\n"
+            "上一轮 workflow 未通过确定性校验（含参数 schema、txt/json 一致性、"
+            "能力反查），错误如下：\n"
             + "\n".join(f"- {item}" for item in report["errors"][:12])
             + (
                 "\n\n各工作站真源允许的参数字段：\n" + "\n".join(allowed_lines)
                 if allowed_lines
                 else ""
             )
+            + route_note
             + "\n请只使用真源参数表中列出的工作站、操作和参数字段（保持真源中的层级字段名，"
-            "不要发明聚合字段），移除臆造字段，补全必填参数，并让数值落在真源允许范围内，"
-            "然后重新输出完整 JSON。"
+            "不要发明聚合字段），移除臆造字段，补全必填参数，让数值落在真源允许范围内；"
+            "被标记为 unnecessary_offline_handoff 或人工物料操作的内容必须改写为对应"
+            "工作站的设备步骤（不允许保留人工称量/转移），然后重新输出完整 JSON。"
         )
-        try:
-            repaired = self._invoke_mapping(state, extra_instruction=instruction)
-        except Exception as exc:  # pragma: no cover - remote model dependent
-            state.add_log(f"validation repair call failed: {exc}")
-            repaired = None
-        if isinstance(repaired, dict) and str(repaired.get("status", "")).strip().lower() == "success":
-            # the repaired output also gets deterministic completion before its
-            # validation — otherwise attempt-2 can reintroduce mechanical
-            # omissions (e.g. 保留瓶盖) that the harness can fill itself.
-            self._apply_deterministic_completion(state, repaired)
-            second_report = self._workflow_validator.validate(repaired.get("workflow_json"))
-            repaired["dispatch_validation"] = second_report
-            if second_report["status"] != "failed":
-                state.add_log("self-repair passed strict dispatch validation")
-                return repaired
-            report = second_report
-            result = repaired
-        result["dispatch_validation"] = report
-        return result
 
     def _apply_deterministic_completion(
         self,
@@ -561,6 +646,21 @@ class SingleDeviceAgent:
                 blocking = ["single device agent 判定当前 macro action 无法映射，但未返回具体阻塞原因。"]
             classification = classify_feasibility_result(result, state.research_handoff)
             overall = classification["overall"] or "unverifiable"
+            # Issue #9 guard: a hard verdict built on "缺少固体称量能力" is
+            # disproved by the truth source (the solid weighing chain exists);
+            # downgrade to unverifiable/needs_human_review. Constraints citing
+            # the true gap (石英孔板/马弗炉 path) keep their hard class.
+            if overall == "hard":
+                hard_items = classification.get("hard", []) or []
+                if hard_items and all(
+                    weighing_false_hard_guard(str(item)) for item in hard_items
+                ):
+                    overall = "unverifiable"
+                    state.add_log(
+                        "weighing false-hard guard: hard verdict rested only on "
+                        "weighing-capability claims disproved by the truth "
+                        "source; downgraded to needs_human_review"
+                    )
             if overall == "hard":
                 error_type = "physical_infeasible"
                 message = result.get("recommendation_to_research_agent", "")
@@ -705,6 +805,9 @@ class SingleDeviceAgent:
             "device_self_check": self_check,
             "dispatch_validation": dispatch_validation,
             "dispatch_completion": result.get("dispatch_completion", {}),
+            "capability_audit": result.get(
+                "capability_audit", {"status": "clean", "findings": []}
+            ),
             "dispatch_payload": dispatch.get("payload", {}),
             "dispatch_formatting": {
                 "mapped_steps": dispatch.get("mapped_steps", 0),

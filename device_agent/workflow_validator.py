@@ -159,6 +159,10 @@ class StationSchema:
         # deterministic completion pass to fill omitted required fields; never
         # changes validation behaviour.
         self.defaults_by_operation: Dict[str, Dict[str, Any]] = {}
+        # operation -> required input lid state ("有盖"/"无盖") parsed from the
+        # SKILL 输入约束 block's `容器状态：必须有盖/必须无盖` line. Drives the
+        # lid-continuity check (issue #12): errors only on PROVEN conflicts.
+        self.lid_requirement_by_operation: Dict[str, str] = {}
 
     def add_param(
         self,
@@ -313,6 +317,7 @@ class WorkflowValidator:
     def _parse_skill_markdown(self, schema: StationSchema, content: str) -> None:
         in_table = False
         current_op = ""
+        in_input_block = False
         # bold list items that are section labels, not operations
         non_operation_labels = {"输入约束", "输出约束", "参数", "示例", "注意", "备注", "约束"}
         for line in content.splitlines():
@@ -323,11 +328,22 @@ class WorkflowValidator:
                 if candidate_op not in non_operation_labels:
                     current_op = candidate_op
                     schema.operations.add(current_op)
+                    in_input_block = False
+                elif candidate_op == "输入约束":
+                    in_input_block = True
+                elif candidate_op == "输出约束":
+                    in_input_block = False
             container_match = re.match(r"^-?\s*容器类型[:：]\s*(.+)$", stripped)
             if container_match:
                 for token in CONTAINER_TOKEN_RE.findall(container_match.group(1)):
                     if token in KNOWN_CONTAINER_TYPES:
                         schema.container_types.add(token)
+            # SKILL input-constraint lid state: `容器状态：必须有盖/必须无盖`
+            lid_match = re.match(r"^-?\s*容器状态[:：]\s*必须(有盖|无盖)", stripped)
+            if lid_match and current_op and in_input_block:
+                schema.lid_requirement_by_operation.setdefault(
+                    current_op, lid_match.group(1)
+                )
             if stripped.startswith("|"):
                 cells = [cell.strip() for cell in stripped.strip("|").split("|")]
                 if cells and cells[0] in {"参数名", "参数"}:
@@ -565,12 +581,131 @@ class WorkflowValidator:
                 station_name, operation, step_no, parameters, errors
             )
 
+        self._validate_lid_continuity(steps, errors, warnings)
+
         return {
             "status": "failed" if errors else "passed",
             "errors": errors,
             "warnings": warnings,
             "checked_steps": len(steps),
         }
+
+    def _validate_lid_continuity(
+        self,
+        steps: List[Any],
+        errors: List[str],
+        warnings: List[str],
+    ) -> None:
+        """Track per-(container type, id) lid state across steps and report
+        PROVEN conflicts only (issue #12: container/sample-state continuity).
+
+        开盖* sets 无盖, 关盖* sets 有盖; the initial state is unknown and an
+        unknown state never errors — heuristic plans that omit lid steps stay
+        valid. A double 开盖/关盖 on an already-known state is a warning; an
+        operation whose SKILL 输入约束 demands 无盖 while the tracked state is
+        有盖 (or vice versa) is an error.
+        """
+        lid_state: Dict[Tuple[str, Any], str] = {}
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                continue
+            step_no = step.get("step_number", index)
+            station_name = str(step.get("workstation", "")).strip()
+            operation = str(step.get("operation", "")).strip()
+            parameters = step.get("parameters")
+            parameters = parameters if isinstance(parameters, dict) else {}
+            container_type = str(parameters.get("容器类型", "")).strip()
+            ids = parameters.get("容器编号")
+            id_list = ids if isinstance(ids, list) else [None]
+            keys = [(container_type, item) for item in id_list]
+
+            requirement = ""
+            station_key = self._resolve_station(station_name)
+            if station_key is not None:
+                schema = self._schemas[station_key]
+                table = getattr(schema, "lid_requirement_by_operation", {})
+                requirement = table.get(operation, "")
+                if not requirement:
+                    normalized_op = _normalize_station_form(operation)
+                    for skill_op, state in table.items():
+                        if _normalize_station_form(skill_op) == normalized_op:
+                            requirement = state
+                            break
+
+            is_open = operation.startswith("开盖")
+            is_close = operation.startswith("关盖")
+            for key in keys:
+                known = lid_state.get(key)
+                if requirement and known and known != requirement:
+                    errors.append(
+                        f"第 {step_no} 步（{station_name}/{operation}）要求容器必须"
+                        f"{requirement}，但按前序开关盖步骤推断当前为{known}"
+                        "（lid_state_conflict）。"
+                    )
+                if is_open:
+                    if known == "无盖":
+                        warnings.append(
+                            f"第 {step_no} 步对已处于无盖状态的容器 {key[1]} 重复开盖。"
+                        )
+                    lid_state[key] = "无盖"
+                elif is_close:
+                    if known == "有盖":
+                        warnings.append(
+                            f"第 {step_no} 步对已处于有盖状态的容器 {key[1]} 重复关盖。"
+                        )
+                    lid_state[key] = "有盖"
+
+    def validate_consistency(
+        self,
+        workflow_txt: str,
+        workflow_json: Any,
+    ) -> Dict[str, Any]:
+        """Deterministic workflow_txt ↔ workflow_json agreement check
+        (issue #12: previously asserted only inside the LLM self-check).
+
+        Checks: the `第N步` block count matches len(steps), and each step's
+        workstation (SKILL code, display name, or a resolvable alias) appears
+        in its corresponding txt block. Anything unprovable is a warning, not
+        an error — only demonstrable mismatches fail."""
+        errors: List[str] = []
+        warnings: List[str] = []
+        text = str(workflow_txt or "")
+        steps = workflow_json.get("steps") if isinstance(workflow_json, dict) else None
+        steps = steps if isinstance(steps, list) else []
+
+        blocks = re.split(r"(?=第\s*\d+\s*步)", text)
+        blocks = [block for block in blocks if re.match(r"第\s*\d+\s*步", block.strip())]
+        if not blocks:
+            if steps:
+                warnings.append("workflow_txt 中未发现『第N步』块，跳过逐步一致性比对。")
+            return {"status": "passed" if not errors else "failed",
+                    "errors": errors, "warnings": warnings}
+        if len(blocks) != len(steps):
+            errors.append(
+                f"workflow_txt 有 {len(blocks)} 个『第N步』块，但 workflow_json 有 "
+                f"{len(steps)} 个 steps（txt_json_mismatch）。"
+            )
+        for index, (block, step) in enumerate(zip(blocks, steps), start=1):
+            if not isinstance(step, dict):
+                continue
+            station = str(step.get("workstation", "")).strip()
+            if not station:
+                continue
+            candidates = {station}
+            station_key = self._resolve_station(station)
+            if station_key is not None:
+                candidates.add(station_key)
+                candidates.add(self._schemas[station_key].label)
+                for alias, key in self._alias_to_key.items():
+                    if key == station_key:
+                        candidates.add(alias)
+            if not any(candidate and candidate in block for candidate in candidates):
+                errors.append(
+                    f"workflow_txt 第 {index} 块未出现该步的工作站『{station}』"
+                    "（txt_json_mismatch）。"
+                )
+        return {"status": "failed" if errors else "passed",
+                "errors": errors, "warnings": warnings}
 
     def _validate_parameters(
         self,
