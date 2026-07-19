@@ -37,14 +37,14 @@ from capability_audit import (
     scan_manual_material_operations,
     weighing_false_hard_guard,
 )
-from workflow_validator import WorkflowValidator
+from workflow_validator import WorkflowValidator, structure_validation_errors
 
 logger = logging.getLogger(__name__)
 
 
 def _needs_temporal_mapping_retry(result: Dict[str, Any], handoff: Dict[str, Any]) -> bool:
-    """Success result whose self-check still complains about addition timing."""
-    if str(result.get("status", "")).strip().lower() != "success":
+    """Plan-stage result whose self-check still complains about addition timing."""
+    if str(result.get("status", "")).strip().lower() not in {"success", "device_plan"}:
         return False
     if not _has_temporal_addition_stirring(handoff):
         return False
@@ -56,18 +56,20 @@ def _needs_temporal_mapping_retry(result: Dict[str, Any], handoff: Dict[str, Any
     )
 
 
-SINGLE_DEVICE_SYSTEM_PROMPT = """
-你是化学自动化平台的 single device agent。
-你只做一件事：把 research agent 输出的化学语义 macro action 映射成当前设备可执行的 workstation workflow。
+FEASIBILITY_PLAN_SYSTEM_PROMPT = """
+你是化学自动化平台的 device feasibility & planning agent（设备两段流程的第一段）。
+你只做一件事：判断 research agent 的化学语义 macro action 能否由当前设备完成，并产出
+**比 workflow_json 更高一级的 device_plan**（设备级计划）。你不写 workflow_json——
+那是第二段 translation agent 的职责；你保证的是"每一步都有真实工作站能做、容器/体积/
+配平/时序在设备上成立"。
 
 职责边界：
-1. 输入包含 query、stage、macro_action_steps、设备/器材真源、TXT/JSON 格式参考。
+1. 输入包含 query、stage、macro_action_steps、设备/器材真源。
 2. research agent 已经根据设备和器材信息尽量规划可做的化学路线，但它仍只输出 macro action，不负责工作站细节。
-3. 你负责选择具体工作站、容器类型、容器编号、原液编号、开盖/关盖、分瓶/配平、重复洗涤、干燥和离线 handoff。
-4. 不再调用 pre-flow agent、workflow generator、verify agent、format translate agent；你一次性完成可行性判断和 workflow 生成。
-5. 只有当当前设备真源无法实现某个必要化学动作或强制科学条件时，才返回 device_feasibility_error。
+3. 你负责选择具体工作站、容器策略、试剂策略、开盖/关盖时机、分瓶/配平、重复洗涤、干燥和离线 handoff 的**计划级决策**；具体参数字段名和 JSON 结构交给第二段。
+4. 只有当当前设备真源无法实现某个必要化学动作或强制科学条件时，才返回 device_feasibility_error。
    先把 macro action 的每个实验参数分类，再决定它是不是阻塞：
-   - device_dispatch_field（设备下发字段）：真源参数表中存在同义字段，直接映射并严格取值；
+   - device_dispatch_field（设备下发字段）：真源参数表中存在同义字段，写入该步骤的 关键参数；
    - fixed_device_capability（固定设备能力）：设备固有且无需下发的能力（如 XRD 的辐射源、
      环境常温），在 parameter_disposition 中说明依据，不作为阻塞；
    - derived_process_constraint（可派生流程约束）：可以用多个受支持步骤组合实现的过程语义
@@ -83,8 +85,8 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
    (1) 论文/Research 参考参数——说明实验依据，不一定需要下发；
    (2) 设备固定参数——设备运行时自动采用（如 XRD 的辐射源、扫描起止角），你不填写，
        也绝不能因为它们没有出现在可下发参数表中而判定设备不可行；
-   (3) 设备开放参数——Skill 参数表列出的字段，只有这一类需要你填写并严格满足取值范围。
-6. 不要因为 macro action 缺少容器编号、工作站名、原液瓶位、开盖/关盖、偶数进样瓶配平、重复洗涤子步骤而拒绝；这些都由你补全。
+   (3) 设备开放参数——Skill 参数表列出的字段，只有这一类需要写入计划并严格满足取值范围。
+6. 不要因为 macro action 缺少容器编号、工作站名、原液瓶位、开盖/关盖、偶数进样瓶配平、重复洗涤子步骤而拒绝；这些都由你在计划级补全。
 7. 如果 macro action 明确把 XRD/PXRD/SEM/TEM/Raman/XAS 等写成离线 observation/handoff/数据回传，保留为 handoff note，不作为当前设备不可执行原因。
 7a. **45 个工作站在物理上是联通的**，工作站之间的物料和样品转移不需要人类参与。
     禁止生成任何 human handoff / manual handoff / 人工拿取 / 人工搬运 / 人工转移 /
@@ -103,49 +105,63 @@ SINGLE_DEVICE_SYSTEM_PROMPT = """
     - 只有 **96位石英孔板** 的定量装粉是当前真源的真实容器路径缺口（可保留 handoff 或按
       hard 判定）；除此之外的 mg 级称量/分装一律必须映射为上述设备步骤。
 8. 不要改变研究目标、目标材料、当前 stage 或目标 observation point。
-9. 所有设备动作必须能从给定工作站 USAGE/AUDIT-RULES 找到依据；不要臆造不存在的工作站或参数。
-10. 维护容器身份台账：同一个容器编号在整个 workflow 中必须保持同一种容器类型，除非 workflow 中显式存在受支持的转移/换瓶操作；不能只在 notes 中声称容器仍是另一种类型。
+9. 计划中的每个步骤都必须能从给定工作站 USAGE/AUDIT-RULES 找到依据；不要臆造不存在的工作站。
+10. 维护容器身份台账：同一个容器编号在整个计划中必须保持同一种容器类型，除非计划中显式存在受支持的转移/换瓶步骤。
 11. 维护体积台账：每次加液、洗涤、去上清、保留清洗液、干燥前后都要避免让任一容器的液体体积超过当前工作站/容器真源限制。若宏观体积过大，优先等比例缩小体系或拆分到多个等价样品容器，并在 device_layer_adaptations 中说明；不能静默超限。
 12. 离心/纯化需要配平时，进入同一次离心的容器数量、容器类型和液体体积必须可配平。若使用配平瓶，配平瓶体积应与主样瓶接近；若无法配平，返回 device_feasibility_error。
-13. 保留化学上有意义的加料方式：若 macro action 明确要求滴加、缓慢加入、分批加入或给出加入速率，必须映射成设备支持的分批/多次加液或在 workflow 中记录可执行的近似节拍；不要擅自改成一次性加入，除非 macro action 明确允许。
+13. 保留化学上有意义的加料方式：若 macro action 明确要求滴加、缓慢加入、分批加入或给出加入速率，必须在计划中写成设备支持的分批/多次加液节拍；不要擅自改成一次性加入，除非 macro action 明确允许。
     “边滴入边搅拌/边搅拌边滴加/同步搅拌加液”默认是可适配的时间语义：若液体进样站和磁力搅拌站支持同一容器，
-    应生成“预搅拌 -> 小份加液 -> 固定时间搅拌 -> 重复 -> 最终搅拌”的交替节拍，并在 adaptations 中标明
+    应规划“预搅拌 -> 小份加液 -> 固定时间搅拌 -> 重复 -> 最终搅拌”的交替节拍，并在 temporal_adaptations 中标明
     `execution_fidelity=approximated`、原始要求和分批计划；不得仅因没有单站原子化并行动作就返回 feasibility_error。
     只有明确要求不可中断的连续流/恒定流速/微流控进料，或不存在共享容器和合法转移路径时，才可返回 feasibility_error。
-14. 如果某个 macro action 会造成“反应/静置/暂存所需容器”与“后续离心/洗涤/干燥/测试所需容器”之间没有受支持的连续路径，不能通过更改容器名称、notes 解释或跳过转移来伪装可执行；必须返回 device_feasibility_error，并在 suggested_research_revision 中说明需要 research layer 改成可连续容器路径的化学语义路线。
-15. 成功输出前必须做一次内部设备自检：工作站/操作/参数受真源支持，容器类型连续，开盖/关盖状态合理，累计体积不超限，离心配平成立，workflow_txt 与 workflow_json 一致。自检不通过时先修复，无法修复时返回 device_feasibility_error。
-16. 输出必须是一个 JSON object，不要 Markdown，不要代码块。
+14. 如果某个 macro action 会造成“反应/静置/暂存所需容器”与“后续离心/洗涤/干燥/测试所需容器”之间没有受支持的连续路径，不能通过更改容器名称或跳过转移来伪装可执行；必须返回 device_feasibility_error，并在 suggested_research_revision 中说明需要 research layer 改成可连续容器路径的化学语义路线。
+15. 输出必须是一个 JSON object，不要 Markdown，不要代码块。
+""".strip()
+
+TRANSLATION_SYSTEM_PROMPT = """
+你是化学自动化平台的 workflow translation agent（设备两段流程的第二段）。
+你只做一件事：把第一段产出的 device_plan **逐步、忠实地**翻译成严格符合工作站 Skill
+参数表的 workflow_txt 和 workflow_json。
+
+铁律：
+1. **不做化学决策**：不增删步骤、不改变工作站选择、不改变任何化学数值（体积/质量/温度/
+   时间/转速）；device_plan 说什么你翻什么。
+2. 每个 workflow_json 步骤的参数字段名、嵌套层级、类型、枚举、单位、取值范围必须严格来自
+   下方给出的工作站参数表；**禁止发明参数名或聚合字段**。
+3. device_plan 的每个 plan 步骤可以展开为多个 workflow 步骤（如开盖→加液→关盖），但每个
+   workflow 步骤必须继承来源 plan 步骤的 source_macro_step，并携带 macro_action_id /
+   observation_point_id（如 device_plan 提供）。
+4. 必填参数（参数表 是否必填=是）必须全部填写；容器数量必须等于容器编号数组长度。
+5. workflow_txt 严格仿照 TXT 格式参考（第N步 工作站：…），且与 workflow_json 步骤
+   一一对应（块数相同、每块出现该步工作站名）。
+6. temporal_adaptations 与 offline_handoffs 原样搬运 device_plan 中的内容，不新增不删除。
+7. 输出必须是一个 JSON object：{"workflow_txt": "...", "workflow_json": {...}}，
+   不要 Markdown，不要代码块，不要输出其它键。
 """.strip()
 
 
-SINGLE_DEVICE_TASK_PROMPT = """
-请把 research handoff 映射为当前设备可执行的 workflow。
+FEASIBILITY_PLAN_TASK_PROMPT = """
+请判断 research handoff 能否由当前设备完成，并产出 device_plan（设备级计划，不含 workflow_json）。
 
 ## research handoff
 {research_handoff_json}
 
 ## 当前设备/器材真源
-下面是每个工作站的 USAGE.md 和 AUDIT-RULES.md 摘要/全文。只能使用这里出现的工作站、容器、操作和参数。
+下面是每个工作站的 USAGE.md 和 AUDIT-RULES.md 摘要/全文。只能使用这里出现的工作站、容器和操作。
 {workstation_descriptions}
-
-## TXT workflow 格式参考
-{txt_format_reference}
-
-## JSON workflow 格式参考
-{json_format_reference}
 
 ## 输出 JSON 格式
 必须返回一个 JSON object，二选一：
 
-### 情况 A：可以映射
+### 情况 A：可以由设备完成 → 输出 device_plan
 {{
-  "status": "success",
+  "status": "device_plan",
   "feasibility": {{
     "is_feasible": true,
     "blocking_constraints": [],
-    "device_layer_adaptations": ["你补全了哪些设备层映射"]
+    "device_layer_adaptations": ["你在计划级补全了哪些设备映射决策"]
   }},
-  "macro_plan_summary": "一句话说明从 macro action 到设备 workflow 的映射策略",
+  "macro_plan_summary": "一句话说明从 macro action 到设备计划的映射策略",
   "device_self_check": {{
     "container_continuity": "pass/fail + 简短说明",
     "volume_and_capacity": "pass/fail + 简短说明",
@@ -168,34 +184,33 @@ SINGLE_DEVICE_TASK_PROMPT = """
       "用途": "用途"
     }}
   ],
-  "workflow_txt": "严格仿照 TXT workflow 格式参考的工作流文本",
-  "workflow_json": {{
-    "steps": [
-      {{
-        "step_number": 1,
-        "workstation": "工作站名称",
-        "operation": "操作名称",
-        "parameters": {{}},
-        "source_macro_step": 1,
-        "notes": "可选说明"
-      }}
-    ],
-    "temporal_adaptations": [
-      {{
-        "original_requirement": "边滴入边搅拌",
-        "execution_fidelity": "approximated",
-        "adaptation_schedule": "预搅拌 -> 分批加液 -> 每批固定时间搅拌 -> 最终搅拌",
-        "requires_scientific_review": true
-      }}
-    ],
-    "offline_handoffs": [
-      {{
-        "name": "离线 XRD observation",
-        "sample": "样品",
-        "required_return_data": ["XRD 图谱", "判读结果"]
-      }}
-    ]
-  }}
+  "device_plan": [
+    {{
+      "plan_step": 1,
+      "workstation": "工作站名称（真源中的名称）",
+      "objective": "这一步要达成什么（化学语义）",
+      "operation_intent": "操作意图（如 拿取容器/开盖/分批加液/搅拌/离心/烘干/固体转移/定量称量）",
+      "key_values": {{"体积/质量/温度/时间/转速等化学数值": "值+单位"}},
+      "containers": {{"容器类型": "进样瓶", "容器编号": [1, 2]}},
+      "source_macro_step": 1,
+      "notes": "可选：配平/节拍/换容器等计划级说明"
+    }}
+  ],
+  "temporal_adaptations": [
+    {{
+      "original_requirement": "边滴入边搅拌",
+      "execution_fidelity": "approximated",
+      "adaptation_schedule": "预搅拌 -> 分批加液 -> 每批固定时间搅拌 -> 最终搅拌",
+      "requires_scientific_review": true
+    }}
+  ],
+  "offline_handoffs": [
+    {{
+      "name": "离线 XRD observation",
+      "sample": "样品",
+      "required_return_data": ["XRD 图谱", "判读结果"]
+    }}
+  ]
 }}
 
 ### 情况 B：不能映射
@@ -225,24 +240,59 @@ SINGLE_DEVICE_TASK_PROMPT = """
   "recommendation_to_research_agent": "给 research agent 的简短反馈"
 }}
 
-生成要求：
-- workflow_txt 必须是工作站步骤，不是 macro action 复述。
-- workflow_json.steps 必须和 workflow_txt 表达同一套步骤。
-- 每个设备步骤尽量标注 source_macro_step。
-- 涉及洗涤时，展开成固定次数或工作站支持的清洗次数，不写“洗涤至”。
-- 涉及干燥时，使用固定温度和固定时间，不写“干燥至”。
-- 离线 observation 可以放在 workflow_json.offline_handoffs，也可以在 workflow_txt 末尾写成“离线 handoff”，但不得伪造成设备内工作站。
-- 如果无法确定某个原液编号，自己分配编号并在 reagent_slot_plan 中说明。
-- 如果需要偶数容器配平，自己选择偶数容器并贯穿后续步骤。
-- 如果 macro action 含“边滴入边搅拌/边搅拌边滴加”等时间语义，优先在同一容器上交替调用液体进样站和磁力搅拌站；
-  `workflow_json.steps` 必须显式展开至少两批加液与批次间搅拌（或记录等价固定节拍），并在 `workflow_json.temporal_adaptations`
-  中保留 `original_requirement`、`execution_fidelity`、`adaptation_schedule` 和 `requires_scientific_review`。
-- 对每个容器编号建立隐式台账：容器类型、当前体积、是否带盖、当前样品用途。后续步骤使用该容器编号时必须与台账一致；如需换容器，必须加入真源支持的转移/重新取样步骤，否则不能换。
-- 对每个加液步骤检查单次加液量、累计体积和后续工作站体积限制。若宏观计划体积超过设备真源或接近不可执行边界，可以等比例缩小所有相关试剂体积以保持摩尔比/浓度关系，或拆分为多个并行样品瓶；必须在 device_layer_adaptations 中说明缩放或拆分理由。
-- 若进入离心/纯化工作站的样品需要配平，所有参与该次离心的容器应使用同一种容器类型，并具有接近的液体体积；不能只用低体积配平瓶去配高体积主样瓶。
-- 若 macro action 包含滴加、缓慢加入、分批加入、加入速率或时间依赖混合，workflow 必须体现为多次加液、分批加液或明确的可执行节拍。若设备真源不支持连续滴加，使用保守分批近似并说明；只有分批近似也不可行或原始要求明确不可中断时，才返回 device_feasibility_error。
-- 不要把“建议”“范围”“上限”当作可以贴边或超过的默认值；优先选择留有余量的参数。若必须贴近边界，必须在 feasibility/device_layer_adaptations 中解释为什么仍可执行。
-- 成功输出必须包含 device_self_check，且其中任一项为 fail 时不得返回 success；应先修改 workflow，若无法修改则返回 device_feasibility_error。
+计划要求：
+- device_plan 步骤按执行顺序排列；开盖/关盖/配平/重复洗涤在计划级写成显式步骤或 notes 说明。
+- 涉及洗涤时，展开成固定次数；涉及干燥时，使用固定温度和固定时间；不写“至……为止”。
+- 若无法确定原液编号，自己分配并在 reagent_slot_plan 说明；需要偶数配平时自己选偶数容器并贯穿。
+- 对每个容器维护台账（类型/体积/带盖/用途）；换容器必须有真源支持的转移步骤。
+- 时间语义（边滴入边搅拌等）在计划级展开为交替节拍并记入 temporal_adaptations。
+- 不要把“建议/范围/上限”当作可贴边的默认值；必须贴边时在 device_layer_adaptations 解释。
+""".strip()
+
+
+TRANSLATION_TASK_PROMPT = """
+请把下面的 device_plan 忠实翻译成严格符合工作站参数表的 workflow_txt 与 workflow_json。
+
+## device_plan（第一段产出，化学决策已定，禁止更改）
+{device_plan_json}
+
+## 各工作站参数表（唯一合法的参数字段来源）
+{station_parameter_tables}
+
+## TXT workflow 格式参考
+{txt_format_reference}
+
+## JSON workflow 格式参考
+{json_format_reference}
+
+## 输出 JSON 格式
+只输出：
+{{
+  "workflow_txt": "严格仿照 TXT 格式参考的工作流文本（第N步 工作站：…）",
+  "workflow_json": {{
+    "steps": [
+      {{
+        "step_number": 1,
+        "workstation": "工作站名称",
+        "operation": "操作名称（参数表中存在的操作）",
+        "parameters": {{}},
+        "source_macro_step": 1,
+        "notes": "可选说明"
+      }}
+    ],
+    "temporal_adaptations": [],
+    "offline_handoffs": []
+  }}
+}}
+
+翻译要求：
+- 每个 plan 步骤可展开为多个 workflow 步骤（如 开盖→加液→关盖），每个 workflow 步骤继承
+  该 plan 步骤的 source_macro_step（以及 macro_action_id/observation_point_id，若提供）。
+- 参数字段名/嵌套/类型/枚举/单位/范围严格来自参数表；必填参数全部填写；
+  容器数量 == len(容器编号)。
+- 化学数值（体积/质量/温度/时间/转速）从 device_plan.key_values 原样搬运，只做单位换算。
+- temporal_adaptations 与 offline_handoffs 从 device_plan 原样搬运。
+- workflow_txt 与 workflow_json 一一对应（块数相同、每块出现该步工作站名）。
 """.strip()
 
 
@@ -307,6 +357,26 @@ class SingleDeviceAgent:
                 return ""
         return ""
 
+    @staticmethod
+    def _plan_signature(research_handoff: Dict[str, Any]) -> str:
+        """Stable signature of the macro steps this device attempt worked on
+        (issue #4: research must be able to refuse regenerating a failed
+        route). Mirrors the research-side idea: ops + reagents + numbers."""
+        import hashlib
+
+        parts: List[str] = []
+        for step in research_handoff.get("macro_action_steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            numbers = re.findall(
+                r"\d+(?:\.\d+)?", str(step.get("参数", ""))
+            )
+            parts.append(
+                f"{step.get('操作', '')}|{step.get('试剂/对象', '')}|{','.join(numbers)}"
+            )
+        digest = hashlib.sha1("||".join(parts).encode("utf-8")).hexdigest()[:12]
+        return f"plan_{digest}"
+
     def run_state(
         self,
         research_handoff: Dict[str, Any],
@@ -337,9 +407,21 @@ class SingleDeviceAgent:
         )
         state.add_log("SingleDeviceAgent started")
         try:
-            result = self._invoke_mapping(state)
-            result = self._retry_adaptable_feedback(state, result, research_handoff)
-            result = self._repair_validation_failures(state, result)
+            # Stage 1: feasibility + device-level plan (no workflow_json).
+            plan_result = self._invoke_feasibility_plan(state)
+            plan_result = self._retry_adaptable_feedback(state, plan_result, research_handoff)
+            plan_result = self._repair_plan_level_findings(state, plan_result)
+
+            if str(plan_result.get("status", "")).strip().lower() in {
+                "device_plan", "success",
+            }:
+                # Stage 2: dedicated translation into strict workflow form;
+                # the chemistry plan is frozen from here on — repairs only
+                # re-invoke translation.
+                result = self._translate_and_verify(state, plan_result)
+            else:
+                result = plan_result
+
             state.raw_llm_output = result
             package = self._normalize_terminal_package(state, result)
             state.terminal_package = package
@@ -380,13 +462,14 @@ class SingleDeviceAgent:
         }
         return json.dumps(focused, ensure_ascii=False)
 
-    def _invoke_mapping(
+    def _invoke_feasibility_plan(
         self,
         state: SingleDeviceAgentState,
         *,
         extra_instruction: str = "",
     ) -> Dict[str, Any]:
-        prompt = SINGLE_DEVICE_TASK_PROMPT
+        """Stage 1: feasibility verdict + device_plan (no workflow_json)."""
+        prompt = FEASIBILITY_PLAN_TASK_PROMPT
         replacements = {
             "{research_handoff_json}": json.dumps(
                 state.research_handoff,
@@ -394,8 +477,6 @@ class SingleDeviceAgent:
                 indent=2,
             ),
             "{workstation_descriptions}": state.workstation_descriptions,
-            "{txt_format_reference}": state.txt_format_reference,
-            "{json_format_reference}": state.json_format_reference,
         }
         for placeholder, value in replacements.items():
             prompt = prompt.replace(placeholder, value)
@@ -409,17 +490,97 @@ class SingleDeviceAgent:
         if extra_instruction:
             prompt += f"\n\n{extra_instruction}"
         messages = [
-            SystemMessage(content=SINGLE_DEVICE_SYSTEM_PROMPT),
+            SystemMessage(content=FEASIBILITY_PLAN_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
         ]
-        print("[single-device-agent] LLM step start: map_macro_to_workflow", flush=True)
+        print("[single-device-agent] LLM step start: feasibility_device_plan", flush=True)
         response = self._model.invoke(messages)
-        print("[single-device-agent] LLM step done: map_macro_to_workflow", flush=True)
+        print("[single-device-agent] LLM step done: feasibility_device_plan", flush=True)
         content = self._coerce_text(getattr(response, "content", response))
         result = self._parse_json(content)
         if not isinstance(result, dict):
-            raise ValueError("single device LLM did not return a JSON object")
+            raise ValueError("feasibility-plan LLM did not return a JSON object")
         return result
+
+    def _invoke_translation(
+        self,
+        state: SingleDeviceAgentState,
+        plan_result: Dict[str, Any],
+        *,
+        extra_instruction: str = "",
+    ) -> Dict[str, Any]:
+        """Stage 2: translate the frozen device_plan into workflow_txt/json."""
+        plan_view = {
+            "device_plan": plan_result.get("device_plan", []),
+            "reagent_slot_plan": plan_result.get("reagent_slot_plan", []),
+            "container_plan": plan_result.get("container_plan", []),
+            "temporal_adaptations": plan_result.get("temporal_adaptations", []),
+            "offline_handoffs": plan_result.get("offline_handoffs", []),
+            "macro_action": (
+                state.research_handoff.get("macro_action")
+                if isinstance(state.research_handoff.get("macro_action"), dict)
+                else {}
+            ),
+        }
+        prompt = TRANSLATION_TASK_PROMPT
+        replacements = {
+            "{device_plan_json}": json.dumps(plan_view, ensure_ascii=False, indent=2),
+            "{station_parameter_tables}": self._station_parameter_tables(plan_result),
+            "{txt_format_reference}": state.txt_format_reference,
+            "{json_format_reference}": state.json_format_reference,
+        }
+        for placeholder, value in replacements.items():
+            prompt = prompt.replace(placeholder, value)
+        if extra_instruction:
+            prompt += f"\n\n{extra_instruction}"
+        messages = [
+            SystemMessage(content=TRANSLATION_SYSTEM_PROMPT),
+            HumanMessage(content=prompt),
+        ]
+        print("[single-device-agent] LLM step start: workflow_translation", flush=True)
+        response = self._model.invoke(messages)
+        print("[single-device-agent] LLM step done: workflow_translation", flush=True)
+        content = self._coerce_text(getattr(response, "content", response))
+        result = self._parse_json(content)
+        if not isinstance(result, dict):
+            raise ValueError("translation LLM did not return a JSON object")
+        return result
+
+    def _station_parameter_tables(self, plan_result: Dict[str, Any]) -> str:
+        """SKILL parameter-table excerpts for exactly the stations the plan
+        uses — the translation stage's only legal source of field names."""
+        stations: List[str] = []
+        for step in plan_result.get("device_plan", []) or []:
+            if isinstance(step, dict):
+                name = str(step.get("workstation", "")).strip()
+                if name and name not in stations:
+                    stations.append(name)
+        if not stations:
+            return self._workstation_loader.format_for_prompt()
+        sections: List[str] = []
+        try:
+            all_stations = {
+                str(entry.get("station_name", "")): entry
+                for entry in self._workstation_loader.get_all()
+                if isinstance(entry, dict)
+            }
+        except Exception:
+            all_stations = {}
+        for name in stations[:12]:
+            entry = all_stations.get(name)
+            if entry is None:
+                for key, candidate in all_stations.items():
+                    if name in key or key in name or name == str(candidate.get("display_name", "")):
+                        entry = candidate
+                        break
+            allowed = self._workflow_validator.allowed_params_for(name)
+            header = f"### {name}\n可下发参数：{', '.join(allowed) if allowed else '(未解析)'}"
+            body = ""
+            if isinstance(entry, dict):
+                content = str(entry.get("skill_content", "") or entry.get("usage_content", ""))
+                body = content[:4000]
+            sections.append(header + ("\n" + body if body else ""))
+        return "\n\n".join(sections)
 
     def _retry_adaptable_feedback(
         self,
@@ -454,22 +615,22 @@ class SingleDeviceAgent:
             "（缺失工作站/无转移路径/容器不兼容/容量超限/站点离线/明确不可中断连续流）。\n"
             "被拒绝的原因是：\n"
             + "\n".join(f"- {item}" for item in complaints[:6])
-            + "\n请重新检查真源并按下列优先级处理每一条原因，然后输出 success：\n"
+            + "\n请重新检查真源并按下列优先级处理每一条原因，然后输出 device_plan（情况 A）：\n"
             "1. 若是过程/时间语义（如边滴入边搅拌、缓慢滴加、分批），在同一兼容容器上派生为"
             "受支持步骤的组合（分批加液、批次间固定转速搅拌等），保持总量、顺序和近似总时长，"
-            "并在 workflow_json.temporal_adaptations 中写明 original_requirement、"
+            "并在 temporal_adaptations 中写明 original_requirement、"
             "execution_fidelity=approximated、adaptation_schedule 和 requires_scientific_review=true。\n"
             "2. 若是设备固有能力（如仪器固定辐射源、常温环境），在 feasibility."
             "device_layer_adaptations 中说明依据后按固定能力处理，不作为阻塞。\n"
             "3. 若为观测数据回传（送样测试后返回图谱/判读）或真源确实无容器路径的操作"
-            "（如向 96位石英孔板 定量装粉），写入 workflow_json.offline_handoffs；"
+            "（如向 96位石英孔板 定量装粉），写入 offline_handoffs；"
             "固体称量/分装必须映射到固体转移+称量工作站，禁止写成人工步骤。\n"
             "4. 只有确认存在硬设备能力缺口时才保留 feasibility_error，并在 blocking_constraints "
             "中写明缺失的工作站/转移路径/容量等硬证据；无法证明满足但也无硬缺口的条件，"
             "映射后在 temporal_adaptations 或 device_layer_adaptations 中标记 requires_scientific_review=true。"
         )
         try:
-            retry_result = self._invoke_mapping(state, extra_instruction=instruction)
+            retry_result = self._invoke_feasibility_plan(state, extra_instruction=instruction)
         except Exception as exc:  # pragma: no cover - remote model dependent
             state.add_log(
                 f"adaptation retry failed; retaining original feedback: {exc}"
@@ -479,61 +640,129 @@ class SingleDeviceAgent:
             return retry_result
         return result
 
-    def _repair_validation_failures(
+    def _repair_plan_level_findings(
         self,
         state: SingleDeviceAgentState,
-        result: Dict[str, Any],
+        plan_result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """One self-repair round when strict dispatch validation fails."""
-        if str(result.get("status", "")).strip().lower() != "success":
-            return result
+        """One stage-1 re-invoke when the PLAN itself carries audit findings
+        (weighing handoffs / manual material ops live in the plan's
+        offline_handoffs — translation cannot fix them)."""
+        if str(plan_result.get("status", "")).strip().lower() not in {
+            "device_plan", "success",
+        }:
+            return plan_result
+        plan_view = {
+            "offline_handoffs": plan_result.get("offline_handoffs", []),
+            "steps": plan_result.get("device_plan", []),
+        }
+        findings = audit_offline_handoffs(plan_view)
+        findings += scan_manual_material_operations(plan_view, "")
+        if not findings:
+            return plan_result
+        state.add_log(
+            f"plan-level capability audit flagged {len(findings)} finding(s); "
+            "re-invoking feasibility-plan stage once"
+        )
+        instruction = (
+            "## 计划级能力审计未通过\n"
+            + "\n".join(f"- {finding['message']}" for finding in findings[:6])
+            + "\n\n" + SOLID_WEIGHING_ROUTE_NOTE
+            + "\n请把上述被标记的人工/离线内容改写为对应工作站的计划步骤"
+            "（disallowed 的人工物料操作不得保留），重新输出完整 JSON。"
+        )
+        try:
+            retried = self._invoke_feasibility_plan(state, extra_instruction=instruction)
+        except Exception as exc:  # pragma: no cover - remote model dependent
+            state.add_log(f"plan-level repair call failed: {exc}")
+            return plan_result
+        if isinstance(retried, dict) and str(retried.get("status", "")).strip().lower() in {
+            "device_plan", "success", "feasibility_error",
+        }:
+            return retried
+        return plan_result
 
-        # Deterministic pre-validation completion: fill mechanically-derivable
-        # required fields (容器数量=len(容器编号), 开盖/关盖编号, SKILL 默认值 like
-        # 保留瓶盖=1) so the Device layer never fails validation — or burns an
-        # LLM self-repair round — on omissions the harness can fill itself.
-        # Never overwrites LLM-written values; never synthesizes structure.
-        self._apply_deterministic_completion(state, result)
-
-        report = self._run_full_checks(result)
-        if report["status"] != "failed":
-            result.setdefault("dispatch_validation", report)
-            return result
-
-        # Bounded self-repair: up to TWO repair rounds (issue #12 — repair →
-        # re-validate → repair → re-validate; still failing → failed package).
-        max_repair_rounds = 2
-        for repair_round in range(1, max_repair_rounds + 1):
+    def _translate_and_verify(
+        self,
+        state: SingleDeviceAgentState,
+        plan_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Stage 2 with the bounded repair loop: translate the frozen plan,
+        run the full deterministic checks, and re-invoke ONLY the translation
+        stage on failure (issue #12 — repairs never re-roll the chemistry)."""
+        max_translation_rounds = 3  # initial + two repairs
+        report: Dict[str, Any] = {"status": "failed", "errors": [], "warnings": []}
+        result: Dict[str, Any] = {}
+        instruction = ""
+        for round_index in range(1, max_translation_rounds + 1):
+            try:
+                translated = self._invoke_translation(
+                    state, plan_result, extra_instruction=instruction
+                )
+            except Exception as exc:  # pragma: no cover - remote model dependent
+                state.add_log(f"translation call failed: {exc}")
+                break
+            result = self._merge_plan_and_translation(plan_result, translated)
+            # Deterministic pre-validation completion: fill mechanically-
+            # derivable required fields so translation never fails on
+            # omissions the harness can fill itself.
+            self._apply_deterministic_completion(state, result)
+            report = self._run_full_checks(result)
+            result["dispatch_validation"] = report
+            if report["status"] != "failed":
+                if round_index > 1:
+                    state.add_log(
+                        f"translation repair round {round_index - 1} passed "
+                        "deterministic checks"
+                    )
+                return result
             state.add_log(
                 f"deterministic checks failed ({len(report['errors'])} errors); "
-                f"self-repair round {repair_round}/{max_repair_rounds}"
+                f"translation round {round_index}/{max_translation_rounds}"
             )
             instruction = self._build_repair_instruction(result, report)
-            try:
-                repaired = self._invoke_mapping(state, extra_instruction=instruction)
-            except Exception as exc:  # pragma: no cover - remote model dependent
-                state.add_log(f"validation repair call failed: {exc}")
-                break
-            if not (
-                isinstance(repaired, dict)
-                and str(repaired.get("status", "")).strip().lower() == "success"
-            ):
-                break
-            # the repaired output also gets deterministic completion before its
-            # validation — otherwise a repair round can reintroduce mechanical
-            # omissions (e.g. 保留瓶盖) that the harness can fill itself.
-            self._apply_deterministic_completion(state, repaired)
-            second_report = self._run_full_checks(repaired)
-            repaired["dispatch_validation"] = second_report
-            result = repaired
-            report = second_report
-            if report["status"] != "failed":
-                state.add_log(
-                    f"self-repair round {repair_round} passed deterministic checks"
-                )
-                return result
-        result["dispatch_validation"] = report
+        if not result:
+            # translation never produced output — surface a failed result so
+            # the terminal package reports the pipeline break honestly.
+            result = dict(plan_result)
+            result["status"] = "success"
+            result["workflow_txt"] = ""
+            result["workflow_json"] = {}
+            result["dispatch_validation"] = {
+                "status": "failed",
+                "errors": ["workflow translation LLM 未能产出结果。"],
+                "warnings": [],
+            }
         return result
+
+    def _merge_plan_and_translation(
+        self,
+        plan_result: Dict[str, Any],
+        translated: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Compose the terminal result: plan fields from stage 1, workflow
+        fields from stage 2. temporal_adaptations/offline_handoffs live inside
+        workflow_json per the established contract, sourced from the plan."""
+        workflow_json = translated.get("workflow_json")
+        workflow_json = dict(workflow_json) if isinstance(workflow_json, dict) else {}
+        workflow_json.setdefault(
+            "temporal_adaptations", plan_result.get("temporal_adaptations", [])
+        )
+        workflow_json.setdefault(
+            "offline_handoffs", plan_result.get("offline_handoffs", [])
+        )
+        merged = {
+            "status": "success",
+            "feasibility": plan_result.get("feasibility", {}),
+            "macro_plan_summary": plan_result.get("macro_plan_summary", ""),
+            "device_self_check": plan_result.get("device_self_check", {}),
+            "reagent_slot_plan": plan_result.get("reagent_slot_plan", []),
+            "container_plan": plan_result.get("container_plan", []),
+            "device_plan": plan_result.get("device_plan", []),
+            "workflow_txt": str(translated.get("workflow_txt", "")),
+            "workflow_json": workflow_json,
+        }
+        return merged
 
     def _run_full_checks(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Schema validation + txt↔json consistency + capability audit, merged
@@ -559,6 +788,24 @@ class SingleDeviceAgent:
             if audit_findings
             else {"status": "clean", "findings": []}
         )
+
+        # Issue #4 hard gate: every step must map into the platform's exact
+        # dispatch form — an unmapped step means the workflow cannot actually
+        # be dispatched, so it is an error, not an FYI.
+        try:
+            dispatch_preview = format_dispatch_payload(
+                workflow_json, self._dispatch_catalog
+            )
+            unmapped = int(dispatch_preview.get("unmapped_steps", 0) or 0)
+            if unmapped > 0:
+                preview_warnings = dispatch_preview.get("warnings", []) or []
+                detail = "; ".join(str(item) for item in preview_warnings[:3])
+                errors.append(
+                    f"{unmapped} 个步骤无法映射为平台下发形式"
+                    f"（formatter_unmapped_step）。{detail}"
+                )
+        except Exception:  # pragma: no cover - formatter must not break checks
+            pass
 
         return {
             "status": "failed" if errors else "passed",
@@ -737,18 +984,51 @@ class SingleDeviceAgent:
         if not isinstance(dispatch_validation, dict):
             dispatch_validation = self._workflow_validator.validate(workflow_json)
         if dispatch_validation.get("status") == "failed":
-            # Never let an unvalidated dispatch payload leave as success —
-            # downgrade with the full validation report attached.
+            # Never let an unvalidated dispatch payload leave as success.
+            # Issue #4: the exhausted-repair failure flows BACK to Research as
+            # structured feedback (workflow_translation_failed) through the
+            # same channel as feasibility errors — the orchestrator's
+            # feasibility branch, deadlock counting, constraint accumulation
+            # and research B2 routing all pick it up unchanged.
+            raw_errors = dispatch_validation.get("errors", []) or []
+            structured = structure_validation_errors(raw_errors, workflow_json)
+            macro_action_view = state.research_handoff.get("macro_action")
+            macro_action_view = (
+                macro_action_view if isinstance(macro_action_view, dict) else {}
+            )
+            blocking = [str(err) for err in raw_errors[:8]]
             return {
                 "status": "failed",
-                "feedback_type": "device_internal_error",
+                "feedback_type": "device_feasibility_error",
                 "failure_stage": "dispatch_validation",
                 "exp_id": state.exp_id,
                 "iteration_id": state.iteration_id,
                 "workflow_id": state.workflow_id,
+                "device_snapshot_id": self._device_snapshot_id(),
                 "macro_plan": state.research_handoff,
                 "macro_plan_summary": result.get("macro_plan_summary", ""),
                 "dispatch_validation": dispatch_validation,
+                "capability_audit": result.get(
+                    "capability_audit", {"status": "clean", "findings": []}
+                ),
+                "device_plan": result.get("device_plan", []),
+                "error_package": {
+                    "type": "workflow_translation_failed",
+                    "assessment_source": "deterministic_workstation_validator",
+                    "blocking_constraints": blocking,
+                    "structured_errors": structured,
+                    "device_snapshot_id": self._device_snapshot_id(),
+                    "macro_action_id": str(macro_action_view.get("macro_action_id", "")),
+                    "observation_point_id": str(
+                        macro_action_view.get("observation_point_id", "")
+                    ),
+                    "failed_plan_signature": self._plan_signature(state.research_handoff),
+                    "message": (
+                        "workflow 翻译未能通过确定性工作站校验（含有界修复轮）。"
+                        "阻塞多为参数字段/结构/范围问题；research 层可考虑简化步骤结构、"
+                        "缩小单步参数复杂度或拆分 macro action 后重试。"
+                    ),
+                },
                 "message": (
                     "workflow_json 未通过严格下发参数校验（含自我修复重试），"
                     "该 workflow 不得下发执行。"
@@ -817,6 +1097,7 @@ class SingleDeviceAgent:
             "requires_scientific_review": requires_review,
             "reagent_slot_plan": result.get("reagent_slot_plan", []),
             "container_plan": result.get("container_plan", []),
+            "device_plan": result.get("device_plan", []),
             "temporal_adaptations": temporal_adaptations,
             "workflow_txt": workflow_txt,
             "workflow_json": workflow_json,

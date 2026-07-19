@@ -242,6 +242,55 @@ class CampaignRunnerTest(unittest.TestCase):
             self.assertNotIn("macro_plan", feasibility_payload)
             self.assertNotIn("feasibility_assessment", feasibility_payload)
 
+    def test_translation_failed_package_flows_back_to_research(self) -> None:
+        """Issue #4: an exhausted-repair failed package (feedback_type
+        device_feasibility_error + error_package.type
+        workflow_translation_failed) must ride the SAME channel as
+        feasibility errors — research re-planning is invoked with the
+        structured errors, and the deadlock counter applies."""
+        translation_failed = {
+            "status": "failed",
+            "feedback_type": "device_feasibility_error",
+            "failure_stage": "dispatch_validation",
+            "error_package": {
+                "type": "workflow_translation_failed",
+                "blocking_constraints": ["第 1 步：参数 `X` 不在可下发参数中"],
+                "structured_errors": [
+                    {"error_code": "unknown_parameter", "step_number": 1,
+                     "parameter_path": "X"}
+                ],
+                "failed_plan_signature": "plan_abc123",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = CountingMockAdapter()
+            steps = FakeSteps([PLAN_STATE], [translation_failed])
+            runner = make_runner(tmp, steps, adapter=adapter, deadlock_limit=2)
+
+            result = runner.run()
+
+            # rode the feasibility channel: no execution, deadlock at limit
+            self.assertEqual(result.stop_reason, STOP_FEASIBILITY_DEADLOCK)
+            self.assertEqual(adapter.calls, 0)
+            # research received the structured feedback for re-planning
+            self.assertEqual(len(steps.research_calls), 2)
+            payload = steps.research_calls[1]["payload"]
+            self.assertEqual(payload["feedback_type"], "device_feasibility_error")
+            self.assertEqual(
+                payload["error_package"]["type"], "workflow_translation_failed"
+            )
+            self.assertTrue(payload["error_package"]["structured_errors"])
+            # cumulative constraints captured the translation blockers too
+            summary = json.loads(
+                (Path(result.campaign_dir) / "campaign_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertTrue(
+                any("参数" in item for item in summary.get(
+                    "cumulative_device_constraints", []))
+            )
+
     def test_deadlock_reports_cumulative_constraints(self) -> None:
         """Issue 4: on deadlock the campaign summary lists every device
         constraint seen, not just the last error."""

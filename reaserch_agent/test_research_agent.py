@@ -461,6 +461,43 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertIn(first_id, history)
         self.assertEqual(history[first_id]["outcome"], "device_rejected")
 
+    def test_b2_translation_failed_routes_to_device_adaptation(self) -> None:
+        """Issue #4: an exhausted-translation failure (error_package.type
+        workflow_translation_failed) must ride the device-adaptation path —
+        research re-plans against the structured device feedback instead of
+        treating it as a generic observation."""
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "feedback_type": "device_feasibility_error",
+                "status": "failed",
+                "error_package": {
+                    "type": "workflow_translation_failed",
+                    "blocking_constraints": [
+                        "第 3 步：参数 `加样方案` 应为数组（type_mismatch）"
+                    ],
+                    "structured_errors": [
+                        {"error_code": "type_mismatch", "step_number": 3,
+                         "parameter_path": "加样方案"}
+                    ],
+                    "failed_plan_signature": "plan_deadbeef",
+                },
+            },
+            previous_state=bootstrap_state,
+        )
+
+        self.assertEqual(state.post_observation_repair_path, "device_adaptation")
+        self.assertTrue(state.macro_plan)  # re-planned, not cleared
+        # the translation blockers joined the cumulative constraint memory
+        self.assertTrue(
+            any("加样方案" in item for item in state.cumulative_device_constraints)
+        )
+
     def test_b2_abnormal_observation_repairs_macro_plan(self) -> None:
         bootstrap_state = self.agent.run(
             event_type="bootstrap",

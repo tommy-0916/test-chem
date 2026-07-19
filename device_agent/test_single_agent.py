@@ -11,7 +11,7 @@ from single_agent import (
     _soft_temporal_mapping_error,
 )
 from utils.workstation_loader import WorkstationLoader
-from workflow_validator import WorkflowValidator
+from workflow_validator import WorkflowValidator, structure_validation_errors
 
 
 class FakeModel:
@@ -200,7 +200,7 @@ def test_temporal_addition_stirring_soft_error_retries_as_batches():
     assert state.terminal_package["status"] == "success"
     assert state.terminal_package["temporal_adaptations"][0]["execution_fidelity"] == "approximated"
     assert state.terminal_package["requires_scientific_review"] is True
-    assert len(model.calls) == 2
+    assert len(model.calls) == 3  # plan -> adaptation retry -> translation
     assert "强制重试要求" in model.calls[1]
 
 
@@ -214,7 +214,7 @@ def test_generic_soft_complaint_also_retries():
 
     assert state.status == "completed"
     assert state.terminal_package["status"] == "success"
-    assert len(model.calls) == 2
+    assert len(model.calls) == 3  # plan -> adaptation retry -> translation
     assert "强制重试要求" in model.calls[1]
 
 
@@ -361,7 +361,7 @@ def test_single_device_agent_success_package():
     assert state.terminal_package["status"] == "success"
     assert state.terminal_package["agent_mode"] == "single_device_agent"
     assert state.workflow_json["steps"]
-    assert len(agent._model.calls) == 1
+    assert len(agent._model.calls) == 2  # plan + translation
     # issue 7: the package carries a platform-form dispatch payload alongside
     # the semantic workflow_json (planning layer stays untouched).
     dispatch = state.terminal_package.get("dispatch_payload") or {}
@@ -403,9 +403,9 @@ def test_deterministic_completion_avoids_llm_repair_round():
 
     assert state.status == "completed"
     assert state.terminal_package["status"] == "success"
-    # deterministic completion filled the mechanical fields, so NO self-repair
-    # LLM round was needed — the model was invoked exactly once.
-    assert len(model.calls) == 1
+    # deterministic completion filled the mechanical fields, so NO repair
+    # round was needed — exactly plan + translation, no third call.
+    assert len(model.calls) == 2
     completion = state.terminal_package.get("dispatch_completion") or {}
     filled_params = {e["param"] for e in completion.get("filled", [])}
     assert {"容器数量", "开盖编号", "保留瓶盖"} <= filled_params
@@ -503,40 +503,46 @@ def _good_material_step():
 
 
 def test_weighing_handoff_triggers_audit_repair_and_route_note():
-    """Issue #9: a manual-weighing offline_handoff must fail the deterministic
-    checks, the repair prompt must carry unnecessary_offline_handoff + the
-    canonical solid-weighing route, and a compliant repair round succeeds with
-    capability_audit=clean in the terminal package."""
+    """Issue #9 (two-stage): a manual-weighing offline_handoff in the PLAN
+    stage must trigger one plan-level repair whose prompt carries the audit
+    finding + the canonical solid-weighing route; the clean plan then flows
+    through translation to success with capability_audit=clean."""
     loader = WorkstationLoader(use_new_format=True)
     validator = WorkflowValidator(loader)
 
-    attempt1 = {
-        "status": "success",
+    plan_with_handoff = {
+        "status": "device_plan",
         "feasibility": {"is_feasible": True, "blocking_constraints": []},
-        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
-        "workflow_json": {
-            "steps": [_good_material_step()],
-            "offline_handoffs": [{
-                "name": "XRD定量称样与换瓶",
-                "instructions": ["分别称取5.0 mg粉末并对应装入无盖进样瓶21-30"],
-            }],
-        },
+        "device_plan": [{
+            "plan_step": 1, "workstation": "General_Material_Station_V1",
+            "objective": "拿取容器", "operation_intent": "物料拿取",
+            "containers": {"容器类型": "进样瓶", "容器编号": [1]},
+            "source_macro_step": 1,
+        }],
+        "offline_handoffs": [{
+            "name": "XRD定量称样与换瓶",
+            "instructions": ["分别称取5.0 mg粉末并对应装入无盖进样瓶21-30"],
+        }],
     }
-    attempt2 = {
-        "status": "success",
+    plan_clean = {
+        "status": "device_plan",
         "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "device_plan": plan_with_handoff["device_plan"],
+        "offline_handoffs": [],
+    }
+    translation = {
         "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
         "workflow_json": {"steps": [_good_material_step()], "offline_handoffs": []},
     }
-    model = _SequencedModel([attempt1, attempt2])
+    model = _SequencedModel([plan_with_handoff, plan_clean, translation])
     agent = SingleDeviceAgent(
         model=model, workstation_loader=loader, workflow_validator=validator,
     )
     state = agent.run_state(RESEARCH_HANDOFF, exp_id="audit_repair_exp")
 
-    assert len(model.calls) == 2
+    assert len(model.calls) == 3  # plan -> plan repair -> translation
     repair_prompt = model.prompts[1]
-    assert "unnecessary_offline_handoff" in repair_prompt or "mg 级固体定量称量" in repair_prompt
+    assert "计划级能力审计" in repair_prompt
     assert "固体样品转移" in repair_prompt  # canonical route note attached
     package = state.terminal_package
     assert package["status"] == "success"
@@ -567,12 +573,22 @@ def test_two_bounded_repair_rounds_then_success():
         "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
         "workflow_json": {"steps": [_good_material_step()], "offline_handoffs": []},
     }
-    model = _SequencedModel([bad, bad, good])
+    model = _SequencedModel([
+        {"status": "device_plan",
+         "feasibility": {"is_feasible": True, "blocking_constraints": []},
+         "device_plan": [{"plan_step": 1,
+                          "workstation": "General_Material_Station_V1",
+                          "objective": "拿取容器", "operation_intent": "物料拿取",
+                          "containers": {"容器类型": "进样瓶", "容器编号": [1]},
+                          "source_macro_step": 1}],
+         "offline_handoffs": []},
+        bad, bad, good,
+    ])
     agent = SingleDeviceAgent(
         model=model, workstation_loader=loader, workflow_validator=validator,
     )
     state = agent.run_state(RESEARCH_HANDOFF, exp_id="two_round_exp")
-    assert len(model.calls) == 3
+    assert len(model.calls) == 4  # plan + initial translation + 2 repairs
     assert state.terminal_package["status"] == "success"
 
 
@@ -600,7 +616,18 @@ def test_lid_conflict_and_txt_mismatch_are_deterministic_errors():
                             "上传文件": "recipe.csv"}},
         ], "offline_handoffs": []},
     }
-    model = _SequencedModel([bad, bad, bad])
+    model = _SequencedModel([
+        {"status": "device_plan",
+         "feasibility": {"is_feasible": True, "blocking_constraints": []},
+         "device_plan": [{"plan_step": 1,
+                          "workstation": "Liquid_Handling_Station_1ml_V2",
+                          "objective": "关盖后称量(制造矛盾)",
+                          "operation_intent": "关盖+称量",
+                          "containers": {"容器类型": "进样瓶", "容器编号": [1]},
+                          "source_macro_step": 1}],
+         "offline_handoffs": []},
+        bad, bad, bad,
+    ])
     agent = SingleDeviceAgent(
         model=model, workstation_loader=loader, workflow_validator=validator,
     )
@@ -689,8 +716,21 @@ def test_fabricated_dispatch_parameter_is_rejected():
         "不存在的危险参数" in error
         for error in package["dispatch_validation"]["errors"]
     )
-    # two bounded self-repair rounds were attempted before giving up
-    assert len(agent._model.calls) == 3
+    # plan + initial translation + two bounded repair rounds
+    assert len(agent._model.calls) == 4
+    # issue #4: the exhausted failure flows back to Research as structured
+    # device feedback through the SAME channel as feasibility errors.
+    assert package["feedback_type"] == "device_feasibility_error"
+    error_package = package["error_package"]
+    assert error_package["type"] == "workflow_translation_failed"
+    assert error_package["blocking_constraints"]
+    assert error_package["failed_plan_signature"].startswith("plan_")
+    structured = error_package["structured_errors"]
+    assert structured and any(
+        entry.get("error_code") == "unknown_parameter"
+        and entry.get("parameter_path") == "不存在的危险参数"
+        for entry in structured
+    )
 
 
 def test_workflow_validator_accepts_reference_and_rejects_bad_values():
@@ -871,6 +911,50 @@ def test_label_value_enum_param_is_not_a_type_mismatch():
     assert any("保留瓶盖" in error for error in report["errors"])
 
 
+def test_structure_validation_errors_parses_fields():
+    """Issue #4: validator error strings parse into per-error records with
+    step/workstation/operation/parameter/error_code, back-filled with
+    source_macro_step / macro_action_id from the workflow step."""
+    workflow_json = {"steps": [
+        {"step_number": 1, "workstation": "物料站", "operation": "物料拿取",
+         "source_macro_step": 2, "macro_action_id": "MA_S01_R00",
+         "parameters": {}},
+        {"step_number": 3, "workstation": "烘干机", "operation": "静置烘干",
+         "source_macro_step": 5, "parameters": {}},
+    ]}
+    errors = [
+        "第 1 步（物料站/物料拿取）参数 `不存在的危险参数` 不在该工作站可下发参数中（unknown_parameter）。",
+        "第 3 步（烘干机/静置烘干）`恒温温度`=999 超出真源允许范围 [26,210]（value_out_of_range）。",
+        "第 1 步的工作站 `虚构站` 不在设备真源中（unknown_workstation）。",
+        "workflow_txt 有 1 个『第N步』块，但 workflow_json 有 2 个 steps（txt_json_mismatch）。",
+        "一条没有已知模式的新错误。",
+    ]
+    records = structure_validation_errors(errors, workflow_json)
+    assert len(records) == 5
+
+    by_code = {}
+    for record in records:
+        by_code.setdefault(record["error_code"], []).append(record)
+
+    unknown_param = by_code["unknown_parameter"][0]
+    assert unknown_param["step_number"] == 1
+    assert unknown_param["workstation"] == "物料站"
+    assert unknown_param["operation"] == "物料拿取"
+    assert unknown_param["parameter_path"] == "不存在的危险参数"
+    assert unknown_param["source_macro_step"] == 2
+    assert unknown_param["macro_action_id"] == "MA_S01_R00"
+
+    out_of_range = by_code["value_out_of_range"][0]
+    assert out_of_range["step_number"] == 3
+    assert out_of_range["parameter_path"] == "恒温温度"
+    assert out_of_range["actual"] == "999"
+    assert out_of_range["source_macro_step"] == 5
+
+    assert by_code["txt_json_mismatch"][0]["error_code"] == "txt_json_mismatch"
+    # unmatched wording degrades gracefully — information never lost
+    assert by_code["unparsed"][0]["message"] == "一条没有已知模式的新错误。"
+
+
 if __name__ == "__main__":
     test_temporal_addition_stirring_soft_error_retries_as_batches()
     test_generic_soft_complaint_also_retries()
@@ -891,4 +975,5 @@ if __name__ == "__main__":
     test_workflow_validator_accepts_reference_and_rejects_bad_values()
     test_skill_required_params_enforced_for_skill_form_stations()
     test_label_value_enum_param_is_not_a_type_mismatch()
+    test_structure_validation_errors_parses_fields()
     print("single device agent tests passed")

@@ -212,16 +212,19 @@ class CampaignRunner:
                         break
                     consecutive_feasibility += 1
                     self._accumulate_campaign_constraints(package)
+                    error_type = str(error_package.get("type", "")) or "unspecified"
                     self._trace.append(
                         {
                             "iteration": iteration,
                             "phase": "device",
                             "status": "feasibility_error",
+                            "error_type": error_type,
                             "consecutive": consecutive_feasibility,
                         }
                     )
                     self._log(
                         f"iteration {iteration}: device returned feasibility_error "
+                        f"[{error_type}] "
                         f"({consecutive_feasibility}/{self.config.feasibility_deadlock_limit})"
                     )
                     if consecutive_feasibility >= self.config.feasibility_deadlock_limit:

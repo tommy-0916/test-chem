@@ -873,3 +873,67 @@ class WorkflowValidator:
                 f"第 {step_no} 步（{station_name}/{operation}）容器数量={int(count)} "
                 f"与容器编号数量 {len(ids_value)} 不一致（container_count_mismatch）。"
             )
+
+
+# ----------------------------------------------------------------------
+# Structured error export (issue #4: per-error feedback fields)
+# ----------------------------------------------------------------------
+
+_ERROR_CODE_RE = re.compile(r"（([a-z_]+)）。?\s*$")
+_STEP_PREFIX_RE = re.compile(r"^第\s*(\d+)\s*步(?:（([^／/）]+)(?:[／/]([^）]+))?）)?")
+_PARAM_NAME_RE = re.compile(r"[`『「]([^`』」]+)[`』」]")
+_ACTUAL_VALUE_RE = re.compile(r"[=＝]\s*([^\s，。（]+)")
+
+
+def structure_validation_errors(
+    errors: Any,
+    workflow_json: Any,
+) -> List[Dict[str, Any]]:
+    """Parse our own validator error strings into structured records
+    (issue #4's required feedback fields). The message wording is generated
+    by this module, so the patterns are stable; anything unmatched degrades
+    to {"error_code": "unparsed", "message": ...} — information is never lost.
+
+    Each record carries: error_code, message, step_number, workstation,
+    operation, parameter_path, actual, plus source_macro_step /
+    macro_action_id / observation_point_id back-filled from the step."""
+    steps_by_number: Dict[Any, Dict[str, Any]] = {}
+    if isinstance(workflow_json, dict):
+        for step in workflow_json.get("steps") or []:
+            if isinstance(step, dict):
+                steps_by_number[step.get("step_number")] = step
+                steps_by_number[str(step.get("step_number"))] = step
+
+    structured: List[Dict[str, Any]] = []
+    for raw in errors or []:
+        text = str(raw)
+        record: Dict[str, Any] = {"message": text, "error_code": "unparsed"}
+        code_match = _ERROR_CODE_RE.search(text)
+        if code_match:
+            record["error_code"] = code_match.group(1)
+        step_match = _STEP_PREFIX_RE.match(text)
+        if step_match:
+            number_text = step_match.group(1)
+            record["step_number"] = int(number_text)
+            if step_match.group(2):
+                record["workstation"] = step_match.group(2).strip()
+            if step_match.group(3):
+                record["operation"] = step_match.group(3).strip()
+            step = steps_by_number.get(int(number_text)) or steps_by_number.get(number_text)
+            if isinstance(step, dict):
+                record.setdefault("workstation", str(step.get("workstation", "")))
+                record.setdefault("operation", str(step.get("operation", "")))
+                for key in ("source_macro_step", "macro_action_id", "observation_point_id"):
+                    if step.get(key) is not None:
+                        record[key] = step[key]
+        param_match = _PARAM_NAME_RE.search(text)
+        if param_match:
+            record["parameter_path"] = param_match.group(1)
+        actual_match = _ACTUAL_VALUE_RE.search(text)
+        if actual_match and record["error_code"] in {
+            "value_out_of_range", "container_count_mismatch", "invalid_enum_value",
+            "type_mismatch",
+        }:
+            record["actual"] = actual_match.group(1).strip("`")
+        structured.append(record)
+    return structured

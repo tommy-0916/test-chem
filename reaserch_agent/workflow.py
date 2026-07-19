@@ -1767,7 +1767,13 @@ class ResearchAgent(BaseAgent):
         error_package = payload.get("error_package")
         if isinstance(error_package, dict):
             error_type = str(error_package.get("type", "")).strip().lower()
-            if error_type in {"physical_infeasible", "device_feasibility_error"}:
+            if error_type in {
+                "physical_infeasible",
+                "device_feasibility_error",
+                # issue #4: exhausted-translation failures flow back through
+                # the same device-adaptation channel as feasibility errors.
+                "workflow_translation_failed",
+            }:
                 return True
         return False
 
@@ -1890,6 +1896,14 @@ class ResearchAgent(BaseAgent):
                 "not_supported": not_supported,
             },
             "device_error_package": error_package,
+            # issue #4: compact per-error structure from the deterministic
+            # validator (workflow_translation_failed) — top entries only so
+            # the LLM context stays bounded.
+            "structured_device_errors": (
+                (error_package or {}).get("structured_errors", [])[:10]
+                if isinstance(error_package, dict)
+                else []
+            ),
             "cumulative_device_constraints": list(state.cumulative_device_constraints),
             "previous_failed_plan_ids": [
                 entry.get("plan_id")
