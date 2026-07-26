@@ -123,6 +123,14 @@ def build_parser() -> argparse.ArgumentParser:
     llm.add_argument("--base-url")
     llm.add_argument("--wire-api", choices=["chat", "codex_responses"], default="chat")
     llm.add_argument("--reasoning-effort", default="xhigh")
+    llm.add_argument(
+        "--llm-timeout-seconds",
+        type=int,
+        help=(
+            "Per-call LLM timeout passed to both research and device agents. "
+            "When omitted, each agent keeps its own default."
+        ),
+    )
     return parser
 
 
@@ -155,6 +163,10 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     if args.device_status_json:
         research_args += ["--device-status-json", args.device_status_json]
         device_args += ["--device-status-json", args.device_status_json]
+    if args.llm_timeout_seconds is not None:
+        timeout_text = str(args.llm_timeout_seconds)
+        research_args += ["--llm-timeout-seconds", timeout_text]
+        device_args += ["--timeout-seconds", timeout_text]
 
     for shared in (research_args, device_args):
         if args.model_name:

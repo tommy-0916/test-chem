@@ -17,8 +17,10 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from utils.paths import format_reference_path
+from utils.paths import format_reference_path, workstation_dir
 from utils.workstation_loader import WorkstationLoader
+
+from workflow_normalizer import SkillContractEngine
 
 from feasibility_rules import (
     classify_feasibility_result,
@@ -296,6 +298,18 @@ TRANSLATION_TASK_PROMPT = """
   该 plan 步骤的 source_macro_step（以及 macro_action_id/observation_point_id，若提供）。
 - 参数字段名/嵌套/类型/枚举/单位/范围严格来自参数表；必填参数全部填写；
   容器数量 == len(容器编号)。
+- 硬性契约（违反即整步作废）：
+  1. 操作名必须逐字等于参数表中列出的操作，禁止扩写/合并（如参数表只有「开始搅拌」，
+     不得写「常温磁力搅拌全流程」）；
+  2. 参数名只能取自该操作的参数表，禁止发明字段（如「配料名称」不在表中就不能出现）；
+  3. JSON 类型严格照表：声明 int 的写数字不加引号，声明 string 的写字符串加引号，
+     声明 object/array 的保持层级结构，不得用裸数字代替对象；
+  4. 「N号原液瓶」等动态字段：N 和瓶号都必须落在参数表声明的范围内（如 [1,6]），
+     超出的瓶位必须换瓶或拆步，绝不允许写 7 号及以上；
+  5. 液量硬上限：单次移液不得超过该移液平台的单次最大量（如 5ml 平台 ≤5 mL），
+     单一原液瓶对同一容器的累计加注不得超过表定总量（如 1ml_V2 平台 ≤3 mL）；
+     超限时必须拆分为多步或改用更大量程的平台/多个原液瓶；
+  6. 一瓶一液：一个原液瓶在整个 workflow 内只能盛放一种溶液，编号保持不变。
 - 化学数值（体积/质量/温度/时间/转速）从 device_plan.key_values 原样搬运，只做单位换算。
 - temporal_adaptations 与 offline_handoffs 从 device_plan 原样搬运。
 - workflow_txt 与 workflow_json 一一对应（块数相同、每块出现该步工作站名）。
@@ -353,6 +367,15 @@ class SingleDeviceAgent:
         self._dispatch_catalog = DispatchCatalog.load(self._workstation_loader)
         self._txt_format_reference = self._read_text(format_reference_path("txt"))
         self._json_format_reference = self._read_text(format_reference_path("json"))
+        try:
+            self._contract_engine: Optional[SkillContractEngine] = SkillContractEngine(
+                workstation_dir(use_new_format=True)
+            )
+        except Exception as exc:  # pragma: no cover - catalog parse failure
+            logging.getLogger(__name__).warning(
+                "SkillContractEngine unavailable, falling back to legacy checks: %s", exc
+            )
+            self._contract_engine = None
 
     def _device_snapshot_id(self) -> str:
         loader = self._workstation_loader
@@ -958,10 +981,24 @@ class SingleDeviceAgent:
         }
         return merged
 
+    def _contract_gate_enabled(self) -> bool:
+        """Skill-contract normalization+audit gate. On by default; legacy tests
+        that pin the pre-contract behaviour set CHEM_DEVICE_CONTRACT_AUDIT=off."""
+        if self._contract_engine is None:
+            return False
+        raw = os.getenv("CHEM_DEVICE_CONTRACT_AUDIT", "").strip().lower()
+        return raw not in {"0", "off", "false", "no"}
+
     def _run_full_checks(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Schema validation + txt↔json consistency + capability audit, merged
         into one report so the repair loop sees every deterministic finding."""
         workflow_json = result.get("workflow_json")
+        if self._contract_gate_enabled() and isinstance(workflow_json, dict):
+            # Deterministic normalization first: inject Skill station ids and
+            # coerce declared scalar types/enum labels. Never changes chemistry.
+            notes = self._contract_engine.normalize_workflow(workflow_json)
+            if notes:
+                result.setdefault("normalization_notes", []).extend(notes)
         report = self._workflow_validator.validate(workflow_json)
         errors = list(report.get("errors", []))
         warnings = list(report.get("warnings", []))
@@ -1017,6 +1054,19 @@ class SingleDeviceAgent:
                 )
         except Exception:  # pragma: no cover - formatter must not break checks
             pass
+
+        if self._contract_gate_enabled() and isinstance(workflow_json, dict):
+            # Evaluation-grade Skill contract audit (same engine the external
+            # reviewers run): types, enums, ranges, dynamic bottle numbers,
+            # per-transfer and cumulative liquid limits, nesting, id match.
+            try:
+                contract_errors = self._contract_engine.contract_audit_errors(
+                    workflow_json
+                )
+            except Exception:  # pragma: no cover - audit must not break checks
+                contract_errors = []
+            known = set(errors)
+            errors.extend(e for e in contract_errors if e not in known)
 
         return {
             "status": "failed" if errors else "passed",

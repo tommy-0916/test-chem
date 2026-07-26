@@ -31,7 +31,10 @@ class WorkstationLoader:
         "Single_Channel_Solid_Weighing_Workstation_V1": ["固体", "粉末", "粉体", "称量", "称取", "固体进样"],
         "Multi_Channel_Solid_Weighing_Workstation_V1": ["多通道", "固体", "粉末", "称量", "平行样"],
         "Multi_Channel_Solid_Weighing_Workstation_V2": ["多通道", "固体", "粉末", "称量", "平行样"],
-        "Solid_Sample_Transfer_Workstation_V1": ["固体转移", "料斗", "转移固体"],
+        "Solid_Sample_Transfer_Workstation_V1": [
+            "固体转移", "料斗", "转移固体", "干粉", "粉末", "称量", "称取",
+            "定量取", "分装", "取粉",
+        ],
         "Liquid_Handling_Station_1ml_V1": [
             "移液", "加液", "滴加", "原液", "开盖", "关盖", "1ml",
             "去离子水", "异丙醇", "nafion", "墨水",
@@ -53,7 +56,10 @@ class WorkstationLoader:
         "Purification_Workstation_V1": ["纯化", "洗涤", "离心", "留固", "沉淀"],
         "Drying_Oven_V1": ["烘干", "干燥", "老化", "恒温"],
         "Cooling_Workstation_V1": ["冷却", "降温"],
-        "Muffle_Furnace_V1": ["马弗炉", "煅烧", "焙烧", "高温烧结"],
+        "Muffle_Furnace_V1": [
+            "马弗炉", "煅烧", "焙烧", "高温烧结", "热处理", "升温速率",
+            "保温", "空气气氛", "300", "400", "500",
+        ],
         "Ultrasonic_Disperser_V1": ["超声", "分散", "清洗", "墨水"],
         "Ultrasonic_Disperser_V2": ["超声", "分散", "清洗", "墨水"],
         "Ultrasonic_Liquid_Handling_Workstation_V1": ["超声加液", "孔板超声", "超声移液"],
@@ -403,12 +409,31 @@ class WorkstationLoader:
         digest = hashlib.sha1(f"{roster}##{overlay}".encode("utf-8")).hexdigest()[:12]
         return f"ws_{digest}"
 
+    # Basic-infrastructure stations that keyword matching keeps missing (the
+    # 2026-07-15/07-26 evaluations both hit "no muffle furnace / no solid
+    # transfer / no spectroscopy placing station" false rejections). They are
+    # cheap to include and load-bearing for container routing, so they are
+    # always part of the relevant-station prompt.
+    ALWAYS_INCLUDE_STATIONS = (
+        "General_Material_Station_V1",
+        "Heat_Resistant_Material_Station",
+        "Container_storaging_Station_V1",
+        "Muffle_Furnace_V1",
+        "Solid_Sample_Transfer_Workstation_V1",
+        "Spectroscopy_Container_Transfer_Station_V1",
+        "Single_Channel_Solid_Weighing_Workstation_V1",
+        "Multi_Channel_Solid_Weighing_Workstation_V1",
+    )
+
     def _select_relevant_station_codes(self, query_text: str) -> List[str]:
         if not self._use_new_format:
             return list(self._workstations.keys())
 
         lowered = (query_text or "").lower()
         selected: Set[str] = set()
+        for station_code in self.ALWAYS_INCLUDE_STATIONS:
+            if station_code in self._new_workstations:
+                selected.add(station_code)
         for station_code, keywords in self.KEYWORD_MAP.items():
             if station_code in self._new_workstations and any(
                 keyword.lower() in lowered for keyword in keywords

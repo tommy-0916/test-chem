@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import types
+
+# These tests pin the legacy validation contract (pre Skill-contract gate).
+# The evaluation-grade contract audit has its own behaviour and is exercised
+# against real workflows offline; here it would reject the minimal canned
+# workflows for reasons unrelated to what each test asserts.
+os.environ.setdefault("CHEM_DEVICE_CONTRACT_AUDIT", "off")
 
 from feasibility_rules import classify_constraint_text
 from single_agent import (
