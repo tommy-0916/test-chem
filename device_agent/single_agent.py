@@ -998,6 +998,23 @@ class SingleDeviceAgent:
                     f"{unmapped} 个步骤无法映射为平台下发形式"
                     f"（formatter_unmapped_step）。{detail}"
                 )
+            # dropped platform parameters: the workflow values are lost from
+            # the dispatch payload, so treat as a hard error to trigger the
+            # repair loop instead of silently degrading the run (issue #17).
+            dropped = [
+                w for w in (dispatch_preview.get("warnings", []) or [])
+                if isinstance(w, dict) and w.get("code") == "dispatch_parameter_dropped"
+            ]
+            for item in dropped:
+                errors.append(
+                    "步骤 {step} 下发参数被省略（dispatch_parameter_dropped）："
+                    "{params} 不在 {ws}/{op} 平台参数中".format(
+                        step=item.get("step_number"),
+                        params="、".join(str(p) for p in item.get("parameters") or []),
+                        ws=item.get("workstation"),
+                        op=item.get("operation"),
+                    )
+                )
         except Exception:  # pragma: no cover - formatter must not break checks
             pass
 
