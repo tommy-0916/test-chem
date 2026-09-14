@@ -3,12 +3,22 @@
 ===============
 """
 
+import hashlib
 import json
 import os
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from utils.paths import workstation_dir
+try:
+    from ..skill_contract_audit import parse_operation_schemas
+except ImportError:
+    from skill_contract_audit import parse_operation_schemas
+
+try:
+    from .paths import workstation_dir
+except ImportError:  # script-style imports with device_agent on sys.path
+    from utils.paths import workstation_dir
 
 
 class WorkstationLoader:
@@ -154,10 +164,59 @@ class WorkstationLoader:
         self._new_workstation_dir = str(workstation_dir(use_new_format=True))
         self._status_overlay = self._load_status_overlay()
 
-        if use_new_format:
+        self.refresh_truth_snapshot()
+
+    def truth_source_root(self) -> Path:
+        return Path(
+            self._normalize_new_workstation_root(self._new_workstation_dir)
+            if self._use_new_format else self._old_workstation_dir
+        )
+
+    def _disk_truth_manifest(self) -> Dict:
+        """Read only source files, including roster additions and status bytes."""
+        root = self.truth_source_root()
+        paths = {root / name for name in ("SKILL.md", "工作站名称中英文对照.md", "0410数据转换.txt")}
+        if self._use_new_format:
+            for pattern in ("SKILL.md", "USAGE.md", "AUDIT-RULES.md"):
+                paths.update(root.rglob(pattern))
+            audit_dir = root / "references_audit"
+            if audit_dir.is_dir():
+                paths.update(audit_dir.glob("*.md"))
+        else:
+            paths.update(root.glob("*.json"))
+        status_path = os.getenv("CHEM_DEVICE_STATUS_JSON", "").strip()
+        return {
+            "sources": {str(path): self._read_text(str(path)) for path in sorted(paths)},
+            "status_path": status_path,
+            "status_content": self._read_text(status_path) if status_path else "",
+        }
+
+    def _disk_truth_digest(self) -> str:
+        return hashlib.sha256(json.dumps(
+            self._disk_truth_manifest(), ensure_ascii=False, sort_keys=True
+        ).encode("utf-8")).hexdigest()
+
+    def refresh_truth_snapshot(self) -> None:
+        """Reload all cached facts under a before/after source-stability check."""
+        self._old_workstation_dir = str(workstation_dir(use_new_format=False))
+        self._new_workstation_dir = str(workstation_dir(use_new_format=True))
+        before = self._disk_truth_digest()
+        self._workstations = {}
+        self._new_workstations = {}
+        self._station_alias_map = dict(self.STATION_ALIAS_MAP)
+        self._status_overlay = self._load_status_overlay()
+        if self._use_new_format:
             self._load_all_new()
         else:
             self._load_all()
+        after = self._disk_truth_digest()
+        if before != after:
+            raise RuntimeError("Workstation truth changed while loading its snapshot; retry with stable sources")
+        self._snapshot_disk_digest = after
+
+    def assert_snapshot_current(self) -> None:
+        if self._disk_truth_digest() != self._snapshot_disk_digest:
+            raise RuntimeError("Workstation truth changed during this Device run; reload before continuing")
 
     UNAVAILABLE_STATUS_VALUES = {
         "offline",
@@ -282,7 +341,7 @@ class WorkstationLoader:
             self._new_workstations[station_dir] = station_data
 
     def _normalize_new_workstation_root(self, root: str) -> str:
-        """Accept either workstations_new, lab-design-main, or the nested skill root."""
+        """Accept workstations_new, lab-design-all, or a nested workstation skill root."""
         if self._is_lab_design_root(root):
             return root
 
@@ -391,6 +450,89 @@ class WorkstationLoader:
         if self._use_new_format:
             return self._new_workstations.get(code)
         return self._workstations.get(code)
+
+    def global_rules_for_prompt(self) -> str:
+        """Cross-station rules are always visible, independently of selection."""
+        if not self._use_new_format:
+            return ""
+        root = self._normalize_new_workstation_root(self._new_workstation_dir)
+        return self._read_text(os.path.join(root, "SKILL.md")).strip()
+
+    def capability_catalog(self) -> List[Dict]:
+        """Complete discovery metadata, deliberately without parameter tables."""
+        catalog: List[Dict] = []
+        for entry in self.get_all():
+            code = str(entry.get("station_name", "")).strip()
+            if not code:
+                identity = entry.get("station_identity", {})
+                code = str(identity.get("code", identity.get("name", "")))
+            if not code:
+                continue
+            content = str(entry.get("skill_content") or entry.get("usage_content") or "")
+            description = re.search(r"^description:\s*(.+)$", content, re.MULTILINE)
+            operations = list(parse_operation_schemas(content))
+            if not operations:
+                operations = [
+                    str(op.get("name", ""))
+                    for op in entry.get("supported_operations", [])
+                    if isinstance(op, dict)
+                ]
+            catalog.append({
+                "station_code": code,
+                "display_name": entry.get("display_name", code),
+                "module": entry.get("module_name", ""),
+                "description": description.group(1).strip() if description else entry.get("description", ""),
+                "operations": list(dict.fromkeys(operations)),
+                "availability": self._station_status(code, entry) or "available",
+            })
+        return catalog
+
+    def format_capability_catalog(self) -> str:
+        return "# 全部工作站能力目录（不是参数合同）\n" + json.dumps(
+            self.capability_catalog(), ensure_ascii=False, separators=(",", ":")
+        )
+
+    def resolve_station_code(self, name: str) -> Optional[str]:
+        """Resolve declared exact aliases, never paths or fuzzy substrings."""
+        entries = {item["station_code"] for item in self.capability_catalog()}
+        if name in entries:
+            return name
+        alias = self._station_alias_map.get(name)
+        return alias if alias in entries else None
+
+    def load_workstation_skill(self, station_code: str) -> Dict:
+        """Read one known station, preserving the entire immutable source."""
+        known = {item["station_code"] for item in self.capability_catalog()}
+        if station_code not in known:
+            raise ValueError(f"Unknown workstation station_code: {station_code}")
+        entry = self.get_by_code(station_code)
+        if not isinstance(entry, dict):
+            raise ValueError(f"Workstation source missing: {station_code}")
+        skill = str(entry.get("skill_content") or entry.get("usage_content") or "")
+        if not skill and not self._use_new_format:
+            skill = json.dumps(entry, ensure_ascii=False)
+        if not skill.strip():
+            raise ValueError(f"Empty workstation skill: {station_code}")
+        audit = str(entry.get("audit_rules_content") or "")
+        return {
+            "station_code": station_code,
+            "display_name": entry.get("display_name", station_code),
+            "availability": self._station_status(station_code, entry) or "available",
+            "skill_content": skill,
+            "audit_rules_content": audit,
+            "source_path": str(Path(entry.get("station_path", "")) / "SKILL.md"),
+            "source_sha256": hashlib.sha256((skill + "\n" + audit).encode("utf-8")).hexdigest(),
+        }
+
+    def truth_source_digest(self) -> str:
+        """Hash full truth and availability; prompt projection never participates."""
+        payload = {
+            "root_sources": self._disk_truth_manifest(),
+            "stations": self.get_all(),
+            "availability": self._status_overlay,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        return "device_truth_" + hashlib.sha256(encoded).hexdigest()
 
     def snapshot_id(self) -> str:
         """Stable id for the loaded workstation truth-source set (issue 4).
@@ -726,6 +868,49 @@ class WorkstationLoader:
                         f"  - 参数：{param.get('name', '')} | 类型：{param.get('type', '')} | 必填：{param.get('required', False)}"
                     )
             chunks.append("\n".join(section))
+        return "\n\n".join(chunks)
+
+    def format_complete_for_workflow_review(self) -> str:
+        """Return untruncated full truth for audits and explicit diagnostics.
+
+        Normal LLM discovery uses the complete capability catalog followed by
+        selected full contracts. This compatibility helper does not implement
+        that progressive disclosure policy.
+        """
+        if not self._use_new_format:
+            return self.format_for_prompt()
+
+        root = self._normalize_new_workstation_root(self._new_workstation_dir)
+        chunks: List[str] = []
+        root_skill = self._read_text(os.path.join(root, "SKILL.md")).strip()
+        if root_skill:
+            chunks.append("# 全局工作站规则\n" + root_skill)
+
+        for station_code, station_data in self._new_workstations.items():
+            display_name = str(station_data.get("display_name", "") or "").strip()
+            module_name = str(station_data.get("module_name", "") or "").strip()
+            heading = f"# 工作站 {station_code}"
+            if display_name and display_name != station_code:
+                heading += f"（{display_name}）"
+            section = [heading]
+            if module_name:
+                section.append(f"module: {module_name}")
+            banner = self._availability_banner(station_code, station_data)
+            if banner:
+                section.append(banner)
+
+            skill_content = str(
+                station_data.get("skill_content", "")
+                or station_data.get("usage_content", "")
+                or ""
+            ).strip()
+            audit_content = str(station_data.get("audit_rules_content", "") or "").strip()
+            if skill_content:
+                section.append("## SKILL\n" + skill_content)
+            if audit_content:
+                section.append("## AUDIT-RULES\n" + audit_content)
+            chunks.append("\n\n".join(section))
+
         return "\n\n".join(chunks)
 
     def format_relevant_for_prompt(self, query_text: str) -> str:

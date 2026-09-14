@@ -7,6 +7,9 @@ __pycache__/
 .mypy_cache/
 
 .env
+.env.*
+!.env.example
+!**/.env.example
 .venv/
 venv/
 
@@ -21,11 +24,20 @@ chem_resources/knowledge_base/
 campaigns/
 chem-agent-latest/
 backend/data/
-frontend/node_modules/
+node_modules/
 frontend/dist/
 frontend/coverage/
 frontend/playwright-report/
 frontend/test-results/
+device_agent/output/
+reaserch_agent/chem_kb/
+reaserch_agent/mem0-main/
+structured_outputs/
+result/
+report/
+tmp/
+.tmp*/
+.kimi/
 *.log
 
 *.zip

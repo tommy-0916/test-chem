@@ -51,11 +51,11 @@ def workstation_dir(use_new_format: bool = True) -> Path:
 
     for candidate in (
         chem_resources_root()
-        / "lab-design-main"
+        / "lab-design-all"
         / "skills"
         / "chemistry-experiment-workstation",
         chem_resources_root()
-        / "lab-design-all"
+        / "lab-design-main"
         / "skills"
         / "chemistry-experiment-workstation",
         chem_resources_root() / "workstations_new",

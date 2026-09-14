@@ -105,3 +105,19 @@ Write the machine-readable matrix to `evaluation/verdict_matrix.json`. Do not cr
 The overall report must link `evaluation/workstation_schema_audit.json`, `evaluation/workstation_schema_llm_review.json`, and `evaluation/workstation_schema_verdict.json`. State the workstation count, truth-source path, reviewer model/endpoint, review coverage, and any failed attempts. If a report verdict differs from the combined verdict, or any generated workflow lacks a completed LLM review, the evaluation is incomplete.
 
 Keep original Chem Agent output and evaluator conclusions explicitly separated.
+
+## Workstation direct acceptance
+
+Write `evaluation/workstation_direct_acceptance.md` after the four-verdict reports. For every emitted workflow, state:
+
+- case ID, iteration, raw `device_package.json` path, and package status;
+- deterministic verdict, independent LLM verdict, and combined verdict;
+- whether the workstation can accept the raw parameters without transformation;
+- every blocking workstation, operation, parameter path, actual value, required value/type/unit/range, and evidence path;
+- missing local upload files, unmapped formatter steps, dropped parameters, and container/reagent discontinuities.
+
+Use `directly_acceptable: yes | no | not_evaluable` for each workflow and at case level. Set `yes` only when the combined schema verdict is `yes` and no required external input is missing. Do not treat a formatter-repaired payload as direct acceptance of the raw workflow.
+
+## Completion record
+
+After all reports exist, run `scripts/validate_evaluation.py`. Retain its machine-readable output as `evaluation/completion_check.json`. A formal report is complete only when this file contains `complete: true` under strict real-LLM mode.

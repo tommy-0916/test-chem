@@ -26,9 +26,11 @@ must never reject the canonical reference workflow itself.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from utils.paths import format_reference_path, workstation_dir
@@ -81,7 +83,8 @@ CORE_REQUIRED_BY_OPERATION: Dict[str, List[Tuple[str, ...]]] = {
 
 META_STEP_KEYS = {
     "step_number", "workstation", "operation", "parameters",
-    "id", "source_macro_step", "macro_action_id", "observation_point_id", "notes",
+    "id", "source_plan_step", "source_macro_step", "source_macro_steps",
+    "macro_action_id", "observation_point_id", "notes",
 }
 
 
@@ -218,12 +221,24 @@ class WorkflowValidator:
         reference_json_path: Optional[str] = None,
     ) -> None:
         self._loader = workstation_loader
+        # Resolve once: refreshing a reused validator must not replace explicit
+        # caller paths with defaults (or reinterpret a relative path in a new cwd).
+        self._old_workstation_dir = str(Path(
+            old_workstation_dir or workstation_dir(use_new_format=False)
+        ).expanduser().resolve())
+        self._reference_json_path = str(Path(
+            reference_json_path or format_reference_path("json")
+        ).expanduser().resolve())
+        WorkflowValidator.refresh(self, workstation_loader)
+
+    def refresh(self, workstation_loader: Any = None) -> None:
+        """Rebuild facts from the same configured sources and a refreshed loader."""
+        if workstation_loader is not None:
+            self._loader = workstation_loader
         self._schemas: Dict[str, StationSchema] = {}
         self._alias_to_key: Dict[str, str] = {}
         try:
-            self._build_from_old_json(
-                old_workstation_dir or str(workstation_dir(use_new_format=False))
-            )
+            self._build_from_old_json(self._old_workstation_dir)
         except Exception:
             pass
         try:
@@ -231,11 +246,16 @@ class WorkflowValidator:
         except Exception:
             pass
         try:
-            self._build_from_reference(
-                reference_json_path or str(format_reference_path("json"))
-            )
+            self._build_from_reference(self._reference_json_path)
         except Exception:
             pass
+
+    def source_paths(self) -> List[Path]:
+        """Actual auxiliary sources for the Device run's drift guard."""
+        root = Path(self._old_workstation_dir)
+        paths = list(root.glob("*.json")) if root.is_dir() else []
+        paths.append(Path(self._reference_json_path))
+        return sorted(paths)
 
     # ------------------------------------------------------------------
     # schema construction
@@ -883,6 +903,55 @@ _ERROR_CODE_RE = re.compile(r"（([a-z_]+)）。?\s*$")
 _STEP_PREFIX_RE = re.compile(r"^第\s*(\d+)\s*步(?:（([^／/）]+)(?:[／/]([^）]+))?）)?")
 _PARAM_NAME_RE = re.compile(r"[`『「]([^`』」]+)[`』」]")
 _ACTUAL_VALUE_RE = re.compile(r"[=＝]\s*([^\s，。（]+)")
+_PLAN_INVARIANT_ERROR_PATTERNS = (
+    (
+        re.compile(r"device_plan\s+引用了\s*Research\s*不存在的\s+source_macro_step=", re.I),
+        "invalid_source_macro_step",
+    ),
+    (
+        re.compile(
+            r"device_plan\s+缺少\s*Research\s+macro\s+step.+?覆盖|"
+            r"删除了\s+macro\s+step\s+coverage",
+            re.I,
+        ),
+        "macro_coverage_missing",
+    ),
+    (
+        re.compile(
+            r"source_macro_steps\s+未按\s*Research\s+macro\s+step\s+顺序排列|"
+            r"改变了\s*Research\s+macro\s+step/reagent\s+执行顺序",
+            re.I,
+        ),
+        "frozen_macro_order_drift",
+    ),
+    (
+        re.compile(r"改变了既存\s+plan_step\s+的冻结\s+source_macro_step\s+绑定", re.I),
+        "frozen_source_macro_binding_drift",
+    ),
+    (
+        re.compile(r"operation\s+recomposition\s+改变了冻结\s+macro\s+source-set\s+union", re.I),
+        "frozen_source_macro_union_drift",
+    ),
+    (
+        re.compile(r"拆分/合并或新增了\s+plan\s+step.+?缺少逐组绑定", re.I),
+        "missing_plan_recomposition_evidence",
+    ),
+    (
+        re.compile(r"source_macro_step=.+?未逐字保留\s*Research\s*试剂/对象身份", re.I),
+        "frozen_reagent_identity_missing",
+    ),
+    (
+        re.compile(r"source_macro_step=.+?的显式试剂身份发生漂移", re.I),
+        "frozen_reagent_identity_drift",
+    ),
+    (
+        re.compile(r"source_macro_steps?=.+?引入了\s*Research\s*未授权的显式试剂身份", re.I),
+        "frozen_reagent_identity_unauthorized",
+    ),
+)
+_SOURCE_MACRO_ERROR_RE = re.compile(
+    r"source_macro_step(?:s)?=(\[[^\]]+\]|[-+]?\d+)"
+)
 
 
 def structure_validation_errors(
@@ -911,6 +980,26 @@ def structure_validation_errors(
         code_match = _ERROR_CODE_RE.search(text)
         if code_match:
             record["error_code"] = code_match.group(1)
+        else:
+            for pattern, error_code in _PLAN_INVARIANT_ERROR_PATTERNS:
+                if pattern.search(text):
+                    record["error_code"] = error_code
+                    break
+        source_macro_match = _SOURCE_MACRO_ERROR_RE.search(text)
+        if source_macro_match:
+            source_value = source_macro_match.group(1)
+            if re.fullmatch(r"[-+]?\d+", source_value):
+                record["source_macro_step"] = int(source_value)
+            else:
+                try:
+                    parsed_sources = json.loads(source_value)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    try:
+                        parsed_sources = ast.literal_eval(source_value)
+                    except (SyntaxError, ValueError):
+                        parsed_sources = None
+                if isinstance(parsed_sources, list):
+                    record["source_macro_steps"] = parsed_sources
         step_match = _STEP_PREFIX_RE.match(text)
         if step_match:
             number_text = step_match.group(1)

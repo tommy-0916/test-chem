@@ -27,6 +27,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.paths import workstation_dir
+from skill_contract_audit import parse_operation_schemas
 
 CONVERSION_FILENAME = "0410数据转换.txt"
 
@@ -97,6 +98,41 @@ CURATED_OPERATION_ALIASES: Dict[str, List[str]] = {
     "XRD测试": ["XRD滴液检测全流程"],
 }
 
+# Latest ``lab-design-all`` Skills keep semantic parameter names while the
+# platform export can use older wire names.  These aliases are deterministic
+# schema translations, not LLM guesses.
+CURATED_PARAMETER_ALIASES: Dict[Tuple[str, str, str], str] = {
+    (
+        "加热磁力搅拌工作站_V1",
+        "加热磁力搅拌全流程",
+        "加热温度",
+    ): "目标温度",
+    (
+        "加热磁力搅拌工作站_V1",
+        "加热磁力搅拌全流程",
+        "搅拌时间",
+    ): "加热时间",
+}
+
+# Parameters required by the semantic Skill contract but inferred by an older
+# platform operation from 容器编号.  They remain in workflow_json for auditing
+# and are intentionally not duplicated into the wire payload.
+WORKFLOW_ONLY_PLATFORM_METADATA: Dict[Tuple[str, str], set[str]] = {
+    (
+        "加热磁力搅拌工作站_V1",
+        "加热磁力搅拌全流程",
+    ): {"容器类型", "容器数量"},
+}
+
+# ``0410数据转换.txt`` predates the 50 mL support now declared by the latest
+# lab-design-all Liquid_Handling_Station_1ml_V2 Skill.  Keep the old wire field
+# names/types, but widen only the container enum/range proven by that Skill.
+CURATED_PLATFORM_OPTION_EXTENSIONS: Dict[Tuple[str, str, str], List[str]] = {
+    ("移液平台1ml_V2", "开盖-离心管", "容器类型"): ["50ml耐热瓶"],
+    ("移液平台1ml_V2", "关盖-离心管", "容器类型"): ["50ml耐热瓶"],
+    ("移液平台1ml_V2", "加液_物料绑定", "容器类型"): ["50ml耐热瓶"],
+}
+
 
 def _normalize_name(name: str) -> str:
     return str(name or "").replace("_", "").replace(" ", "").lower()
@@ -129,7 +165,37 @@ class DispatchCatalog:
             catalog._load_from_loader(workstation_loader)
         except Exception:
             pass
+        catalog._apply_curated_schema_extensions()
         return catalog
+
+    def _apply_curated_schema_extensions(self) -> None:
+        """Reconcile narrowly-scoped newer Skill facts with the wire export."""
+        for (station, operation, parameter), additions in (
+            CURATED_PLATFORM_OPTION_EXTENSIONS.items()
+        ):
+            spec = (
+                self.stations.get(station, {})
+                .get(operation, {})
+                .get(parameter)
+            )
+            if not isinstance(spec, dict):
+                continue
+            options = list(spec.get("options") or [])
+            for value in additions:
+                if value not in options:
+                    options.append(value)
+            spec["options"] = options
+            if parameter == "容器类型":
+                count_spec = (
+                    self.stations.get(station, {})
+                    .get(operation, {})
+                    .get("容器数量")
+                )
+                if isinstance(count_spec, dict):
+                    ranges = dict(count_spec.get("range") or {})
+                    for value in additions:
+                        ranges.setdefault(value, {"min": 0, "max": 10})
+                    count_spec["range"] = ranges
 
     def _conversion_paths(self) -> List[str]:
         roots = []
@@ -172,7 +238,15 @@ class DispatchCatalog:
             break  # first existing spec wins
 
     def _load_from_loader(self, workstation_loader: Any) -> None:
-        """工作站编码 + EN→display bridge from the loaded truth source."""
+        """Merge ids/aliases and stations added after the platform export.
+
+        ``0410数据转换.txt`` remains authoritative for every station it
+        contains.  ``lab-design-all`` can also introduce a complete new
+        workstation Skill (name, numeric id, operations and parameter tables)
+        before the next conversion export is cut.  Such an entirely missing
+        station is dispatchable from that newer Skill contract; overlapping
+        stations are never widened here.
+        """
         if workstation_loader is None or not hasattr(workstation_loader, "get_all"):
             return
         for station in workstation_loader.get_all():
@@ -185,11 +259,34 @@ class DispatchCatalog:
             content = str(
                 station.get("skill_content", "") or station.get("usage_content", "")
             )
+            platform = self.resolve_station(code_name) or self.resolve_station(display)
+            if platform is None and content:
+                skill_operations = parse_operation_schemas(content)
+                if skill_operations:
+                    platform = display or code_name
+                    operation_specs: Dict[str, Dict[str, Dict[str, Any]]] = {}
+                    for operation_name, operation in skill_operations.items():
+                        specs: Dict[str, Dict[str, Any]] = {}
+                        for parameter_name, node in operation.parameters.items():
+                            specs[parameter_name] = {
+                                "type": node.type_name,
+                                "unit": node.unit or None,
+                                "options": None,
+                                "range": None,
+                                "source": "lab-design-all/SKILL.md",
+                            }
+                        operation_specs[operation_name] = specs
+                    self.stations[platform] = operation_specs
+                    for identifier in (platform, code_name, display):
+                        if identifier:
+                            self._normalized_station_index.setdefault(
+                                _normalize_name(identifier), platform
+                            )
             match = STATION_CODE_RE.search(content)
             if not match:
                 continue
             code = int(match.group(1))
-            for identifier in (code_name, display):
+            for identifier in (code_name, display, platform):
                 if identifier:
                     self.station_ids[identifier] = code
         # once the bridge exists, platform names can inherit ids too
@@ -265,6 +362,11 @@ class DispatchCatalog:
         text = _normalize_param_name(name)
         if text in specs:
             return text
+        curated = CURATED_PARAMETER_ALIASES.get(
+            (platform_station, platform_operation, text)
+        )
+        if curated in specs:
+            return curated
         # per-version wording variants: 保留瓶盖 ↔ 是否保留瓶盖, 开盖编号 ↔
         # 开盖瓶号 ↔ 开盖的瓶号, 关盖编号 ↔ 关盖瓶号 ↔ 关盖的瓶号 …
         normalized = _normalize_name(text)
@@ -422,6 +524,14 @@ def format_dispatch_payload(
             )
             value = _instantiate_n_bottle_keys(raw_value)
             if platform_param is None:
+                workflow_metadata = WORKFLOW_ONLY_PLATFORM_METADATA.get(
+                    (platform_station, platform_operation), set()
+                )
+                if _normalize_param_name(raw_name) in workflow_metadata:
+                    # The platform operation addresses the same container set
+                    # through 容器编号.  Do not report this expected omission as
+                    # loss of a dispatchable chemical parameter.
+                    continue
                 # The dispatch payload must contain ONLY platform-known
                 # fields; the original value stays auditable in workflow_json.
                 warnings.append(

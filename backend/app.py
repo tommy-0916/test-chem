@@ -263,7 +263,7 @@ def create_app(manager: Optional[JobManager] = None) -> FastAPI:
         image_path = (
             get_manager().repo_root
             / "chem_resources"
-            / "lab-design-main"
+            / "lab-design-all"
             / "skills"
             / "chemistry-experiment-workstation"
             / "img.png"

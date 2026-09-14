@@ -1,35 +1,8 @@
-# Chem Agent 黑盒八题评估包
+# Chem Agent 八例黑箱评估 Skill 包
 
-该包把完整 Chem Agent 当作黑盒评估。评估器只提供八个原始 Query 和强制联网论文检索参数，不直接调用或重新编排 Research Agent、Device Agent、设备可行性反馈、observation 或修复分支。
+本包安装一个自包含的 `chem-agent-eval-sop` Skill。接收者只需准备 Chem Agent 仓库、固定八题 DOCX 和真实 LLM 环境变量，即可执行预检、八例黑箱运行、双层 workstation 审计、正式报告和完成性验收。
 
-## 收件人快速开始
-
-1. 解压本包并进入目录：
-
-   ```bash
-   unzip chem-agent-eval-blackbox-20260720.zip
-   cd chem-agent-eval-package
-   ```
-
-2. 在待测 Chem Agent 项目自身的 `.env` 或 shell 环境中配置真实 API key。可参考本包的 `.env.example`，但不要把真实 key 写入或转发本包。
-
-3. 安装 Skill 并复制八题测试文件：
-
-   ```bash
-   python3 scripts/install.py --repo "/path/to/chem-agent"
-   ```
-
-4. 执行预检：
-
-   ```bash
-   python3 scripts/preflight.py \
-     --repo "/path/to/chem-agent" \
-     --api-key-env REFINER_LLM_API_KEY
-   ```
-
-5. 预检通过后，可以在 Codex 中说“使用 `chem-agent-eval-sop` 评估这个 Chem Agent”，也可以直接执行下文的 runner 命令。
-
-建议先在待测 Chem Agent 的副本或独立工作目录中运行。联网八题评估会真实调用模型和论文检索服务，并在待测项目的 `result/` 下写入结果。
+要求 Python 3.10 或更高版本；优先使用待测仓库的 `.venv/bin/python`。
 
 ## 安装
 
@@ -37,83 +10,72 @@
 python3 scripts/install.py --repo "/path/to/chem-agent"
 ```
 
-安装器只会：
+安装器把 Skill 复制到 `${CODEX_HOME:-$HOME/.codex}/skills/chem-agent-eval-sop`。如果目标 Skill 已存在，会先创建时间戳备份。只有仓库缺少 `测试题目.docx` 时才自动复制本包测试文件；使用 `--replace-docx` 才会备份并替换已有文件。
 
-- 安装 `chem-agent-eval-sop` 到 `$CODEX_HOME/skills`；
-- 将测试 DOCX 放到 Chem Agent 根目录；
-- 在覆盖不同版本时备份原文件。
+安装器不会修改 Chem Agent 源码，也不会保存 API key。
 
-安装器不会修改 Chem Agent 源码。
+## 配置
 
-## 预检
+在 Chem Agent 自己的 `.env` 或 shell 环境中设置：
+
+```text
+REFINER_LLM_MODEL_NAME
+REFINER_LLM_ENDPOINT_URL
+REFINER_LLM_API_KEY
+REFINER_LLM_WIRE_API
+REFINER_LLM_REASONING_EFFORT
+```
+
+参考 `.env.example`。不要把真实密钥写入或转发本包。
+
+## 真实预检
 
 ```bash
 python3 scripts/preflight.py \
   --repo "/path/to/chem-agent" \
-  --api-key-env REFINER_LLM_API_KEY
-```
-
-预检确认：
-
-- DOCX 中包含 A01–D02 八个唯一 Query；
-- 45 个工作站 Skill 可用于输出审计；
-- `run_campaign.py` 是可调用的公开入口并支持 `--query`、`--campaign-id`、`--campaigns-root` 和 `--online-literature`；
-- evaluation runner 不直接调用 Research/Device 内部 CLI；
-- 确定性审计器和独立 LLM reviewer 已安装；
-- API key 存在但不会打印。
-
-## 运行
-
-```bash
-python3 "$HOME/.codex/skills/chem-agent-eval-sop/scripts/run_suite.py" \
-  --repo "/path/to/chem-agent" \
   --docx "/path/to/chem-agent/测试题目.docx" \
-  --workers 4
+  --probe-api
 ```
 
-每题只通过公开入口调用：
+预检必须返回 `ready: true`，并确认 provider 返回了非空真实 LLM 文本。
 
-```bash
-python run_campaign.py \
-  --query "<exact Query>" \
-  --campaign-id "<case>-<timestamp>" \
-  --campaigns-root "<isolated output root>" \
-  --online-literature
+## 使用 Skill
+
+在 Codex 中说：
+
+```text
+使用 $chem-agent-eval-sop 对这个 Chem Agent 完成固定八例黑箱评估，生成正式报告并严格验证完成性。
 ```
 
-`campaign-id` 和 `campaigns-root` 只用于隔离、定位输出。runner 不传入 `--include-device-context`、`--full-workstations`、execution adapter、mock observation 或其他内部策略参数。
-
-如果 Chem Agent 输出 `AWAITING_OBSERVATION.md`，而八题没有提供 observation，runner 将其记录为 `awaiting_observation` 外部状态并停止该进程，不会生成假 observation。若要评估完整多轮闭环，测试输入必须另外提供 observation fixture。
-
-## 结果
+Skill 会使用公开 `run_campaign.py`，保留原始输出，对每个 Device workflow 同时执行确定性和独立 LLM 审查，并生成：
 
 ```text
 <repo>/result/chem-agent-eval-YYYYMMDD-HHMMSS/
 ├── suite_manifest.json
 ├── raw_summary.json
-├── A01/
-│   ├── input.json
-│   ├── query.sha256
-│   ├── chem_agent.log
-│   ├── case_summary.json
-│   └── blackbox/<campaign-id>/...
+├── A01/ ... D02/
 └── evaluation/
     ├── workstation_schema_audit.json
     ├── workstation_schema_llm_review.json
     ├── workstation_schema_verdict.json
-    ├── <case>/evaluation.md
-    ├── <case>/evaluation.json
+    ├── A01/evaluation.md ... D02/evaluation.json
+    ├── verdict_matrix.json
     ├── overall_report.md
-    └── verdict_matrix.json
+    ├── workstation_direct_acceptance.md
+    └── completion_check.json
 ```
 
-审计器会发现并检查黑盒 campaign 暴露出的所有 `device_package.json`，而不是假定每题只有一个固定 Device 输出。
+只有 `completion_check.json` 的 `complete` 为 `true` 才算完成。任何 Query 变化、缺失案例、未覆盖 workflow、失败或 fallback LLM 调用、缺失 workstation 直接接收结论都会使验收失败。
 
-每题最终给出四类离散结论，不使用数字评分：
+## 直接命令
 
-1. `process_completion`；
-2. `paper_quality_summary`；
-3. `plan_workstation_match`；
-4. `dispatch_schema_match`。
+不通过 Codex 对话时，可直接运行黑箱和 schema 审计：
 
-确定性 schema 审计与独立 LLM review 均通过，`dispatch_schema_match` 才能为 `yes`。
+```bash
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/chem-agent-eval-sop/scripts/run_suite.py" \
+  --repo "/path/to/chem-agent" \
+  --docx "/path/to/chem-agent/测试题目.docx" \
+  --workers 4
+```
+
+语义性论文质量、plan-to-workstation 和回归结论仍须按 Skill rubric 写入正式报告，再运行 `validate_evaluation.py`。脚本不会伪造这些判断。

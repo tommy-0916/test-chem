@@ -58,6 +58,9 @@ class ResearchAgentState:
     current_stage_plan: str = ""
     macro_plan: List[Dict[str, Any]] = field(default_factory=list)
     macro_action: Dict[str, Any] = field(default_factory=dict)
+    # A new action is designed before its steps. Publish it only after the
+    # steps pass validation, so B2 can still record the previous action outcome.
+    pending_macro_action: Dict[str, Any] = field(default_factory=dict)
     macro_action_history: List[Dict[str, Any]] = field(default_factory=list)
     stage_route_reason: str = ""
     current_stage_reason: str = ""
@@ -73,7 +76,7 @@ class ResearchAgentState:
     manual_handoff: str = ""
     # Issue 5: explicit failure taxonomy so an empty macro plan is never
     # ambiguous. One of "": macro_generation_error / macro_quality_error /
-    # device_feasibility_error / network_or_retrieval_error / bootstrap_error.
+    # device_feasibility_error / network_or_retrieval_error / configuration_error / bootstrap_error.
     failure_category: str = ""
     rejected_macro_plan: List[Dict[str, Any]] = field(default_factory=list)
     # Issue 4: campaign-level device-feasibility memory across re-planning
@@ -165,7 +168,8 @@ class ResearchAgentState:
             "device_agent_contract": {
                 "research_output_level": (
                     "research agent 输出化学语义 macro action：应做什么实验、关键试剂/"
-                    "样品对象和关键参数；不负责选择具体机器容器、工作站、容器编号、"
+                    "样品对象和关键参数；macro step 可给逻辑容器类型/数量、物料 I/O 和返回要求，"
+                    "不负责选择实体机器容器、工作站、容器编号、"
                     "原液瓶位、开盖/关盖、分瓶/配平或机器人动作。"
                 ),
                 "device_agent_input_should_add": (
@@ -174,8 +178,11 @@ class ResearchAgentState:
                 ),
                 "device_agent_responsibility": (
                     "先评估当前 macro action 能否由设备和器材映射执行；若可以，选择"
-                    "具体容器/工作站并生成机器 workflow；若不可以，返回 device_feasibility_error "
-                    "及无法映射的硬约束。"
+                    "具体容器/工作站并生成机器 workflow；仅当 workflow 生成前存在真实"
+                    "路线硬缺口时，才以 feedback_route=research、"
+                    "failure_scope=route_feasibility、feedback_type="
+                    "research_replan_required 返回 Research。路线可行性通过后，剂量、"
+                    "workflow 与内部运行错误均由 Device 持有，不得触发 Research 重规划。"
                 ),
             },
         }

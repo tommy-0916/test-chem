@@ -4,12 +4,31 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 DEFAULT_USAGE_CHAR_LIMIT = 900
 DEFAULT_AUDIT_CHAR_LIMIT = 1200
 DEFAULT_TOTAL_CHAR_LIMIT = 18000
+RESOURCE_ROOT = Path(__file__).resolve().parents[2] / "chem_resources"
+DEFAULT_CAPABILITY_INDEX_PATH = RESOURCE_ROOT / "workstation_capability_index.json"
+
+DEVICE_PLANNING_POLICY = (
+    "B1 research planning should prefer routes whose containers, operations, "
+    "fixed-parameter steps, reaction/testing modules, characterization "
+    "handoffs, and observation points are compatible with the loaded device "
+    "truth source. Keep output at macro-action level; do not emit workstation "
+    "pipeline/control JSON. If the loaded source exposes characterization "
+    "stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported "
+    "observation points; otherwise keep them as offline handoffs. All listed "
+    "workstations are physically connected: an existing sample/container may "
+    "move between stations without a human handoff. Material transfer from "
+    "container A to container B is also connected through the platform transfer "
+    "fabric, but the destination operation's container and sample-state constraints "
+    "remain strict. Prefer one continuous sample/container lineage and introduce a "
+    "new vessel or solvent-location change only when required by compatibility, "
+    "capacity, split/merge, output format, or explicit scientific conditions."
+)
 
 UNAVAILABLE_STATUSES = {
     "offline",
@@ -93,7 +112,7 @@ def _lookup_station_status(
     station: Dict[str, Any],
     normalized_status: Dict[str, str],
 ) -> str:
-    for key in ("station_name", "display_name", "code", "name"):
+    for key in ("station_name", "station_code", "station_id", "display_name", "code", "name"):
         value = str(station.get(key, "")).strip().lower()
         if value and value in normalized_status:
             return normalized_status[value]
@@ -101,21 +120,20 @@ def _lookup_station_status(
 
 
 def default_workstations_dir() -> Path:
-    resource_root = Path(__file__).resolve().parents[2] / "chem_resources"
     for candidate in (
-        resource_root
-        / "lab-design-main"
-        / "skills"
-        / "chemistry-experiment-workstation",
-        resource_root
+        RESOURCE_ROOT
         / "lab-design-all"
         / "skills"
         / "chemistry-experiment-workstation",
-        resource_root / "workstations_new",
+        RESOURCE_ROOT
+        / "lab-design-main"
+        / "skills"
+        / "chemistry-experiment-workstation",
+        RESOURCE_ROOT / "workstations_new",
     ):
         if candidate.exists():
             return candidate
-    return resource_root / "workstations_new"
+    return RESOURCE_ROOT / "workstations_new"
 
 
 def load_device_context(
@@ -128,6 +146,16 @@ def load_device_context(
     root = _normalize_workstations_root(root)
     if not root.exists():
         raise FileNotFoundError(f"workstations directory not found: {root}")
+
+    indexed_context = _load_indexed_device_context(root)
+    if indexed_context is not None:
+        return _trim_context(indexed_context, max_total_chars)
+    if _is_lab_design_root(root):
+        from agent_skills.capabilities import load_current_capability_index
+        current = load_current_capability_index(source=root)
+        context = _context_from_capability_index(current, DEFAULT_CAPABILITY_INDEX_PATH)
+        if context is not None:
+            return _trim_context(context, max_total_chars)
 
     workstations: List[Dict[str, Any]] = []
     for station_dir in _iter_station_dirs(root):
@@ -149,18 +177,7 @@ def load_device_context(
 
     context: Dict[str, Any] = {
         "source": str(root),
-        "planning_policy": (
-            "B1 research planning should prefer routes whose containers, operations, "
-            "fixed-parameter steps, reaction/testing modules, characterization "
-            "handoffs, and observation points are compatible with the loaded device "
-            "truth source. Keep output at macro-action level; do not emit workstation "
-            "pipeline/control JSON. If the loaded source exposes characterization "
-            "stations such as XRD/IR/UV-Vis/GC/LC, they may be used as device-supported "
-            "observation points; otherwise keep them as offline handoffs. Avoid macro "
-            "routes that require a sample to move across incompatible container classes "
-            "when the loaded device capabilities do not expose a supported transfer or "
-            "vessel-change operation."
-        ),
+        "planning_policy": DEVICE_PLANNING_POLICY,
         "workstations": workstations,
     }
     return _trim_context(context, max_total_chars)
@@ -172,6 +189,11 @@ def load_device_context_from_path(path_text: str | Path) -> Dict[str, Any]:
         return load_device_context(path)
     parsed = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(parsed, dict):
+        indexed_context = _context_from_capability_index(parsed, path)
+        if indexed_context is not None:
+            from agent_skills.capabilities import load_current_capability_index
+            current = load_current_capability_index(path, source=indexed_context["source"])
+            return _context_from_capability_index(current, path) or indexed_context
         return parsed
     if isinstance(parsed, list):
         return {"source": str(path), "workstations": parsed}
@@ -179,7 +201,14 @@ def load_device_context_from_path(path_text: str | Path) -> Dict[str, Any]:
 
 
 def ensure_device_context(constraints: Dict[str, Any]) -> Dict[str, Any]:
-    """Return constraints with device_context loaded when requested."""
+    """Return constraints with workstation truth loaded for Research planning.
+
+    The compact ``lab-design-all`` index is a planning invariant, not an
+    optional hint.  Callers may supply an explicit context/path/root (for
+    example a live-status overlay), but an old
+    ``include_default_device_context=false`` flag may no longer make the first
+    Research plan blind to equipment capabilities.
+    """
     updated = dict(constraints or {})
     if updated.get("device_context"):
         return _ensure_status_applied(updated)
@@ -194,8 +223,7 @@ def ensure_device_context(constraints: Dict[str, Any]) -> Dict[str, Any]:
         updated["device_context"] = load_device_context(str(workstations_dir))
         return _ensure_status_applied(updated)
 
-    if updated.get("include_default_device_context"):
-        updated["device_context"] = load_device_context()
+    updated["device_context"] = load_device_context()
 
     return _ensure_status_applied(updated)
 
@@ -229,6 +257,79 @@ def _read_text(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8")
+
+
+def _load_indexed_device_context(root: Path) -> Optional[Dict[str, Any]]:
+    if not DEFAULT_CAPABILITY_INDEX_PATH.exists():
+        return None
+    try:
+        parsed = json.loads(DEFAULT_CAPABILITY_INDEX_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    context = _context_from_capability_index(parsed, DEFAULT_CAPABILITY_INDEX_PATH)
+    if context is None:
+        return None
+    indexed_source = Path(str(context["source"])).expanduser().resolve()
+    if indexed_source != root.resolve():
+        return None
+    # A Skill/audit edit must be visible immediately, without requiring the
+    # user to remember to regenerate a checked-in JSON artifact first.
+    from agent_skills.capabilities import load_current_capability_index
+    current = load_current_capability_index(DEFAULT_CAPABILITY_INDEX_PATH, source=root)
+    return _context_from_capability_index(current, DEFAULT_CAPABILITY_INDEX_PATH)
+
+
+def _context_from_capability_index(
+    parsed: Dict[str, Any],
+    index_path: Path,
+) -> Optional[Dict[str, Any]]:
+    research_context = parsed.get("research_context")
+    workstations = parsed.get("workstations")
+    source_text = str(parsed.get("source", "")).strip()
+    if not (
+        parsed.get("source_kind") == "lab-design-all"
+        and isinstance(research_context, dict)
+        and isinstance(research_context.get("text"), str)
+        and isinstance(workstations, list)
+        and source_text
+    ):
+        return None
+
+    source_path = Path(source_text).expanduser()
+    if not source_path.is_absolute():
+        source_path = Path(__file__).resolve().parents[2] / source_path
+    compact_stations = []
+    for station in workstations:
+        if not isinstance(station, dict):
+            continue
+        compact_stations.append(
+            {
+                "station_name": str(station.get("station_code", "")),
+                "display_name": str(station.get("display_name", "")),
+            }
+        )
+    return {
+        "source": str(source_path.resolve()),
+        "capability_index": str(index_path.resolve()),
+        "source_kind": "lab-design-all capability index",
+        "source_digest_sha256": str(parsed.get("source_digest_sha256", "")),
+        "planning_policy": DEVICE_PLANNING_POLICY,
+        "container_list": list(
+            research_context.get("container_list", parsed.get("container_list", []))
+        ),
+        "sample_carrier_list": list(
+            research_context.get(
+                "sample_carrier_list", parsed.get("sample_carrier_list", [])
+            )
+        ),
+        "compact_workstation_capabilities": research_context["text"],
+        "compact_capability_semantics": dict(
+            research_context.get("semantics", {})
+        ),
+        # Names are retained separately so live availability overlays can still
+        # match either the canonical station code or the Chinese display name.
+        "workstations": compact_stations,
+    }
 
 
 def _normalize_workstations_root(root: Path) -> Path:

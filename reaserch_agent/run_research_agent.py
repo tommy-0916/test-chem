@@ -117,7 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--include-device-context",
         action="store_true",
-        help="Load current device capabilities into B1 constraints before the first LLM call.",
+        help=(
+            "Load the compact workstation capability index into B1 constraints "
+            "before the first LLM call. Enabled by default."
+        ),
     )
     parser.add_argument(
         "--device-status-json",
@@ -140,8 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Always run online literature acquisition (seed resolution + citation "
-            "snowball + keyword search) before planning. Default: auto — runs only "
-            "when --reference entries need online resolution."
+            "snowball + keyword search) before planning. Enabled by default."
         ),
     )
     parser.add_argument(
@@ -161,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Enable the open-web line during literature acquisition: search "
             "(Tavily/Serper/Brave/SearXNG/DuckDuckGo, auto by configured keys), "
             "read top pages via Jina Reader, and archive them as web_unverified "
-            "leads. Off by default."
+            "leads. Enabled by default."
         ),
     )
     parser.add_argument(
@@ -201,6 +203,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM timeout seconds. Default: 240.",
     )
     parser.add_argument(
+        "--llm-max-retries",
+        type=int,
+        default=8,
+        help="Maximum LLM retries for the Research Agent and SDK transport. Default: 8.",
+    )
+    parser.add_argument(
         "--disable-llm",
         action="store_true",
         help="Force heuristic mode even if model credentials are configured.",
@@ -231,6 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--save-state",
         help="Optional path for saving the final state JSON.",
+    )
+    parser.set_defaults(
+        include_device_context=True,
+        online_literature=True,
+        web_search=True,
     )
     return parser
 
@@ -356,6 +369,7 @@ def configure_model_env(args: argparse.Namespace) -> None:
     if args.base_url:
         os.environ["REFINER_LLM_ENDPOINT_URL"] = args.base_url
     os.environ["REFINER_LLM_TIMEOUT_SECONDS"] = str(args.llm_timeout_seconds)
+    os.environ["REFINER_LLM_MAX_RETRIES"] = str(max(0, args.llm_max_retries))
     if args.wire_api == "codex_responses":
         os.environ["REFINER_LLM_WIRE_API"] = "codex_responses"
         os.environ["REFINER_LLM_REASONING_EFFORT"] = args.reasoning_effort

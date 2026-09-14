@@ -75,6 +75,21 @@ def discover_keys(env: dict[str, str], preferred_env: str | None = None) -> list
     return [fallback] if fallback else []
 
 
+def discover_campaign_keys(env: dict[str, str]) -> list[str]:
+    direct = parse_key_list(env.get("CHEM_AGENT_EVAL_API_KEYS", ""))
+    if direct:
+        return direct
+    pooled = [
+        env[f"REFINER_LLM_POOL_{index}_API_KEY"].strip()
+        for index in range(1, 100)
+        if env.get(f"REFINER_LLM_POOL_{index}_API_KEY", "").strip()
+    ]
+    if pooled:
+        return pooled
+    fallback = env.get("REFINER_LLM_API_KEY", "").strip()
+    return [fallback] if fallback else []
+
+
 def command_text(command: list[str]) -> str:
     return " ".join(command)
 
@@ -218,6 +233,13 @@ def run_case(
     python: Path,
     args: argparse.Namespace,
     base_env: dict[str, str],
+    api_key: str | None = None,
+    campaign_model: str | None = None,
+    campaign_endpoint: str | None = None,
+    campaign_wire_api: str | None = None,
+    campaign_reasoning_effort: str | None = None,
+    campaign_llm_timeout_seconds: int | None = None,
+    campaign_max_iterations: int | None = None,
 ) -> dict[str, Any]:
     case_id = case["case_id"]
     local_id = f"{case_id}-{run_stamp}"
@@ -241,10 +263,28 @@ def run_case(
         str(blackbox_root),
         "--online-literature",
     ]
+    # Provider pinning uses documented public run_campaign.py options and does
+    # not bypass or reconfigure either internal agent stage.
+    if campaign_model:
+        command += ["--model-name", campaign_model]
+    if campaign_endpoint:
+        command += ["--base-url", campaign_endpoint]
+    if campaign_wire_api:
+        command += ["--wire-api", campaign_wire_api]
+    if campaign_reasoning_effort:
+        command += ["--reasoning-effort", campaign_reasoning_effort]
+    if campaign_llm_timeout_seconds is not None:
+        command += ["--llm-timeout-seconds", str(campaign_llm_timeout_seconds)]
+    if campaign_max_iterations is not None:
+        command += ["--max-iterations", str(campaign_max_iterations)]
+    case_env = dict(base_env)
+    if api_key:
+        case_env["REFINER_LLM_API_KEY"] = api_key
+        case_env["OPENAI_API_KEY"] = api_key
     result = run_blackbox(
         command,
         cwd=repo,
-        env=dict(base_env),
+        env=case_env,
         log_path=case_dir / "chem_agent.log",
         campaign_dir=campaign_dir,
         timeout=args.case_timeout,
@@ -306,8 +346,8 @@ def run_case(
 
 def workstation_root(repo: Path) -> Path:
     for candidate in (
-        repo / "chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
         repo / "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
+        repo / "chem_resources/lab-design-main/skills/chemistry-experiment-workstation",
     ):
         if candidate.exists():
             return candidate.resolve()
@@ -341,6 +381,30 @@ def main() -> int:
     parser.add_argument("--schema-review-max-output-tokens", type=int, default=16000)
     parser.add_argument("--schema-review-attempts", type=int, default=2)
     parser.add_argument("--schema-review-workers", type=int, default=4)
+    parser.add_argument("--campaign-model")
+    parser.add_argument("--campaign-endpoint")
+    parser.add_argument(
+        "--campaign-wire-api", choices=["chat", "codex_responses"]
+    )
+    parser.add_argument("--campaign-reasoning-effort")
+    parser.add_argument(
+        "--campaign-max-iterations",
+        type=int,
+        default=1,
+        help=(
+            "Positive iteration budget passed through the public run_campaign.py "
+            "option. Default: 1, to guarantee a bounded end-to-end artifact."
+        ),
+    )
+    parser.add_argument(
+        "--campaign-llm-timeout-seconds",
+        type=int,
+        default=3600,
+        help=(
+            "Positive per-call timeout passed through the public run_campaign.py "
+            "shared LLM option. Default: 3600."
+        ),
+    )
     parser.add_argument(
         "--skip-schema-llm-review",
         action="store_true",
@@ -367,16 +431,43 @@ def main() -> int:
     if not python.exists():
         python = Path(sys.executable)
     workstations = workstation_root(repo)
-    review_model = args.schema_review_model or base_env.get("REFINER_LLM_MODEL_NAME", "gpt-5.6-sol")
-    review_endpoint = args.schema_review_endpoint or base_env.get(
-        "REFINER_LLM_ENDPOINT_URL", "https://anyrouter.top/v1"
+    campaign_model = args.campaign_model or base_env.get("REFINER_LLM_MODEL_NAME", "")
+    campaign_endpoint = args.campaign_endpoint or base_env.get("REFINER_LLM_ENDPOINT_URL", "")
+    campaign_wire_api = args.campaign_wire_api or base_env.get("REFINER_LLM_WIRE_API", "")
+    campaign_reasoning_effort = (
+        args.campaign_reasoning_effort
+        or base_env.get("REFINER_LLM_REASONING_EFFORT", "")
     )
-    review_wire_api = args.schema_review_wire_api or base_env.get(
-        "REFINER_LLM_WIRE_API", "codex_responses"
-    )
+    review_model = args.schema_review_model or campaign_model
+    review_endpoint = args.schema_review_endpoint or campaign_endpoint
+    review_wire_api = args.schema_review_wire_api or campaign_wire_api
     review_keys = discover_keys(base_env, args.schema_review_api_key_env)
+    campaign_keys = discover_campaign_keys(base_env)
+    missing_campaign_config = [
+        name
+        for name, value in (
+            ("model", campaign_model),
+            ("endpoint", campaign_endpoint),
+            ("wire_api", campaign_wire_api),
+        )
+        if not value
+    ]
+    if missing_campaign_config and not args.dry_run:
+        raise RuntimeError(
+            "Missing black-box LLM configuration: " + ", ".join(missing_campaign_config)
+        )
+    if not campaign_keys and not args.dry_run:
+        raise RuntimeError("No API key found for the black-box Chem Agent campaigns")
+    if not campaign_keys:
+        campaign_keys = [""]
     if not review_keys and not args.dry_run and not args.skip_schema_llm_review:
         raise RuntimeError("No API key found for the independent schema reviewer")
+    if (
+        (not review_model or not review_endpoint or not review_wire_api)
+        and not args.dry_run
+        and not args.skip_schema_llm_review
+    ):
+        raise RuntimeError("Independent schema-review model, endpoint, and wire API are required")
     if not review_keys:
         review_keys = ["no-call-required"]
 
@@ -408,7 +499,18 @@ def main() -> int:
         "schema_review_wire_api": review_wire_api,
         "schema_review_reasoning_effort": args.schema_review_reasoning_effort,
         "schema_review_api_key_env": args.schema_review_api_key_env or "auto-discovery",
+        "campaign_model": campaign_model,
+        "campaign_endpoint": campaign_endpoint,
+        "campaign_wire_api": campaign_wire_api,
+        "campaign_reasoning_effort": campaign_reasoning_effort,
+        "campaign_max_iterations": args.campaign_max_iterations,
+        "campaign_llm_timeout_seconds": args.campaign_llm_timeout_seconds,
         "api_keys_recorded": False,
+        "campaign_api_key_count": len(campaign_keys),
+        "campaign_key_assignment": {
+            case["case_id"]: f"key_{(index % len(campaign_keys)) + 1}"
+            for index, case in enumerate(cases)
+        },
         "dry_run": args.dry_run,
     }
     (run_root / "suite_manifest.json").write_text(
@@ -429,8 +531,15 @@ def main() -> int:
                 python=python,
                 args=args,
                 base_env=base_env,
+                api_key=campaign_keys[index % len(campaign_keys)],
+                campaign_model=campaign_model,
+                campaign_endpoint=campaign_endpoint,
+                campaign_wire_api=campaign_wire_api,
+                campaign_reasoning_effort=campaign_reasoning_effort,
+                campaign_llm_timeout_seconds=args.campaign_llm_timeout_seconds,
+                campaign_max_iterations=args.campaign_max_iterations,
             ): case
-            for case in cases
+            for index, case in enumerate(cases)
         }
         for future in concurrent.futures.as_completed(future_to_case):
             case = future_to_case[future]

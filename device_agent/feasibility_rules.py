@@ -4,8 +4,8 @@ The device agent's LLM may return a ``device_feasibility_error`` for three
 very different reasons, and only one of them is a real physical blocker:
 
 - ``hard``          — the truth source genuinely lacks a capability
-                      (missing station/equipment, no legal transfer path,
-                      incompatible containers, volume over a hard limit,
+                      (missing station/equipment or chemical operation,
+                      volume over a hard limit,
                       station offline, an explicitly non-interruptible
                       continuous feed).
 - ``adaptable``     — the complaint is about process phrasing/timing
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ HARD_TEMPORAL_FEED_RE = re.compile(
 )
 
 # Hard capability-gap evidence.  These phrases talk about equipment or legal
-# paths, not about parameter fields or timing.
+# capabilities, not about parameter fields, timing, or implicit transport.
 HARD_DEVICE_BLOCKER_MARKERS = (
     "没有液体进样",
     "缺少液体进样",
@@ -71,11 +71,6 @@ HARD_DEVICE_BLOCKER_MARKERS = (
     "设备离线",
     "维修",
     "故障",
-    "无法转移",
-    "没有转移路径",
-    "无合法转移",
-    "容器不兼容",
-    "容器类型不连续",
     "体积超过",
     "体积超限",
     "超出上限",
@@ -147,6 +142,214 @@ DROPWISE_LIMIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Physical station-to-station movement and A→B material transfer are connected
+# platform defaults. A container mismatch therefore triggers route repair/minimal
+# vessel adaptation, not a hard verdict by itself.
+CONTAINER_ROUTE_ADAPTATION_RE = re.compile(
+    r"(?:没有|缺少|不存在|无|无法).{0,80}(?:转移路径|连续路径|容器路径)"
+    r"|(?:没有|缺少|不存在|无|无法).{0,80}(?:容器链路|反应管链路)"
+    r"|(?:没有|缺少|不存在|无|无法).{0,36}(?:获取|拿取|提供|供给)"
+    r".{0,24}(?:空)?(?:\d+\s*ml)?(?:耐压)?(?:反应管|容器)(?:的物料站|物料站|来源|入口)?"
+    r"|(?:反应管|容器).{0,24}(?:获取|供给|提供|来源).{0,24}(?:缺失|没有|缺少|链路|能力)"
+    r"|(?:通往|跨站|工作站之间).{0,80}(?:转移|路径|链路)"
+    r"|(?:转移|换瓶).{0,80}(?:路径|链路)"
+    r"|(?:没有|缺少|不存在|未提供|无法|不能|不支持|不接受)"
+    r"[^\n。；;]{0,120}(?:样品|物料|悬浊液|沉淀|产物|液体|固体)?"
+    r"(?:转移|换瓶|移液|取样|接驳|transfer|transport)"
+    r"[^\n。；;]{0,36}(?:操作|路径|链路|接口|来源|转移源|输入状态)?"
+    # ``转入/输出`` are ambiguous in isolation (for example gas
+    # output can be a real chemical capability). Require both source and
+    # destination vessel evidence before treating them as ordinary transfer.
+    r"|(?:没有|缺少|不存在|未提供|无法|不能|不支持|不接受)"
+    r"[^\n。；;]{0,100}(?:\d+\s*ml)?(?:耐压)?(?:反应管|进样瓶|留样瓶|西林瓶|耐热瓶|容器)"
+    r"[^\n。；;]{0,64}(?:转入|移入|倒入|导入|输出|转装)"
+    r"[^\n。；;]{0,40}(?:进样瓶|留样瓶|西林瓶|耐热瓶|反应管|容器)"
+    r"|(?:转移|换瓶|移液|取样|接驳|transfer|transport)"
+    r"(?:工作站|设备|操作|路径|链路|接口)?"
+    r"[^\n。；;]{0,80}(?:没有|缺少|不存在|未提供|无法|不能|不支持|不接受)"
+    # A downstream station accepting a different container does not prove a
+    # route gap: the platform contract permits one minimal A→B vessel move.
+    r"|(?:样品|物料|悬浊液|沉淀|产物|液体|固体)"
+    r"[^\n。；;]{0,32}(?:仍|尚)?(?:位于|留在|处于)"
+    r"[^\n。；;]{0,32}(?:耐压)?(?:反应管|进样瓶|留样瓶|西林瓶|耐热瓶|容器)"
+    r"[^\n。；;]{0,24}(?:无法|不能)建立[^\n。；;]{0,20}输入"
+    r"|(?:耐压反应管|反应管|进样瓶|留样瓶|西林瓶|容器)"
+    r"[^\n。；;]{0,40}(?:没有|无法|不支持|不接受)"
+    r"[^\n。；;]{0,32}(?:兼容)?(?:搅拌|离心|洗涤|干燥|后处理|加液|取液)?操作"
+    r"|(?:容器不兼容|容器类型不连续|无法转移|换瓶|转移混合样品)",
+    re.IGNORECASE,
+)
+
+# A ``missing_device_capability`` field often contains only a noun phrase, not
+# an explicit negative verb.  In that field alone, a request for an ordinary
+# container-to-container transfer interface is still a denial of the platform
+# default and must not become a route blocker.
+CONTAINER_TRANSFER_CAPABILITY_RE = re.compile(
+    r"(?:反应管|容器|样品|物料|悬浊液|沉淀|产物)"
+    r"[^\n。；;]{0,36}(?:到|至|→|->)"
+    r"[^\n。；;]{0,36}(?:反应管|瓶|容器)"
+    r"[^\n。；;]{0,36}(?:转移|换瓶|移液|接驳|接口|操作|路径)"
+    r"|(?:自动化|合法|受支持)?[^\n。；;]{0,20}"
+    r"(?:全量)?(?:样品|物料|悬浊液|产物)?转移"
+    r"(?:接口|操作|路径|链路|能力)"
+    r"|(?:接受|接收)?[^\n。；;]{0,16}"
+    r"(?:\d+\s*ml)?(?:耐压)?(?:反应管|容器)"
+    r"[^\n。；;]{0,32}(?:转入|移入|倒入|导入|输出|转装)"
+    r"[^\n。；;]{0,32}(?:进样瓶|留样瓶|西林瓶|耐热瓶|容器)"
+    r"[^\n。；;]{0,32}(?:自动转移|固液分离链|接口|操作|路径|链路|能力)?"
+    # A downstream operation named together with an otherwise incompatible
+    # source vessel is an input-container adaptation, not proof that the
+    # centrifuge/wash/XRD operation itself is absent.
+    r"|(?:以|接受|接收)?[^\n。；;]{0,16}"
+    r"(?:\d+\s*ml)?(?:耐压)?(?:反应管|容器)"
+    r"[^\n。；;]{0,20}(?:为|作为)?输入[^\n。；;]{0,20}"
+    r"(?:自动)?(?:离心洗涤|离心|洗涤|XRD(?:_V1)?制样|XRD(?:_V1)?输入|表征制样)"
+    r"|(?:可获取|获取|供给|提供)[^\n。；;]{0,24}"
+    r"(?:空)?(?:\d+\s*ml)?(?:耐压)?(?:反应管|容器)"
+    r"[^\n。；;]{0,24}(?:链路|能力|入口|来源)?",
+    re.IGNORECASE,
+)
+
+CONNECTIVITY_CONSEQUENCE_RE = re.compile(
+    r"(?:不能|无法)建立[^\n。；;]{0,32}(?:离心|洗涤|干燥|搅拌|后处理)?输入状态"
+    r"|(?:后续|样品处理|流程|路线|链)"
+    r"[^\n。；;]{0,60}(?:无法|不能)(?:闭合|继续|建立|进入)"
+    r"|(?:链|流程|路线)[^\n。；;]{0,20}(?:无法|不能)闭合"
+    r"|(?:该|上述|因此)?[^\n。；;]{0,40}"
+    r"(?:固液分离|离心|洗涤|干燥|后处理|表征)"
+    r"[^\n。；;]{0,48}(?:不能|不可|无法)[^\n。；;]{0,24}"
+    r"(?:offline(?:_handoff)?|离线|人工)[^\n。；;]{0,12}(?:替代|完成)?",
+    re.IGNORECASE,
+)
+
+_CONNECTIVITY_SEGMENT_SPLIT_RE = re.compile(
+    r"(?<=[。！？!?；;])\s*|"
+    r"(?=[，,]?(?:并且|而且|同时|此外|另外|设备还|"
+    r"仍然|另有|也(?:没有|无|不|未)|但|且))"
+)
+
+# When a mixed sentence contains both a false transport complaint and an
+# independent blocker, retain only the latter.  Mere descriptions of the
+# requested pH/temperature are not blockers; a retained fragment needs a
+# negative/contradictory fact of its own.
+INDEPENDENT_CONSTRAINT_EVIDENCE_RE = re.compile(
+    r"矛盾|不一致|冲突|超过|超出|超限|不足|容量不足|"
+    r"重复消费|重复计量|未知收率|无法判断|不允许合批|"
+    r"(?:没有|缺少|不存在|未提供|无法|不能|不支持|离线|不可用)"
+    r"[^\n。；;]{0,100}|"
+    r"(?:安全|防爆|惰性|无氧|压力|温度|pH|酸碱)"
+    r"[^\n。；;]{0,60}(?:无法满足|不能满足|不支持|缺少|不存在|未提供|超限)",
+    re.IGNORECASE,
+)
+
+STRONG_INDEPENDENT_CONSTRAINT_RE = re.compile(
+    r"(?:pH|酸碱)[^\n。；;]{0,36}(?:测量|检测|调节|控制|验证)"
+    r"[^\n。；;]{0,36}(?:没有|缺少|不存在|未提供|无法|不能|不支持)"
+    r"|(?:没有|缺少|不存在|未提供|无法|不能|不支持)"
+    r"[^\n。；;]{0,36}(?:pH|酸碱)[^\n。；;]{0,24}(?:测量|检测|调节|控制|验证)?"
+    r"|(?:安全|防爆|惰性|无氧|密闭安全|压力安全)"
+    r"[^\n。；;]{0,60}(?:无法满足|不能满足|不支持|缺少|不存在|未提供|超限)"
+    r"|矛盾|不一致|重复消费|重复计量|未知收率|不允许合批",
+    re.IGNORECASE,
+)
+
+
+def _has_strong_independent_constraint(segment: str) -> bool:
+    """Fail-safe guard for two claims written without a splittable delimiter."""
+
+    return bool(
+        STRONG_INDEPENDENT_CONSTRAINT_RE.search(segment)
+        or CHEMICAL_OPERATION_GAP_RE.search(segment)
+        or EQUIPMENT_GAP_PREFIX_RE.search(segment)
+        or EQUIPMENT_GAP_SUFFIX_RE.search(segment)
+        or any(marker in segment.lower() for marker in HARD_DEVICE_BLOCKER_MARKERS)
+    )
+
+
+def scrub_implicit_connectivity_constraint(
+    text: Any,
+    *,
+    capability_field: bool = False,
+) -> Tuple[str, bool]:
+    """Remove only ordinary-transfer denial fragments from one constraint.
+
+    The return value is ``(remaining_text, changed)``.  If the complaint is
+    purely about the default-connected transfer fabric, ``remaining_text`` is
+    empty.  In a mixed complaint, independently negative quantity, pH, safety,
+    availability, or operation-capability fragments are retained.
+    """
+
+    original = str(text or "").strip()
+    if not original:
+        return "", False
+    has_connectivity = bool(CONTAINER_ROUTE_ADAPTATION_RE.search(original))
+    if capability_field:
+        has_connectivity = has_connectivity or bool(
+            CONTAINER_TRANSFER_CAPABILITY_RE.search(original)
+        )
+    if not has_connectivity:
+        return original, False
+
+    segments = [
+        segment.strip(" \t\r\n，,")
+        for segment in _CONNECTIVITY_SEGMENT_SPLIT_RE.split(original)
+        if segment.strip(" \t\r\n，,")
+    ]
+    kept: List[str] = []
+    removed_previous = False
+    changed = False
+    for segment in segments:
+        route_fragment = bool(CONTAINER_ROUTE_ADAPTATION_RE.search(segment))
+        if capability_field:
+            route_fragment = route_fragment or bool(
+                CONTAINER_TRANSFER_CAPABILITY_RE.search(segment)
+            )
+        if route_fragment:
+            # If the model concatenated a true independent blocker and a
+            # transport complaint without a safe delimiter, retain the full
+            # fragment rather than risk deleting pH/safety/operation evidence.
+            # Normal delimited mixed claims are split and cleaned precisely.
+            if _has_strong_independent_constraint(segment):
+                kept.append(segment)
+                removed_previous = False
+                continue
+            changed = True
+            removed_previous = True
+            continue
+        if removed_previous and CONNECTIVITY_CONSEQUENCE_RE.search(segment):
+            changed = True
+            continue
+        # Once a transport-only fragment has been removed, surrounding text is
+        # often just requirement context ("pH 9.5 is required"). Preserve it
+        # only when it independently asserts a failure/contradiction.
+        if has_connectivity and not INDEPENDENT_CONSTRAINT_EVIDENCE_RE.search(segment):
+            changed = True
+            continue
+        kept.append(segment)
+        removed_previous = False
+
+    return " ".join(kept).strip(), changed
+
+CHEMICAL_OPERATION_GAP_RE = re.compile(
+    r"(?:真源|设备|工作站).{0,24}(?:没有|缺少|不存在|未提供)"
+    r".{0,80}(?:化学操作|工艺操作|工作站操作|混合操作|均匀混合|球磨|研磨)"
+    r"|(?:没有|缺少|不存在|未提供).{0,80}"
+    r"(?:固体粉末混合|干粉混合|均匀混合|球磨|研磨).{0,30}(?:操作|能力|工作站)",
+    re.IGNORECASE,
+)
+
+
+def is_implicit_connectivity_constraint(text: Any) -> bool:
+    """True when a complaint only denies the platform's default transfer fabric.
+
+    Physical station-to-station transport and material transfer A→B are runtime
+    defaults supplied by the platform contract. Such wording must be repaired in
+    Device planning, not returned to Research as a capability blocker.
+    """
+    normalized = json_text(text)
+    remaining, changed = scrub_implicit_connectivity_constraint(normalized)
+    return bool(changed and not remaining)
+
 # LLM-declared categories in unsupported_items (see the task prompt).  The
 # LLM may soften a constraint, but hardening requires textual evidence.
 LLM_CATEGORY_MAP = {
@@ -189,9 +392,14 @@ def classify_constraint_text(text: Any) -> str:
     normalized = json_text(text)
     if not normalized.strip("\"' "):
         return "unverifiable"
+    residual, connectivity_removed = scrub_implicit_connectivity_constraint(
+        normalized
+    )
+    if connectivity_removed and not residual:
+        return "adaptable"
+    if connectivity_removed:
+        normalized = residual
     if HARD_TEMPORAL_FEED_RE.search(normalized):
-        return "hard"
-    if any(marker in normalized for marker in HARD_DEVICE_BLOCKER_MARKERS):
         return "hard"
     # An explicit inability to CONFIRM/prove equivalence of an existing
     # candidate station is an unprovable condition (human review), and takes
@@ -200,7 +408,16 @@ def classify_constraint_text(text: Any) -> str:
     # path, incompatible container, volume over limit) already returned hard.
     if CONFIRMATION_HEDGE_RE.search(normalized):
         return "unverifiable"
-    if EQUIPMENT_GAP_PREFIX_RE.search(normalized) or EQUIPMENT_GAP_SUFFIX_RE.search(normalized):
+    prefix_gap = EQUIPMENT_GAP_PREFIX_RE.search(normalized)
+    if prefix_gap and not is_implicit_connectivity_constraint(prefix_gap.group(0)):
+        return "hard"
+    if is_implicit_connectivity_constraint(normalized):
+        return "adaptable"
+    if CHEMICAL_OPERATION_GAP_RE.search(normalized):
+        return "hard"
+    if any(marker in normalized for marker in HARD_DEVICE_BLOCKER_MARKERS):
+        return "hard"
+    if EQUIPMENT_GAP_SUFFIX_RE.search(normalized):
         return "hard"
     if HARD_DEVICE_BLOCKER_RE.search(normalized) and not PARAM_ABSENCE_RE.search(normalized):
         return "hard"

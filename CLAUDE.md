@@ -79,7 +79,7 @@ python run_campaign.py --query "..." --reference paper.pdf --reference "10.1038/
 python device_agent/run_from_research_state.py \
   --research-state path/to/state.json --print-package-json \
   --wire-api codex_responses --reasoning-effort xhigh \
-  --workstations-dir chem_resources/lab-design-main/skills/chemistry-experiment-workstation
+  --workstations-dir chem_resources/lab-design-all/skills/chemistry-experiment-workstation
 
 # Knowledge ingestion (offline utility — get papers into the corpus before research can use them)
 python reaserch_agent/ingest_knowledge.py --input /path/to/papers --output-dir reaserch_agent/chem_kb
@@ -142,7 +142,7 @@ The LLM is used **text-in / JSON-out only** — it is *not* wired as native func
 
 - `workstations/*.json` — legacy workstation definitions (old JSON layout above).
 - `format_reference/reference.{txt,json}` — the authoritative `workflow_txt` / `workflow_json` format contract.
-- `lab-design-main/` and `lab-design-all/` — the "Skill-OpenClaw" Claude-skill bundles (`experiments-design`, `workflow-generator`, `lab-operation`, `chemistry-experiment-workstation`). `-main` and `-all` are near-identical (a token placeholder differs).
+- `lab-design-all/` — the current "Skill-OpenClaw" truth source (`experiments-design`, `workflow-generator`, `lab-operation`, `chemistry-experiment-workstation`). `lab-design-main/` is retained only as a legacy snapshot/fallback.
 - **`lab-operation` skill drives the *real* lab ("智能科学家 / 机器化学家" system). SAFETY: `scripts/dispatch_guard.py` hard-blocks real dispatch** — `generate_task.py` and `start_task.py` return `blocked` results and never contact the cloud gateway or create/start real experiments. Do not remove this guard without explicit human authorization.
 
 ## Conventions & gotchas

@@ -12,10 +12,15 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_LLM_MAX_RETRIES = 8
+
+
 class BaseAgent:
     """Small base class with optional LLM invocation helpers."""
 
-    def __init__(self, model: Any = None, max_retries: int = 4) -> None:
+    def __init__(
+        self, model: Any = None, max_retries: int = DEFAULT_LLM_MAX_RETRIES
+    ) -> None:
         self._model = model
         retry_override = os.getenv("REFINER_LLM_MAX_RETRIES")
         if retry_override:

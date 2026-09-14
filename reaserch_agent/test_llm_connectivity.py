@@ -333,7 +333,7 @@ def extract_response_text(payload: Dict[str, Any], kind: str) -> str:
     return json.dumps(payload, ensure_ascii=False)[:1000]
 
 
-def test_api(config: LLMConfig) -> EndpointResult:
+def probe_api(config: LLMConfig) -> EndpointResult:
     print("effective LLM config:")
     print(f"- model: {config.model}")
     print(f"- base_url: {config.base_url}")
@@ -444,7 +444,7 @@ def main() -> int:
     load_env(args.env_file)
     os.environ.setdefault("REFINER_LLM_MAX_RETRIES", "1")
     config = get_config()
-    endpoint = test_api(config)
+    endpoint = probe_api(config)
     if args.api_only:
         return 0
 

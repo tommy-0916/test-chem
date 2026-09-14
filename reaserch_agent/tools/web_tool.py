@@ -1,12 +1,11 @@
-"""LLM-facing external tools with bounded calls and campaign archiving.
+"""Internal retrieval primitives with campaign archiving.
 
-The research LLM stays text-in / JSON-out (no native function calling — the
-codex_responses backend cannot do it). Instead, any planning step may reply
-with ``{"tool_request": {"tool": "web_search", "query": "..."}}``; the
-workflow executes the request here, appends the output to the prompt, and
-re-invokes the same step (bounded rounds). Web pages are archived as
-``web_unverified`` leads. Scholarly results are archived with DOI/arXiv
-verification and can be downloaded through redundant open-access providers.
+The model-facing interface is now the single native LangChain
+``online_research`` tool in ``online_research.py``. This executor preserves
+the four implementation operations and their existing verification, URL
+safety, OA download and archiving behavior. Its legacy protocol formatter is
+retained for compatibility tests only; workflow code never executes a
+``tool_request`` embedded in model text.
 """
 
 from __future__ import annotations

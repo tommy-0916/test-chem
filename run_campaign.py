@@ -9,13 +9,19 @@ back through the mock / manual / listen execution adapters.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from orchestrator.execution_adapters import build_adapter  # noqa: E402
-from orchestrator.runner import CampaignConfig, CampaignRunner  # noqa: E402
+from orchestrator.runner import (  # noqa: E402
+    MAX_CAMPAIGN_ITERATIONS,
+    CampaignConfig,
+    CampaignRunner,
+    DeviceRepairResumeError,
+)
 
 
 EXIT_CODES = {
@@ -37,7 +43,13 @@ def build_parser() -> argparse.ArgumentParser:
             "goal is reached or the iteration budget is exhausted."
         )
     )
-    parser.add_argument("--query", required=True, help="Research goal for the campaign.")
+    parser.add_argument(
+        "--query",
+        help=(
+            "Research goal for a new campaign. Required unless "
+            "--resume-device-repair is used."
+        ),
+    )
     parser.add_argument(
         "--reference",
         action="append",
@@ -48,8 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-iterations",
         type=int,
-        default=10,
-        help="Maximum device⇄research iterations after bootstrap. Default: 10.",
+        default=MAX_CAMPAIGN_ITERATIONS,
+        help=(
+            "Maximum device⇄research iterations after bootstrap. "
+            f"Allowed range: 1-{MAX_CAMPAIGN_ITERATIONS}. "
+            f"Default: {MAX_CAMPAIGN_ITERATIONS}."
+        ),
     )
     parser.add_argument(
         "--feasibility-deadlock-limit",
@@ -60,6 +76,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--campaigns-root",
         help="Directory holding campaign run artifacts. Default: <repo>/campaigns.",
+    )
+    parser.add_argument(
+        "--resume-device-repair",
+        help=(
+            "Resume from a device_repair_request.json without bootstrapping "
+            "Research or consuming another Research↔Device iteration."
+        ),
+    )
+    parser.add_argument(
+        "--device-plan-override",
+        help=(
+            "Complete manual Device-plan override matching the frozen repair "
+            "request. Route or sample-matrix drift is rejected."
+        ),
     )
 
     execution = parser.add_argument_group("execution boundary")
@@ -97,18 +127,51 @@ def build_parser() -> argparse.ArgumentParser:
 
     research = parser.add_argument_group("research agent passthrough")
     research.add_argument("--disable-llm", action="store_true", help="Heuristic research mode.")
-    research.add_argument("--include-device-context", action="store_true")
+    research.add_argument(
+        "--include-device-context",
+        action="store_true",
+        help=(
+            "Load the compact workstation capability index into the first "
+            "Research plan. Enabled by default."
+        ),
+    )
     research.add_argument("--enable-memory", action="store_true")
     research.add_argument("--knowledge-base-dir")
-    research.add_argument("--online-literature", action="store_true")
-    research.add_argument("--no-online-literature", action="store_true")
+    research.add_argument(
+        "--online-literature",
+        action="store_true",
+        help="Enable scholarly retrieval before the first plan. Enabled by default.",
+    )
+    research.add_argument(
+        "--no-online-literature",
+        action="store_true",
+        help=(
+            "Reserved for lower-level diagnostics; rejected for a new public "
+            "campaign because bootstrap retrieval is mandatory."
+        ),
+    )
     research.add_argument("--download-pdfs", action="store_true")
-    research.add_argument("--web-search", action="store_true")
-    research.add_argument("--no-web-search", action="store_true")
+    research.add_argument(
+        "--web-search",
+        action="store_true",
+        help="Enable open-web retrieval before the first plan. Enabled by default.",
+    )
+    research.add_argument(
+        "--no-web-search",
+        action="store_true",
+        help=(
+            "Reserved for lower-level diagnostics; rejected for a new public "
+            "campaign because bootstrap web retrieval is mandatory."
+        ),
+    )
 
     device = parser.add_argument_group("device agent passthrough")
     device.add_argument("--workstations-dir")
-    device.add_argument("--full-workstations", action="store_true")
+    device.add_argument(
+        "--full-workstations",
+        action="store_true",
+        help="Use every workstation Skill and audit rule. Enabled by default.",
+    )
     parser.add_argument(
         "--device-status-json",
         help=(
@@ -131,10 +194,56 @@ def build_parser() -> argparse.ArgumentParser:
             "When omitted, each agent keeps its own default."
         ),
     )
+    llm.add_argument(
+        "--llm-max-retries",
+        type=int,
+        default=8,
+        help="Maximum LLM retries passed to both Research and Device agents. Default: 8.",
+    )
+    parser.set_defaults(
+        include_device_context=True,
+        online_literature=True,
+        web_search=True,
+        full_workstations=True,
+    )
     return parser
 
 
+def validate_research_bootstrap_invariants(args: argparse.Namespace) -> None:
+    """Enforce the public campaign's evidence-before-planning contract.
+
+    A Device-repair resume deliberately skips Research bootstrap.  Every new
+    campaign, however, must load the compact workstation truth and must attempt
+    both scholarly and open-web retrieval before the first Research plan.  The
+    lower-level Research CLI keeps its opt-out switches for isolated/offline
+    diagnostics; the public campaign entrypoint must not silently weaken this
+    production invariant.
+    """
+    if getattr(args, "resume_device_repair", None):
+        return
+    if not bool(getattr(args, "include_device_context", False)):
+        raise ValueError(
+            "new campaigns require the workstation capability context before "
+            "Research bootstrap"
+        )
+    if bool(getattr(args, "no_online_literature", False)) or not bool(
+        getattr(args, "online_literature", False)
+    ):
+        raise ValueError(
+            "new campaigns require online scholarly retrieval before the first "
+            "Research plan; use the lower-level Research CLI for offline diagnostics"
+        )
+    if bool(getattr(args, "no_web_search", False)) or not bool(
+        getattr(args, "web_search", False)
+    ):
+        raise ValueError(
+            "new campaigns require open-web retrieval before the first Research "
+            "plan; use the lower-level Research CLI for offline diagnostics"
+        )
+
+
 def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
+    validate_research_bootstrap_invariants(args)
     research_args: list[str] = []
     if args.disable_llm:
         research_args.append("--disable-llm")
@@ -168,6 +277,10 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         research_args += ["--llm-timeout-seconds", timeout_text]
         device_args += ["--timeout-seconds", timeout_text]
 
+    retry_text = str(max(0, args.llm_max_retries))
+    research_args += ["--llm-max-retries", retry_text]
+    device_args += ["--llm-max-retries", retry_text]
+
     for shared in (research_args, device_args):
         if args.model_name:
             shared += ["--model-name", args.model_name]
@@ -179,8 +292,33 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
 
 
 def main() -> int:
-    args = build_parser().parse_args()
-    research_args, device_args = build_step_args(args)
+    parser = build_parser()
+    args = parser.parse_args()
+    if not 1 <= args.max_iterations <= MAX_CAMPAIGN_ITERATIONS:
+        parser.error(
+            "--max-iterations must be between 1 and "
+            f"{MAX_CAMPAIGN_ITERATIONS}"
+        )
+    if bool(args.resume_device_repair) != bool(args.device_plan_override):
+        parser.error(
+            "--resume-device-repair and --device-plan-override must be provided together"
+        )
+    if not args.resume_device_repair and not str(args.query or "").strip():
+        parser.error("--query is required for a new campaign")
+
+    resume_metadata: dict = {}
+    if args.resume_device_repair:
+        request_path = Path(args.resume_device_repair).expanduser().resolve()
+        try:
+            resume_metadata = json.loads(request_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"cannot read --resume-device-repair: {exc}")
+        if not isinstance(resume_metadata, dict):
+            parser.error("--resume-device-repair must contain a JSON object")
+    try:
+        research_args, device_args = build_step_args(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     adapter = build_adapter(
         args.execution_adapter,
@@ -190,8 +328,10 @@ def main() -> int:
         timeout_seconds=args.result_timeout_seconds,
     )
     config = CampaignConfig(
-        query=args.query,
-        campaign_id=(args.campaign_id or "").strip(),
+        query=str(args.query or resume_metadata.get("query") or "").strip(),
+        campaign_id=str(
+            args.campaign_id or resume_metadata.get("campaign_id") or ""
+        ).strip(),
         references=list(args.reference),
         max_iterations=args.max_iterations,
         feasibility_deadlock_limit=args.feasibility_deadlock_limit,
@@ -200,9 +340,19 @@ def main() -> int:
         else None,
         research_args=research_args,
         device_args=device_args,
+        resume_device_repair=Path(args.resume_device_repair).expanduser().resolve()
+        if args.resume_device_repair
+        else None,
+        device_plan_override=Path(args.device_plan_override).expanduser().resolve()
+        if args.device_plan_override
+        else None,
     )
 
-    result = CampaignRunner(config, adapter).run()
+    try:
+        result = CampaignRunner(config, adapter).run()
+    except DeviceRepairResumeError as exc:
+        print(f"device repair resume rejected: {exc}", file=sys.stderr)
+        return EXIT_CODES["device_error"]
 
     print("\n=== campaign result ===")
     print(f"campaign_id: {result.campaign_id}")

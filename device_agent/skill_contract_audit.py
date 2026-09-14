@@ -33,7 +33,9 @@ META_STEP_KEYS = {
     "operation",
     "parameters",
     "id",
+    "source_plan_step",
     "source_macro_step",
+    "source_macro_steps",
     "macro_action_id",
     "observation_point_id",
     "notes",
@@ -934,14 +936,22 @@ def _infer_workstations(
     return (
         repo
         / "chem_resources"
-        / "lab-design-main"
+        / "lab-design-all"
         / "skills"
         / "chemistry-experiment-workstation"
     ).resolve()
 
 
 def _case_package_paths(case_dir: Path) -> list[Path]:
-    """Locate every Device package exposed by one black-box campaign."""
+    """Locate terminal Device packages exposed by one black-box campaign.
+
+    Failed intermediate iterations remain in the campaign history, but once a
+    later package succeeds they must not poison the final dispatch-schema
+    verdict (or trigger ``missing_dispatch_formatting`` on an intentionally
+    rejected workflow).  Audit every successful package when there are
+    multiple successful stages; otherwise retain the discovered failures so a
+    no-success campaign stays diagnosable.
+    """
     paths: list[Path] = []
     summary_path = case_dir / "case_summary.json"
     if summary_path.exists():
@@ -965,7 +975,16 @@ def _case_package_paths(case_dir: Path) -> list[Path]:
     canonical = case_dir / "device_package.json"
     if canonical.is_file():
         paths.append(canonical.resolve())
-    return list(dict.fromkeys(paths))
+    deduplicated = list(dict.fromkeys(paths))
+    successful: list[Path] = []
+    for path in deduplicated:
+        try:
+            package = _load_json(path)
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        if str(package.get("status", "")).strip().lower() == "success":
+            successful.append(path)
+    return successful or deduplicated
 
 
 def audit_run(

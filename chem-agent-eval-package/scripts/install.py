@@ -60,6 +60,11 @@ def main() -> int:
         default=Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")),
         help="Codex home directory. Default: $CODEX_HOME or ~/.codex.",
     )
+    parser.add_argument(
+        "--replace-docx",
+        action="store_true",
+        help="Back up and replace an existing repository 测试题目.docx.",
+    )
     args = parser.parse_args()
 
     repo = args.repo.expanduser().resolve()
@@ -74,13 +79,21 @@ def main() -> int:
             raise FileNotFoundError(f"Package is incomplete: {source}")
 
     messages = [replace_directory(SKILL_SOURCE, codex_home / "skills" / "chem-agent-eval-sop")]
-    messages.append(replace_file(TEST_SOURCE, repo / "测试题目.docx"))
+    target_docx = repo / "测试题目.docx"
+    if not target_docx.exists() or args.replace_docx:
+        messages.append(replace_file(TEST_SOURCE, target_docx))
+    elif digest(TEST_SOURCE) == digest(target_docx):
+        messages.append(f"already current {target_docx}")
+    else:
+        messages.append(
+            f"preserved existing {target_docx}; use --replace-docx to install the bundled suite"
+        )
 
     print("Chem Agent evaluation package installed:")
     for message in messages:
         print(f"- {message}")
     print("The Chem Agent repository source was not modified.")
-    print("Next: configure the repository .env, then run scripts/preflight.py from this package.")
+    print("Next: configure the repository environment, then run scripts/preflight.py --probe-api.")
     return 0
 
 

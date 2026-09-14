@@ -40,6 +40,11 @@ class RunSuiteBlackBoxTest(unittest.TestCase):
                 python=Path(sys.executable),
                 args=args,
                 base_env={},
+                api_key="test-secret-not-for-log",
+                campaign_model="test-model",
+                campaign_endpoint="https://provider.invalid/v1",
+                campaign_wire_api="codex_responses",
+                campaign_reasoning_effort="xhigh",
             )
             log = (run_root / "A01" / "chem_agent.log").read_text(encoding="utf-8")
             self.assertIn("run_campaign.py", log)
@@ -48,6 +53,11 @@ class RunSuiteBlackBoxTest(unittest.TestCase):
             self.assertNotIn("run_research_agent.py", log)
             self.assertNotIn("run_from_research_state.py", log)
             self.assertNotIn("--execution-adapter", log)
+            self.assertIn("--model-name test-model", log)
+            self.assertIn("--base-url https://provider.invalid/v1", log)
+            self.assertIn("--wire-api codex_responses", log)
+            self.assertIn("--reasoning-effort xhigh", log)
+            self.assertNotIn("test-secret-not-for-log", log)
             self.assertEqual(summary["blackbox_input_contract"]["online_literature"], True)
 
     def test_awaiting_observation_is_an_external_boundary(self) -> None:

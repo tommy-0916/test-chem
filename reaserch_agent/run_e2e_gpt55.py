@@ -105,8 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--llm-max-retries",
         type=int,
-        default=1,
-        help="research agent 内部每个 LLM 步骤最大重试次数。默认: 1",
+        default=8,
+        help="research agent 内部每个 LLM 步骤最大重试次数。默认: 8",
     )
     parser.add_argument(
         "--max-survey-rounds",

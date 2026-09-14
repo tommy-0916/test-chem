@@ -766,10 +766,10 @@ def main() -> int:
     parser.add_argument("--repo", type=Path)
     parser.add_argument("--workstations", type=Path)
     parser.add_argument("--deterministic-audit", type=Path)
-    parser.add_argument("--model", default="gpt-5.6-sol")
-    parser.add_argument("--endpoint", default="https://anyrouter.top/v1")
-    parser.add_argument("--wire-api", choices=["chat", "codex_responses"], default="codex_responses")
-    parser.add_argument("--reasoning-effort", default="xhigh")
+    parser.add_argument("--model")
+    parser.add_argument("--endpoint")
+    parser.add_argument("--wire-api", choices=["chat", "codex_responses"])
+    parser.add_argument("--reasoning-effort")
     parser.add_argument("--api-key-env")
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument("--max-output-tokens", type=int, default=16000)
@@ -785,22 +785,32 @@ def main() -> int:
     deterministic = _load_json(deterministic_path)
     env = load_dotenv(repo / ".env")
     env.update(os.environ)
+    model = args.model or env.get("REFINER_LLM_MODEL_NAME", "")
+    endpoint = args.endpoint or env.get("REFINER_LLM_ENDPOINT_URL", "")
+    wire_api = args.wire_api or env.get("REFINER_LLM_WIRE_API", "")
+    reasoning_effort = args.reasoning_effort or env.get(
+        "REFINER_LLM_REASONING_EFFORT", ""
+    )
     keys = discover_keys(env, args.api_key_env)
     workflow_cases = [
         case for case in deterministic.get("cases", []) if case.get("workflow_present")
     ]
     if workflow_cases and not keys:
         raise RuntimeError("No API key found for independent LLM schema review")
+    if workflow_cases and (not model or not endpoint or not wire_api):
+        raise RuntimeError(
+            "Independent LLM schema review requires model, endpoint, and wire API"
+        )
     if not keys:
         keys = ["no-call-required"]
     reviews, combined = review_run(
         run_dir=run_dir,
         deterministic_audit=deterministic,
         keys=keys,
-        endpoint=args.endpoint,
-        model=args.model,
-        wire_api=args.wire_api,
-        reasoning_effort=args.reasoning_effort,
+        endpoint=endpoint,
+        model=model,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
         timeout=args.timeout,
         max_output_tokens=args.max_output_tokens,
         attempts=args.attempts,

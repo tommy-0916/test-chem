@@ -4,9 +4,23 @@ from __future__ import annotations
 
 import os
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any, Dict, List
+
+try:
+    from .human_quantity_approval import (
+        HumanQuantityApprovalError,
+        file_sha256 as approval_request_sha256,
+        validate_human_quantity_approvals,
+    )
+except ImportError:  # pragma: no cover - direct script execution
+    from human_quantity_approval import (
+        HumanQuantityApprovalError,
+        file_sha256 as approval_request_sha256,
+        validate_human_quantity_approvals,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +42,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--package-output",
         help="Optional path for saving only the terminal package JSON.",
+    )
+    parser.add_argument(
+        "--device-plan-override",
+        help=(
+            "Validated manual Device-plan override JSON. Used only with a frozen "
+            "Device repair request; it never changes the Research macro route."
+        ),
+    )
+    parser.add_argument(
+        "--prior-repair-request",
+        help=(
+            "The device_repair_request.json that authorized --device-plan-override. "
+            "The campaign orchestrator validates its frozen signatures before this "
+            "entry point is invoked."
+        ),
     )
     parser.add_argument(
         "--exp-id",
@@ -71,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--workstations-dir",
         help=(
             "Optional path to workstation truth source. Supports the old "
-            "workstations_new layout and the new lab-design-main layout."
+            "workstations_new layout and the current lab-design-all layout."
         ),
     )
     parser.add_argument(
@@ -80,6 +109,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Include the full loaded workstation truth source in the device-agent "
             "prompt instead of selecting only relevant workstations."
+        ),
+    )
+    parser.add_argument(
+        "--workflow-verification",
+        choices=["llm", "deterministic"],
+        default=None,
+        help=(
+            "Final workflow gate. Default: llm (review against complete workstation "
+            "Skills through the Device-local repair state machine). Use deterministic "
+            "to roll back to the "
+            "legacy schema/formatter checks."
         ),
     )
     parser.add_argument(
@@ -98,13 +138,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM timeout seconds. Default: 600.",
     )
     parser.add_argument(
+        "--llm-max-retries",
+        type=int,
+        default=8,
+        help="Maximum LLM retries for the Device Agent and SDK transport. Default: 8.",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
-        default=16384,
+        default=32768,
         help=(
             "Max completion tokens for each device-agent LLM call. Default: "
-            "16384 (multi-step workflows with strict validation easily exceed "
-            "the old 4096 and would truncate into JSON parse failures)."
+            "32768 (Responses counts reasoning and visible workflow JSON against "
+            "the same limit; long multi-step workflows can truncate below this)."
         ),
     )
     parser.add_argument(
@@ -274,6 +320,16 @@ def build_device_agent_input_package(
         },
         "macro_action_steps": macro_plan,
         "macro_action": macro_action,
+        # Quantity-bearing observations are immutable scientific evidence for
+        # Device state-change yield checks.  Keep the structured records (and
+        # their IDs/sample/material fields) intact; the truncated narrative
+        # latest_observation below is display context only and must never fund
+        # inventory.
+        "observations": copy.deepcopy(
+            research_state.get("observations", [])
+            if isinstance(research_state.get("observations"), list)
+            else []
+        ),
         "research_context": {
             "survey_report": truncate(survey_report, max_chars=2600),
             "extracted_paper_protocols": truncate(extracted_protocols, max_chars=2600),
@@ -301,7 +357,7 @@ def build_device_agent_input_package(
                 "Select concrete supported containers and workstations from the loaded workstation truth source.",
                 "Map liquid sources to reagent/original-solution bottle slots when appropriate.",
                 "Expand macro actions into device-level operations such as lid handling, aliquoting, balancing, repeated purification, drying, and handoff notes.",
-                "Maintain one continuous, supported container path across reaction, aging/resting, purification, washing, drying, and testing; if a vessel change is required, it must be backed by an explicit supported transfer/vessel-change operation.",
+                "Treat workstation transport and material transfer as connected platform defaults. Preserve one sample/container lineage across reaction, aging/resting, purification, washing, drying, and testing; introduce a vessel change only when an operation input, capacity, split/merge, output format, or scientific condition requires it, and use the minimum supported transfer steps.",
                 "Return device_feasibility_error only when no legal equipment/container/workstation mapping can realize the chemical action or a mandatory scientific condition is impossible.",
             ],
             "do_not_return_to_research_for": [
@@ -313,14 +369,18 @@ def build_device_agent_input_package(
                 "missing split/repeated wash substeps",
             ],
             "must_return_to_research_for": [
-                "macro routes that require an unsupported transfer or vessel change between incompatible container classes",
+                "macro routes whose required chemical operation, target input state, capacity/safety range, or online workstation remains impossible after searching all workstation Skills and the connected transfer fabric",
             ],
         },
     }
 
 
 def device_input_package_to_text(package: Dict[str, Any]) -> str:
-    return json.dumps(package, ensure_ascii=False, indent=2)
+    printable = copy.deepcopy(package)
+    validation = printable.get("human_quantity_approval_validation")
+    if isinstance(validation, dict):
+        validation.pop("approval_capability_token", None)
+    return json.dumps(printable, ensure_ascii=False, indent=2)
 
 
 def configure_model_env(args: argparse.Namespace) -> None:
@@ -330,6 +390,7 @@ def configure_model_env(args: argparse.Namespace) -> None:
         os.environ["REFINER_LLM_API_KEY"] = args.api_key
     if args.base_url:
         os.environ["REFINER_LLM_ENDPOINT_URL"] = args.base_url
+    os.environ["REFINER_LLM_MAX_RETRIES"] = str(max(0, args.llm_max_retries))
     if args.wire_api == "codex_responses":
         os.environ["REFINER_LLM_WIRE_API"] = "codex_responses"
         os.environ["REFINER_LLM_REASONING_EFFORT"] = args.reasoning_effort
@@ -337,6 +398,8 @@ def configure_model_env(args: argparse.Namespace) -> None:
         os.environ["CHEM_WORKSTATIONS_NEW_DIR"] = str(Path(args.workstations_dir).expanduser())
     if args.full_workstations:
         os.environ["CHEM_DEVICE_AGENT_FULL_WORKSTATIONS"] = "1"
+    if args.workflow_verification:
+        os.environ["CHEM_DEVICE_WORKFLOW_VERIFICATION"] = args.workflow_verification
     if getattr(args, "device_status_json", None):
         os.environ["CHEM_DEVICE_STATUS_JSON"] = str(
             Path(args.device_status_json).expanduser()
@@ -360,8 +423,60 @@ def main() -> int:
     from single_agent import SingleDeviceAgent
 
     research_state = load_json_object(args.research_state)
+    device_plan_override = (
+        load_json_object(args.device_plan_override)
+        if args.device_plan_override
+        else None
+    )
+    prior_repair_request = (
+        load_json_object(args.prior_repair_request)
+        if args.prior_repair_request
+        else None
+    )
+    if bool(device_plan_override) != bool(prior_repair_request):
+        raise SystemExit(
+            "--device-plan-override and --prior-repair-request must be provided together"
+        )
+    approval_validation: Dict[str, Any] = {}
+    validated_human_quantity_approvals: List[Dict[str, Any]] = []
+    human_quantity_approval_bundle = None
+    if device_plan_override and prior_repair_request:
+        try:
+            (
+                device_plan_override,
+                approval_validation,
+                validated_human_quantity_approvals,
+                human_quantity_approval_bundle,
+            ) = validate_human_quantity_approvals(
+                device_plan_override,
+                prior_repair_request,
+                repair_request_sha256=approval_request_sha256(
+                    Path(args.prior_repair_request).expanduser()
+                ),
+                create_runtime_bundle=True,
+            )
+        except (HumanQuantityApprovalError, OSError) as exc:
+            raise SystemExit(
+                f"invalid human quantity approval in Device repair override: {exc}"
+            ) from exc
     macro_plan = extract_macro_plan(research_state)
     device_input_package = build_device_agent_input_package(research_state, macro_plan)
+    if device_plan_override:
+        device_input_package["device_repair_resume"] = {
+            "request_id": prior_repair_request.get("request_id", ""),
+            "frozen_route_signature": prior_repair_request.get(
+                "frozen_route_signature", ""
+            ),
+            "frozen_sample_matrix_signature": prior_repair_request.get(
+                "frozen_sample_matrix_signature", ""
+            ),
+            "device_snapshot_signature": prior_repair_request.get(
+                "device_snapshot_signature", ""
+            ),
+            "human_quantity_approval_count": len(
+                validated_human_quantity_approvals
+            ),
+        }
     macro_plan_text = device_input_package_to_text(device_input_package)
 
     print(
@@ -387,12 +502,26 @@ def main() -> int:
         model=model,
         use_new_format=True,
     )
-    state = workflow.run_state(device_input_package, exp_id=args.exp_id)
+    run_kwargs: Dict[str, Any] = {"exp_id": args.exp_id}
+    if device_plan_override:
+        run_kwargs.update(
+            {
+                "device_plan_override": device_plan_override,
+                "prior_repair_request": prior_repair_request,
+            }
+        )
+        if human_quantity_approval_bundle is not None:
+            run_kwargs["human_quantity_approval_bundle"] = (
+                human_quantity_approval_bundle
+            )
+    state = workflow.run_state(device_input_package, **run_kwargs)
     state_dict = state.to_dict()
     package = state.terminal_package or {}
     status = state.status
     verification_result = (
-        "refused" if package.get("status") in {"feasibility_error", "failed"} else "accepted"
+        "refused"
+        if package.get("status") in {"feasibility_error", "failed", "manual_required"}
+        else "accepted"
     )
     error_package = (
         package.get("error_package")
@@ -402,6 +531,10 @@ def main() -> int:
     if package.get("status") == "feasibility_error":
         verification_category = str(
             error_package.get("type") or "physical_infeasible"
+        )
+    elif package.get("status") == "manual_required":
+        verification_category = str(
+            error_package.get("type") or "human_review_required"
         )
     elif package.get("status") == "failed":
         verification_category = str(package.get("failure_stage") or "device_internal_error")

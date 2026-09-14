@@ -159,6 +159,8 @@ class ResearchAgentLedgerTest(unittest.TestCase):
             model=None,
             use_llm=False,
             knowledge_base_dir=str(self.kb_dir),
+            enable_online_literature=False,
+            enable_web_search=False,
         )
 
     def tearDown(self) -> None:
@@ -224,7 +226,9 @@ class ResearchAgentLedgerTest(unittest.TestCase):
         state = self.agent.run(
             event_type="new_observation",
             payload={
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "status": "feasibility_error",
                 "error_package": {
                     "type": "physical_infeasible",
@@ -245,7 +249,7 @@ class ResearchAgentLedgerTest(unittest.TestCase):
 
         self.assertEqual(state.status, "completed")
         record = state.plan_revisions[-1]
-        self.assertEqual(record["trigger"], "device_feasibility_error")
+        self.assertEqual(record["trigger"], "research_replan_required")
         self.assertEqual(record["event"], "revised")
         self.assertEqual(record["scope"], "macro_plan")
         self.assertEqual(record["branch_path"], "B2/device_adaptation")

@@ -2,6 +2,7 @@
 LLM instance factory and pooled backend runtime.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
 from utils.paths import default_env_file
@@ -45,6 +47,55 @@ except ModuleNotFoundError:  # pragma: no cover - depends on optional local deps
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_LLM_MAX_RETRIES = 8
+
+
+def configured_max_retries() -> int:
+    """Return the transport retry count used by every OpenAI-compatible client."""
+
+    raw_value = os.getenv("REFINER_LLM_MAX_RETRIES", str(DEFAULT_LLM_MAX_RETRIES))
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        logger.warning(
+            "Invalid REFINER_LLM_MAX_RETRIES=%r; using %s",
+            raw_value,
+            DEFAULT_LLM_MAX_RETRIES,
+        )
+        return DEFAULT_LLM_MAX_RETRIES
+
+
+def normalize_openai_base_url(base_url: str) -> str:
+    """Ensure an OpenAI-compatible base URL includes the ``/v1`` prefix."""
+
+    value = str(base_url or "").strip().rstrip("/")
+    if not value:
+        return value
+    parsed = urlsplit(value)
+    path = parsed.path.rstrip("/")
+    if path == "/v1" or path.endswith("/v1"):
+        return value
+    path = f"{path}/v1" if path else "/v1"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)).rstrip("/")
+
+
+_DEVICE_JSON_ENVELOPE_FIELD = "payload_json"
+_DEVICE_JSON_ENVELOPE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        _DEVICE_JSON_ENVELOPE_FIELD: {
+            "type": "string",
+            "description": (
+                "The exact requested Device response serialized as one JSON "
+                "object string, with no Markdown or surrounding prose."
+            ),
+        }
+    },
+    "required": [_DEVICE_JSON_ENVELOPE_FIELD],
+    "additionalProperties": False,
+}
+
+
 @dataclass
 class ChatResponse:
     """Lightweight response wrapper compatible with `.content` access."""
@@ -66,7 +117,12 @@ class BackendConfig:
 
 
 class CodexResponsesModel:
-    """Adapter for Codex-compatible providers that require wire_api=responses."""
+    """Stateless Responses API adapter with an optional Codex CLI fallback.
+
+    The normal path sends one plain Responses request with no tools.  Running a
+    full ``codex exec`` agent for every JSON subtask is both slower and less
+    deterministic because the CLI may invoke workspace tools before answering.
+    """
 
     def __init__(
         self,
@@ -76,60 +132,400 @@ class CodexResponsesModel:
         base_url: str,
         reasoning_effort: str = "xhigh",
         timeout: float = 180.0,
+        max_output_tokens: Optional[int] = None,
         codex_path: Optional[str] = None,
+        client: Optional[Any] = None,
     ) -> None:
         self.model_name = model
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_openai_base_url(base_url)
         self.reasoning_effort = reasoning_effort
         self.timeout = timeout
+        self.max_output_tokens = max_output_tokens
         self.codex_path = (
             codex_path
             or shutil.which("codex")
             or "/Applications/Codex.app/Contents/Resources/codex"
         )
+        self._client = client or OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            max_retries=configured_max_retries(),
+        )
+        # None means unprobed.  A deterministic CLI/gateway rejection or a
+        # successful response that ignores the envelope disables the feature
+        # for later JSON calls on this model instance.
+        self._cli_output_schema_supported: Optional[bool] = None
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        """Delegate native Responses conversion without invoking Codex CLI."""
+        from agent_skills.native_tools import make_native_openai_model, require_direct_tool_transport
+
+        require_direct_tool_transport()
+        if getattr(self, "_native_tool_model", None) is None:
+            self._native_tool_model = make_native_openai_model(
+                model=self.model_name,
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+                max_tokens=self.max_output_tokens,
+                max_retries=configured_max_retries(),
+                use_responses_api=True,
+                reasoning_effort=self.reasoning_effort,
+            )
+        return self._native_tool_model.bind_tools(tools, **kwargs)
 
     def invoke(self, messages: List[Any]) -> ChatResponse:
         prompt = self._messages_to_prompt(messages)
+        transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
+        if transport not in {"cli", "codex_cli"}:
+            try:
+                return self._invoke_direct(prompt)
+            except Exception:
+                fallback = os.getenv(
+                    "REFINER_RESPONSES_CLI_FALLBACK", "1"
+                ).strip().lower()
+                if fallback in {"0", "off", "false", "no"}:
+                    raise
+                logger.exception(
+                    "Direct Responses request failed; falling back to Codex CLI"
+                )
+        return self._invoke_cli(prompt)
+
+    def invoke_json_object(self, messages: List[Any]) -> ChatResponse:
+        """Invoke a Device JSON task with a CLI structured-output guard.
+
+        The public ``invoke`` method deliberately keeps its historical text
+        behavior.  Device call sites that require exactly one JSON object can
+        opt into this method.  Direct Responses requests are also left
+        unchanged because some OpenAI-compatible gateways reject SDK-shaped
+        structured-output parameters.  On the Codex CLI transport, a tiny
+        strict envelope prevents prose or multiple top-level values while the
+        existing Device parser remains responsible for validating the inner
+        task-specific object.
+        """
+        prompt = self._messages_to_prompt(messages)
+        transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
+        if transport not in {"cli", "codex_cli"}:
+            try:
+                return self._invoke_direct(prompt)
+            except Exception as exc:
+                fallback = os.getenv(
+                    "REFINER_RESPONSES_CLI_FALLBACK", "1"
+                ).strip().lower()
+                if fallback in {"0", "off", "false", "no"}:
+                    raise
+                logger.warning(
+                    "Direct Responses JSON request failed with %s; falling "
+                    "back to the Codex CLI",
+                    type(exc).__name__,
+                )
+        return self._invoke_cli_json_object(prompt)
+
+    def _invoke_direct(self, prompt: str) -> ChatResponse:
+        payload: Dict[str, Any] = {
+            "model": self.model_name,
+            "input": prompt,
+            "store": False,
+        }
+        if self.reasoning_effort:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
+        if self.max_output_tokens is not None:
+            payload["max_output_tokens"] = self.max_output_tokens
+        response = self._client.responses.create(**payload)
+        text = self._extract_response_text(response)
+        if not text:
+            status = getattr(response, "status", "")
+            raise RuntimeError(
+                f"Responses API returned no text output (status={status or 'unknown'})"
+            )
+        return ChatResponse(content=text, raw_response=response)
+
+    def _invoke_cli(self, prompt: str) -> ChatResponse:
+        return self._invoke_cli_request(prompt, request_json_envelope=False)
+
+    def _invoke_cli_json_object(self, prompt: str) -> ChatResponse:
+        return self._invoke_cli_request(prompt, request_json_envelope=True)
+
+    def _invoke_cli_request(
+        self,
+        prompt: str,
+        *,
+        request_json_envelope: bool,
+    ) -> ChatResponse:
         tmpdir = tempfile.mkdtemp(prefix="device-codex-")
         try:
             tmp_path = Path(tmpdir)
             output_path = tmp_path / "last_message.txt"
             self._write_codex_home(tmp_path)
-            cmd = [
-                self.codex_path,
-                "exec",
-                "--skip-git-repo-check",
+            schema_path: Optional[Path] = None
+            use_json_envelope = (
+                request_json_envelope
+                and self._cli_output_schema_supported is not False
+            )
+            if use_json_envelope:
+                schema_path = tmp_path / "device_json_envelope.schema.json"
+                schema_path.write_text(
+                    json.dumps(
+                        _DEVICE_JSON_ENVELOPE_SCHEMA,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    encoding="utf-8",
+                )
+                schema_path.chmod(0o600)
+            stateless_prompt = (
+                "You are serving one stateless structured-inference request. "
+                "All evidence needed to answer is already included below. Do not call "
+                "tools, inspect files, browse the network, or discuss your work. "
+                + (
+                    "Serialize the exact requested final JSON object into the "
+                    f"{_DEVICE_JSON_ENVELOPE_FIELD} string required by the output "
+                    "schema; put no prose or Markdown outside it.\n\n"
+                    if use_json_envelope
+                    else (
+                        "Return exactly one requested final JSON object with no "
+                        "prose or Markdown.\n\n"
+                        if request_json_envelope
+                        else "Return the requested final JSON/text directly.\n\n"
+                    )
+                )
+                + prompt
+            )
+            env = dict(os.environ)
+            env["CODEX_HOME"] = str(tmp_path)
+            # Codex authenticates from the private auth.json in CODEX_HOME.
+            # Keeping API keys out of the child environment prevents them from
+            # being copied into shell snapshots if a CLI process is interrupted.
+            env.pop("OPENAI_API_KEY", None)
+            env.pop("REFINER_LLM_API_KEY", None)
+
+            completed = self._run_codex_cli(
+                stateless_prompt=stateless_prompt,
+                output_path=output_path,
+                schema_path=schema_path if use_json_envelope else None,
+                env=env,
+                cwd=tmp_path,
+            )
+            if completed.returncode != 0:
+                if use_json_envelope and self._is_output_schema_rejection(completed):
+                    self._cli_output_schema_supported = False
+                    logger.warning(
+                        "Codex CLI output-schema is unsupported by this CLI/gateway; "
+                        "retrying this JSON request once without the schema"
+                    )
+                    return self._run_plain_cli_fallback(
+                        prompt=prompt,
+                        output_path=output_path,
+                        env=env,
+                        cwd=tmp_path,
+                    )
+                raise RuntimeError(self._cli_failure_diagnostic(completed))
+
+            try:
+                text = self._read_cli_output(output_path)
+            except RuntimeError:
+                if not use_json_envelope:
+                    raise
+                self._cli_output_schema_supported = False
+                logger.warning(
+                    "Codex CLI schema attempt produced no readable final output; "
+                    "retrying this JSON request once without the schema"
+                )
+                return self._run_plain_cli_fallback(
+                    prompt=prompt,
+                    output_path=output_path,
+                    env=env,
+                    cwd=tmp_path,
+                )
+            if not use_json_envelope:
+                return ChatResponse(content=text)
+
+            inner = self._unwrap_json_envelope(text)
+            if inner is not None:
+                self._cli_output_schema_supported = True
+                return ChatResponse(content=inner)
+
+            # A zero-exit response that does not match the requested envelope
+            # means the CLI/gateway ignored or failed to enforce the schema.
+            # Never guess at or partially extract the payload.  Retry once via
+            # the old plain transport, then cache the incompatibility.
+            self._cli_output_schema_supported = False
+            logger.warning(
+                "Codex CLI returned a non-conforming JSON envelope; retrying "
+                "this JSON request once without the schema (%s)",
+                self._text_diagnostic(text),
+            )
+            return self._run_plain_cli_fallback(
+                prompt=prompt,
+                output_path=output_path,
+                env=env,
+                cwd=tmp_path,
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def _run_plain_cli_fallback(
+        self,
+        *,
+        prompt: str,
+        output_path: Path,
+        env: Dict[str, str],
+        cwd: Path,
+    ) -> ChatResponse:
+        """Run exactly one schema-free CLI fallback inside the same temp home."""
+        stateless_prompt = (
+            "You are serving one stateless structured-inference request. "
+            "All evidence needed to answer is already included below. Do not call "
+            "tools, inspect files, browse the network, or discuss your work. Return "
+            "exactly one requested final JSON object with no prose or Markdown.\n\n"
+            + prompt
+        )
+        completed = self._run_codex_cli(
+            stateless_prompt=stateless_prompt,
+            output_path=output_path,
+            schema_path=None,
+            env=env,
+            cwd=cwd,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(self._cli_failure_diagnostic(completed))
+        return ChatResponse(content=self._read_cli_output(output_path))
+
+    def _run_codex_cli(
+        self,
+        *,
+        stateless_prompt: str,
+        output_path: Path,
+        schema_path: Optional[Path],
+        env: Dict[str, str],
+        cwd: Path,
+    ) -> subprocess.CompletedProcess[str]:
+        output_path.unlink(missing_ok=True)
+        cmd = [
+            self.codex_path,
+            "exec",
+            "--ephemeral",
+            "--sandbox",
+            "read-only",
+            "--skip-git-repo-check",
+        ]
+        if schema_path is not None:
+            cmd.extend(["--output-schema", str(schema_path)])
+        cmd.extend(
+            [
                 "--output-last-message",
                 str(output_path),
                 "--json",
                 "-",
             ]
-            env = dict(os.environ)
-            env["CODEX_HOME"] = str(tmp_path)
-            env["OPENAI_API_KEY"] = self.api_key
-            completed = subprocess.run(
+        )
+        try:
+            return subprocess.run(
                 cmd,
-                input=prompt,
+                input=stateless_prompt,
                 text=True,
                 capture_output=True,
                 timeout=self.timeout,
                 env=env,
+                cwd=cwd,
                 check=False,
             )
-            if completed.returncode != 0:
-                stderr = completed.stderr.strip()
-                stdout = completed.stdout.strip()
-                detail = stderr or stdout or f"exit code {completed.returncode}"
-                raise RuntimeError(f"Codex responses call failed: {detail[-2000:]}")
-            if not output_path.exists():
-                raise RuntimeError("Codex responses call did not produce output-last-message")
-            text = output_path.read_text(encoding="utf-8").strip()
-            if not text:
-                raise RuntimeError("Codex responses call returned empty output")
-            return ChatResponse(content=text)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"Codex responses call timed out after {self.timeout:g} seconds"
+            ) from None
+        except OSError as exc:
+            raise RuntimeError(
+                f"Codex responses CLI launch failed ({type(exc).__name__})"
+            ) from None
+
+    @staticmethod
+    def _read_cli_output(output_path: Path) -> str:
+        if not output_path.exists():
+            raise RuntimeError("Codex responses call did not produce output-last-message")
+        text = output_path.read_text(encoding="utf-8").strip()
+        if not text:
+            raise RuntimeError("Codex responses call returned empty output")
+        return text
+
+    @staticmethod
+    def _unwrap_json_envelope(text: str) -> Optional[str]:
+        try:
+            envelope = json.loads(text)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(envelope, dict):
+            return None
+        if set(envelope) != {_DEVICE_JSON_ENVELOPE_FIELD}:
+            return None
+        payload = envelope.get(_DEVICE_JSON_ENVELOPE_FIELD)
+        return payload if isinstance(payload, str) else None
+
+    @staticmethod
+    def _is_output_schema_rejection(completed: subprocess.CompletedProcess[str]) -> bool:
+        detail = f"{completed.stderr or ''}\n{completed.stdout or ''}".lower()
+        schema_markers = (
+            "--output-schema",
+            "output_schema",
+            "output schema",
+            "json_schema",
+            "response_format",
+            "text.format",
+        )
+        rejection_markers = (
+            "unsupported",
+            "not supported",
+            "unknown",
+            "unrecognized",
+            "unexpected argument",
+            "invalid parameter",
+            "invalid schema",
+            "invalid value",
+        )
+        return any(marker in detail for marker in schema_markers) and any(
+            marker in detail for marker in rejection_markers
+        )
+
+    @classmethod
+    def _cli_failure_diagnostic(
+        cls,
+        completed: subprocess.CompletedProcess[str],
+    ) -> str:
+        return (
+            "Codex responses call failed: "
+            f"exit_code={completed.returncode}, "
+            f"stdout_{cls._text_diagnostic(completed.stdout or '')}, "
+            f"stderr_{cls._text_diagnostic(completed.stderr or '')}"
+        )
+
+    @staticmethod
+    def _text_diagnostic(text: str) -> str:
+        digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+        return f"len={len(text)},sha256={digest}"
+
+    @staticmethod
+    def _extract_response_text(response: Any) -> str:
+        direct = getattr(response, "output_text", None)
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+
+        parts: List[str] = []
+        output = getattr(response, "output", None)
+        if output is None and isinstance(response, dict):
+            output = response.get("output")
+        for item in output if isinstance(output, list) else []:
+            content = getattr(item, "content", None)
+            if content is None and isinstance(item, dict):
+                content = item.get("content")
+            for block in content if isinstance(content, list) else []:
+                text = getattr(block, "text", None)
+                if text is None and isinstance(block, dict):
+                    text = block.get("text") or block.get("content")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+        return "\n".join(parts).strip()
 
     def _write_codex_home(self, path: Path) -> None:
         bundled_marketplace = Path(
@@ -161,23 +557,30 @@ base_url = "{self._escape_toml(self.base_url)}"
 wire_api = "responses"
 requires_openai_auth = true
 """
-        if bundled_marketplace.exists():
+        load_marketplaces = os.getenv(
+            "REFINER_CODEX_LOAD_MARKETPLACES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if load_marketplaces and bundled_marketplace.exists():
             config += f"""
 [marketplaces.openai-bundled]
 source_type = "local"
 source = "{self._escape_toml(str(bundled_marketplace))}"
 """
-        if primary_runtime_marketplace.exists():
+        if load_marketplaces and primary_runtime_marketplace.exists():
             config += f"""
 [marketplaces.openai-primary-runtime]
 source_type = "local"
 source = "{self._escape_toml(str(primary_runtime_marketplace))}"
 """
-        (path / "config.toml").write_text(config, encoding="utf-8")
-        (path / "auth.json").write_text(
+        config_path = path / "config.toml"
+        auth_path = path / "auth.json"
+        config_path.write_text(config, encoding="utf-8")
+        auth_path.write_text(
             json.dumps({"OPENAI_API_KEY": self.api_key}, ensure_ascii=False),
             encoding="utf-8",
         )
+        config_path.chmod(0o600)
+        auth_path.chmod(0o600)
 
     def _messages_to_prompt(self, messages: List[Any]) -> str:
         parts = []
@@ -217,15 +620,43 @@ class OpenAICompatChatModel:
         self.model_name = model
         self._preferred_model = model
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_openai_base_url(base_url)
         self.timeout = timeout
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.disable_thinking = disable_thinking
         self.do_sample = do_sample
         self.name = name or f"{self.base_url}:{model}"
-        self._client = OpenAI(api_key=api_key, base_url=self.base_url)
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            max_retries=configured_max_retries(),
+        )
         self._supports_extra_body: Optional[bool] = None
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        """Keep native messages/call IDs separate from the legacy text wrapper."""
+        from agent_skills.native_tools import make_native_openai_model, require_direct_tool_transport
+
+        responses = os.getenv("REFINER_LLM_WIRE_API", "").strip().lower() == "codex_responses"
+        if responses:
+            require_direct_tool_transport()
+        cache_key = (responses, self._preferred_model)
+        if getattr(self, "_native_tool_model_key", None) != cache_key:
+            self._native_tool_model = make_native_openai_model(
+                model=self._preferred_model or self.model_name,
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+                max_tokens=self.max_tokens,
+                max_retries=configured_max_retries(),
+                use_responses_api=responses,
+                reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
+                temperature=self.temperature,
+            )
+            self._native_tool_model_key = cache_key
+        return self._native_tool_model.bind_tools(tools, **kwargs)
 
     def _coerce_content(self, content: Any) -> str:
         if isinstance(content, str):
@@ -395,6 +826,10 @@ class ModelPoolChatModel:
         self.round_backoff_seconds = round_backoff_seconds or [2, 5]
         self._preferred_backend_index = 0
 
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        """Failover only between native-bound backends, never text invoke()."""
+        return NativeBoundModelPool(self, tools, kwargs)
+
     def _ordered_backend_entries(self) -> List[Tuple[int, OpenAICompatChatModel]]:
         if len(self.backends) == 1:
             return [(0, self.backends[0])]
@@ -462,6 +897,53 @@ class ModelPoolChatModel:
         raise RuntimeError(message)
 
 
+class NativeBoundModelPool:
+    """Transport retries preserve messages and never execute application tools."""
+
+    def __init__(self, pool: ModelPoolChatModel, tools: Any, bind_kwargs: Dict[str, Any]) -> None:
+        from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
+
+        self.pool = pool
+        self.bound: Dict[int, Any] = {}
+        self.unsupported: set[int] = set()
+        for index, backend in enumerate(pool.backends):
+            try:
+                if not callable(getattr(backend, "bind_tools", None)):
+                    raise NativeToolConfigurationError("Backend is text-only")
+                self.bound[index] = backend.bind_tools(tools, **bind_kwargs)
+            except Exception as exc:
+                if not is_tool_support_error(exc):
+                    raise
+                self.unsupported.add(index)
+        if not self.bound:
+            raise NativeToolConfigurationError("No configured pool backend supports native tools")
+
+    def invoke(self, messages: List[Any], **kwargs: Any) -> Any:
+        from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
+
+        last_error: Optional[Exception] = None
+        for round_index in range(self.pool.max_rounds):
+            for index, _backend in self.pool._ordered_backend_entries():
+                if index in self.unsupported:
+                    continue
+                try:
+                    result = self.bound[index].invoke(messages, **kwargs)
+                    self.pool._preferred_backend_index = index
+                    return result
+                except Exception as exc:
+                    last_error = exc
+                    if is_tool_support_error(exc):
+                        self.unsupported.add(index)
+            if len(self.unsupported) == len(self.pool.backends):
+                raise NativeToolConfigurationError(
+                    "All configured backends reject native tools; no text/CLI fallback was used"
+                ) from last_error
+            if round_index + 1 < self.pool.max_rounds:
+                delays = self.pool.round_backoff_seconds
+                time.sleep(delays[min(round_index, len(delays) - 1)])
+        raise RuntimeError("All native tool backends failed") from last_error
+
+
 class LLMFactory:
     """Create single-backend or pooled OpenAI-compatible chat models."""
 
@@ -472,7 +954,7 @@ class LLMFactory:
     DEFAULT_TEMPERATURE = 0
     DEFAULT_MAX_TOKENS = 3072
     DEFAULT_POOL_BACKOFF_SECONDS = [2, 5]
-    DEFAULT_POOL_MAX_ROUNDS = 2
+    DEFAULT_POOL_MAX_ROUNDS = 8
 
     @staticmethod
     def load_env(env_path: Optional[str] = None) -> None:
@@ -544,7 +1026,10 @@ class LLMFactory:
     def get_pool_runtime_config() -> Dict[str, Any]:
         return {
             "max_rounds": int(
-                os.getenv("REFINER_LLM_POOL_MAX_ROUNDS", str(LLMFactory.DEFAULT_POOL_MAX_ROUNDS))
+                os.getenv(
+                    "REFINER_LLM_POOL_MAX_ROUNDS",
+                    str(LLMFactory.DEFAULT_POOL_MAX_ROUNDS),
+                )
             ),
             "round_backoff_seconds": LLMFactory._parse_int_list(
                 os.getenv("REFINER_LLM_POOL_BACKOFF_SECONDS"),
@@ -670,6 +1155,7 @@ class LLMFactory:
                 base_url=resolved_endpoint_url,
                 reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
                 timeout=timeout,
+                max_output_tokens=max_tokens,
                 codex_path=os.getenv("REFINER_CODEX_CLI_PATH"),
             )
 

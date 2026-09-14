@@ -214,6 +214,19 @@ def _relevance_tokens(text: str) -> List[str]:
     return tokens[:64]
 
 
+def classify_retrieval_status(found: bool, errors: Sequence[str]) -> str:
+    """Keep provider outages distinct from a valid zero-result search."""
+    if found:
+        return "success"
+    for error in errors:
+        if re.search(
+            r"http(?:error)?\s*[:_-]?\s*(?:error\s*)?(?:429|403|5\d\d)\b|timed\s*out|timeout|credential|connection|unreachable",
+            str(error or ""), re.I,
+        ):
+            return "provider_failure"
+    return "no_relevant_papers"
+
+
 class LiteratureAcquisition:
     """One campaign's literature acquisition pipeline (B1 seeds + B2 repair)."""
 
@@ -384,10 +397,15 @@ class LiteratureAcquisition:
         # nothing relevant" — they demand different fixes and must never be
         # reported as the same failure.
         provider_failure = any(
-            marker in error.lower()
+            re.search(
+                r"http(?:error)?\s*[:_-]?\s*(?:error\s*)?"
+                r"(?:429|403|5\d\d)\b|timed\s*out|timeout|credential|"
+                r"connection|unreachable",
+                str(error or ""),
+                re.I,
+            )
+            is not None
             for error in self.errors
-            for marker in ("http 429", "http 403", "http 5", "timed out", "timeout",
-                            "credential", "connection", "unreachable")
         )
         if kept or seeds:
             retrieval_status = "success"
@@ -473,6 +491,7 @@ class LiteratureAcquisition:
         self.errors = []
         written_files: List[str] = []
         kept_count = 0
+        candidate_log: List[Dict[str, Any]] = []
         # Issue 1: repair-round queries carry stage/observation prose that may
         # include device context — sanitize before they leave the process.
         repair_queries = sanitize_search_queries(queries)
@@ -489,7 +508,14 @@ class LiteratureAcquisition:
             )
             self.errors.extend(self.client.last_errors)
             for paper in papers or []:
-                if self.relevance_fn(paper, query) < self.relevance_threshold:
+                relevance = self.relevance_fn(paper, query)
+                kept = relevance >= self.relevance_threshold
+                candidate_log.append({
+                    "title": paper.title, "doi": paper.doi, "arxiv_id": paper.arxiv_id,
+                    "kept": kept, "relevance": round(float(relevance), 4),
+                    "reason": "passed_relevance_filter" if kept else "below_relevance_threshold",
+                })
+                if not kept:
                     continue
                 paths, _ = self._archive_paper(paper, role="b2_repair", stage=stage)
                 written_files.extend(paths)
@@ -509,6 +535,9 @@ class LiteratureAcquisition:
             "kept": kept_count,
             "web_kept": web_summary.get("kept", 0),
             "search_queries": repair_queries[:2],
+            "actual_scholarly_queries": repair_queries[:2] if self.enable_scholarly_search else [],
+            "candidates_log": candidate_log,
+            "retrieval_status": classify_retrieval_status(kept_count > 0, self.errors),
             "written_files": written_files,
             "errors": list(self.errors),
         }
@@ -687,8 +716,9 @@ class LiteratureAcquisition:
         seen = set(seed_keys)
         for score, _, role, title, paper in scored:
             entry = {
-                "title": title[:160],
+                "title": title,
                 "doi": paper.doi,
+                "arxiv_id": paper.arxiv_id,
                 "role": role,
                 "relevance": round(float(score), 4),
             }

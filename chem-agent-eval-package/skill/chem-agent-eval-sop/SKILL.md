@@ -1,120 +1,132 @@
 ---
 name: chem-agent-eval-sop
-description: Evaluate Chem Agent as one black-box system on the fixed eight-case suite. Preserve each Query exactly, force online scholarly retrieval, invoke only the repository's public campaign entrypoint, collect its unmodified campaign outputs, and then assess process completion, paper quality, plan-to-workstation feasibility, and workflow-to-Skill schema compliance with deterministic and independent LLM audits. Use for Chem Agent evaluation, regression testing, benchmarking, comparison, and reporting.
+description: Run and evaluate Chem Agent as one black-box system on the fixed A01-D02 eight-case DOCX suite. Preserve every Query exactly, require real LLM responses and online scholarly retrieval, invoke only run_campaign.py, retain raw campaign artifacts, audit every Device workflow deterministically and with an independent LLM, assess paper quality and plan feasibility, verify workstation-ready parameters, compare a historical baseline, and refuse completion when evidence is missing. Use for Chem Agent evaluation, regression testing, benchmarking, acceptance testing, or workstation dispatch-readiness review.
 ---
 
-# Chem Agent Evaluation SOP
+# Chem Agent Black-Box Evaluation
 
-Treat the complete Chem Agent, including its Research/Device routing, feasibility feedback, observation handling, repair loops, and termination logic, as the system under test.
+Treat the complete Research/Device campaign as the system under test. Keep evaluator conclusions downstream from unmodified Chem Agent outputs.
 
-## Black-box boundary
+## Resolve inputs
 
-Supply only these semantic inputs for each case:
+Require:
 
-```json
-{
-  "query": "the exact Query extracted from 测试题目.docx",
-  "online_literature": true
-}
-```
+- Python 3.10 or newer, preferably the target repository's `.venv/bin/python`;
+- a Chem Agent repository containing `run_campaign.py`, `reaserch_agent/`, `device_agent/`, and `chem_resources/`;
+- a DOCX containing exactly `A01`, `A02`, `B01`, `B02`, `C01`, `C02`, `D01`, and `D02`;
+- real provider configuration in the repository `.env` or process environment;
+- the current workstation truth source under `chem_resources/lab-design-all/...` (`lab-design-main` is legacy fallback only).
 
-Campaign IDs and output roots are harness instrumentation for isolation, not planning inputs.
+Use the repository's `测试题目.docx` unless the user names another DOCX. Never rewrite, translate, normalize, or summarize a Query.
 
-Never:
+Read [references/rubric.md](references/rubric.md) completely before assigning verdicts. Read [references/report-format.md](references/report-format.md) completely before writing reports.
 
-- invoke `reaserch_agent/run_research_agent.py` directly;
-- invoke `device_agent/run_from_research_state.py` directly;
-- reproduce or replace Chem Agent's internal orchestration;
-- force internal retrieval, workstation-selection, memory, retry, repair, or execution-adapter policies except `online_literature=true`;
-- create mock observations or feed Device errors back into Research;
-- repair, normalize, or replace Chem Agent output;
-- dispatch real laboratory instructions.
+## Protect credentials and systems
 
-Use the repository's documented top-level public entrypoint. For this repository, use `run_campaign.py`. Inspect its `--help` before a formal run and adapt only if the public contract changed.
+- Read keys from environment variables only. Never add a key to a command argument, script, report, manifest, or log.
+- Record provider/model/endpoint names, never secret values.
+- Never use `--disable-llm`, fake models, mock responses, or evaluator-generated observations in a formal run.
+- Never dispatch real laboratory instructions. Keep the public campaign's default non-real execution boundary.
+- Stop at `AWAITING_OBSERVATION.md` when the suite provides no observation fixture.
 
-When the black box exposes `AWAITING_OBSERVATION.md` and the test case provides no observation, record `awaiting_observation` as the external boundary state and stop the harness process. Do not invent an observation. Full multi-turn closed-loop evaluation requires an explicit observation fixture supplied as an additional external test input.
+## Preflight
 
-## Fixed suite
-
-- Extract exactly `A01`, `A02`, `B01`, `B02`, `C01`, `C02`, `D01`, and `D02` from the user-specified `测试题目.docx` on every run.
-- Preserve each Query exactly after DOCX extraction. Do not summarize, translate, clean, or rewrite it.
-- Save `input.json` and `query.sha256` for every case.
-- Always pass `--online-literature` through the public black-box entrypoint.
-- Do not implicitly enable Web search or PDF download. Those are separate external test conditions and require explicit user input.
-- Read model/provider credentials from the repository environment. Record configuration names and endpoints without recording secret values.
-- Run up to four black-box cases concurrently by default. Keep each case's harness output and Chem Agent campaign directory separate.
-- Never rerun only failed internal stages. A repeated case is a new black-box attempt in a new timestamped run directory.
-
-## Run
+Locate this Skill directory and run:
 
 ```bash
-python3 "$HOME/.codex/skills/chem-agent-eval-sop/scripts/run_suite.py" \
+python3 <skill-dir>/scripts/preflight.py \
+  --repo "/path/to/chem-agent" \
+  --docx "/path/to/chem-agent/测试题目.docx" \
+  --probe-api
+```
+
+Do not start a formal run unless preflight returns `ready: true`. The API probe must receive non-empty text from the configured real provider. A credential, endpoint, model, protocol, DOCX, public-CLI, or workstation failure is blocking.
+
+## Run the eight cases
+
+Invoke only the bundled runner:
+
+```bash
+python3 <skill-dir>/scripts/run_suite.py \
   --repo "/path/to/chem-agent" \
   --docx "/path/to/chem-agent/测试题目.docx" \
   --workers 4
 ```
 
-The runner invokes only:
+Use `--campaign-model`, `--campaign-endpoint`, `--campaign-wire-api`, and `--campaign-reasoning-effort` only to pin documented public provider settings when environment defaults are insufficient. Use the corresponding `--schema-review-*` options for the independent reviewer.
 
-```bash
-python run_campaign.py \
-  --query "<exact Query>" \
-  --campaign-id "<case>-<timestamp>" \
-  --campaigns-root "<isolated harness directory>" \
-  --online-literature
-```
-
-The final two arguments that identify the campaign and output root are instrumentation. Do not add internal Research/Device flags.
-
-## Preserve black-box outputs
-
-For each case retain:
-
-- exact `input.json` and `query.sha256`;
-- `chem_agent.log`, exit status, elapsed time, and boundary status;
-- the complete unmodified Chem Agent campaign directory;
-- `case_summary.json` containing an artifact inventory and paths to every emitted workflow package.
-
-At run level retain `suite_manifest.json`, `raw_summary.json`, and all evaluation artifacts. Do not require a fixed internal file layout beyond the black box's exported campaign directory. Internal states may be read as evidence but must never be used to drive the run.
-
-## Audit exposed outputs
-
-Read [references/rubric.md](references/rubric.md) completely before evaluating. Read [references/report-format.md](references/report-format.md) before writing reports.
-
-After all black-box cases reach an external boundary:
-
-1. Discover every emitted `device_package.json` from each campaign output.
-2. Run `scripts/audit_workflows.py` against every raw `workflow_json`.
-3. Run `scripts/llm_review_workflows.py` against every generated workflow, using only the raw workflow, the recorded workstation truth source, used workstation Skills/audit rules, container/reagent plans, and formatting evidence.
-4. Combine deterministic and LLM verdicts with an AND gate:
+The runner must invoke the public entrypoint once per case with only these semantic inputs:
 
 ```text
-all deterministic reviews=yes AND all LLM reviews=yes -> dispatch_schema_match=yes
-any deterministic or LLM review=no -> dispatch_schema_match=no
-no workflow -> not_evaluable
-review failure for an emitted workflow -> evaluation incomplete
+query=<exact DOCX Query>
+online_literature=true
 ```
 
-The audits are downstream consumers. They must not influence or repair the black-box run.
+Treat campaign IDs, output roots, and provider pinning as harness configuration. Do not pass internal Research/Device policy flags, enable Web search/PDF download without explicit user direction, invent observations, or rerun an internal stage. Repeat a failed case only as a fresh whole black-box attempt in a new timestamped directory.
 
-## Required case verdicts
+## Preserve evidence
 
-Produce no numeric score. For every case output exactly:
+Retain for every case:
 
-1. `process_completion`: `yes`, `partial`, or `no` based on the public black-box invocation and external boundary state.
-2. `paper_quality_summary`: `high`, `mixed`, or `low`, with publication facts for every adopted paper.
-3. `plan_workstation_match`: `yes`, `no`, or `not_evaluable` for every plan/workflow exposed by the black box.
-4. `dispatch_schema_match`: copy the combined verdict from `workstation_schema_verdict.json` without override.
+- `input.json` and `query.sha256`;
+- `chem_agent.log`, return code, elapsed time, and boundary status;
+- the complete unmodified campaign directory;
+- `case_summary.json` and every emitted `device_package.json`.
 
-Do not equate an internal `feasibility_error` with physical impossibility. Recheck the exposed result against the workstation truth source and classify it as a confirmed unsupported operation, exposed parameter violation, container/transfer discontinuity, false rejection of a fixed/default parameter, insufficient Skill description, or model mapping error.
+Retain `suite_manifest.json`, `raw_summary.json`, provider limitations, and all evaluation artifacts at run level. Do not repair or normalize raw Chem Agent output.
 
-## Reports and completion
+## Audit Device outputs
 
-Create:
+The runner automatically executes:
 
-- `<run>/evaluation/<case>/evaluation.md` and `evaluation.json`;
-- `<run>/evaluation/overall_report.md`;
-- `<run>/evaluation/verdict_matrix.json`;
-- run-level and per-case deterministic audits, LLM reviews, and combined verdicts.
+1. `scripts/audit_workflows.py` against every raw `workflow_json`;
+2. `scripts/llm_review_workflows.py` against the same workflows using workstation Skills, audit rules, container/reagent plans, and formatting evidence;
+3. an AND merge into `workstation_schema_verdict.json`.
 
-Do not declare the evaluation complete unless all eight exact Queries were attempted through the public black-box entrypoint, online literature was requested for every case, all black-box outputs and limitations were retained, every emitted workflow was covered by both schema reviewers, all four case verdicts are present, and historical findings are compared with `CHEMAGENT_TEST_SUITE_REPORT_20260715.md` when available.
+Use the merged verdict without manual override:
+
+```text
+deterministic=yes AND LLM=yes -> dispatch_schema_match=yes
+either=no -> dispatch_schema_match=no
+no workflow -> not_evaluable
+review missing or failed -> evaluation incomplete
+```
+
+Do not use the Device Agent's self-check, package status, formatter success, or dispatch validator as evaluator evidence.
+
+## Produce formal reports
+
+For every case, inspect all Research states, adopted papers, plans, workflows, deterministic findings, LLM findings, and workstation truth. Write:
+
+- `evaluation/<case>/evaluation.md`;
+- `evaluation/<case>/evaluation.json`;
+- `evaluation/overall_report.md`;
+- `evaluation/verdict_matrix.json`;
+- `evaluation/workstation_direct_acceptance.md`.
+
+Assign exactly four discrete case verdicts:
+
+1. `process_completion`: `yes`, `partial`, or `no`;
+2. `paper_quality_summary`: `high`, `mixed`, or `low`;
+3. `plan_workstation_match`: `yes`, `no`, or `not_evaluable`;
+4. `dispatch_schema_match`: copy the combined schema verdict exactly.
+
+Verify every adopted paper's publication identity and relevance. Do not guess impact factors. Recheck every internal feasibility error against workstation truth; never equate an Agent rejection with physical impossibility.
+
+Compare findings with `CHEMAGENT_TEST_SUITE_REPORT_20260715.md` when it exists and label regressions `fixed`, `still present`, or `new issue`.
+
+## Validate completion
+
+Run the strict validator after writing reports:
+
+```bash
+python3 <skill-dir>/scripts/validate_evaluation.py \
+  --run "/path/to/chem-agent/result/chem-agent-eval-YYYYMMDD-HHMMSS" \
+  --baseline "/path/to/chem-agent/CHEMAGENT_TEST_SUITE_REPORT_20260715.md"
+```
+
+Omit `--baseline` only when no baseline exists. Never use `--allow-recorded-llm-failures` for a formal evaluation.
+
+Declare completion only when `evaluation/completion_check.json` contains `complete: true`. Any modified Query, absent online-literature request, missing case, recorded failed/empty/fallback LLM call, uncovered workflow, incomplete LLM review, missing report, mismatched dispatch verdict, absent workstation direct-acceptance report, or missing baseline comparison keeps the evaluation incomplete.
+
+Report blockers with evidence. Do not convert incomplete evidence into a passing verdict.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -11,6 +12,51 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit, urlunsplit
+
+from openai import OpenAI
+
+
+logger = logging.getLogger(__name__)
+
+
+DEFAULT_LLM_MAX_RETRIES = 8
+
+
+def configured_max_retries() -> int:
+    """Return the transport retry count used by every OpenAI-compatible client."""
+
+    raw_value = os.getenv("REFINER_LLM_MAX_RETRIES", str(DEFAULT_LLM_MAX_RETRIES))
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        logger.warning(
+            "Invalid REFINER_LLM_MAX_RETRIES=%r; using %s",
+            raw_value,
+            DEFAULT_LLM_MAX_RETRIES,
+        )
+        return DEFAULT_LLM_MAX_RETRIES
+
+
+def normalize_openai_base_url(base_url: str) -> str:
+    """Return an OpenAI-compatible API base URL with the ``/v1`` prefix.
+
+    The OpenAI Python SDK treats ``base_url`` as the API root and appends
+    ``/responses`` or ``/chat/completions`` itself.  Several compatible
+    gateways expose those routes below ``/v1``; accepting a host-only value
+    here would therefore send requests to the wrong path.  Keep callers that
+    already provide ``/v1`` unchanged and preserve any URL query/fragment.
+    """
+
+    value = str(base_url or "").strip().rstrip("/")
+    if not value:
+        return value
+    parsed = urlsplit(value)
+    path = parsed.path.rstrip("/")
+    if path == "/v1" or path.endswith("/v1"):
+        return value
+    path = f"{path}/v1" if path else "/v1"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)).rstrip("/")
 
 try:
     from dotenv import load_dotenv
@@ -52,7 +98,7 @@ def default_env_file() -> Path:
 
 
 class CodexResponsesModel:
-    """Small adapter for Codex CLI providers that require wire_api=responses."""
+    """Stateless direct Responses adapter with an optional CLI fallback."""
 
     def __init__(
         self,
@@ -62,25 +108,97 @@ class CodexResponsesModel:
         base_url: str,
         reasoning_effort: str = "xhigh",
         timeout: float = 180.0,
+        max_output_tokens: Optional[int] = None,
         codex_path: Optional[str] = None,
+        client: Optional[Any] = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
+        self._base_url = normalize_openai_base_url(base_url)
         self._reasoning_effort = reasoning_effort
         self._timeout = timeout
+        self._max_output_tokens = max_output_tokens
         self._codex_path = codex_path or shutil.which("codex") or "/Applications/Codex.app/Contents/Resources/codex"
+        self._client = client or OpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=configured_max_retries(),
+        )
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        """Native tools use direct Responses messages, never the text/CLI path."""
+        from agent_skills.native_tools import make_native_openai_model, require_direct_tool_transport
+
+        require_direct_tool_transport()
+        if getattr(self, "_native_tool_model", None) is None:
+            self._native_tool_model = make_native_openai_model(
+                model=self._model,
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+                max_tokens=self._max_output_tokens,
+                max_retries=configured_max_retries(),
+                use_responses_api=True,
+                reasoning_effort=self._reasoning_effort,
+            )
+        return self._native_tool_model.bind_tools(tools, **kwargs)
 
     def invoke(self, messages: Any) -> Any:
         prompt = self._messages_to_prompt(messages)
+        transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
+        if transport not in {"cli", "codex_cli"}:
+            try:
+                return self._invoke_direct(prompt)
+            except Exception:
+                fallback = os.getenv(
+                    "REFINER_RESPONSES_CLI_FALLBACK", "1"
+                ).strip().lower()
+                if fallback in {"0", "off", "false", "no"}:
+                    raise
+                logger.exception(
+                    "Direct Responses request failed; falling back to Codex CLI"
+                )
+        return self._invoke_cli(prompt)
+
+    def _invoke_direct(self, prompt: str) -> Any:
+        payload: Dict[str, Any] = {
+            "model": self._model,
+            "input": prompt,
+            "store": False,
+        }
+        if self._reasoning_effort:
+            payload["reasoning"] = {"effort": self._reasoning_effort}
+        if self._max_output_tokens is not None:
+            payload["max_output_tokens"] = self._max_output_tokens
+        response = self._client.responses.create(**payload)
+        text = self._extract_response_text(response)
+        if not text:
+            status = getattr(response, "status", "")
+            raise RuntimeError(
+                f"Responses API returned no text output (status={status or 'unknown'})"
+            )
+        return SimpleNamespace(content=text, raw_response=response)
+
+    def _invoke_cli(self, prompt: str) -> Any:
         tmpdir = tempfile.mkdtemp(prefix="research-codex-")
         try:
             tmp_path = Path(tmpdir)
             output_path = tmp_path / "last_message.txt"
             self._write_codex_home(tmp_path)
+            stateless_prompt = (
+                "You are serving one stateless structured-inference request. "
+                "All evidence needed to answer is already included below. Do not call "
+                "tools, inspect files, browse the network, or discuss your work. Return "
+                "the requested final JSON/text directly.\n\n"
+                + prompt
+            )
             cmd = [
                 self._codex_path,
                 "exec",
+                "--ephemeral",
+                "--sandbox",
+                "read-only",
                 "--skip-git-repo-check",
                 "--output-last-message",
                 str(output_path),
@@ -89,14 +207,19 @@ class CodexResponsesModel:
             ]
             env = dict(os.environ)
             env["CODEX_HOME"] = str(tmp_path)
-            env["OPENAI_API_KEY"] = self._api_key
+            # Codex authenticates from the private auth.json in CODEX_HOME.
+            # Do not also expose credentials through the child environment,
+            # because interrupted Codex sessions may persist shell snapshots.
+            env.pop("OPENAI_API_KEY", None)
+            env.pop("REFINER_LLM_API_KEY", None)
             completed = subprocess.run(
                 cmd,
-                input=prompt,
+                input=stateless_prompt,
                 text=True,
                 capture_output=True,
                 timeout=self._timeout,
                 env=env,
+                cwd=tmp_path,
                 check=False,
             )
             if completed.returncode != 0:
@@ -114,6 +237,27 @@ class CodexResponsesModel:
             return SimpleNamespace(content=text)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @staticmethod
+    def _extract_response_text(response: Any) -> str:
+        direct = getattr(response, "output_text", None)
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        parts = []
+        output = getattr(response, "output", None)
+        if output is None and isinstance(response, dict):
+            output = response.get("output")
+        for item in output if isinstance(output, list) else []:
+            content = getattr(item, "content", None)
+            if content is None and isinstance(item, dict):
+                content = item.get("content")
+            for block in content if isinstance(content, list) else []:
+                text = getattr(block, "text", None)
+                if text is None and isinstance(block, dict):
+                    text = block.get("text") or block.get("content")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+        return "\n".join(parts).strip()
 
     def _write_codex_home(self, path: Path) -> None:
         bundled_marketplace = Path(
@@ -145,23 +289,30 @@ base_url = "{self._escape_toml(self._base_url)}"
 wire_api = "responses"
 requires_openai_auth = true
 """
-        if bundled_marketplace.exists():
+        load_marketplaces = os.getenv(
+            "REFINER_CODEX_LOAD_MARKETPLACES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if load_marketplaces and bundled_marketplace.exists():
             config += f"""
 [marketplaces.openai-bundled]
 source_type = "local"
 source = "{self._escape_toml(str(bundled_marketplace))}"
 """
-        if primary_runtime_marketplace.exists():
+        if load_marketplaces and primary_runtime_marketplace.exists():
             config += f"""
 [marketplaces.openai-primary-runtime]
 source_type = "local"
 source = "{self._escape_toml(str(primary_runtime_marketplace))}"
 """
-        (path / "config.toml").write_text(config, encoding="utf-8")
-        (path / "auth.json").write_text(
+        config_path = path / "config.toml"
+        auth_path = path / "auth.json"
+        config_path.write_text(config, encoding="utf-8")
+        auth_path.write_text(
             json.dumps({"OPENAI_API_KEY": self._api_key}, ensure_ascii=False),
             encoding="utf-8",
         )
+        config_path.chmod(0o600)
+        auth_path.chmod(0o600)
 
     def _messages_to_prompt(self, messages: Any) -> str:
         parts = []
@@ -245,6 +396,9 @@ class LLMFactory:
                 base_url=provider_url,
                 reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
                 timeout=LLMFactory._openai_compatible_timeout(),
+                max_output_tokens=int(
+                    os.getenv("REFINER_LLM_RESPONSES_MAX_OUTPUT_TOKENS", "32768")
+                ),
                 codex_path=os.getenv("REFINER_CODEX_CLI_PATH"),
             )
 
@@ -275,10 +429,11 @@ class LLMFactory:
             "temperature": temperature,
             "default_headers": LLMFactory._openai_compatible_headers(),
             "timeout": LLMFactory._openai_compatible_timeout(),
+            "max_retries": configured_max_retries(),
             "use_responses_api": False,
         }
         if provider_url:
-            model_kwargs["base_url"] = provider_url
+            model_kwargs["base_url"] = normalize_openai_base_url(provider_url)
         model_kwargs.update(kwargs)
         return ChatOpenAI(**model_kwargs)
 

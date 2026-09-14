@@ -322,6 +322,43 @@ class AcquisitionOutboundQueryTest(unittest.TestCase):
         )
         self.assertEqual(summary["retrieval_status"], "provider_failure")
 
+    def test_provider_failure_status_accepts_urllib_http_error_wording(self) -> None:
+        """urllib reports ``HTTP Error 429``, not the shorter ``HTTP 429``."""
+        from reaserch_agent.tools.literature_acquisition import LiteratureAcquisition
+
+        class BrokenClient:
+            last_errors = ["semantic_scholar: HTTPError: HTTP Error 429: Too Many Requests"]
+
+            def search(self, query, sources=(), max_results=5):
+                return []
+
+            def fetch_references(self, seed, limit=0):
+                return []
+
+            def fetch_citations(self, seed, limit=0):
+                return []
+
+        acquisition = LiteratureAcquisition.__new__(LiteratureAcquisition)
+        acquisition.client = BrokenClient()
+        acquisition.errors = []
+        acquisition.keyword_sources = ["semantic_scholar"]
+        acquisition.max_keyword_results = 6
+        acquisition.max_snowball_per_seed = 0
+        acquisition.web_client = None
+        acquisition.enable_web = False
+        acquisition.enable_scholarly_search = True
+        acquisition._resolve_seeds = lambda refs: []
+        acquisition._filter_candidates = lambda candidates, anchor, seeds: []
+        acquisition._archive_paper = lambda paper, role="", stage="": ([], False)
+        acquisition._acquire_web_knowledge = lambda *args, **kwargs: {}
+        acquisition._safe = lambda fn, label: fn()
+        acquisition._paper_summary = lambda paper: {}
+
+        summary = acquisition.acquire_for_bootstrap(
+            POLLUTED_QUERY, [], survey_queries=["NiFe OER 电催化"]
+        )
+        self.assertEqual(summary["retrieval_status"], "provider_failure")
+
 
 if __name__ == "__main__":
     unittest.main()

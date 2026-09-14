@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import unittest
+from unittest import mock
 
 from reaserch_agent.tools.run_comparison import compare_research_states
 from reaserch_agent.workflow import ResearchAgent
@@ -17,6 +18,13 @@ QUERY = "合成 NiFe 普鲁士蓝类似物并进行 XRD 表征"
 
 
 class RepeatRunStabilityTest(unittest.TestCase):
+    def setUp(self):
+        offline = mock.patch.dict("os.environ", {
+            "RESEARCH_ONLINE_LITERATURE": "0", "RESEARCH_WEB_SEARCH": "0",
+        })
+        offline.start()
+        self.addCleanup(offline.stop)
+
     def test_same_query_twice_produces_identical_plan(self) -> None:
         """Deterministic acceptance: same query + same KB + heuristic mode
         → identical survey queries, stage route, and macro plan."""

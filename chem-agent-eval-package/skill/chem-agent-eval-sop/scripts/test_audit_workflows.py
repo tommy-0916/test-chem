@@ -247,6 +247,28 @@ class AuditWorkflowsTest(unittest.TestCase):
         self.assertEqual(case["dispatch_schema_match"], "no")
         self.assertIn("workstation_id_mismatch", case["counts_by_code"])
 
+    def test_failed_intermediate_workflow_remains_in_final_verdict(self) -> None:
+        case_dir = self.run / "A01"
+        first = case_dir / "blackbox" / "campaign" / "iteration_01"
+        second = case_dir / "blackbox" / "campaign" / "iteration_02"
+        first.mkdir(parents=True)
+        second.mkdir(parents=True)
+        failed = self.valid_package()
+        failed["status"] = "failed"
+        failed.pop("dispatch_formatting")
+        (first / "device_package.json").write_text(
+            json.dumps(failed, ensure_ascii=False), encoding="utf-8"
+        )
+        (second / "device_package.json").write_text(
+            json.dumps(self.valid_package(), ensure_ascii=False), encoding="utf-8"
+        )
+
+        result = audit_run(run_dir=self.run, expected_workstation_count=None)
+        case = result["cases"][0]
+        self.assertEqual(case["checked_workflows"], 2)
+        self.assertEqual(case["dispatch_schema_match"], "no")
+        self.assertIn("missing_dispatch_formatting", case["counts_by_code"])
+
 
 if __name__ == "__main__":
     unittest.main()

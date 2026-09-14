@@ -91,6 +91,8 @@ class ChemMemoryLayerTests(unittest.TestCase):
                 knowledge_base_dir=str(structured_outputs_dir),
                 memory_dir=tmpdir,
                 enable_memory=True,
+                enable_online_literature=False,
+                enable_web_search=False,
             )
 
             state = agent.run(

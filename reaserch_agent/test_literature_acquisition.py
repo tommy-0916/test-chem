@@ -504,6 +504,7 @@ class ResearchAgentAcquisitionIntegrationTest(unittest.TestCase):
                 use_llm=False,
                 knowledge_base_dir=str(kb_dir),
                 literature_client=client,
+                enable_web_search=False,
             )
 
             state = agent.run(
@@ -536,7 +537,7 @@ class ResearchAgentAcquisitionIntegrationTest(unittest.TestCase):
                 hit_titles,
             )
 
-    def test_b1_without_references_skips_acquisition(self) -> None:
+    def test_b1_without_references_uses_default_online_acquisition(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             client = FakeClient()
             agent = ResearchAgent(
@@ -544,11 +545,15 @@ class ResearchAgentAcquisitionIntegrationTest(unittest.TestCase):
                 use_llm=False,
                 knowledge_base_dir=tmp,
                 literature_client=client,
+                enable_web_search=False,
             )
             state = agent.run(event_type="bootstrap", query=QUERY)
 
             self.assertEqual(state.status, "completed")
-            self.assertEqual(client.calls, [])
+            self.assertTrue(
+                any(call.startswith("search:") for call in client.calls),
+                client.calls,
+            )
             self.assertEqual(state.seed_papers, [])
 
     def test_b1_survives_broken_network(self) -> None:
@@ -559,6 +564,7 @@ class ResearchAgentAcquisitionIntegrationTest(unittest.TestCase):
                 use_llm=False,
                 knowledge_base_dir=tmp,
                 literature_client=client,
+                enable_web_search=False,
             )
             state = agent.run(
                 event_type="bootstrap",

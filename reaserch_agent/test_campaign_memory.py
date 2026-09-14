@@ -40,7 +40,9 @@ NORMAL_OBSERVATION = {
     }
 }
 DEVICE_ERROR_PAYLOAD = {
-    "feedback_type": "device_feasibility_error",
+    "feedback_type": "research_replan_required",
+    "feedback_route": "research",
+    "failure_scope": "route_feasibility",
     "status": "feasibility_error",
     "error_package": {
         "type": "physical_infeasible",
@@ -88,6 +90,8 @@ class CampaignMemoryTestBase(unittest.TestCase):
             use_llm=False,
             knowledge_base_dir=str(self.kb_dir),
             enable_memory=True,
+            enable_online_literature=False,
+            enable_web_search=False,
         )
 
     def tearDown(self) -> None:

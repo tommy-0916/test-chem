@@ -6,14 +6,18 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from reaserch_agent.state import ResearchAgentState, ResearchEvent
-from reaserch_agent.workflow import ResearchAgent
+from reaserch_agent.workflow import ResearchAgent, _canonical_stage_route_value
 
 
 class CapturingModel:
     def __init__(self) -> None:
         self.prompts = []
+
+    def bind_tools(self, tools, **kwargs):
+        return self
 
     def invoke(self, messages):
         prompt = "\n\n".join(
@@ -22,6 +26,13 @@ class CapturingModel:
         )
         self.prompts.append(prompt)
 
+        if "macro action design" in prompt:
+            return self._json({
+                "objective": "制备目标样品并确认物相",
+                "planned_operations": ["配制前驱体", "加热反应", "洗涤干燥", "XRD 表征"],
+                "expected_observation": "XRD 数据",
+                "completion_condition": "获得有效 XRD observation",
+            })
         if "survey query generate" in prompt:
             return self._json(
                 {
@@ -126,12 +137,23 @@ class DeviceAdaptationRetryModel:
     def __init__(self) -> None:
         self.prompts = []
 
+    def bind_tools(self, tools, **kwargs):
+        return self
+
     def invoke(self, messages):
         prompt = "\n\n".join(
             getattr(message, "content", None) or message.get("content", "")
             for message in messages
         )
         self.prompts.append(prompt)
+
+        if "macro action design" in prompt:
+            return self._json({
+                "objective": "小规模制备目标相",
+                "planned_operations": ["小体积共沉淀", "固定次数洗涤", "干燥表征"],
+                "expected_observation": "XRD 数据",
+                "completion_condition": "获得有效 XRD observation",
+            })
 
         if "device-adaptation macro plan design" not in prompt:
             raise AssertionError(f"Unexpected prompt: {prompt[:200]}")
@@ -197,9 +219,162 @@ class DeviceAdaptationRetryModel:
 
 class ResearchAgentTests(unittest.TestCase):
     def setUp(self) -> None:
+        environment = mock.patch.dict("os.environ", {
+            "RESEARCH_ONLINE_LITERATURE": "0", "RESEARCH_WEB_SEARCH": "0",
+        })
+        environment.start()
+        self.addCleanup(environment.stop)
         self.agent = ResearchAgent(model=None, use_llm=False)
         self.structured_outputs_dir = (
             Path(__file__).resolve().parents[1] / "structured_outputs"
+        )
+
+    def test_macro_quantities_defer_natural_language_semantics_to_device_llm(self) -> None:
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="制备样品并完成 XRD",
+                constraints={
+                    "device_context": {
+                        "compact_workstation_capabilities": (
+                            "烘干{Qout=整批处理;不要求预知总量;Report=未声明}\n"
+                            "固体进样{Ctl=进样质量(0,200)g;Qout=按目标设定量输出;Report=未声明}"
+                        )
+                    }
+                },
+            )
+        )
+        state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "干燥后整批进入下一操作",
+                "试剂/对象": "湿态样品",
+                "参数": "60 C 干燥后直接转入下一操作",
+            },
+            {
+                "步骤序号": 2,
+                "操作": "称取粉末制样",
+                "试剂/对象": "干燥粉末",
+                "参数": "称取 20 mg 粉末用于表征",
+            },
+        ]
+
+        self.agent._annotate_macro_plan_sources(state)
+
+        # Research does not invent a whole-batch requirement merely because
+        # the prose says “整批”.  The Device semantic reviewer sees the full
+        # macro action and workstation context before assigning that meaning.
+        self.assertEqual(state.macro_plan[0]["quantity_requirements"], [])
+        target = state.macro_plan[1]["quantity_requirements"][0]
+        self.assertEqual(target["kind"], "semantic_classification_required")
+        self.assertEqual(target["value"], 20.0)
+        self.assertEqual(target["unit"].lower(), "mg")
+        self.assertEqual(target["source"], "agent_proposed")
+        self.assertEqual(target["adjustability"], "device_semantic_review")
+        self.assertEqual(target["owner"], "device_execution")
+        self.assertEqual(target["required_by"], "llm_semantic_review")
+        self.assertEqual(target["device_policy"], "device_semantic_decision")
+        self.assertFalse(target["scientifically_fixed"])
+
+    def test_runtime_inventory_is_not_invented_without_skill_feedback(self) -> None:
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="干燥样品",
+                constraints={
+                    "device_context": {
+                        "compact_workstation_capabilities": "Drying;Report=未声明"
+                    }
+                },
+            )
+        )
+        step = {
+            "步骤序号": 1,
+            "操作": "烘干样品",
+            "试剂/对象": "湿态样品",
+            "参数": "60 C 烘干 12 h",
+            "quantity_requirements": [
+                {
+                    "kind": "runtime_measured_inventory",
+                    "material": "干粉",
+                    "source": "workstation_requirement",
+                    "evidence": "net_dry_mass_g",
+                    "adjustability": "runtime",
+                }
+            ],
+        }
+        state.macro_plan = [step]
+        self.agent._annotate_macro_plan_sources(state)
+        requirement = state.macro_plan[0]["quantity_requirements"][0]
+        self.assertEqual(requirement["kind"], "whole_batch")
+        self.assertEqual(requirement["source"], "process_semantics")
+        self.assertEqual(requirement["owner"], "process_flow")
+        self.assertEqual(requirement["device_policy"], "preserve_whole_batch")
+        self.assertNotIn("value", requirement)
+
+    def test_concentration_is_not_duplicated_as_amount_inventory(self) -> None:
+        quantities = self.agent._explicit_step_quantities(
+            "使用 0.10 mol L−1 Ni(NO3)2 配制前驱体"
+        )
+        self.assertEqual(len(quantities), 1)
+        self.assertEqual(quantities[0]["unit"], "mol L−1")
+        self.assertNotEqual(quantities[0]["unit"], "mol")
+
+    def test_skill_parameter_name_cannot_fund_an_agent_chosen_exact_value(self) -> None:
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="完成 XRD",
+                constraints={
+                    "device_context": {
+                        "compact_workstation_capabilities": (
+                            "固体进样{Ctl=进样质量(0,200)g;Report=未声明}"
+                        )
+                    }
+                },
+            )
+        )
+        state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "称取粉末制样",
+                "试剂/对象": "干燥粉末",
+                "参数": "称取 20 mg 粉末",
+                "quantity_requirements": [
+                    {
+                        "kind": "target_dose",
+                        "material": "干燥粉末",
+                        "value": 20,
+                        "unit": "mg",
+                        "source": "workstation_requirement",
+                        "evidence": "进样质量",
+                    }
+                ],
+            }
+        ]
+        self.agent._annotate_macro_plan_sources(state)
+        requirement = state.macro_plan[0]["quantity_requirements"][0]
+        self.assertEqual(requirement["source"], "agent_proposed")
+        self.assertEqual(requirement["device_policy"], "device_semantic_decision")
+
+    def test_stage_route_value_repairs_single_unicode_replacement(self) -> None:
+        route = [
+            "stage 1：制备后Fe存在形式、配位环境与结构基线观察",
+            "stage 2：统一条件下碱性OER活性与反应动力学观察",
+        ]
+        selected = "stage 1：制备后Fe存在形式、配位环境与结构�线观察"
+
+        self.assertEqual(_canonical_stage_route_value(route, selected), route[0])
+
+    def test_stage_route_value_does_not_repair_a_different_stage(self) -> None:
+        route = [
+            "stage 1：结构基线观察",
+            "stage 2：电化学动力学观察",
+        ]
+
+        self.assertEqual(
+            _canonical_stage_route_value(route, "stage 3：完全不同的观察"),
+            "",
         )
 
     def test_b0_returns_not_implemented_for_unknown_event(self) -> None:
@@ -447,10 +622,12 @@ class ResearchAgentTests(unittest.TestCase):
         state = self.agent.run(
             event_type="new observation",
             payload={
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "status": "feasibility_error",
                 "error_package": {
-                    "type": "physical_infeasible",
+                    "type": "research_replan_required",
                     "blocking_constraints": ["缺少高压反应釜"],
                 },
             },
@@ -461,20 +638,21 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertIn(first_id, history)
         self.assertEqual(history[first_id]["outcome"], "device_rejected")
 
-    def test_b2_translation_failed_routes_to_device_adaptation(self) -> None:
-        """Issue #4: an exhausted-translation failure (error_package.type
-        workflow_translation_failed) must ride the device-adaptation path —
-        research re-plans against the structured device feedback instead of
-        treating it as a generic observation."""
+    def test_b2_translation_failed_never_routes_to_device_adaptation(self) -> None:
+        """Workflow translation remains Device-owned after feasibility."""
         bootstrap_state = self.agent.run(
             event_type="bootstrap",
             query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
         )
+        original_plan = list(bootstrap_state.macro_plan)
 
         state = self.agent.run(
             event_type="new observation",
             payload={
                 "feedback_type": "device_feasibility_error",
+                "feedback_route": "research",
+                "failure_scope": "device_workflow",
+                "feasibility_accepted": True,
                 "status": "failed",
                 "error_package": {
                     "type": "workflow_translation_failed",
@@ -491,12 +669,165 @@ class ResearchAgentTests(unittest.TestCase):
             previous_state=bootstrap_state,
         )
 
-        self.assertEqual(state.post_observation_repair_path, "device_adaptation")
-        self.assertTrue(state.macro_plan)  # re-planned, not cleared
-        # the translation blockers joined the cumulative constraint memory
-        self.assertTrue(
-            any("加样方案" in item for item in state.cumulative_device_constraints)
+        self.assertEqual(
+            state.post_observation_repair_path,
+            "device_local_feedback_ignored",
         )
+        self.assertEqual(state.macro_plan, original_plan)
+        self.assertFalse(state.cumulative_device_constraints)
+        self.assertEqual(
+            state.observation_stage_fit["status"],
+            "ignored_device_local_feedback",
+        )
+
+    def test_b2_feasibility_accepted_vetoes_mislabeled_physical_error(self) -> None:
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+        original_plan = list(bootstrap_state.macro_plan)
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "feedback_type": "device_feasibility_error",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
+                "status": "feasibility_error",
+                "observation": {"feasibility_accepted": True},
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "blocking_constraints": ["瓶盖状态与下一步不匹配"],
+                },
+            },
+            previous_state=bootstrap_state,
+        )
+
+        self.assertEqual(state.macro_plan, original_plan)
+        self.assertEqual(
+            state.post_observation_repair_path,
+            "device_local_feedback_ignored",
+        )
+
+    def test_research_replan_feedback_requires_complete_route_contract(self) -> None:
+        valid = {
+            "feedback_type": "research_replan_required",
+            "feedback_route": "research",
+            "failure_scope": "route_feasibility",
+            "error_package": {"type": "physical_infeasible"},
+        }
+        self.assertTrue(
+            self.agent._payload_looks_like_device_feasibility_error(valid)
+        )
+        for invalid in [
+            {"feedback_type": "physical_infeasible"},
+            {**valid, "failure_scope": ""},
+            {**valid, "failure_scope": "device_workflow"},
+            {**valid, "feedback_type": "device_feasibility_error"},
+            {**valid, "feedback_route": "device"},
+            {
+                **valid,
+                "error_package": {
+                    "type": "physical_infeasible",
+                    "details": {"feasibility_accepted": True},
+                },
+            },
+            {
+                **valid,
+                "terminal_package": {
+                    "error_package": {
+                        "details": {"failure_scope": "device_workflow"}
+                    }
+                },
+            },
+        ]:
+            with self.subTest(invalid=invalid):
+                self.assertFalse(
+                    self.agent._payload_looks_like_device_feasibility_error(
+                        invalid
+                    )
+                )
+                self.assertTrue(
+                    self.agent._is_unauthorized_device_feedback(
+                        invalid,
+                        invalid,
+                    )
+                )
+
+    def test_b2_all_device_local_scopes_preserve_macro_plan(self) -> None:
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+        original_plan = list(bootstrap_state.macro_plan)
+
+        for scope, feedback_type, error_type in [
+            ("device_quantity", "device_local_quantity_error", "device_local_quantity_error"),
+            ("device_internal", "device_internal_error", "device_internal_error"),
+            ("device_workflow", "device_workflow_error", "workflow_skill_review_failed"),
+        ]:
+            with self.subTest(scope=scope):
+                state = self.agent.run(
+                    event_type="new observation",
+                    payload={
+                        "feedback_type": feedback_type,
+                        "feedback_route": "device",
+                        "failure_scope": scope,
+                        "status": "failed",
+                        "error_package": {"type": error_type},
+                    },
+                    previous_state=bootstrap_state,
+                )
+                self.assertEqual(state.macro_plan, original_plan)
+                self.assertEqual(
+                    state.post_observation_repair_path,
+                    "device_local_feedback_ignored",
+                )
+
+    def test_success_observation_preserves_effective_device_parameters(self) -> None:
+        bootstrap_state = self.agent.run(
+            event_type="bootstrap",
+            query="合成普鲁士蓝样品并通过 XRD 确认目标物相",
+        )
+        quantity_adjustments = [
+            {
+                "kind": "split_transfer",
+                "before": "10 mL once",
+                "after": "2 x 5 mL",
+                "requires_scientific_review": False,
+            }
+        ]
+
+        state = self.agent.run(
+            event_type="new observation",
+            payload={
+                "observation": {
+                    "observation_type": "XRD",
+                    "summary": "目标物相已确认",
+                    "status": "success",
+                },
+                "actual_parameters": {"temperature_c": 79.8},
+                "quantity_adjustments": quantity_adjustments,
+                "device_plan_adjustments": ["改用两个西林瓶等分"],
+                "material_ledger": {"checks": {"all_consumers_funded": True}},
+            },
+            previous_state=bootstrap_state,
+        )
+
+        self.assertEqual(
+            state.latest_observation["quantity_adjustments"],
+            quantity_adjustments,
+        )
+        self.assertEqual(
+            state.latest_observation["actual_parameters"]["temperature_c"],
+            79.8,
+        )
+        self.assertNotEqual(
+            state.post_observation_repair_path,
+            "device_adaptation",
+        )
+        context = self.agent._stage_context_json(state)
+        self.assertIn("device_plan_adjustments", context["observation"])
 
     def test_b2_abnormal_observation_repairs_macro_plan(self) -> None:
         bootstrap_state = self.agent.run(
@@ -586,7 +917,9 @@ class ResearchAgentTests(unittest.TestCase):
         state = self.agent.run(
             event_type="new observation",
             payload={
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "previous_macro_plan": [
                     {
                         "步骤序号": 1,
@@ -627,7 +960,10 @@ class ResearchAgentTests(unittest.TestCase):
         )
 
         self.assertEqual(state.status, "completed")
-        self.assertEqual(state.latest_observation["feedback_type"], "device_feasibility_error")
+        self.assertEqual(
+            state.latest_observation["feedback_type"],
+            "research_replan_required",
+        )
         self.assertFalse(state.observation_stage_fit["fits_current_stage"])
         self.assertEqual(state.observation_stage_fit["status"], "abnormal")
         self.assertEqual(state.post_observation_repair_path, "device_adaptation")
@@ -659,7 +995,9 @@ class ResearchAgentTests(unittest.TestCase):
 
         def device_error(constraint: str) -> dict:
             return {
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "status": "feasibility_error",
                 "device_snapshot_id": "ws_snapshot_A",
                 "previous_macro_plan": [
@@ -723,7 +1061,9 @@ class ResearchAgentTests(unittest.TestCase):
 
         def device_error() -> dict:
             return {
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "status": "feasibility_error",
                 "previous_macro_plan": [
                     {
@@ -881,7 +1221,9 @@ class ResearchAgentTests(unittest.TestCase):
             event_type="new observation",
             query=bootstrap_state.event.query,
             payload={
-                "feedback_type": "device_feasibility_error",
+                "feedback_type": "research_replan_required",
+                "feedback_route": "research",
+                "failure_scope": "route_feasibility",
                 "status": "feasibility_error",
                 "previous_macro_plan": bootstrap_state.macro_plan,
                 "error_package": {
@@ -902,8 +1244,9 @@ class ResearchAgentTests(unittest.TestCase):
         self.assertEqual(state.status, "completed")
         self.assertIn("device_adaptation_macro_plan_design", state.raw_llm_outputs)
         self.assertIn("device_adaptation_macro_plan_design_retry_1", state.raw_llm_outputs)
-        self.assertEqual(len(model.prompts), 2)
-        self.assertIn("本地质量检查反馈", model.prompts[1])
+        self.assertEqual(len(model.prompts), 3)
+        self.assertIn("macro action design", model.prompts[0])
+        self.assertIn("本地质量检查反馈", model.prompts[2])
         self.assertIn("洗涤 3 次", str(state.macro_plan))
         self.assertNotIn("洗涤至", str(state.macro_plan))
         self.assertTrue(
@@ -950,6 +1293,35 @@ class ResearchAgentTests(unittest.TestCase):
         issues = agent._device_context_macro_quality_issues(state, macro_plan)
 
         self.assertEqual(issues, [])
+
+    def test_b2_rejects_optional_rigid_carrier_after_device_state_mismatch(self) -> None:
+        agent = ResearchAgent(model=None, use_llm=False)
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="new observation",
+                query="设计 NiFe LDH 表面重构实验",
+                payload={
+                    "error_package": {
+                        "blocking_constraints": [
+                            "刚性泡沫镍不能作为悬浊液离心（RIGID_CARRIER_STATE_MISMATCH）。"
+                        ]
+                    }
+                },
+            )
+        )
+        state.latest_observation = dict(state.event.payload)
+        macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "制备负载样品",
+                "试剂/对象": "NiFe LDH/泡沫镍",
+                "参数": "90 ℃反应 12 h",
+            }
+        ]
+
+        issues = agent._device_adaptation_macro_plan_issues(state, macro_plan)
+
+        self.assertTrue(any("optional rigid nickel-foam" in item for item in issues))
 
 
 if __name__ == "__main__":

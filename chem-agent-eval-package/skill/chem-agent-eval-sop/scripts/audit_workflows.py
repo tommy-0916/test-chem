@@ -931,14 +931,21 @@ def _infer_workstations(
     return (
         repo
         / "chem_resources"
-        / "lab-design-main"
+        / "lab-design-all"
         / "skills"
         / "chemistry-experiment-workstation"
     ).resolve()
 
 
 def _case_package_paths(case_dir: Path) -> list[Path]:
-    """Locate every Device package exposed by one black-box campaign."""
+    """Locate every Device package exposed by one black-box campaign.
+
+    The evaluator is a downstream consumer and may not erase an earlier raw
+    workflow merely because a later campaign iteration succeeds.  Packages
+    without a workflow remain useful process evidence and evaluate as
+    ``not_evaluable``; every package that *does* expose ``workflow_json`` must
+    be covered by both schema reviewers.
+    """
     paths: list[Path] = []
     summary_path = case_dir / "case_summary.json"
     if summary_path.exists():

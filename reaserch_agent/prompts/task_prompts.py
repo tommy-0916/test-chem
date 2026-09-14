@@ -222,6 +222,54 @@ stage design
 
 """
 
+MACRO_ACTION_DESIGN_PROMPT = """## 任务名称
+macro action design
+
+先设计当前 stage 到下一个 observation point 的一整批 macro action，再由下一步细化 macro steps。
+当前只使用 operation 层 skill：操作名称和科学语义；不得读取或输出工作站参数表、设备 I/O、容器或实例编号。
+planned_operations 是有序的化学操作语义，不是机器命令，不得将一次洗涤等动作变为 stage。
+结合 query、文献、当前 stage、真实 observation 与失败反馈，保留科学目标并避免已失败路线。
+输出 JSON object：
+{{
+  "objective": "本批实验要解决的科学目标",
+  "planned_operations": ["配制前驱体", "反应", "分离纯化", "目标表征"],
+  "expected_observation": "下一观察节点预期可获得的信息，不是编造的实验结果",
+  "completion_condition": "什么真实 observation 可判定本批完成",
+  "current_stage_plan": "本 stage 的推进逻辑、科学变量和完成条件"
+}}
+
+当前规划模式：{planning_mode}
+当前 stage：{current_stage}
+下一 observation point：{observation_point}
+"""
+
+MACRO_STEP_CONTRACT_PROMPT = """
+## 已先行确定的 macro action 与步骤接口
+下面的 macro action 已先于步骤生成。必须将其 planned_operations 细化为当前待执行步骤，
+保留 objective、expected_observation 和 completion_condition，不得改成不同科学路线或越过目标观察点。
+{macro_action_json}
+
+当前设备 skill 是 step 层，仅据其中声明的 I/O、容器兼容和返回信息细化：
+{device_context_json}
+
+每个 macro step 保留 步骤序号、操作、试剂/对象、参数、来源、quantity_requirements，并增加：
+- material_inputs / material_outputs：数组；每项 name、state（相态/载体状态）、quantity（有证据才给）及 source。
+- container_requirements：数组；每项 logical_container_id、container_type、count、capacity_ml、lid_state，
+  只填有依据的需求；未知数值用 null，不得虚构容器兼容性。logical_container_id 表示同一样品的逻辑容器，
+  不是实体瓶号、机器槽位、原液瓶位或工作站编码。保留跨步骤物料与容器连续性。
+- intermediate_returns：数组；每项 name、availability（declared/undeclared）、required_for_next_step、source。
+  declared 必须引用当前 step 投影的真实字段：name 与 fields 中字段完全一致，source 为包含
+  station_code、operation 的对象，feedback_kind 为 returned_data（操作完成后返回）或
+  intermediate_feedback（中间/实时反馈）；对应 feedback_contract 声明必须为 supported。
+  完成后返回不能充当实时反馈；控制设定值和物料输出也不是测量返回。
+  required_for_next_step 必须为布尔值。delivery_mode 为 automatic、observation 或 manual_handoff。
+  未声明但科学步骤确实依赖的读数可保留为 undeclared，必须设置 delivery_mode 为 observation 或
+  manual_handoff，并以非空 wait_for 说明等待何种真实读数/人工交接；收到前不得自动继续闭环。
+  这些返回需求字段必须保留到 Device handoff，不能靠一个非空来源路径声称已声明支持。
+实体工作站、实际瓶号/槽位、开关盖展开、机器参数及编译仍由 Device 决定。
+本段关于逻辑容器需求的约定替代旧模板中笼统的“不选择容器”：允许逻辑要求，不允许实体分配。
+"""
+
 MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
 macro plan design
 
@@ -236,7 +284,7 @@ macro plan design
   当前 stage 内的具体执行步骤或步骤段，
   用于推进实验到达该 stage 的目标 observation point。
   它不构成新的 stage 边界。
-  每个 macro action 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
+  每个 macro step 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
   关键实验参数包括但不限于用量、浓度、体积、温度、时间、溶剂比例、电压、电流、电流密度、参比电极、终点现象等。
 - `current_stage_plan`：
   当前 stage 的完整科学语义计划，粒度高于待执行 macro plan，
@@ -275,7 +323,7 @@ macro plan design
 2. 待执行 macro plan 的目标必须是推进到当前 stage 的目标 observation point
 3. 不得把未来 stage 的内容提前写入当前 macro plan
 4. 若当前 stage 只有一个 observation point，则所有 macro steps 都必须服务于该唯一 observation point
-5. macro step 的格式和粒度不能是泛化研究建议，每个 macro action 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
+5. macro step 的格式和粒度不能是泛化研究建议，每个 macro step 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
 6. 在设备能力满足的情况下，优先把“从知识库论文抽取的实验过程”转成 macro_plan
 7. 不得随意改写论文抽取步骤中的试剂、用量、体积、温度、时间等具体参数
 8. 若论文 protocol 足够完整，直接忠实转换；若论文没有读取到完整步骤或关键参数大量缺失，可以基于论文和化学常识补全一个可执行 macro plan，但必须在 current_stage_plan 中说明“部分参数为 agent 补全”
@@ -285,8 +333,9 @@ macro plan design
     从化学语义层面改为常压、低温、外部预配、外部表征等可交给下游进一步适配的路线；
     具体选择进样瓶/西林瓶/50ml耐热瓶、原料瓶位、开盖/关盖、分瓶、配平、清洗动作等由 device agent 完成。
 11. 若设备边界上下文非空，macro_plan 还必须避免“容器连续性硬冲突”：
-    不要提出必须先在一种容器/状态中长时间静置、老化、暂存或反应，随后又必须在另一类不连通容器中
-    离心、洗涤、干燥或测试的路线，除非设备上下文明确存在支持的转移/换瓶操作。
+    工作站、默认容器运输、物料转移和样品处理链视为联通，不要求相邻 Skill 重复声明运输边；
+    不要把缺少显式运输文字当作硬冲突。只在后续 operation 明确不接受当前容器类型、相态或
+    刚性载体时改写路线，并优先保持同一样品、最少换瓶和最少溶剂位置变化。
     research layer 不需要指定具体容器，但要把实验条件写成下游可在同一兼容容器路径内实现的化学语义；
     若文献路线含有会造成设备容器断链的环节，应优先选择化学上等价、设备可适配的宏观表达，或在
     current_stage_plan 中说明该环节需由 device layer 判定可行性，不要把不可转移的容器切换写成必需步骤。
@@ -301,6 +350,9 @@ macro plan design
       不要把缺少单站原子化并行能力直接当成 feasibility_error。
     - 对需要结晶/老化的 PBA 体系，应写成固定条件的搅拌老化/搅拌熟化，例如室温、500-800 rpm、固定分钟数；
       若设备真源存在同类容器暂存路径，也可写固定时长的静置老化，不得把“静置”本身当作硬阻塞。
+13. 若原始 query 没有明确要求泡沫镍/金属片/刚性基底，而设备上下文没有接受刚性载体完成后处理
+    的 operation，不得仅因参考论文使用该载体而主动引入它；优先选择粉末或悬浊液形态的化学
+    等价 NiFe LDH 路线。若 query 明确要求刚性载体，必须保持其身份，不能把它写成可离心沉淀。
 
 ## macro step 粒度标尺
 每个 macro step 应该像结构化文献抽取中的 `参数列表`：
@@ -308,6 +360,23 @@ macro plan design
 - `操作` 应是短语级实验动作，例如“配制 NiCo-PBA 前驱体 A 液”“共沉淀制备 NiCo-PBA”“制备电极浆料并涂覆”
 - `试剂/对象` 应列出核心试剂、样品或被处理对象，例如“Ni(NO3)2 + sodium citrate”“K3Co(CN)6”“NiCo@A-NiCo-PBA/FTO”
 - `参数` 应保留自然语言实验条件，优先包含 mmol、mg、mL、浓度、溶剂比例、时间、温度、电压、参比电极等关键量
+- `quantity_requirements` 逐项说明数量语义、来源、可调整性和权限边界；数量语义必须由你
+  根据完整 query、macro action、前后步骤和科学目的判断，不能只根据“取样/称量/干燥”等
+  单个关键词分类。允许的 `kind` 为
+  `scientific_input_setpoint`、`target_dose`、`whole_batch`、`runtime_measured_inventory`；
+  `whole_batch` 不填写虚构 value/unit，表示整批直接进入下一操作，只有后续 Skill/科学约束明确要求定量
+  取样时才另外增加 `target_dose`。`target_dose` 是目标取用量，不等于整批实际库存读数。
+- 每个数值的 `source` 只能是 `user_query`、`literature`、`agent_proposed` 或
+  `workstation_requirement`；Research 不得自行声称 `workstation_requirement`，除非设备摘要明确列出该
+  control。`agent_proposed` 必须将 `adjustability` 设为 `scientific_review_required`。
+- 每项还必须给 `owner/required_by/device_policy/scientifically_fixed`：用户/文献科学量属于
+  `research_scientific`；Skill 必填执行值属于 `device_execution + bind_skill_setpoint`；模型自行提出的
+  target_dose 属于 `device_execution + device_semantic_decision`，由 Device 模型结合下游 Skill、科学目的
+  与可观测量判断保留/调整/删除/whole_batch；运行时读数属于 `runtime_observation + runtime_only`。
+  不得把待 Device 判断的执行目标升级为冻结科学量。
+- 设备摘要的 `I/O/CReq` 给出容器输入、输出和数量/状态约束；`Ctl` 只是控制设定，`Qout` 是物料
+  输出效果，`Report` 才是设备返回的数值。
+  `Report=未声明` 时不得把烘干、称量、转移或表征工作站写成会返回实际整批质量/收率。
 - 不要输出“围绕 query 进行首轮探索性配方准备”“进一步优化条件”“结合文献细化”这类占位性步骤
 - 不要把洗涤、干燥、离心、陈化简单删掉；如果它们在文献中和合成段绑定，可写进同一个 step 的 `参数`
 - 通常输出 4-8 个 macro steps；若参考案例有可迁移的 `参数列表`，优先沿用其粒度并按当前 query 做必要改写
@@ -346,7 +415,18 @@ macro plan design
       "步骤序号": 1,
       "操作": "步骤名称",
       "试剂/对象": "对象",
-      "参数": "自然语言参数"
+      "参数": "自然语言参数",
+      "quantity_requirements": [
+        {{
+          "kind": "scientific_input_setpoint | target_dose | whole_batch | runtime_measured_inventory",
+          "material": "该数量对应的物料",
+          "value": 5,
+          "unit": "mg",
+          "source": "user_query | literature | agent_proposed | workstation_requirement",
+          "evidence": "逐字来源片段或明确来源说明",
+          "adjustability": "fixed | scalable_with_scientific_review | scientific_review_required | runtime"
+        }}
+      ]
     }}
   ],
   "macro_plan_summary": "一句话概括这段 macro plan 在做什么"
@@ -357,6 +437,9 @@ macro plan design
 - 每一步必须包含 步骤序号、操作、试剂/对象、参数
 - 参数保持实验自然语言，不要翻译成 workstation 级动作
 - 每一步可附加可选字段 `来源`：标注该步骤关键参数来自哪个 protocol（paper_id 或文献题目，可带页码如 p.4）；由 agent 依据化学常识补全的写 "agent补全"。不确定时可省略该字段，系统会自动标注，缺失不算错误。
+- `quantity_requirements` 是必需数组。没有数值数量需求但要把产物整批继续处理时，至少输出一条
+  `kind=whole_batch`；若一步确实没有物料数量语义，可输出空数组。不得把通用设备摘要中的可配置范围
+  端点或示例值抄成当前任务的固定数量。
 - 如果输入包含设备边界上下文，参数应尽量写成下游可判断的固定化学条件，例如固定体积、固定时间、
   固定洗涤次数、固定温度、离线 observation/handoff；不要选择具体机器容器、工作站、容器编号或机器动作。
 - 如果输入包含设备边界上下文且当前平台无法低质量固体称量/大体积离心，参数应优先使用
@@ -379,8 +462,8 @@ macro plan design
 5. 是否错误写成 workstation 级控制指令？
 6. 若输入含设备边界上下文，macro_plan 是否避免了必须依赖无支持转移/换瓶的容器连续性硬冲突？
 7. 是否只是用“同一兼容路径”这类口头声明掩盖了静置/老化与后续分离/测试之间的容器断链？
-8. 若输入含设备边界上下文，是否避免了设备内 mmol 级固体称量、单容器超体积离心、
-   条件式洗涤/干燥以及无法连续转移的独立静置老化？并确认任何“边加液边搅拌”语义都能交给
+8. 是否根据当前 skill 的明确限制判断称量、容器容量、条件式洗涤/干燥与独立静置老化，
+   而非一概禁止设备内固体称量、20 mL 以上体系或在线 XRD？并确认任何“边加液边搅拌”语义都能交给
    device agent 转换为分批/间隔节拍，而不是被误判为硬阻塞？
 若任一检查不通过，必须重写 macro_plan 后再输出 JSON。"""
 
@@ -606,6 +689,12 @@ device-adaptation macro plan design
 - macro_plan 的每一步应是正向可执行命令，不要把“不使用某设备”写成设备动作。
 - 不要直接照抄 observation 中被设备层判定不支持的动作、容器、工作站、传感器、闭环判断或在线表征能力。
 - 如果最终 observation point 需要设备外表征，必须明确区分“设备内可执行步骤”和“离线 handoff/数据回传”，但不要伪造设备描述中没有的表征工作站。
+- 不得把整个 current stage 都改成 offline_handoff 来规避一个局部错误；只把真源没有任何兼容
+  operation 的最小连续化学处理段设为离线边界，其前后仍可执行的合成、加液、反应、分散或表征
+  必须保留为正向 macro action，供 Device 产生非空 workflow。
+- 若原始 query 没有明确要求泡沫镍/金属片/刚性基底，而设备反馈指出刚性载体状态不兼容，
+  应改用不改变 NiFe LDH 目标材料的自由粉末/悬浊液制备路线；不要继续保留泡沫镍，也不要把
+  它伪装成悬浊液或沉淀。只有 query 明确要求载体时才保留，并由 Device 声明最小 offline_handoff。
 
 ## 输出要求
 只输出 JSON：

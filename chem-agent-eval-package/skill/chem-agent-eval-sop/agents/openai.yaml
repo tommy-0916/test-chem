@@ -1,4 +1,4 @@
 interface:
   display_name: "Chem Agent Black-Box Evaluation"
-  short_description: "Evaluate eight cases through the complete Chem Agent black box"
-  default_prompt: "Use $chem-agent-eval-sop to run all eight exact Queries through the complete Chem Agent public entrypoint with online literature enabled, then evaluate its unmodified outputs."
+  short_description: "Audit all eight Chem Agent cases end to end"
+  default_prompt: "Use $chem-agent-eval-sop to run and strictly validate the complete eight-case Chem Agent evaluation."

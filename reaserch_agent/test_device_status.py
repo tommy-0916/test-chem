@@ -122,7 +122,7 @@ class DeviceStatusLoaderSideTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_old_format_prompt_flags_offline_station(self) -> None:
-        from utils.workstation_loader import WorkstationLoader
+        from device_agent.utils.workstation_loader import WorkstationLoader
 
         loader = WorkstationLoader(use_new_format=False)
         prompt = loader.format_for_prompt()
@@ -135,7 +135,7 @@ class DeviceStatusLoaderSideTest(unittest.TestCase):
         self.assertIn("⚠️ 当前占用（status=busy）", prompt)
 
     def test_station_status_matching_by_code_and_display_name(self) -> None:
-        from utils.workstation_loader import WorkstationLoader
+        from device_agent.utils.workstation_loader import WorkstationLoader
 
         loader = WorkstationLoader(use_new_format=False)
         self.assertEqual(

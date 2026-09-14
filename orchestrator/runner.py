@@ -9,13 +9,17 @@ detected, or the iteration budget is exhausted.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
+import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -25,6 +29,11 @@ from reaserch_agent.plan_ledger import (  # noqa: E402
     PlanLedger,
     default_ledger_path,
     generate_campaign_id,
+)
+from device_agent.human_quantity_approval import (  # noqa: E402
+    HumanQuantityApprovalError,
+    approval_contract_template,
+    validate_human_quantity_approvals,
 )
 
 from .execution_adapters import BaseExecutionAdapter  # noqa: E402
@@ -42,6 +51,327 @@ STOP_RESEARCH_ERROR = "research_error"
 STOP_REVIEW_REQUIRED = "scientific_review_required"
 
 APPROVAL_FILENAME = "review_approval.json"
+DEVICE_REPAIR_MARKDOWN = "AWAITING_DEVICE_REPAIR.md"
+DEVICE_REPAIR_REQUEST = "device_repair_request.json"
+DEVICE_PLAN_OVERRIDE_TEMPLATE = "device_plan_override.template.json"
+MAX_CAMPAIGN_ITERATIONS = 12
+
+RESEARCH_FEEDBACK_TYPE = "research_replan_required"
+RESEARCH_FAILURE_SCOPE = "route_feasibility"
+DEVICE_LOCAL_FAILURE_SCOPES = {
+    "device_plan",
+    "device_quantity",
+    "device_local_quantity",
+    "device_workflow",
+    "device_internal",
+}
+DEVICE_LOCAL_FEEDBACK_TYPES = {
+    "device_workflow_error",
+    "device_local_quantity_error",
+    "device_internal_error",
+    "human_review_required",
+}
+DEVICE_LOCAL_ERROR_TYPES = {
+    "workflow_translation_failed",
+    "workflow_skill_review_failed",
+    "recipe_materialization_failed",
+    "device_workflow_error",
+    "device_local_quantity_error",
+    "device_internal_error",
+    "human_review_required",
+}
+SCIENTIFIC_QUANTITY_CHANGE_KINDS = {
+    "replicate_batch",
+    "new_batch",
+    "scale_out_for_minimum",
+    "concentration_change",
+    "molar_ratio_change",
+    "amount_change",
+    "total_amount_change",
+    "single_batch_amount_change",
+    "parameter_change",
+}
+
+
+class DeviceRepairResumeError(ValueError):
+    """Raised when a manual Device override violates a frozen invariant."""
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _value_signature(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_nonempty(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", [], {}):
+            return value
+    return ""
+
+
+def _nested_dicts(value: Any) -> List[Dict[str, Any]]:
+    nodes: List[Dict[str, Any]] = []
+    stack = [value]
+    seen: Set[int] = set()
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (dict, list)):
+            identity = id(current)
+            if identity in seen:
+                continue
+            seen.add(identity)
+        if isinstance(current, dict):
+            nodes.append(current)
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+    return nodes
+
+
+def package_feasibility_accepted(package: Dict[str, Any]) -> bool:
+    """True when any layer of a terminal wrapper records Stage-1 acceptance."""
+
+    if _as_dict(package.get("error_package")).get("type") == "device_external_return_wait_required":
+        # Historical certificates may remain in review evidence. None can
+        # authorize crossing the current frozen Research observation barrier.
+        return False
+    for node in _nested_dicts(package):
+        if node.get("feasibility_accepted") is True:
+            return True
+        certificate = node.get("feasibility_certificate")
+        if isinstance(certificate, dict) and certificate.get("accepted") is True:
+            return True
+    return False
+
+
+def feedback_route(package: Dict[str, Any]) -> str:
+    """Return the orchestrator route using an explicit, fail-closed whitelist.
+
+    Once Device has accepted route feasibility, legacy labels such as
+    ``device_feasibility_error`` are insufficient to enter Research B2.  Only
+    the explicit ``research_replan_required`` + ``route_feasibility`` contract
+    is allowed to mutate the Research macro plan.
+    """
+
+    status = str(package.get("status", "")).strip()
+    route = str(package.get("feedback_route", "")).strip().lower()
+    scope = str(package.get("failure_scope", "")).strip().lower()
+    feedback_type = str(package.get("feedback_type", "")).strip().lower()
+    nested = _nested_dicts(package)
+    feasibility_accepted = package_feasibility_accepted(package)
+    nested_device_scope = any(
+        str(node.get("failure_scope") or "").strip().lower().startswith("device_")
+        for node in nested
+    )
+    nested_local_route = any(
+        str(node.get("feedback_route") or "").strip().lower()
+        in {"device", "human", "stop"}
+        for node in nested
+    )
+    nested_local_feedback = any(
+        str(node.get("feedback_type") or "").strip().lower()
+        in DEVICE_LOCAL_FEEDBACK_TYPES
+        for node in nested
+    )
+    nested_local_error = any(
+        str(node.get("type") or "").strip().lower()
+        in DEVICE_LOCAL_ERROR_TYPES
+        for node in nested
+    )
+    failed_device_gate = any(
+        (
+            isinstance(node.get("dispatch_validation"), dict)
+            and str(node["dispatch_validation"].get("status") or "")
+            .strip()
+            .lower()
+            == "failed"
+        )
+        or (
+            isinstance(node.get("quantity_audit"), dict)
+            and str(node["quantity_audit"].get("status") or "")
+            .strip()
+            .lower()
+            in {"failed", "human_review_required"}
+        )
+        or (
+            isinstance(node.get("recipe_materialization"), dict)
+            and str(node["recipe_materialization"].get("status") or "")
+            .strip()
+            .lower()
+            == "failed"
+        )
+        for node in nested
+    )
+
+    if status == "success":
+        if failed_device_gate:
+            return "device"
+        return "success"
+    if (
+        status == "manual_required"
+        or route == "human"
+        or feedback_type == "human_review_required"
+    ):
+        return "human"
+    if (
+        not feasibility_accepted
+        and not nested_device_scope
+        and not nested_local_route
+        and not nested_local_feedback
+        and not nested_local_error
+        and route == "research"
+        and feedback_type == RESEARCH_FEEDBACK_TYPE
+        and scope == RESEARCH_FAILURE_SCOPE
+    ):
+        return "research"
+    if route == "device" or scope in DEVICE_LOCAL_FAILURE_SCOPES:
+        return "device"
+    if feedback_type == "device_internal_error":
+        return "device"
+    return "terminal"
+
+
+def adjustment_requires_scientific_review(value: Any) -> bool:
+    """Infer scientific changes independently of a model-supplied kind label."""
+
+    if not isinstance(value, dict):
+        return False
+    if value.get("requires_scientific_review") is True:
+        return True
+    kind = str(
+        value.get("kind")
+        or value.get("change_type")
+        or value.get("adjustment_type")
+        or ""
+    ).strip().lower()
+    if kind in SCIENTIFIC_QUANTITY_CHANGE_KINDS:
+        return True
+
+    before = value.get("before")
+    after = value.get("after")
+
+    def canonical_quantity(raw: Any) -> tuple[Optional[float], str]:
+        if not isinstance(raw, dict):
+            return None, ""
+        unit = str(raw.get("unit") or raw.get("单位") or "").strip().lower()
+        number = _first_nonempty(
+            raw.get("total"),
+            raw.get("value"),
+            raw.get("amount"),
+            raw.get("quantity"),
+            raw.get("数值"),
+            raw.get("数量"),
+        )
+        if number in (None, "", [], {}):
+            aliquots = raw.get("aliquots")
+            if isinstance(aliquots, list) and aliquots:
+                try:
+                    number = sum(float(item) for item in aliquots)
+                except (TypeError, ValueError):
+                    number = None
+        try:
+            numeric = float(number)
+        except (TypeError, ValueError):
+            return None, ""
+        unit_table = {
+            "mol": ("substance", 1.0),
+            "mmol": ("substance", 1e-3),
+            "umol": ("substance", 1e-6),
+            "µmol": ("substance", 1e-6),
+            "μmol": ("substance", 1e-6),
+            "g": ("mass", 1.0),
+            "mg": ("mass", 1e-3),
+            "ug": ("mass", 1e-6),
+            "µg": ("mass", 1e-6),
+            "μg": ("mass", 1e-6),
+            "l": ("volume", 1.0),
+            "ml": ("volume", 1e-3),
+            "ul": ("volume", 1e-6),
+            "µl": ("volume", 1e-6),
+            "μl": ("volume", 1e-6),
+            "m": ("concentration", 1.0),
+            "mm": ("concentration", 1e-3),
+            "um": ("concentration", 1e-6),
+            "µm": ("concentration", 1e-6),
+            "μm": ("concentration", 1e-6),
+        }
+        dimension_scale = unit_table.get(unit)
+        if dimension_scale is None:
+            return None, ""
+        dimension, scale = dimension_scale
+        return numeric * scale, dimension
+
+    before_quantity, before_dimension = canonical_quantity(before)
+    after_quantity, after_dimension = canonical_quantity(after)
+    if (
+        before_quantity is not None
+        and after_quantity is not None
+        and before_dimension == after_dimension
+        and abs(before_quantity - after_quantity)
+        > max(1e-12, abs(before_quantity) * 1e-9)
+    ):
+        # A kind label such as ``device_operational`` or ``split_transfer``
+        # cannot hide a changed amount/concentration.  Mechanical splits only
+        # remain review-free when their canonical total is conserved.
+        return True
+
+    field_text = " ".join(
+        str(value.get(key) or "")
+        for key in ("field", "parameter", "reason", "description", "calculation")
+    )
+    sensitive_field = re.search(
+        r"浓度|concentration|摩尔比|molar\s*ratio|stoichiometr|"
+        r"(?:单批|实验|反应|配方|名义).{0,12}(?:总量|用量|剂量|amount)|"
+        r"(?:总量|用量|剂量|amount).{0,12}(?:改变|增加|减少|change|scale)",
+        field_text,
+        re.I,
+    )
+    if sensitive_field and before not in (None, "") and after not in (None, ""):
+        return _canonical_json(before) != _canonical_json(after)
+
+    for side_before, side_after in (
+        (before, after),
+        (value.get("previous"), value.get("updated")),
+    ):
+        if not isinstance(side_before, dict) or not isinstance(side_after, dict):
+            continue
+        for key in set(side_before) & set(side_after):
+            if re.search(
+                r"concentration|molar_ratio|stoichiometr|total_amount|"
+                r"single_batch_amount|per_batch_quantity|浓度|摩尔比|总量|单批",
+                str(key),
+                re.I,
+            ) and _canonical_json(side_before[key]) != _canonical_json(
+                side_after[key]
+            ):
+                return True
+
+    blob = _canonical_json(value)
+    return bool(
+        re.search(
+            r"新增.{0,12}(?:完整)?批|复制.{0,12}(?:完整)?批|"
+            r"replicat(?:e|ed|ion).{0,12}batch|new\s+batch|"
+            r"(?:浓度|concentration|摩尔比|molar\s*ratio|stoichiometr).{0,24}"
+            r"(?:改变|增加|减少|from|to|->|→)",
+            blob,
+            re.I,
+        )
+    )
 
 
 def package_requires_review(package: Dict[str, Any]) -> bool:
@@ -53,12 +383,25 @@ def package_requires_review(package: Dict[str, Any]) -> bool:
     adaptations = []
     if isinstance(workflow_json, dict):
         adaptations = workflow_json.get("temporal_adaptations") or []
+    if not isinstance(adaptations, list):
+        adaptations = []
     top_level = package.get("temporal_adaptations")
     if isinstance(top_level, list):
         adaptations = list(adaptations) + top_level
+    quantity_adjustments = package.get("quantity_adjustments") or []
+    if not isinstance(quantity_adjustments, list):
+        quantity_adjustments = []
+    if isinstance(workflow_json, dict):
+        nested = workflow_json.get("quantity_adjustments") or []
+        if isinstance(nested, list):
+            quantity_adjustments = list(quantity_adjustments) + nested
     return any(
-        isinstance(item, dict) and item.get("requires_scientific_review")
-        for item in adaptations
+        (
+            isinstance(item, dict)
+            and item.get("requires_scientific_review")
+        )
+        or adjustment_requires_scientific_review(item)
+        for item in list(adaptations) + list(quantity_adjustments)
     )
 
 
@@ -76,16 +419,103 @@ def load_review_approval(iteration_dir: Path) -> Optional[Dict[str, Any]]:
     return None
 
 
+def feasibility_blocker_keys(package: Dict[str, Any]) -> Set[str]:
+    """Stable blocker identities used for *repeat* deadlock detection.
+
+    A campaign is still making progress when Device surfaces a different class
+    of problem after Research repairs the prior one.  Only overlapping blocker
+    identities should advance the deadlock streak.
+    """
+    error_package = (
+        package.get("error_package")
+        if isinstance(package.get("error_package"), dict)
+        else {}
+    )
+    keys: Set[str] = set()
+    structured = error_package.get("structured_errors")
+    for item in structured if isinstance(structured, list) else []:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("error_code") or item.get("code") or "").strip()
+        # Parser placeholders are not blocker identities. Treating every new
+        # reviewer finding as ``code:unparsed`` makes unrelated, progressively
+        # repaired errors look like the same deadlock and stops a 12-iteration
+        # campaign after only three attempts.
+        if code and code.lower() not in {"unparsed", "unknown", "unspecified"}:
+            keys.add(f"code:{code.lower()}")
+
+    constraints = error_package.get("blocking_constraints")
+    for raw in constraints if isinstance(constraints, list) else []:
+        text = str(raw).strip()
+        if not text:
+            continue
+        codes = re.findall(r"[（(]([A-Z][A-Z0-9_]{2,})[)）]", text)
+        if codes:
+            keys.update(f"code:{code.lower()}" for code in codes)
+            continue
+        normalized = re.sub(r"\d+(?:\.\d+)?", "#", text.lower())
+        normalized = re.sub(r"\s+", "", normalized)
+        keys.add(f"constraint:{normalized[:240]}")
+
+    if not keys:
+        error_type = str(error_package.get("type") or "unspecified").strip().lower()
+        keys.add(f"type:{error_type}")
+    return keys
+
+
+def is_transient_device_internal_error(package: Dict[str, Any]) -> bool:
+    """True only for retryable provider/runtime transport failures.
+
+    A gateway deadline is not evidence that the chemistry or workstation plan
+    is invalid, and it must not be sent to Research as a feasibility blocker.
+    Schema, parsing, and implementation errors remain terminal device errors.
+    """
+
+    if str(package.get("feedback_type", "")).strip() != "device_internal_error":
+        return False
+    error_package = (
+        package.get("error_package")
+        if isinstance(package.get("error_package"), dict)
+        else {}
+    )
+    text = json.dumps(error_package, ensure_ascii=False).lower()
+    markers = (
+        "gateway_deadline",
+        "stream disconnected",
+        "connection reset",
+        "temporarily unavailable",
+        "timed out",
+        "timeout",
+    )
+    return any(marker in text for marker in markers)
+
+
 @dataclass
 class CampaignConfig:
     query: str
     campaign_id: str = ""
     references: List[str] = field(default_factory=list)
-    max_iterations: int = 10
+    max_iterations: int = MAX_CAMPAIGN_ITERATIONS
     feasibility_deadlock_limit: int = 3
+    transient_device_retry_limit: int = 3
     campaigns_root: Optional[Path] = None
     research_args: List[str] = field(default_factory=list)
     device_args: List[str] = field(default_factory=list)
+    resume_device_repair: Optional[Path] = None
+    device_plan_override: Optional[Path] = None
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_iterations <= MAX_CAMPAIGN_ITERATIONS:
+            raise ValueError(
+                "max_iterations must be between 1 and "
+                f"{MAX_CAMPAIGN_ITERATIONS}, got {self.max_iterations}"
+            )
+        if self.transient_device_retry_limit < 0:
+            raise ValueError("transient_device_retry_limit must be >= 0")
+        if bool(self.resume_device_repair) != bool(self.device_plan_override):
+            raise ValueError(
+                "resume_device_repair and device_plan_override must be provided together"
+            )
 
 
 @dataclass
@@ -110,6 +540,19 @@ class CampaignRunner:
         device_step: DeviceStepFn | None = None,
     ) -> None:
         self.config = config
+        if self.config.resume_device_repair and not self.config.campaign_id.strip():
+            try:
+                request_data = json.loads(
+                    Path(self.config.resume_device_repair)
+                    .expanduser()
+                    .read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                request_data = {}
+            if isinstance(request_data, dict):
+                self.config.campaign_id = str(
+                    request_data.get("campaign_id") or ""
+                ).strip()
         if not self.config.campaign_id.strip():
             self.config.campaign_id = generate_campaign_id(config.query)
         self.campaigns_root = (
@@ -131,6 +574,11 @@ class CampaignRunner:
     # ------------------------------------------------------------------
 
     def run(self) -> CampaignResult:
+        if self.config.resume_device_repair and self.config.device_plan_override:
+            return self._run_device_repair_resume(
+                Path(self.config.resume_device_repair).expanduser().resolve(),
+                Path(self.config.device_plan_override).expanduser().resolve(),
+            )
         self.campaign_dir.mkdir(parents=True, exist_ok=True)
         started_at = datetime.now().isoformat(timespec="seconds")
         self._log(
@@ -172,6 +620,7 @@ class CampaignRunner:
             self._log(f"bootstrap ended with status={state.get('status')}; stopping")
         else:
             consecutive_feasibility = 0
+            previous_feasibility_keys: Set[str] = set()
             for iteration in range(1, self.config.max_iterations + 1):
                 iterations_run = iteration
                 iteration_dir = self._iteration_dir(iteration)
@@ -181,36 +630,90 @@ class CampaignRunner:
                 package_status = str(package.get("status", "")).strip()
                 last_package = package
                 self._write_human_readable(iteration_dir, state, package)
-                is_feasibility_error = (
-                    package_status == "feasibility_error"
-                    or package.get("feedback_type") == "device_feasibility_error"
-                )
+                route = feedback_route(package)
 
-                if is_feasibility_error:
+                transient_retry_count = 0
+                while (
+                    route == "device"
+                    and is_transient_device_internal_error(package)
+                    and transient_retry_count < self.config.transient_device_retry_limit
+                ):
+                    transient_retry_count += 1
+                    self._trace.append(
+                        {
+                            "iteration": iteration,
+                            "phase": "device",
+                            "status": "transient_device_internal_error",
+                            "same_layer_retry": transient_retry_count,
+                        }
+                    )
+                    self._log(
+                        f"iteration {iteration}: transient Device/API error; "
+                        "retrying inside the Device layer without consuming a "
+                        "campaign iteration "
+                        f"({transient_retry_count}/"
+                        f"{self.config.transient_device_retry_limit})"
+                    )
+                    package = self._device_step(state_path, iteration_dir)
+                    package_status = str(package.get("status", "")).strip()
+                    last_package = package
+                    self._write_human_readable(iteration_dir, state, package)
+                    route = feedback_route(package)
+
+                if route == "device" and is_transient_device_internal_error(package):
+                    stop_reason = STOP_DEVICE_ERROR
+                    self._log(
+                        f"iteration {iteration}: transient Device/API retry limit "
+                        "exhausted; stopping"
+                    )
+                    break
+
+                if route == "human":
+                    stop_reason = STOP_MANUAL_REQUIRED
+                    self._trace.append(
+                        {
+                            "iteration": iteration,
+                            "phase": "device",
+                            "status": "human_review_required",
+                            "failure_scope": str(package.get("failure_scope", "")),
+                        }
+                    )
+                    if package_feasibility_accepted(package):
+                        self._write_device_repair_artifacts(
+                            iteration_dir,
+                            state_path,
+                            package,
+                            campaign_iteration=iteration,
+                        )
+                        self._log(
+                            f"iteration {iteration}: Device-local repair exhausted or "
+                            "requires scientific judgement; generated a resumable "
+                            "human Device repair request without entering Research B2"
+                        )
+                    else:
+                        self._write_unverifiable_review_request(
+                            iteration_dir,
+                            _as_dict(package.get("error_package")),
+                        )
+                        self._log(
+                            f"iteration {iteration}: Stage-1 feasibility was not "
+                            "accepted; requesting condition review without creating "
+                            "a Device-plan override"
+                        )
+                    break
+
+                if route == "research":
                     error_package = (
                         package.get("error_package")
                         if isinstance(package.get("error_package"), dict)
                         else {}
                     )
-                    if str(error_package.get("type", "")) == "needs_human_review":
-                        stop_reason = STOP_MANUAL_REQUIRED
-                        self._trace.append(
-                            {
-                                "iteration": iteration,
-                                "phase": "device",
-                                "status": "needs_human_review",
-                            }
-                        )
-                        self._write_unverifiable_review_request(
-                            iteration_dir, error_package
-                        )
-                        self._log(
-                            f"iteration {iteration}: device reported conditions it "
-                            "cannot verify against the truth source; handing to "
-                            "human review instead of re-planning"
-                        )
-                        break
-                    consecutive_feasibility += 1
+                    current_feasibility_keys = feasibility_blocker_keys(package)
+                    repeated_keys = current_feasibility_keys & previous_feasibility_keys
+                    consecutive_feasibility = (
+                        consecutive_feasibility + 1 if repeated_keys else 1
+                    )
+                    previous_feasibility_keys = current_feasibility_keys
                     self._accumulate_campaign_constraints(package)
                     error_type = str(error_package.get("type", "")) or "unspecified"
                     self._trace.append(
@@ -220,6 +723,8 @@ class CampaignRunner:
                             "status": "feasibility_error",
                             "error_type": error_type,
                             "consecutive": consecutive_feasibility,
+                            "blocker_keys": sorted(current_feasibility_keys),
+                            "repeated_blocker_keys": sorted(repeated_keys),
                         }
                     )
                     self._log(
@@ -240,8 +745,9 @@ class CampaignRunner:
                         )
                         break
                     payload = self._feasibility_payload(package)
-                elif package_status == "success":
+                elif route == "success":
                     consecutive_feasibility = 0
+                    previous_feasibility_keys = set()
                     needs_review = package_requires_review(package)
                     if needs_review and self.adapter.real_lab_boundary:
                         approval = load_review_approval(iteration_dir)
@@ -286,7 +792,10 @@ class CampaignRunner:
                             f"review; proceeding on simulated adapter `{self.adapter.name}` "
                             "(review still required before any real dispatch)"
                         )
-                    observation = self.adapter.execute(package, iteration_dir)
+                    observation = self._attach_actual_execution_parameters(
+                        self.adapter.execute(package, iteration_dir),
+                        package,
+                    )
                     observation_path = iteration_dir / "observation_in.json"
                     observation_path.write_text(
                         json.dumps(observation, ensure_ascii=False, indent=2),
@@ -313,11 +822,14 @@ class CampaignRunner:
                             "iteration": iteration,
                             "phase": "device",
                             "status": package_status or "unknown",
+                            "feedback_route": route,
+                            "failure_scope": str(package.get("failure_scope", "")),
                         }
                     )
                     self._log(
                         f"iteration {iteration}: device ended with "
-                        f"status={package_status or 'unknown'}; stopping"
+                        f"status={package_status or 'unknown'}, route={route}; "
+                        "stopping without invoking Research"
                     )
                     break
 
@@ -392,6 +904,532 @@ class CampaignRunner:
             final_report_path=str(report_path),
         )
 
+    def _run_device_repair_resume(
+        self,
+        request_path: Path,
+        override_path: Path,
+    ) -> CampaignResult:
+        """Resume one frozen Research plan directly at the Device layer.
+
+        This path deliberately has no Research bootstrap and does not increment
+        the stored Research↔Device campaign iteration for the repair attempt.
+        """
+
+        self.campaign_dir.mkdir(parents=True, exist_ok=True)
+        started_at = datetime.now().isoformat(timespec="seconds")
+        summary_path = self.campaign_dir / "campaign_summary.json"
+        if summary_path.exists():
+            try:
+                prior_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                prior_summary = {}
+            if isinstance(prior_summary, dict):
+                prior_trace = prior_summary.get("trace")
+                if isinstance(prior_trace, list):
+                    self._trace.extend(
+                        item for item in prior_trace if isinstance(item, dict)
+                    )
+                prior_constraints = prior_summary.get(
+                    "cumulative_device_constraints"
+                )
+                if isinstance(prior_constraints, list):
+                    for item in prior_constraints:
+                        text = str(item).strip()
+                        if text and text not in self._campaign_constraints:
+                            self._campaign_constraints.append(text)
+                started_at = str(prior_summary.get("started_at") or started_at)
+        request, override, state_path, state = self._validate_device_repair_resume(
+            request_path,
+            override_path,
+        )
+        campaign_iteration = int(request.get("campaign_iteration") or 0)
+        resume_dir = self._next_device_repair_resume_dir(campaign_iteration)
+        self._log(
+            "resuming frozen Device repair without Research bootstrap: "
+            f"request_id={request.get('request_id', '')}, "
+            f"campaign_iteration={campaign_iteration}"
+        )
+        self._trace.append(
+            {
+                "iteration": campaign_iteration,
+                "phase": "device_repair_resume",
+                "status": "override_validated",
+                "request_id": request.get("request_id", ""),
+                "campaign_iteration_incremented": False,
+            }
+        )
+
+        package = self._device_step(
+            state_path,
+            resume_dir,
+            device_plan_override_path=override_path,
+            prior_repair_request_path=request_path,
+        )
+        package_path = resume_dir / "device_package.json"
+        if not package_path.exists():
+            package_path.write_text(
+                json.dumps(package, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        self._write_human_readable(resume_dir, state, package)
+        route = feedback_route(package)
+        stop_reason = STOP_DEVICE_ERROR
+        goal_reached = False
+        final_state_path = state_path
+        iterations_run = campaign_iteration
+
+        if route == "human":
+            stop_reason = STOP_MANUAL_REQUIRED
+            self._write_device_repair_artifacts(
+                resume_dir,
+                state_path,
+                package,
+                campaign_iteration=campaign_iteration,
+                parent_request_id=str(request.get("request_id") or ""),
+                repair_generation=int(request.get("repair_generation") or 1) + 1,
+            )
+            self._trace.append(
+                {
+                    "iteration": campaign_iteration,
+                    "phase": "device_repair_resume",
+                    "status": "human_review_required_again",
+                }
+            )
+        elif route == "success":
+            needs_review = package_requires_review(package)
+            if needs_review and self.adapter.real_lab_boundary:
+                approval = load_review_approval(resume_dir)
+                if approval is None:
+                    stop_reason = STOP_REVIEW_REQUIRED
+                    self._write_review_request(resume_dir, package)
+                else:
+                    stop_reason, goal_reached, state, final_state_path = (
+                        self._execute_resumed_package(
+                            package,
+                            state,
+                            state_path,
+                            resume_dir,
+                            campaign_iteration,
+                        )
+                    )
+            else:
+                stop_reason, goal_reached, state, final_state_path = (
+                    self._execute_resumed_package(
+                        package,
+                        state,
+                        state_path,
+                        resume_dir,
+                        campaign_iteration,
+                    )
+                )
+        else:
+            # A feasibility certificate already exists for every repair
+            # request. Even a malformed package claiming route="research" is
+            # therefore fail-closed at Device and can never reach Research B2.
+            stop_reason = STOP_DEVICE_ERROR
+            self._trace.append(
+                {
+                    "iteration": campaign_iteration,
+                    "phase": "device_repair_resume",
+                    "status": str(package.get("status") or "failed"),
+                    "feedback_route": route,
+                    "research_invoked": False,
+                }
+            )
+
+        if (
+            stop_reason == STOP_MAX_ITERATIONS
+            and state.get("status") == "completed"
+            and state.get("macro_plan")
+            and campaign_iteration < self.config.max_iterations
+        ):
+            (
+                stop_reason,
+                goal_reached,
+                iterations_run,
+                state,
+                final_state_path,
+                continuation_package,
+            ) = self._continue_campaign_from_state(
+                state,
+                final_state_path,
+                start_iteration=campaign_iteration + 1,
+            )
+            if continuation_package:
+                package = continuation_package
+
+        finished_at = datetime.now().isoformat(timespec="seconds")
+        self._write_human_readable(
+            self.campaign_dir,
+            state,
+            package,
+            campaign_meta={
+                "campaign_id": self.config.campaign_id,
+                "stop_reason": stop_reason,
+                "goal_reached": goal_reached,
+                "iterations_run": iterations_run,
+                "device_repair_resume": True,
+            },
+        )
+        report_path = self._write_final_report(
+            stop_reason=stop_reason,
+            goal_reached=goal_reached,
+            iterations_run=iterations_run,
+            final_state_path=final_state_path,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+        self._log(f"Device repair resume finished: stop_reason={stop_reason}")
+        return CampaignResult(
+            campaign_id=self.config.campaign_id,
+            stop_reason=stop_reason,
+            iterations_run=iterations_run,
+            goal_reached=goal_reached,
+            campaign_dir=str(self.campaign_dir),
+            final_state_path=str(final_state_path),
+            final_report_path=str(report_path),
+        )
+
+    def _execute_resumed_package(
+        self,
+        package: Dict[str, Any],
+        state: Dict[str, Any],
+        state_path: Path,
+        resume_dir: Path,
+        campaign_iteration: int,
+    ) -> tuple[str, bool, Dict[str, Any], Path]:
+        observation = self._attach_actual_execution_parameters(
+            self.adapter.execute(package, resume_dir),
+            package,
+        )
+        (resume_dir / "observation_in.json").write_text(
+            json.dumps(observation, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        new_state = self._research_step(
+            "new_observation",
+            query="",
+            previous_state_path=state_path,
+            payload={"observation": observation},
+            iteration_dir=resume_dir,
+            references=[],
+        )
+        new_state_path = resume_dir / "research_state.json"
+        macro_steps = len(new_state.get("macro_plan") or [])
+        self._trace.append(
+            {
+                "iteration": campaign_iteration,
+                "phase": "research_after_device_repair",
+                "status": new_state.get("status", ""),
+                "macro_steps": macro_steps,
+                "campaign_iteration_incremented": False,
+            }
+        )
+        if new_state.get("status") == "manual_required":
+            return STOP_MANUAL_REQUIRED, False, new_state, new_state_path
+        if new_state.get("status") != "completed":
+            return STOP_RESEARCH_ERROR, False, new_state, new_state_path
+        if macro_steps == 0:
+            return STOP_GOAL_REACHED, True, new_state, new_state_path
+
+        # The repaired macro action itself did not consume another campaign
+        # iteration. A later macro action emitted by Research is allowed to
+        # continue at ``campaign_iteration + 1``.
+        return STOP_MAX_ITERATIONS, False, new_state, new_state_path
+
+    def _continue_campaign_from_state(
+        self,
+        state: Dict[str, Any],
+        state_path: Path,
+        *,
+        start_iteration: int,
+    ) -> tuple[str, bool, int, Dict[str, Any], Path, Dict[str, Any]]:
+        """Continue later macro actions after a same-iteration Device resume."""
+
+        stop_reason = STOP_MAX_ITERATIONS
+        goal_reached = False
+        iterations_run = max(0, start_iteration - 1)
+        last_package: Dict[str, Any] = {}
+        consecutive_feasibility = 0
+        previous_feasibility_keys: Set[str] = set()
+
+        for iteration in range(start_iteration, self.config.max_iterations + 1):
+            iterations_run = iteration
+            iteration_dir = self._iteration_dir(iteration)
+            self._log(f"iteration {iteration}: device mapping starts after repair resume")
+            package = self._device_step(state_path, iteration_dir)
+            last_package = package
+            self._write_human_readable(iteration_dir, state, package)
+            route = feedback_route(package)
+
+            transient_retry_count = 0
+            while (
+                route == "device"
+                and is_transient_device_internal_error(package)
+                and transient_retry_count < self.config.transient_device_retry_limit
+            ):
+                transient_retry_count += 1
+                package = self._device_step(state_path, iteration_dir)
+                last_package = package
+                self._write_human_readable(iteration_dir, state, package)
+                route = feedback_route(package)
+            if route == "device" and is_transient_device_internal_error(package):
+                stop_reason = STOP_DEVICE_ERROR
+                break
+
+            if route == "human":
+                stop_reason = STOP_MANUAL_REQUIRED
+                if package_feasibility_accepted(package):
+                    self._write_device_repair_artifacts(
+                        iteration_dir,
+                        state_path,
+                        package,
+                        campaign_iteration=iteration,
+                    )
+                else:
+                    self._write_unverifiable_review_request(
+                        iteration_dir,
+                        _as_dict(package.get("error_package")),
+                    )
+                break
+            if route == "research":
+                current_keys = feasibility_blocker_keys(package)
+                repeated = current_keys & previous_feasibility_keys
+                consecutive_feasibility = (
+                    consecutive_feasibility + 1 if repeated else 1
+                )
+                previous_feasibility_keys = current_keys
+                self._accumulate_campaign_constraints(package)
+                if consecutive_feasibility >= self.config.feasibility_deadlock_limit:
+                    stop_reason = STOP_FEASIBILITY_DEADLOCK
+                    break
+                payload = self._feasibility_payload(package)
+            elif route == "success":
+                consecutive_feasibility = 0
+                previous_feasibility_keys = set()
+                if package_requires_review(package) and self.adapter.real_lab_boundary:
+                    if load_review_approval(iteration_dir) is None:
+                        stop_reason = STOP_REVIEW_REQUIRED
+                        self._write_review_request(iteration_dir, package)
+                        break
+                observation = self._attach_actual_execution_parameters(
+                    self.adapter.execute(package, iteration_dir),
+                    package,
+                )
+                (iteration_dir / "observation_in.json").write_text(
+                    json.dumps(observation, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                payload = {"observation": observation}
+            else:
+                stop_reason = STOP_DEVICE_ERROR
+                break
+
+            state = self._research_step(
+                "new_observation",
+                query="",
+                previous_state_path=state_path,
+                payload=payload,
+                iteration_dir=iteration_dir,
+                references=[],
+            )
+            state_path = iteration_dir / "research_state.json"
+            macro_steps = len(state.get("macro_plan") or [])
+            self._trace.append(
+                {
+                    "iteration": iteration,
+                    "phase": "research",
+                    "status": state.get("status", ""),
+                    "macro_steps": macro_steps,
+                }
+            )
+            if state.get("status") == "manual_required":
+                stop_reason = STOP_MANUAL_REQUIRED
+                break
+            if state.get("status") != "completed":
+                stop_reason = STOP_RESEARCH_ERROR
+                break
+            if macro_steps == 0:
+                stop_reason = STOP_GOAL_REACHED
+                goal_reached = True
+                break
+
+        return (
+            stop_reason,
+            goal_reached,
+            iterations_run,
+            state,
+            state_path,
+            last_package,
+        )
+
+    def _next_device_repair_resume_dir(self, campaign_iteration: int) -> Path:
+        prefix = f"iteration_{campaign_iteration:02d}_device_repair_resume_"
+        existing: List[int] = []
+        for path in self.campaign_dir.glob(prefix + "*"):
+            try:
+                existing.append(int(path.name.rsplit("_", 1)[-1]))
+            except ValueError:
+                continue
+        path = self.campaign_dir / f"{prefix}{max(existing, default=0) + 1:02d}"
+        path.mkdir(parents=True, exist_ok=False)
+        return path
+
+    @staticmethod
+    def _load_json_object(path: Path, label: str) -> Dict[str, Any]:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise DeviceRepairResumeError(f"cannot read {label}: {path}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise DeviceRepairResumeError(
+                f"{label} is not valid JSON: {path}: {exc}"
+            ) from exc
+        if not isinstance(value, dict):
+            raise DeviceRepairResumeError(f"{label} must be a JSON object: {path}")
+        return value
+
+    def _validate_device_repair_resume(
+        self,
+        request_path: Path,
+        override_path: Path,
+    ) -> tuple[Dict[str, Any], Dict[str, Any], Path, Dict[str, Any]]:
+        request = self._load_json_object(request_path, "device repair request")
+        override = self._load_json_object(override_path, "device plan override")
+        if request.get("schema_version") != "chem-device-repair-request/v1":
+            raise DeviceRepairResumeError("unsupported device repair request schema")
+        if override.get("schema_version") != "chem-device-plan-override/v1":
+            raise DeviceRepairResumeError("unsupported device plan override schema")
+        if str(request.get("campaign_id") or "") != self.config.campaign_id:
+            raise DeviceRepairResumeError(
+                "repair request campaign_id does not match the selected campaign"
+            )
+        if not _as_dict(request.get("feasibility_certificate")).get("accepted"):
+            raise DeviceRepairResumeError(
+                "Device repair resume requires an accepted feasibility_certificate"
+            )
+        if str(override.get("request_id") or "") != str(
+            request.get("request_id") or ""
+        ):
+            raise DeviceRepairResumeError("override request_id does not match request")
+
+        state_path = Path(str(request.get("research_state_path") or "")).expanduser()
+        if not state_path.is_absolute():
+            state_path = (request_path.parent / state_path).resolve()
+        else:
+            state_path = state_path.resolve()
+        if not state_path.exists():
+            raise DeviceRepairResumeError(
+                f"frozen Research state does not exist: {state_path}"
+            )
+        actual_state_hash = _file_sha256(state_path)
+        expected_state_hash = str(request.get("research_state_sha256") or "")
+        if not expected_state_hash or actual_state_hash != expected_state_hash:
+            raise DeviceRepairResumeError(
+                "frozen Research state hash mismatch; re-bootstrap is required"
+            )
+        if str(override.get("research_state_sha256") or "") != expected_state_hash:
+            raise DeviceRepairResumeError(
+                "override Research state hash does not match repair request"
+            )
+
+        signature_pairs = (
+            ("route_signature", "frozen_route_signature"),
+            ("sample_matrix_signature", "frozen_sample_matrix_signature"),
+            ("device_snapshot_signature", "device_snapshot_signature"),
+            ("route_payload_sha256", "frozen_route_payload_sha256"),
+            ("sample_matrix_sha256", "frozen_sample_matrix_sha256"),
+            ("device_snapshot_sha256", "device_snapshot_sha256"),
+        )
+        for override_key, request_key in signature_pairs:
+            expected = str(request.get(request_key) or "")
+            actual = str(override.get(override_key) or "")
+            if not expected or actual != expected:
+                raise DeviceRepairResumeError(
+                    f"override {override_key} does not match frozen request"
+                )
+
+        if _value_signature(request.get("frozen_route_payload")) != str(
+            request.get("frozen_route_payload_sha256")
+        ):
+            raise DeviceRepairResumeError("repair request route payload is corrupted")
+        if _value_signature(request.get("frozen_sample_matrix")) != str(
+            request.get("frozen_sample_matrix_sha256")
+        ):
+            raise DeviceRepairResumeError("repair request sample matrix is corrupted")
+        if _value_signature(request.get("device_snapshot")) != str(
+            request.get("device_snapshot_sha256")
+        ):
+            raise DeviceRepairResumeError("repair request device snapshot is corrupted")
+
+        declarations = _as_dict(override.get("declarations"))
+        forbidden_declarations = (
+            "route_changed",
+            "sample_matrix_changed",
+            "reagent_identity_or_order_changed",
+            "observation_points_changed",
+        )
+        if any(declarations.get(key) is not False for key in forbidden_declarations):
+            raise DeviceRepairResumeError(
+                "override must explicitly declare every frozen scientific invariant unchanged"
+            )
+        device_plan = override.get("device_plan")
+        if not isinstance(device_plan, (dict, list)) or not device_plan:
+            raise DeviceRepairResumeError(
+                "override must contain a complete non-empty device_plan"
+            )
+
+        frozen_matrix = request.get("frozen_sample_matrix")
+        embedded_matrix = (
+            _first_nonempty(
+                device_plan.get("sample_matrix"),
+                device_plan.get("sample_control_matrix"),
+                [],
+            )
+            if isinstance(device_plan, dict)
+            else []
+        )
+        if embedded_matrix not in (None, "", [], {}) and _value_signature(
+            embedded_matrix
+        ) != _value_signature(frozen_matrix):
+            raise DeviceRepairResumeError(
+                "override device_plan changes the frozen sample/control matrix"
+            )
+
+        changes = override.get("changes") or []
+        requires_review = any(
+            adjustment_requires_scientific_review(item)
+            for item in changes
+            if isinstance(changes, list)
+        )
+        if requires_review and override.get("requires_scientific_review") is not True:
+            raise DeviceRepairResumeError(
+                "batch/amount/concentration/ratio changes require scientific review"
+            )
+
+        state = self._load_json_object(state_path, "frozen Research state")
+        route_payload_hash = _value_signature(self._research_route_payload(state))
+        if route_payload_hash != str(request.get("frozen_route_payload_sha256")):
+            raise DeviceRepairResumeError(
+                "current Research route or macro plan differs from the frozen request"
+            )
+        sample_hash = _value_signature(self._sample_matrix_from_state(state))
+        if sample_hash != str(request.get("research_state_sample_matrix_sha256")):
+            raise DeviceRepairResumeError(
+                "current Research sample/control matrix differs from the frozen request"
+            )
+        try:
+            override, _, _, _ = validate_human_quantity_approvals(
+                override,
+                request,
+                repair_request_sha256=_file_sha256(request_path),
+            )
+        except HumanQuantityApprovalError as exc:
+            raise DeviceRepairResumeError(
+                f"invalid human quantity approval: {exc}"
+            ) from exc
+        return request, override, state_path, state
+
     # ------------------------------------------------------------------
     # default subprocess step implementations
     # ------------------------------------------------------------------
@@ -454,6 +1492,9 @@ class CampaignRunner:
         self,
         state_path: Path,
         iteration_dir: Path,
+        *,
+        device_plan_override_path: Optional[Path] = None,
+        prior_repair_request_path: Optional[Path] = None,
     ) -> Dict[str, Any]:
         package_path = iteration_dir / "device_package.json"
         device_state_path = iteration_dir / "device_state.json"
@@ -467,6 +1508,10 @@ class CampaignRunner:
             "--package-output",
             str(package_path),
         ]
+        if device_plan_override_path:
+            command += ["--device-plan-override", str(device_plan_override_path)]
+        if prior_repair_request_path:
+            command += ["--prior-repair-request", str(prior_repair_request_path)]
         command += self.config.device_args
 
         completed = subprocess.run(
@@ -558,11 +1603,460 @@ class CampaignRunner:
             encoding="utf-8",
         )
 
+    @staticmethod
+    def _attach_actual_execution_parameters(
+        observation: Dict[str, Any],
+        package: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Carry effective Device parameters into Research result interpretation.
+
+        The adapter owns measured observations.  Device owns the difference
+        between nominal Research quantities and the executable parameters.  The
+        two are joined here without overwriting adapter-provided fields.
+        """
+
+        enriched = dict(observation) if isinstance(observation, dict) else {
+            "summary": str(observation)
+        }
+        workflow = _as_dict(package.get("workflow_json"))
+        effective = _first_nonempty(
+            package.get("actual_parameter_adjustments"),
+            package.get("quantity_adjustments"),
+            workflow.get("quantity_adjustments"),
+            [],
+        )
+        batch_plan = _first_nonempty(
+            package.get("batch_plan"),
+            workflow.get("batch_plan"),
+            [],
+        )
+        material_ledger = _first_nonempty(
+            package.get("material_ledger"),
+            workflow.get("material_ledger"),
+            {},
+        )
+        plan_level_repair = _as_dict(package.get("plan_level_repair"))
+        device_plan_adjustments = _first_nonempty(
+            package.get("device_plan_adjustments"),
+            package.get("device_plan_changes"),
+            plan_level_repair.get("plan_changes"),
+            [],
+        )
+        execution_context = {
+            "research_plan_signature": _first_nonempty(
+                package.get("research_plan_signature"),
+                _as_dict(package.get("feasibility_certificate")).get(
+                    "research_plan_signature"
+                ),
+            ),
+            "quantity_adjustments": effective,
+            "batch_plan": batch_plan,
+            "material_ledger": material_ledger,
+            "device_plan_adjustments": device_plan_adjustments,
+            "temporal_adaptations": _first_nonempty(
+                package.get("temporal_adaptations"),
+                workflow.get("temporal_adaptations"),
+                [],
+            ),
+            "requires_scientific_review": bool(
+                package.get("requires_scientific_review")
+            ),
+        }
+        existing = enriched.get("actual_execution_parameters")
+        if isinstance(existing, dict):
+            merged = dict(execution_context)
+            merged.update(existing)
+            execution_context = merged
+        enriched["actual_execution_parameters"] = execution_context
+        return enriched
+
+    @staticmethod
+    def _research_route_payload(state: Dict[str, Any]) -> Dict[str, Any]:
+        handoff = _as_dict(state.get("device_adaptation_handoff"))
+        if not handoff:
+            handoff = _as_dict(
+                state.get("B. 发给下游 device adaptation layer agent 的外部交接输出")
+            )
+        return {
+            "stage_route": _first_nonempty(
+                handoff.get("stage 路线"),
+                handoff.get("stage_route"),
+                state.get("stage_route"),
+            ),
+            "current_stage": _first_nonempty(
+                handoff.get("当前 stage"),
+                state.get("current_stage"),
+            ),
+            "current_stage_plan": _first_nonempty(
+                handoff.get("当前 stage 的完整化学语义实验计划"),
+                state.get("current_stage_plan"),
+            ),
+            "macro_plan": _first_nonempty(
+                handoff.get("待执行 macro plan"),
+                handoff.get("macro_plan"),
+                state.get("macro_plan"),
+                [],
+            ),
+        }
+
+    @staticmethod
+    def _sample_matrix_from_state(state: Dict[str, Any]) -> Any:
+        handoff = _as_dict(state.get("device_adaptation_handoff"))
+        persistent = _as_dict(state.get("persistent_outputs"))
+        macro_action = _as_dict(
+            _first_nonempty(
+                state.get("macro_action"),
+                handoff.get("当前 macro action"),
+                persistent.get("当前 macro action"),
+                {},
+            )
+        )
+        return _first_nonempty(
+            handoff.get("sample_matrix"),
+            handoff.get("样品/对照矩阵"),
+            handoff.get("样品矩阵"),
+            macro_action.get("sample_matrix"),
+            macro_action.get("样品/对照矩阵"),
+            state.get("sample_matrix"),
+            [],
+        )
+
+    def _write_device_repair_artifacts(
+        self,
+        iteration_dir: Path,
+        research_state_path: Path,
+        package: Dict[str, Any],
+        *,
+        campaign_iteration: int,
+        parent_request_id: str = "",
+        repair_generation: int = 1,
+    ) -> Path:
+        """Emit a self-contained, resumable Device-only handoff package."""
+
+        research_state_path = Path(research_state_path).expanduser().resolve()
+        try:
+            research_state = json.loads(
+                research_state_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            research_state = {}
+        if not isinstance(research_state, dict):
+            research_state = {}
+
+        error_package = _as_dict(package.get("error_package"))
+        manual_context = _as_dict(package.get("manual_repair_context"))
+        workflow_repair = _as_dict(package.get("workflow_repair"))
+        certificate = _as_dict(
+            _first_nonempty(
+                package.get("feasibility_certificate"),
+                error_package.get("feasibility_certificate"),
+                {},
+            )
+        )
+        route_payload = self._research_route_payload(research_state)
+        sample_matrix = _first_nonempty(
+            certificate.get("sample_matrix"),
+            certificate.get("sample_control_matrix"),
+            package.get("sample_matrix"),
+            self._sample_matrix_from_state(research_state),
+            [],
+        )
+        device_snapshot = _first_nonempty(
+            certificate.get("device_snapshot"),
+            certificate.get("workstation_snapshot"),
+            package.get("device_snapshot"),
+            {
+                "snapshot_id": _first_nonempty(
+                    certificate.get("device_snapshot_id"),
+                    package.get("device_snapshot_id"),
+                    "",
+                )
+            }
+            if _first_nonempty(
+                certificate.get("device_snapshot_id"),
+                package.get("device_snapshot_id"),
+                "",
+            )
+            else {},
+            {},
+        )
+        route_signature = str(
+            _first_nonempty(
+                certificate.get("research_plan_signature"),
+                certificate.get("route_signature"),
+                package.get("research_plan_signature"),
+                _value_signature(route_payload),
+            )
+        )
+        sample_matrix_signature = str(
+            _first_nonempty(
+                certificate.get("sample_matrix_signature"),
+                package.get("sample_matrix_signature"),
+                _value_signature(sample_matrix),
+            )
+        )
+        device_snapshot_signature = str(
+            _first_nonempty(
+                certificate.get("device_snapshot_signature"),
+                certificate.get("workstation_snapshot_signature"),
+                package.get("device_snapshot_signature"),
+                _value_signature(device_snapshot),
+            )
+        )
+        research_state_sha256 = (
+            _file_sha256(research_state_path) if research_state_path.exists() else ""
+        )
+        raw_last_device_plan = _first_nonempty(
+            package.get("device_plan"),
+            package.get("last_device_plan"),
+            manual_context.get("last_device_plan"),
+            error_package.get("last_device_plan"),
+            {},
+        )
+        if isinstance(raw_last_device_plan, dict):
+            last_device_plan = copy.deepcopy(raw_last_device_plan)
+        else:
+            last_device_plan = {
+                "status": "device_plan",
+                "device_plan": copy.deepcopy(raw_last_device_plan)
+                if isinstance(raw_last_device_plan, list)
+                else [],
+                "feasibility": copy.deepcopy(package.get("feasibility", {})),
+                "macro_plan_summary": package.get("macro_plan_summary", ""),
+                "device_self_check": copy.deepcopy(
+                    package.get("device_self_check", {})
+                ),
+                "reagent_slot_plan": copy.deepcopy(
+                    package.get("reagent_slot_plan", [])
+                ),
+                "container_plan": copy.deepcopy(package.get("container_plan", [])),
+                "quantity_adjustments": copy.deepcopy(
+                    package.get("quantity_adjustments", [])
+                ),
+                "batch_plan": copy.deepcopy(package.get("batch_plan", [])),
+                "material_transitions": copy.deepcopy(
+                    package.get("material_transitions", [])
+                ),
+                "material_ledger": copy.deepcopy(
+                    package.get("material_ledger", {})
+                ),
+                "quantity_audit": copy.deepcopy(package.get("quantity_audit", {})),
+                "temporal_adaptations": copy.deepcopy(
+                    package.get("temporal_adaptations", [])
+                ),
+                "offline_handoffs": copy.deepcopy(
+                    package.get("offline_handoffs", [])
+                ),
+                "sample_control_matrix": copy.deepcopy(sample_matrix),
+            }
+        request_seed = {
+            "campaign_id": self.config.campaign_id,
+            "campaign_iteration": campaign_iteration,
+            "query": self.config.query,
+            "repair_generation": repair_generation,
+            "research_state_sha256": research_state_sha256,
+            "route_signature": route_signature,
+            "last_plan": last_device_plan,
+        }
+        request_id = "device-repair-" + _value_signature(request_seed)[:16]
+        request = {
+            "schema_version": "chem-device-repair-request/v1",
+            "request_id": request_id,
+            "parent_request_id": parent_request_id,
+            "repair_generation": repair_generation,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": str(
+                package.get("failure_scope") or "device_workflow"
+            ),
+            "campaign_id": self.config.campaign_id,
+            "campaign_iteration": campaign_iteration,
+            "query": self.config.query,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "research_state_path": str(research_state_path),
+            "research_state_sha256": research_state_sha256,
+            "feasibility_certificate": certificate,
+            "frozen_route_signature": route_signature,
+            "frozen_route_payload": route_payload,
+            "frozen_route_payload_sha256": _value_signature(route_payload),
+            "frozen_sample_matrix": sample_matrix,
+            "frozen_sample_matrix_signature": sample_matrix_signature,
+            "frozen_sample_matrix_sha256": _value_signature(sample_matrix),
+            "research_state_sample_matrix_sha256": _value_signature(
+                self._sample_matrix_from_state(research_state)
+            ),
+            "device_snapshot": device_snapshot,
+            "device_snapshot_signature": device_snapshot_signature,
+            "device_snapshot_sha256": _value_signature(device_snapshot),
+            "last_device_plan": last_device_plan,
+            "last_workflow": _first_nonempty(
+                package.get("workflow_json"),
+                package.get("last_workflow"),
+                package.get("last_workflow_json"),
+                manual_context.get("last_workflow"),
+                error_package.get("last_workflow"),
+                {},
+            ),
+            "repair_history": _first_nonempty(
+                package.get("repair_history"),
+                package.get("repair_cycles"),
+                package.get("workflow_repair_history"),
+                manual_context.get("repair_history"),
+                manual_context.get("workflow_repair_cycles"),
+                workflow_repair.get("deduplicated_error_history"),
+                workflow_repair.get("cycles"),
+                error_package.get("repair_history"),
+                [],
+            ),
+            "workflow_repair_cycles": _first_nonempty(
+                manual_context.get("workflow_repair_cycles"),
+                workflow_repair.get("cycles"),
+                package.get("repair_cycles"),
+                [],
+            ),
+            "structured_errors": _first_nonempty(
+                error_package.get("structured_errors"),
+                package.get("structured_errors"),
+                [],
+            ),
+            "allowed_device_plan_changes": [
+                "workstation selection",
+                "container and slot allocation",
+                "operation decomposition",
+                "transfer/split/batch execution",
+                "total amount, concentration, or molar ratio with scientific-review flag",
+            ],
+            "forbidden_changes": [
+                "target material or reaction route",
+                "reagent identity or reagent order",
+                "observation point",
+                "sample/control/variable matrix",
+            ],
+            "human_quantity_approval_contract": {
+                "schema_version": "chem-human-quantity-approval/v1",
+                "allowed_basis": [
+                    "observed_quantity",
+                    "planning_yield_lower_bound",
+                ],
+                "transition_quantity_basis_mapping": {
+                    "observed_quantity": "measured_observation",
+                    "planning_yield_lower_bound": "planning_yield_lower_bound",
+                },
+                "responsibility": (
+                    "observed_quantity is a human-attested measurement, not an "
+                    "ordinary model observation; planning_yield_lower_bound is an "
+                    "explicit scientific planning assumption. The named approver "
+                    "accepts responsibility for the bound transition quantity."
+                ),
+                "required_target_binding": [
+                    "transition_id",
+                    "sample_id",
+                    "material_id",
+                    "batch_id",
+                    "approved_quantity",
+                ],
+            },
+        }
+        request_path = iteration_dir / DEVICE_REPAIR_REQUEST
+        request_path.write_text(
+            json.dumps(request, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        repair_request_sha256 = _file_sha256(request_path)
+
+        override_template = {
+            "schema_version": "chem-device-plan-override/v1",
+            "request_id": request_id,
+            "research_state_sha256": research_state_sha256,
+            "route_signature": route_signature,
+            "route_payload_sha256": request["frozen_route_payload_sha256"],
+            "sample_matrix_signature": sample_matrix_signature,
+            "sample_matrix_sha256": request["frozen_sample_matrix_sha256"],
+            "device_snapshot_signature": device_snapshot_signature,
+            "device_snapshot_sha256": request["device_snapshot_sha256"],
+            "declarations": {
+                "route_changed": False,
+                "sample_matrix_changed": False,
+                "reagent_identity_or_order_changed": False,
+                "observation_points_changed": False,
+            },
+            "device_plan": request["last_device_plan"],
+            "changes": [],
+            "requires_scientific_review": False,
+            "human_quantity_approvals": [],
+            "human_quantity_approval_template": approval_contract_template(
+                request,
+                repair_request_sha256=repair_request_sha256,
+            ),
+        }
+        (iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE).write_text(
+            json.dumps(override_template, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        lines = [
+            "# 等待 Device 层人工修订",
+            "",
+            "两轮 Device workflow 自修复已耗尽，或剂量/合批条件需要人工判断。",
+            "本请求不会返回 Research B2，Research 路线与样品矩阵保持冻结。",
+            "",
+            "## 文件",
+            "",
+            f"- `{DEVICE_REPAIR_REQUEST}`：冻结签名、Research state、设备快照与两轮错误历史",
+            f"- `{DEVICE_PLAN_OVERRIDE_TEMPLATE}`：可编辑的完整 Device plan 模板",
+            "- 若要解除 unknown-yield 数量门，将模板中的 "
+            "`human_quantity_approval_template` 复制到 "
+            "`human_quantity_approvals`，逐项填写并签认；不要把模板对象本身当批准。",
+            "- `observed_quantity` 表示人工对测量值作出的明确证明，并不伪装成机器 "
+            "observation；`planning_yield_lower_bound` 表示人工批准的科学规划下界。",
+            "",
+            "## 续跑",
+            "",
+            "```bash",
+            "python run_campaign.py \\",
+            f"  --resume-device-repair {shlex.quote(str(request_path))} \\",
+            "  --device-plan-override /path/to/device_plan_override.json",
+            "```",
+            "",
+            "若需要改目标、化学路线、试剂身份/顺序、observation point 或样品矩阵，",
+            "不得使用 Device override，必须重新进入 Research 规划。",
+        ]
+        (iteration_dir / DEVICE_REPAIR_MARKDOWN).write_text(
+            "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+        return request_path
+
     def _write_unverifiable_review_request(
         self,
         iteration_dir: Path,
         error_package: Dict[str, Any],
     ) -> None:
+        if error_package.get("type") == "device_external_return_wait_required":
+            lines = [
+                "# 等待真实 observation / 人工返回",
+                "",
+                "当前 macro action 跨越了必需的外部读数等待点，尚未批准机器执行。",
+                "不能用审核同意、Device override 或预计结果代替真实返回。",
+                "请先按 observation 边界拆分计划；取得真实结果后，通过 Research 的",
+                "post_observation 交接生成下一段宏动作。原计划的后续科学步骤仍被保留。",
+                "",
+            ]
+            for pending in error_package.get("pending_returns", []) or []:
+                if isinstance(pending, dict):
+                    lines.append(
+                        f"- 步骤 {pending.get('source_macro_step', '?')}："
+                        + str(pending.get("wait_for") or pending.get("name") or "需要真实返回")
+                    )
+            (iteration_dir / "AWAITING_CONDITION_REVIEW.md").write_text(
+                "\n".join(lines) + "\n", encoding="utf-8",
+            )
+            return
+        stage1_device_local_exhausted = (
+            str(error_package.get("type", "")).strip().lower()
+            == "stage1_plan_repair_exhausted"
+        )
         classification = (
             error_package.get("constraint_classification")
             if isinstance(error_package.get("constraint_classification"), dict)
@@ -580,11 +2074,19 @@ class CampaignRunner:
         ]
         for item in unverifiable:
             lines.append(f"- {item}")
-        lines += [
-            "",
-            "请确认这些条件在本实验室是否成立；成立则可将该轮 macro plan 视为可执行，",
-            "否则请给 research layer 提出化学语义修改意见。",
-        ]
+        if stage1_device_local_exhausted:
+            lines += [
+                "",
+                "这些是 Stage-1 Device-local 计划修复候选耗尽后的人工判定项。",
+                "Research 化学路线与样品矩阵保持不变；请只在 Device 层修订工作站、",
+                "容器、操作拆分或确定配方，不得把该错误返回 Research。",
+            ]
+        else:
+            lines += [
+                "",
+                "请确认这些条件在本实验室是否成立；成立则可将该轮 macro plan 视为可执行，",
+                "否则请给 research layer 提出化学语义修改意见。",
+            ]
         (iteration_dir / "AWAITING_CONDITION_REVIEW.md").write_text(
             "\n".join(lines) + "\n",
             encoding="utf-8",

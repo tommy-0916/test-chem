@@ -10,7 +10,8 @@
 
 - **observation point（观测点）**：能更新科学判断的关键检测/表征节点（XRD、颜色变化、产率、电化学响应……）
 - **stage**：从当前状态到下一个观测点之间的一整段科学计划——stage 的边界只能由观测点决定，不能按工艺步骤切分
-- **macro action**：stage 内推进到目标观测点的具体执行步骤段（含操作、试剂/对象、关键参数）
+- **macro action**：stage 内推进到下一次 observation 的整段实验，先规划目标、操作序列和完成条件
+- **macro step**：在已确定的 macro action 下细化的实验步骤，包含试剂、条件、物料 I/O 和逻辑容器需求
 - **campaign**：一次完整的科研任务（从目标输入到达成/终止），系统的文献、计划版本、实验记忆都以 campaign 为单位组织
 
 每次拿到真实观测结果后，系统重新评估并**演化**后续计划——每个计划版本的产生、修改与放弃都带原因落盘，可审计、可追溯。
@@ -37,7 +38,7 @@
 
 手写分支状态机（非 LangGraph）：
 
-- **B1 bootstrap（冷启动）**：按需获取文献 → 多轮调研 → protocol 抽取 → 调研报告 → 按观测点设计 stage 路线 → 生成首个 macro plan（带质量门重试）
+- **B1 bootstrap（冷启动）**：统一联网 skill 获取文献 → 多轮调研 → protocol 抽取 → 调研报告 → 按观测点设计 stage 路线 → 独立 macro action 规划 → macro steps 细化（带质量门重试）
 - **B2 post_observation（热循环）**：判断新观测是否落在当前 stage 上
   - **正常** → 推进 stage / 收束，出下一段 macro plan
   - **异常** → 增量调研 + **三层最小修复阶梯**（改 stage 内计划 → 换当前 stage → 重写整条路线 → 否则人工交接）
@@ -49,7 +50,7 @@
 
 ### 2. 设备适配层 `device_agent/` — 只回答"怎么在本实验室做"
 
-单次 LLM 调用 + 三层确定性防线，把 macro plan 映射为机器可执行工作流：
+两段设备规划与翻译，加上确定性防线，把 macro plan 映射为机器工作流：
 
 - 产出 `workflow_txt`（仿 `chem_resources/format_reference/reference.txt`）与 `workflow_json` 两个工作流视图
 - 自动补全容器选择、瓶位、开关盖、离心配平、洗涤子步骤等映射细节
@@ -73,6 +74,45 @@
 - 结束产出 `final_report.md`（停止原因 + 计划版本演化表 + 迭代轨迹）与 `campaign_summary.json`
 
 ## 关键机制
+
+### 分层 Skill 与原生工具接口
+
+45 个工作站 SKILL 保持独立、作为设备事实真源；`chem_resources/agent-skills/` 中新增四个应用 skill：
+
+| Skill | 加载时机 | 设备信息粒度 |
+| --- | --- | --- |
+| `online-research` | 首次调研、异常补检、模型临时补查 | 一个任务式入口，内部统一网页/论文搜索、阅读、按需 OA 下载 |
+| `experiment-capabilities` | 检索和 stage 设计 | 实验类型及适用边界，不含操作 I/O |
+| `operation-capabilities` | macro action 规划 | 操作及用途，不含设备 I/O |
+| `macro-step-capabilities` | macro step 细化 | 物料 I/O、容器、科学条件、前置约束及返回信息 |
+
+设备投影由 `chem_resources/generate_workstation_capability_index.py` 同源生成，并绑定来源摘要。未声明的测量返回/中间反馈保持 `unknown`，不推断为不存在，也不将设定量当作测量结果。检查生成物：
+
+```bash
+python3 -B chem_resources/generate_workstation_capability_index.py --check --with-skill-references
+```
+
+步骤的 `intermediate_returns` 若标记 `declared`，必须以 `source.station_code`、`source.operation` 和 `feedback_kind` 引用真源中已声明的返回字段与时点。未声明但实验必需的读数必须指定 `delivery_mode=observation/manual_handoff` 和 `wait_for`，不能伪装成自动回传。
+
+若等待点后仍有机器执行步骤，Device 会阻断跨边界的签证和下发，并保留原计划、返回需求及人工交接说明；不能用 Device override 代替真实 observation。先按观测边界拆分、取得真实返回后，再由 Research 生成下一段宏动作。
+
+运行接口使用 LangChain `StructuredTool` + Pydantic schema：
+
+```python
+# service 由 workflow 创建，设备能力、campaign、provider 配置由应用注入。
+tool = service.as_tool()  # name == "online_research"
+result = tool.invoke({
+    "query": "目标材料的合成与 XRD 表征",
+    "objective": "查找可复现的实验步骤",
+    "references": [],
+    "evidence_depth": "full_text",  # 仍受应用的下载开关约束
+})
+print(tool.args_schema.model_json_schema())
+```
+
+真实模型调用由 `agent_skills/native_tools.py` 使用 `bind_tools`、`AIMessage.tool_calls` 和关联 call ID 的 `ToolMessage` 执行有界循环；不再执行文本中的 `tool_request`。普通无工具模型调用保留原接口，需要工具的后端必须支持原生调用，不能静默回退 CLI。
+
+Device 先读取 45 站能力目录，再用 `load_workstation_skill(station_code)` 读取选中站完整 SKILL、audit 和机器合同；第一段分配工作站/容器/槽位，第二段翻译机器参数。模型按需加载不影响确定性审计的全目录覆盖。能力标签仅用于文献筛选，不能替代 Device 的执行安全门。
 
 ### 计划版本台账（每次修改/放弃都落盘 + 原因）
 
@@ -193,13 +233,15 @@ cd frontend && npm run dev -- --host 127.0.0.1 --port 5173
 ```bash
 python -m unittest discover -s reaserch_agent -t . -p "test*.py"   # 研究层
 python -m unittest discover -s orchestrator  -t . -p "test*.py"   # 编排层
+python -m unittest discover -s agent_skills  -t . -p "test*.py"   # 同源能力投影与分层
+python -m pytest device_agent -q                                # 含原生工具、渐进加载和安全门
 python device_agent/test_single_agent.py                          # 设备层（需已装依赖）
 ./.venv/bin/python -m pytest backend/test_api.py                   # 后端
 cd frontend && npm test && npm run lint && npm run build          # 前端
 # 可选浏览器回归：PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 ```
 
-约定：测试用暴露 `.invoke()` 的假模型 mock LLM，网络客户端注入 fake，不触真实端点；研究层的 `--disable-llm` 路径无凭据可跑。
+约定：普通调用用 `.invoke()` 假模型；工具测试使用 `.bind_tools()`、原生 `AIMessage.tool_calls` 和 `ToolMessage`，网络客户端注入 fake，不触真实端点；研究层的 `--disable-llm` 路径无凭据可跑。
 
 ## 八题评估包（chem-agent-eval-package/）
 
@@ -220,6 +262,7 @@ reaserch_agent/            # 研究层（目录名拼写是有意保留的）
   tools/                   #   检索/摄取/文献获取（含 chemistry_gate）/query_sanitizer/注册表/设备上下文
   memory/                  #   两层记忆 + 三层召回 + 打分
   chem_kb/                 #   本地知识库（语料 + registry）
+agent_skills/              # 同源能力投影与有界原生工具调用（无设备执行）
 device_agent/              # 设备适配层（单 agent 映射 + 三层确定性防线）
   feasibility_rules.py     #   可行性三桶分类（hard/adaptable/unverifiable）
   workflow_validator.py    #   SKILL schema 严格校验（必填/类型/枚举/范围）
@@ -235,5 +278,6 @@ chem-eval/  docs/          # 设计/评测文档、调研与快速上手（docs/
 
 - **交接载荷中的中文键是数据契约**（`待执行 macro plan`、`当前 stage`、`原液量`…），不得改名/翻译
 - `reaserch_agent` 目录名拼写**有意保留**，除非同步迁移全部 import
-- 宏动作步骤位于 `state.macro_plan`，每步 `{步骤序号, 操作, 试剂/对象, 参数[, 来源]}`（`来源` 为加法式可选键）
+- `state.macro_action` 保存先行规划的 `planned_operations`、目标和完成条件；`pending_macro_action` 仅用于发布前暂存，避免覆盖上一批次的 observation outcome
+- 宏步骤仍位于 `state.macro_plan`，保留 `{步骤序号, 操作, 试剂/对象, 参数[, 来源]}`，并支持 `material_inputs`、`material_outputs`、`container_requirements`、`intermediate_returns`；实际工作站、瓶号与槽位由 Device 分配
 - 完整设计文档：`chem-eval/chem-technical-report.md`；研究层状态机全谱：`reaserch_agent/research_layer.md`（B3–B7 分支已设计、暂未实现）

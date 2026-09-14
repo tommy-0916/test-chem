@@ -13,6 +13,7 @@ import unittest
 sys.path.insert(0, "device_agent")
 
 from capability_audit import (  # noqa: E402
+    audit_connected_sample_container_chain,
     audit_offline_handoffs,
     scan_manual_material_operations,
     weighing_false_hard_guard,
@@ -143,6 +144,262 @@ class ManualMaterialScanTest(unittest.TestCase):
         self.assertEqual(
             scan_manual_material_operations({}, "该步骤需人工复核后继续"), []
         )
+
+
+class ConnectedSampleContainerChainTest(unittest.TestCase):
+    def test_real_a01_reaction_tube_to_vial_no_path_handoff_is_flagged(self) -> None:
+        """Regression distilled from the 20260826 A01 terminal package."""
+        payload = {
+            "offline_handoffs": [
+                {
+                    "name": "10ml耐压反应管到纯化进样瓶的无容器路径转换",
+                    "handoff_type": "no_supported_container_path",
+                    "sample": "RT01-RT18中的反应悬浊液",
+                    "source_container": "RT01-RT18，10ml耐压反应管，无盖",
+                    "destination_container": "V01-V18，进样瓶，有盖",
+                    "lineage_mapping": "RT01→V01，依次一一对应至RT18→V18",
+                    "reason": "模型声称完整真源没有容器路径",
+                }
+            ]
+        }
+
+        findings = audit_connected_sample_container_chain(payload)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["type"], "ordinary_transfer_misclassified_offline"
+        )
+        self.assertEqual(findings[0]["feedback_route"], "device")
+        self.assertFalse(findings[0]["requires_research_replan"])
+
+    def test_special_carrier_hopper_and_observation_boundaries_are_exempt(self) -> None:
+        payload = {
+            "offline_handoffs": [
+                {
+                    "name": "XRD原始数据回传",
+                    "handoff_type": "observation_data_return",
+                    "sample": "XRD01",
+                    "contains_sample_handling": False,
+                    "required_return_data": ["XRD图谱"],
+                },
+                {
+                    "name": "石英孔板载体交接",
+                    "handoff_type": "no_supported_container_path",
+                    "sample": "sample_A",
+                    "source_container": "进样瓶1",
+                    "destination_container": "96位石英孔板1",
+                    "lineage_mapping": "sample_A:V1→Q1",
+                },
+                {
+                    "name": "固体料斗边界",
+                    "handoff_type": "no_supported_container_path",
+                    "sample": "sample_B",
+                    "source_container": "进样瓶2",
+                    "destination_container": "料斗1",
+                    "lineage_mapping": "sample_B:V2→H1",
+                },
+            ]
+        }
+        self.assertEqual(audit_connected_sample_container_chain(payload), [])
+
+    def test_ordinary_no_path_without_lineage_stays_device_evidence_request(self) -> None:
+        payload = {
+            "offline_handoffs": [
+                {
+                    "name": "反应管到进样瓶的无容器路径",
+                    "handoff_type": "no_supported_container_path",
+                    "source_container": "10ml耐压反应管RT01",
+                    "destination_container": "进样瓶V01",
+                }
+            ]
+        }
+        findings = audit_connected_sample_container_chain(payload)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["type"],
+            "ordinary_transfer_path_requires_lineage_evidence",
+        )
+        self.assertEqual(findings[0]["feedback_route"], "device")
+        self.assertFalse(findings[0]["requires_research_replan"])
+
+    def test_false_no_handling_flag_cannot_hide_explicit_ordinary_transfer(self) -> None:
+        payload = {
+            "offline_handoffs": [
+                {
+                    "name": "ordinary transfer mislabeled as no path",
+                    "handoff_type": "no_supported_container_path",
+                    "contains_sample_handling": False,
+                    "sample": "sample_A",
+                    "source_container": "10ml耐压反应管RT01",
+                    "destination_container": "进样瓶V01",
+                    "lineage_mapping": "sample_A:RT01→V01",
+                    "reason": "转移后续还会进入XRD基底片和料斗，但本次仅为换瓶",
+                }
+            ]
+        }
+
+        findings = audit_connected_sample_container_chain(payload)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["type"], "ordinary_transfer_misclassified_offline"
+        )
+        self.assertEqual(findings[0]["feedback_route"], "device")
+
+    def test_observation_label_cannot_hide_no_path_ordinary_transfer(self) -> None:
+        payload = {
+            "offline_handoffs": [
+                {
+                    "name": "伪装成观察回传的换瓶",
+                    "handoff_type": (
+                        "observation_data_return no_supported_container_path"
+                    ),
+                    "sample": "sample_A",
+                    "source_container": "10ml耐压反应管RT01",
+                    "destination_container": "进样瓶V01",
+                    "lineage_mapping": "sample_A:RT01→V01",
+                }
+            ]
+        }
+
+        findings = audit_connected_sample_container_chain(payload)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["type"], "ordinary_transfer_misclassified_offline"
+        )
+
+    @staticmethod
+    def _transfer(
+        number: int,
+        source_id: str,
+        destination_id: str,
+        *,
+        complete: bool = True,
+        reason: str = "minimal_required_transfer",
+        evidence_refs: list[str] | None = None,
+    ) -> dict:
+        return {
+            "plan_step": number,
+            "operation_intent": "转移换瓶",
+            "sample_lineage": {
+                "sample_id": "sample_A",
+                "source_container": {
+                    "container_type": "进样瓶",
+                    "container_id": source_id,
+                },
+                "destination_container": {
+                    "container_type": "进样瓶",
+                    "container_id": destination_id,
+                },
+                "transfer_reason": reason,
+                "justification_evidence_refs": evidence_refs or [],
+                "trace_complete": complete,
+            },
+        }
+
+    def test_complete_same_sample_round_trip_is_device_local(self) -> None:
+        payload = {
+            "steps": [self._transfer(3, "V01", "V02"), self._transfer(4, "V02", "V01")]
+        }
+        findings = audit_connected_sample_container_chain(payload)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["type"], "redundant_container_round_trip")
+        self.assertEqual(findings[0]["failure_scope"], "device_workflow")
+        self.assertFalse(findings[0]["requires_research_replan"])
+
+    def test_container_type_aliases_cannot_hide_round_trip(self) -> None:
+        payload = {
+            "steps": [
+                {
+                    "plan_step": 1,
+                    "operation_intent": "转移换瓶",
+                    "sample_lineage": {
+                        "sample_id": "sample_A",
+                        "source_container": "10ml耐压反应管#R1",
+                        "destination_container": "50ml耐热瓶#V1",
+                        "transfer_reason": "minimal_required_transfer",
+                        "trace_complete": True,
+                    },
+                },
+                {
+                    "plan_step": 2,
+                    "operation_intent": "转移换瓶",
+                    "sample_lineage": {
+                        "sample_id": "sample_A",
+                        "source_container": "耐热瓶#V1",
+                        "destination_container": "耐压反应管#R1",
+                        "transfer_reason": "minimal_required_transfer",
+                        "trace_complete": True,
+                    },
+                },
+            ]
+        }
+
+        findings = audit_connected_sample_container_chain(payload)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["type"], "redundant_container_round_trip")
+
+    def test_complete_repeated_same_type_changes_are_flagged(self) -> None:
+        payload = {
+            "steps": [self._transfer(7, "V01", "V02"), self._transfer(8, "V02", "V03")]
+        }
+        findings = audit_connected_sample_container_chain(payload)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["type"], "redundant_same_type_container_changes"
+        )
+
+    def test_incomplete_trace_or_necessary_transfer_is_not_flagged(self) -> None:
+        incomplete = {
+            "steps": [
+                self._transfer(3, "V01", "V02", complete=False),
+                self._transfer(4, "V02", "V01"),
+            ]
+        }
+        necessary = {
+            "quantity_adjustments": [
+                {
+                    "adjustment_id": "adj_capacity_1",
+                    "kind": "capacity_split",
+                    "route_changed": False,
+                }
+            ],
+            "steps": [
+                self._transfer(
+                    3,
+                    "V01",
+                    "V02",
+                    reason="capacity_split",
+                    evidence_refs=["adj_capacity_1"],
+                ),
+                self._transfer(4, "V02", "V01"),
+            ]
+        }
+        self.assertEqual(audit_connected_sample_container_chain(incomplete), [])
+        self.assertEqual(audit_connected_sample_container_chain(necessary), [])
+
+    def test_free_text_necessary_reason_requires_structured_evidence(self) -> None:
+        for reason in ("capacity_split", "XRD sample carrier prep"):
+            payload = {
+                "steps": [
+                    self._transfer(3, "V01", "V02", reason=reason),
+                    self._transfer(4, "V02", "V01"),
+                ]
+            }
+
+            findings = audit_connected_sample_container_chain(payload)
+
+            self.assertEqual(len(findings), 1)
+            self.assertIn(
+                findings[0]["type"],
+                {
+                    "unverified_transfer_justification",
+                    "redundant_container_round_trip",
+                },
+            )
+            self.assertFalse(findings[0]["requires_research_replan"])
 
 
 class WeighingFalseHardGuardTest(unittest.TestCase):

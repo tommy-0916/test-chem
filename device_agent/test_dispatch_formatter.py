@@ -77,6 +77,42 @@ class DispatchCatalogTest(unittest.TestCase):
         self.assertEqual(catalog.station_ids.get("303物料站"), 1427568512205824)
         self.assertEqual(catalog.station_ids.get("移液平台1ml_V2"), 2002186824385539)
 
+    def test_new_skill_station_missing_from_0410_is_dispatchable(self) -> None:
+        catalog = _catalog()
+        self.assertEqual(
+            catalog.resolve_station("Liquid_Pouring_Workstation_V1"),
+            "液体倾倒工作站_V1",
+        )
+        self.assertEqual(
+            catalog.resolve_operation("液体倾倒工作站_V1", "液体倾倒"),
+            "液体倾倒",
+        )
+        self.assertEqual(
+            catalog.station_ids.get("液体倾倒工作站_V1"), 2342310067209216
+        )
+
+        workflow = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "液体倾倒工作站_V1",
+                "operation": "液体倾倒",
+                "parameters": {
+                    "容器类型": "进样瓶",
+                    "容器数量": 1,
+                    "容器编号": [1],
+                    "目标角度偏移": 45.0,
+                    "转动速度": 50,
+                    "停留时间": 5,
+                },
+            }]
+        }
+        formatted = format_dispatch_payload(workflow, catalog)
+        self.assertEqual(formatted["unmapped_steps"], 0)
+        self.assertFalse(formatted["warnings"])
+        step = formatted["payload"]["experiment_steps"]["steps"][0]
+        self.assertEqual(step["workstation"], "液体倾倒工作站_V1")
+        self.assertEqual(step["id"], 2342310067209216)
+
 
 class DispatchFormattingTest(unittest.TestCase):
     WORKFLOW = {
@@ -191,6 +227,53 @@ class DispatchFormattingTest(unittest.TestCase):
         # unit-suffixed keys are canonicalized
         self.assertIn("搅拌时间", by_no[4]["parameters"])
         self.assertNotIn("搅拌时间（分钟）", by_no[4]["parameters"])
+
+    def test_heating_skill_names_map_to_exact_wire_names_without_loss(self) -> None:
+        workflow = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Heating_Magnetic_Stirring_Workstation_V1",
+                "operation": "加热磁力搅拌全流程",
+                "parameters": {
+                    "容器类型": "50ml耐热瓶",
+                    "容器数量": 1,
+                    "容器编号": [1],
+                    "搅拌速度": 500,
+                    "加热温度": 95.0,
+                    "搅拌时间": 720,
+                },
+            }]
+        }
+
+        result = format_dispatch_payload(workflow, self.catalog)
+        self.assertEqual(result["unmapped_steps"], 0)
+        self.assertEqual(result["warnings"], [])
+        params = result["payload"]["experiment_steps"]["steps"][0]["parameters"]
+        self.assertEqual(
+            params,
+            {"容器编号": [1], "搅拌速度": 500, "目标温度": 95.0, "加热时间": 720.0},
+        )
+
+    def test_latest_skill_widens_1ml_v2_to_50ml_heat_resistant_bottle(self) -> None:
+        workflow = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Liquid_Handling_Station_1ml_V2",
+                "operation": "开盖",
+                "parameters": {
+                    "容器类型": "50ml耐热瓶",
+                    "容器数量": 1,
+                    "容器编号": [1],
+                    "开盖编号": [{"瓶号": 1}],
+                    "保留瓶盖": 1,
+                },
+            }]
+        }
+
+        result = format_dispatch_payload(workflow, self.catalog)
+        self.assertEqual(result["warnings"], [])
+        params = result["payload"]["experiment_steps"]["steps"][0]["parameters"]
+        self.assertEqual(params["容器类型"], "50ml耐热瓶")
 
     def test_n_bottle_placeholder_is_instantiated(self) -> None:
         result = format_dispatch_payload(

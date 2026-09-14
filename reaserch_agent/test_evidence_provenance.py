@@ -113,6 +113,8 @@ class ProvenanceWorkflowTestBase(unittest.TestCase):
             use_llm=False,
             knowledge_base_dir=str(self.kb_dir),
             enable_memory=True,
+            enable_online_literature=False,
+            enable_web_search=False,
         )
 
     def tearDown(self) -> None:
@@ -153,6 +155,8 @@ class ProtocolProvenanceTest(ProvenanceWorkflowTestBase):
                 model=None,
                 use_llm=False,
                 knowledge_base_dir=str(kb),
+                enable_online_literature=False,
+                enable_web_search=False,
             )
             state = agent.run(
                 event_type="bootstrap",
