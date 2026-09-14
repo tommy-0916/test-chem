@@ -6,8 +6,13 @@ import os
 import argparse
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from .human_quantity_approval import (
@@ -29,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Load a research-agent state JSON, extract its macro_plan, and run "
             "the device adaptation workflow."
         )
+    )
+    parser.add_argument(
+        "--contract-version",
+        choices=["v1", "v2"],
+        default="v2",
+        help="Internal agent contract. Default: v2; use v1 for compatibility rollback.",
     )
     parser.add_argument(
         "--research-state",
@@ -284,7 +295,9 @@ def build_device_agent_input_package(
         persistent.get("当前 macro action"),
     )
 
-    return {
+    package = {
+        "contract_version": str(research_state.get("contract_version") or "v1"),
+        "campaign_id": str(research_state.get("campaign_id") or ""),
         "handoff_type": "research_to_device_adaptation",
         "task": {
             "query": first_non_empty(
@@ -320,6 +333,9 @@ def build_device_agent_input_package(
         },
         "macro_action_steps": macro_plan,
         "macro_action": macro_action,
+        "current_evidence_bundle": copy.deepcopy(
+            research_state.get("current_evidence_bundle") or {}
+        ),
         # Quantity-bearing observations are immutable scientific evidence for
         # Device state-change yield checks.  Keep the structured records (and
         # their IDs/sample/material fields) intact; the truncated narrative
@@ -373,6 +389,14 @@ def build_device_agent_input_package(
             ],
         },
     }
+    canonical = first_dict(
+        research_state.get("research_action_package_v2"),
+        handoff.get("research_action_package_v2"),
+    )
+    if canonical:
+        package["research_action_package_v2"] = copy.deepcopy(canonical)
+        package["contract_version"] = "v2"
+    return package
 
 
 def device_input_package_to_text(package: Dict[str, Any]) -> str:
@@ -461,6 +485,16 @@ def main() -> int:
             ) from exc
     macro_plan = extract_macro_plan(research_state)
     device_input_package = build_device_agent_input_package(research_state, macro_plan)
+    if args.contract_version == "v2":
+        from chem_agent_contracts.adapters import research_state_to_v2
+
+        canonical = research_state.get("research_action_package_v2")
+        if not isinstance(canonical, dict):
+            canonical = research_state_to_v2(research_state).model_dump(
+                mode="json", exclude_none=True
+            )
+        device_input_package["contract_version"] = "v2"
+        device_input_package["research_action_package_v2"] = copy.deepcopy(canonical)
     if device_plan_override:
         device_input_package["device_repair_resume"] = {
             "request_id": prior_repair_request.get("request_id", ""),
@@ -501,6 +535,7 @@ def main() -> int:
     workflow = SingleDeviceAgent(
         model=model,
         use_new_format=True,
+        contract_version=args.contract_version,
     )
     run_kwargs: Dict[str, Any] = {"exp_id": args.exp_id}
     if device_plan_override:
@@ -520,7 +555,12 @@ def main() -> int:
     status = state.status
     verification_result = (
         "refused"
-        if package.get("status") in {"feasibility_error", "failed", "manual_required"}
+        if package.get("status") in {
+            "feasibility_error",
+            "terminal_unmappable",
+            "failed",
+            "manual_required",
+        }
         else "accepted"
     )
     error_package = (
@@ -528,7 +568,7 @@ def main() -> int:
         if isinstance(package.get("error_package"), dict)
         else {}
     )
-    if package.get("status") == "feasibility_error":
+    if package.get("status") in {"feasibility_error", "terminal_unmappable"}:
         verification_category = str(
             error_package.get("type") or "physical_infeasible"
         )

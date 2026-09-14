@@ -37,6 +37,7 @@ class ResearchAgentState:
     """Runtime state for the partially implemented research agent."""
 
     event: ResearchEvent
+    contract_version: str = "v1"
     status: str = "pending"
     current_branch: str = "B0"
     next_branch: Optional[str] = None
@@ -62,6 +63,8 @@ class ResearchAgentState:
     # steps pass validation, so B2 can still record the previous action outcome.
     pending_macro_action: Dict[str, Any] = field(default_factory=dict)
     macro_action_history: List[Dict[str, Any]] = field(default_factory=list)
+    current_evidence_bundle: Dict[str, Any] = field(default_factory=dict)
+    research_action_package_v2: Dict[str, Any] = field(default_factory=dict)
     stage_route_reason: str = ""
     current_stage_reason: str = ""
 
@@ -115,11 +118,14 @@ class ResearchAgentState:
 
     def research_layer_internal_outputs(self) -> Dict[str, Any]:
         return {
+            "contract_version": self.contract_version,
             "stage 路线": self.stage_route,
             "当前 stage": self.current_stage,
             "当前 stage 的完整化学语义实验计划": self.current_stage_plan,
             "待执行 macro plan": self.macro_plan,
             "当前 macro action": self.macro_action,
+            "当前 Action 独立证据包": self.current_evidence_bundle,
+            "research_action_package_v2": self.research_action_package_v2,
             "stage路线设计理由": self.stage_route_reason,
             "当前stage设计理由": self.current_stage_reason,
             "调研报告": self.survey_report,
@@ -139,6 +145,8 @@ class ResearchAgentState:
     def device_adaptation_external_handoff(self) -> Dict[str, Any]:
         return {
             "handoff_type": "research_to_device_adaptation",
+            "contract_version": self.contract_version,
+            "research_action_package_v2": self.research_action_package_v2,
             "query": self.event.query,
             "stage 路线": self.stage_route,
             "当前 stage": self.current_stage,

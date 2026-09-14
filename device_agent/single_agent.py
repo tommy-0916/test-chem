@@ -66,6 +66,22 @@ from recipe_materializer import (
     RecipeMaterializationError,
     materialize_workflow_recipe_files,
 )
+try:
+    from .v2_validation import (
+        build_validation_issues_v2,
+        chunk_hashes,
+        device_step_hashes,
+        locked_chunk_violations,
+        merge_scoped_device_step_repair,
+    )
+except ImportError:
+    from v2_validation import (
+        build_validation_issues_v2,
+        chunk_hashes,
+        device_step_hashes,
+        locked_chunk_violations,
+        merge_scoped_device_step_repair,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -1449,6 +1465,11 @@ class SingleDeviceAgentState:
 class SingleDeviceAgent:
     """One LLM agent for device-layer workflow mapping."""
 
+    # Several focused tests and lightweight integrations construct the agent
+    # with ``__new__`` and inject only the collaborators they exercise.  Keep
+    # that legacy path on V1 unless the caller explicitly opts into V2.
+    _contract_version = "v1"
+
     def __init__(
         self,
         model: Any,
@@ -1456,8 +1477,16 @@ class SingleDeviceAgent:
         use_new_format: bool = True,
         workstation_loader: Optional[WorkstationLoader] = None,
         workflow_validator: Optional[WorkflowValidator] = None,
+        contract_version: str = "v1",
+        workflow_repair_limit: Optional[int] = None,
     ) -> None:
+        if contract_version not in {"v1", "v2"}:
+            raise ValueError("contract_version must be 'v1' or 'v2'")
+        if workflow_repair_limit is not None and workflow_repair_limit < 0:
+            raise ValueError("workflow_repair_limit cannot be negative")
         self._model = model
+        self._contract_version = contract_version
+        self._configured_workflow_repair_limit = workflow_repair_limit
         # Natural-language chemistry semantics are supplied by a separate LLM
         # analysis and kept in runtime state.  Model-generated plan JSON cannot
         # overwrite this contract.
@@ -2133,10 +2162,12 @@ class SingleDeviceAgent:
         )
 
     def _workflow_repair_limit(self) -> int:
+        if self._configured_workflow_repair_limit is not None:
+            return min(10, self._configured_workflow_repair_limit)
         raw = os.getenv("CHEM_DEVICE_WORKFLOW_REPAIR_LIMIT", "").strip()
         if raw.isdigit() and int(raw) >= 0:
-            return int(raw)
-        return DEFAULT_WORKFLOW_REPAIR_LIMIT
+            return min(10, int(raw)) if self._contract_version == "v2" else int(raw)
+        return 10 if self._contract_version == "v2" else DEFAULT_WORKFLOW_REPAIR_LIMIT
 
     @staticmethod
     def _unique_json_records(records: List[Any]) -> List[Any]:
@@ -10377,7 +10408,7 @@ class SingleDeviceAgent:
                         result = self._run_accepted_device_plan(
                             state,
                             plan_result,
-                            allow_plan_rewrite=True,
+                            allow_plan_rewrite=self._contract_version != "v2",
                             resumed_from_manual=False,
                         )
                     else:
@@ -10396,10 +10427,12 @@ class SingleDeviceAgent:
             result["loaded_workstation_skills"] = state.loaded_workstation_skills
             result["skill_load_events"] = state.skill_load_events
             package = self._normalize_terminal_package(state, result)
+            if self._contract_version == "v2":
+                package = self._attach_v2_contract(state, package)
             self._assert_workstation_snapshot_current(state)
             state.terminal_package = package
             package_status = str(package.get("status", ""))
-            if package_status == "feasibility_error":
+            if package_status in {"feasibility_error", "terminal_unmappable"}:
                 state.status = "feasibility_error"
             elif package_status == "manual_required":
                 state.status = "manual_required"
@@ -11893,7 +11926,11 @@ class SingleDeviceAgent:
         ):
             if not isinstance(macro, dict):
                 continue
-            source = str(macro.get("步骤序号", macro.get("step", index)))
+            source = str(
+                macro.get("macro_step_id")
+                or macro.get("logical_step_id")
+                or macro.get("步骤序号", macro.get("step", index))
+            )
             if self._active_semantic_analysis:
                 assessment = self._semantic_assessment(source)
                 if (
@@ -13410,6 +13447,11 @@ class SingleDeviceAgent:
         return normalized
 
     def _translation_chunk_size(self) -> int:
+        if self._contract_version == "v2":
+            # One frozen Device-plan source step per repair unit.  A source
+            # step may expand to several machine steps, but other source steps
+            # remain byte-for-byte cached while this unit is repaired.
+            return 1
         raw = os.getenv("CHEM_DEVICE_TRANSLATION_CHUNK_SIZE", "").strip()
         if raw.isdigit() and int(raw) > 0:
             return int(raw)
@@ -13604,6 +13646,8 @@ class SingleDeviceAgent:
         *,
         only_chunks: Optional[Set[int]] = None,
         feedback_by_chunk: Optional[Dict[int, str]] = None,
+        previous_steps_by_chunk: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+        mutable_device_ids_by_chunk: Optional[Dict[int, Set[str]]] = None,
     ) -> Tuple[Dict[str, Any], str, Dict[int, int], List[List[Dict[str, Any]]]]:
         """Translate the device_plan chunk-by-chunk and assemble.
 
@@ -13625,6 +13669,8 @@ class SingleDeviceAgent:
         ] or [[]]
         total = len(chunks)
         feedback_by_chunk = feedback_by_chunk or {}
+        previous_steps_by_chunk = previous_steps_by_chunk or {}
+        mutable_device_ids_by_chunk = mutable_device_ids_by_chunk or {}
 
         carryover: Dict[str, Any] = {}
         assembled_steps: List[Dict[str, Any]] = []
@@ -13644,6 +13690,18 @@ class SingleDeviceAgent:
                     wf = wf if isinstance(wf, dict) else {}
                     steps = [s for s in (wf.get("steps") or []) if isinstance(s, dict)]
                     self._inherit_workflow_source_traces(steps, chunk_steps)
+                    if self._contract_version == "v2":
+                        self._stamp_device_steps_with_macro_action(
+                            {"steps": steps}, state.research_handoff
+                        )
+                        previous_steps = previous_steps_by_chunk.get(index)
+                        mutable_ids = mutable_device_ids_by_chunk.get(index)
+                        if previous_steps is not None and mutable_ids is not None:
+                            steps, scope_errors = merge_scoped_device_step_repair(
+                                previous_steps, steps, mutable_ids
+                            )
+                            if scope_errors:
+                                raise ValueError("; ".join(scope_errors))
                     chunk_cache[index] = {
                         "steps": steps,
                         "txt": str(translated.get("workflow_txt", "")),
@@ -13752,6 +13810,9 @@ class SingleDeviceAgent:
         only_chunks: Optional[Set[int]] = None
         feedback_by_chunk: Dict[int, str] = {}
         repair_rounds: List[Dict[str, Any]] = []
+        expected_locked_hashes: Dict[str, str] = {}
+        previous_steps_by_chunk: Dict[int, List[Dict[str, Any]]] = {}
+        mutable_device_ids_by_chunk: Dict[int, Set[str]] = {}
 
         for round_index in range(1, max_rounds + 1):
             workflow_json, workflow_txt, step_map, chunk_groups = (
@@ -13759,10 +13820,39 @@ class SingleDeviceAgent:
                     state, plan_result, chunk_cache,
                     only_chunks=only_chunks,
                     feedback_by_chunk=feedback_by_chunk,
+                    previous_steps_by_chunk=previous_steps_by_chunk,
+                    mutable_device_ids_by_chunk=mutable_device_ids_by_chunk,
                 )
             )
+            current_chunk_hashes = chunk_hashes(chunk_cache)
+            current_lock_hashes = dict(current_chunk_hashes)
+            for cached in chunk_cache.values():
+                current_lock_hashes.update(
+                    device_step_hashes(cached.get("steps", []))
+                )
+            lock_violations = locked_chunk_violations(
+                expected_locked_hashes, current_lock_hashes
+            )
+            if lock_violations:
+                report = {
+                    "status": "failed",
+                    "errors": lock_violations,
+                    "warnings": [],
+                    "_device_internal_error": True,
+                    "assessment_source": "v2_repair_scope_guard",
+                }
+                result = dict(plan_result)
+                result["workflow_json"] = workflow_json
+                result["workflow_txt"] = workflow_txt
+                result["dispatch_validation"] = report
+                result["feedback_type"] = "device_internal_error"
+                result["feedback_route"] = "device"
+                return result
             result = self._merge_plan_and_translation(
                 plan_result, {"workflow_txt": workflow_txt, "workflow_json": workflow_json}
+            )
+            self._stamp_device_steps_with_macro_action(
+                workflow_json, state.research_handoff
             )
             self._apply_deterministic_completion(state, result)
             if not self._materialize_recipe_files(state, result):
@@ -13810,7 +13900,14 @@ class SingleDeviceAgent:
                     ),
                     "status": report.get("status", "failed"),
                     "errors": list(report.get("errors", [])),
-                    "issues": [],
+                    "issues": (
+                        build_validation_issues_v2(
+                            report.get("errors", []), result.get("workflow_json")
+                        )
+                        if self._contract_version == "v2"
+                        else []
+                    ),
+                    "locked_step_hashes": dict(expected_locked_hashes),
                 }
             )
             if report.get("_device_internal_error"):
@@ -13847,17 +13944,53 @@ class SingleDeviceAgent:
                 report.get("errors", []), result.get("workflow_json")
             )
             erroring_chunks: Set[int] = set()
+            mutable_device_ids_by_chunk = {}
+            workflow_steps = {
+                step.get("step_number"): step
+                for step in (result.get("workflow_json") or {}).get("steps", [])
+                if isinstance(step, dict)
+            }
             for record in structured:
                 step_no = record.get("step_number")
                 if isinstance(step_no, int) and step_no in step_map:
-                    erroring_chunks.add(step_map[step_no])
+                    chunk_index = step_map[step_no]
+                    erroring_chunks.add(chunk_index)
+                    step = workflow_steps.get(step_no, {})
+                    device_step_id = str(step.get("device_step_id") or "")
+                    if device_step_id:
+                        mutable_device_ids_by_chunk.setdefault(
+                            chunk_index, set()
+                        ).add(device_step_id)
             empty_chunks = {
                 idx for idx, group in enumerate(chunk_groups) if not group
             }
             erroring_chunks |= empty_chunks
             if not erroring_chunks:
-                # global error with no step anchor — re-translate everything
+                if self._contract_version == "v2":
+                    # A V2 repair must have an exact step scope.  An unanchored
+                    # global failure is retained for human review instead of
+                    # authorizing a whole-workflow rewrite.
+                    break
                 erroring_chunks = set(range(len(chunk_groups)))
+
+            if self._contract_version == "v2":
+                previous_steps_by_chunk = {
+                    idx: copy.deepcopy(chunk_cache[idx].get("steps", []))
+                    for idx in erroring_chunks
+                    if idx in chunk_cache
+                }
+                expected_locked_hashes = {
+                    key: digest
+                    for key, digest in current_chunk_hashes.items()
+                    if int(key.rsplit("_", 1)[1]) not in erroring_chunks
+                }
+                for idx, steps in previous_steps_by_chunk.items():
+                    expected_locked_hashes.update(
+                        device_step_hashes(
+                            steps,
+                            exclude=mutable_device_ids_by_chunk.get(idx, set()),
+                        )
+                    )
 
             state.add_log(
                 f"deterministic checks failed ({len(report['errors'])} errors); "
@@ -13865,7 +13998,20 @@ class SingleDeviceAgent:
                 f"{sorted(erroring_chunks)}"
             )
             instruction = self._build_repair_instruction(result, report)
-            feedback_by_chunk = {idx: instruction for idx in erroring_chunks}
+            feedback_by_chunk = {
+                idx: instruction
+                + (
+                    "\nV2 局部修复范围：只允许替换 device_step_id="
+                    + json.dumps(
+                        sorted(mutable_device_ids_by_chunk.get(idx, set())),
+                        ensure_ascii=False,
+                    )
+                    + "；其余 Device Steps 已由哈希锁定，必须逐字保持。"
+                    if self._contract_version == "v2"
+                    else ""
+                )
+                for idx in erroring_chunks
+            }
             only_chunks = erroring_chunks
             for idx in erroring_chunks:  # force re-translation of these chunks
                 chunk_cache.pop(idx, None)
@@ -13885,7 +14031,9 @@ class SingleDeviceAgent:
             }
         result["workflow_repair_cycle"] = {
             "initial_candidate_count": 1,
-            "modification_count": min(max_modifications, max(0, max_rounds - 1)),
+            "modification_count": min(
+                max_modifications, max(0, len(repair_rounds) - 1)
+            ),
             "max_modifications": max_modifications,
             "status": "failed",
             "rounds": repair_rounds,
@@ -13899,6 +14047,8 @@ class SingleDeviceAgent:
         Skill-grounded LLM review is the default. The former deterministic gate
         remains available as an explicit rollback while the new stage settles.
         """
+        if self._contract_version == "v2":
+            return "deterministic"
         raw = os.getenv("CHEM_DEVICE_WORKFLOW_VERIFICATION", "llm").strip().lower()
         return "deterministic" if raw in {"deterministic", "legacy", "format"} else "llm"
 
@@ -14985,6 +15135,12 @@ class SingleDeviceAgent:
         fail validation on omissions the harness can fill deterministically.
         Accumulates into result['dispatch_completion'] across calls.
         """
+        if self._contract_version == "v2":
+            # V2 requires the binding LLM to emit every station id, operation,
+            # container field and machine parameter.  The deterministic layer
+            # reports omissions and never turns them into apparently valid
+            # commands by choosing defaults.
+            return
         recipe_filled = self._restore_recipe_evidence_from_device_plan(result)
         id_filled = self._fill_workstation_ids(result.get("workflow_json"))
         completed, filled_log = complete_required_fields(
@@ -15920,6 +16076,40 @@ class SingleDeviceAgent:
             "agent_mode": "single_device_agent",
         }
 
+    def _attach_v2_contract(
+        self,
+        state: SingleDeviceAgentState,
+        package: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Attach the canonical V2 package while retaining the legacy view."""
+
+        from chem_agent_contracts.adapters import attach_device_v2_contract, research_state_to_v2
+        from chem_agent_contracts.v2 import ResearchActionPackageV2
+
+        raw = state.research_handoff.get("research_action_package_v2")
+        if isinstance(raw, dict):
+            research = ResearchActionPackageV2.model_validate(raw)
+        else:
+            task = (
+                state.research_handoff.get("task")
+                if isinstance(state.research_handoff.get("task"), dict)
+                else {}
+            )
+            research = research_state_to_v2(
+                {
+                    "campaign_id": state.research_handoff.get("campaign_id", ""),
+                    "current_stage": task.get("current_stage", "current stage"),
+                    "current_stage_plan": task.get("current_stage_plan", "current stage"),
+                    "macro_plan": state.research_handoff.get("macro_action_steps", []),
+                    "macro_action": state.research_handoff.get("macro_action", {}),
+                    "current_evidence_bundle": state.research_handoff.get(
+                        "current_evidence_bundle", {}
+                    ),
+                    "event": {"query": task.get("query", "")},
+                }
+            )
+        return attach_device_v2_contract(package, research)
+
     def _stamp_device_steps_with_macro_action(
         self,
         workflow_json: Dict[str, Any],
@@ -15947,8 +16137,18 @@ class SingleDeviceAgent:
                 ids["macro_action_id"] = macro_step["macro_action_id"]
             if macro_step.get("observation_point_id"):
                 ids["observation_point_id"] = macro_step["observation_point_id"]
+            macro_step_id = str(
+                macro_step.get("macro_step_id")
+                or macro_step.get("logical_step_id")
+                or ""
+            ).strip()
+            if macro_step_id:
+                ids["source_macro_step_id"] = macro_step_id
             if number is not None and ids:
                 step_id_map[number] = ids
+                step_id_map[str(number)] = ids
+            if macro_step_id:
+                step_id_map[macro_step_id] = ids
 
         default_ids = {}
         if macro_action.get("macro_action_id"):
@@ -15957,14 +16157,39 @@ class SingleDeviceAgent:
             default_ids["observation_point_id"] = macro_action["observation_point_id"]
 
         try:
-            for step in workflow_json.get("steps", []) or []:
+            device_id_ordinals: Dict[Tuple[str, str], int] = {}
+            for position, step in enumerate(workflow_json.get("steps", []) or [], start=1):
                 if not isinstance(step, dict):
                     continue
                 self._normalize_source_macro_fields(step)
-                source = step.get("source_macro_step")
+                source = step.get("source_macro_step_id") or step.get("source_macro_step")
                 ids = step_id_map.get(source, default_ids)
                 for key, value in ids.items():
                     step.setdefault(key, value)
+                stable_macro_id = str(step.get("source_macro_step_id") or "").strip()
+                if stable_macro_id:
+                    source_plan = str(step.get("source_plan_step") or "P").strip()
+                    ordinal_key = (stable_macro_id, source_plan)
+                    device_id_ordinals[ordinal_key] = (
+                        device_id_ordinals.get(ordinal_key, 0) + 1
+                    )
+                    safe_macro = re.sub(r"[^A-Za-z0-9_-]+", "_", stable_macro_id)
+                    safe_plan = re.sub(r"[^A-Za-z0-9_-]+", "_", source_plan)
+                    generated_id = (
+                        f"DS_{safe_macro}_{safe_plan}_"
+                        f"{device_id_ordinals[ordinal_key]:03d}"
+                    )
+                    if self._contract_version == "v2":
+                        step["device_step_id"] = generated_id
+                    else:
+                        step.setdefault("device_step_id", generated_id)
+                station = str(step.get("station_code") or step.get("workstation") or "").strip()
+                station_code = self._workstation_skill_session().resolve(station)
+                if station_code:
+                    step.setdefault("station_code", station_code)
+                    platform = self._dispatch_catalog.resolve_station(station_code)
+                    if platform:
+                        step.setdefault("platform_name", platform)
         except Exception:  # pragma: no cover - stamping must not break success
             pass
         return macro_action

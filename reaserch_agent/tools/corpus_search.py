@@ -7,7 +7,10 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ..state import SearchHit
+try:
+    from ..state import SearchHit
+except ImportError:  # unittest discovery with reaserch_agent as start directory
+    from reaserch_agent.state import SearchHit
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9\-\+\./]+|[\u4e00-\u9fff]+")
 EXPERIMENT_KEYWORDS = [

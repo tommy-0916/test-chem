@@ -23,6 +23,17 @@ TIER_SKILLS = {
     "operation": "operation-capabilities",
     "step": "macro-step-capabilities",
 }
+V2_TIER_ALIASES = {
+    "stage": "experiment",
+    "macro_action": "operation",
+    "macro_step": "step",
+}
+V2_TIER_SKILLS = {
+    "stage": "experiment-capabilities",
+    "macro_action": "operation-capabilities",
+    "macro_step": "macro-step-capabilities",
+    "device": "device-capabilities",
+}
 PROJECTION_VERSION = "1.0"
 UNAVAILABLE = {"offline", "unavailable", "down", "maintenance", "fault", "disabled", "停机", "维修", "故障", "不可用", "禁用"}
 
@@ -530,4 +541,222 @@ def load_capability_skill(context: dict[str, Any], tier: str) -> dict[str, Any]:
         "instructions": instructions,
         "skill_source_path": str(source.resolve()),
         "instructions_digest_sha256": hashlib.sha256(instructions.encode("utf-8")).hexdigest(),
+    }
+
+
+def capability_snapshot_id(context: dict[str, Any]) -> str:
+    """Return one snapshot identity shared by every V2 projection tier."""
+
+    metadata, stations = _resolve_context(context or {})
+    raw_status = metadata.get("station_status", metadata.get("device_status", {}))
+    status_map = raw_status if isinstance(raw_status, dict) else {}
+    payload = {
+        "source": metadata.get("source", "explicit device context"),
+        "source_digest_sha256": metadata.get("source_digest_sha256", ""),
+        "semantic_mapping_digest": metadata.get("semantic_mapping_digest", ""),
+        "station_status": status_map,
+        "roster": [
+            {
+                "station_code": _identity(station)["station_code"],
+                "availability": _status_for(station, status_map),
+            }
+            for station in stations
+        ],
+    }
+    return "capability_snapshot_" + hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _normalized_operation_name(value: Any) -> str:
+    return re.sub(r"[\s_\-—:：]+", "", str(value or "")).casefold()
+
+
+def _filter_macro_step_projection(
+    projection: dict[str, Any], selected_operations: list[str]
+) -> dict[str, Any]:
+    """Keep selected operation contracts and their declared dependencies."""
+
+    requested = {
+        _normalized_operation_name(item)
+        for item in selected_operations
+        if _normalized_operation_name(item)
+    }
+    if not requested:
+        return projection
+    contracts = []
+    station_codes: set[str] = set()
+    for item in projection.get("operation_contracts", []):
+        if not isinstance(item, dict):
+            continue
+        name = _normalized_operation_name(item.get("name"))
+        if not any(token in name or name in token for token in requested if name):
+            continue
+        contracts.append(copy.deepcopy(item))
+        station_codes.add(str(item.get("station_code", "")))
+    if not contracts:
+        fallback = copy.deepcopy(projection)
+        fallback["selected_operations"] = list(selected_operations)
+        fallback["selection_miss"] = True
+        fallback["selection_policy"] = (
+            "no safe operation-name match; returned the complete macro-step projection "
+            "instead of hiding a potentially valid workstation"
+        )
+        return fallback
+    by_code = {
+        str(item.get("station_code", "")): item
+        for item in projection.get("workstations", [])
+        if isinstance(item, dict)
+    }
+    dependency_codes: set[str] = set()
+    for code in list(station_codes):
+        for dependency in by_code.get(code, {}).get("dependencies", []) or []:
+            if isinstance(dependency, dict):
+                dependency_codes.update(
+                    str(item)
+                    for item in dependency.get("station_codes", []) or []
+                    if str(item)
+                )
+    kept_codes = station_codes | dependency_codes
+    filtered = copy.deepcopy(projection)
+    filtered["operation_contracts"] = contracts
+    filtered["workstations"] = [
+        copy.deepcopy(item)
+        for item in projection.get("workstations", [])
+        if isinstance(item, dict) and str(item.get("station_code", "")) in kept_codes
+    ]
+    filtered["selected_operations"] = list(selected_operations)
+    filtered["dependency_station_codes"] = sorted(dependency_codes)
+    filtered["selection_policy"] = (
+        "all operation-name matches plus declared dependency closure; no Top-K"
+    )
+    return filtered
+
+
+def _device_projection(context: dict[str, Any]) -> dict[str, Any]:
+    """Expose all station choices while keeping full source files tool-loaded."""
+
+    metadata, stations = _resolve_context(context or {})
+    raw_status = metadata.get("station_status", metadata.get("device_status", {}))
+    status_map = raw_status if isinstance(raw_status, dict) else {}
+    catalog: list[dict[str, Any]] = []
+    for raw in stations:
+        station = copy.deepcopy(raw)
+        identity = _identity(station)
+        availability = _status_for(station, status_map) or "unknown"
+        operations = []
+        for operation in _operations(station):
+            operations.append(
+                {
+                    "name": str(operation.get("name", "")),
+                    "input": _compact_io(
+                        operation.get("input", {"declaration_status": "unknown"})
+                    ),
+                    "output": _compact_io(
+                        operation.get("output", {"declaration_status": "unknown"})
+                    ),
+                    "container_contract": _residual_container_contract(operation),
+                    "scientific_controls": _scientific_controls(operation),
+                    "quantity_semantics": _pick(
+                        operation.get("quantity_semantics"),
+                        (
+                            "target_setpoints",
+                            "material_output_effect",
+                            "material_output_quantity_mode",
+                            "reported_measurements",
+                        ),
+                    ),
+                    "feedback_contract": _compact_feedback(
+                        operation.get("feedback_contract")
+                    ),
+                }
+            )
+        declared_experiments = station.get("experiment_capabilities")
+        catalog.append(
+            {
+                **identity,
+                "station_id": station.get("station_id"),
+                "availability": availability,
+                "currently_usable": availability.lower() not in UNAVAILABLE,
+                "capability_description": str(station.get("description", "")),
+                "experiment_capabilities": copy.deepcopy(
+                    declared_experiments
+                    if declared_experiments is not None
+                    else extract_experiment_capabilities(station)
+                ),
+                "operations": operations,
+                "planning_constraints": _compact_constraints(
+                    station.get(
+                        "planning_constraints", station.get("critical_constraints", [])
+                    )
+                ),
+                "dependencies": copy.deepcopy(station.get("dependencies", [])),
+            }
+        )
+    return {
+        "tier": "device",
+        "skill": V2_TIER_SKILLS["device"],
+        "projection_version": "2.0",
+        "source": str(metadata.get("source", "explicit device context")),
+        "source_kind": str(metadata.get("source_kind", "explicit device context")),
+        "source_digest_sha256": str(metadata.get("source_digest_sha256", "")),
+        "semantic_mapping_digest": str(metadata.get("semantic_mapping_digest", "")),
+        "capability_snapshot_id": capability_snapshot_id(context),
+        "workstation_count": len(catalog),
+        "workstations": catalog,
+        "loading_policy": (
+            "The complete catalog is visible. Load full selected SKILL, audit and "
+            "wire contracts with load_workstation_skill(station_code)."
+        ),
+    }
+
+
+def project_capability_tier(
+    context: dict[str, Any],
+    tier: str,
+    *,
+    selected_operations: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return one of the four V2 capability abstraction levels."""
+
+    if tier == "device":
+        return _device_projection(context)
+    legacy_tier = V2_TIER_ALIASES.get(tier)
+    if legacy_tier is None:
+        raise ValueError(f"unknown V2 capability tier: {tier!r}")
+    projection = project_device_context(context, legacy_tier)
+    if tier == "macro_step" and selected_operations:
+        projection = _filter_macro_step_projection(projection, selected_operations)
+    projection = copy.deepcopy(projection)
+    projection["legacy_tier"] = legacy_tier
+    projection["tier"] = tier
+    projection["skill"] = V2_TIER_SKILLS[tier]
+    projection["capability_snapshot_id"] = capability_snapshot_id(context)
+    return projection
+
+
+def load_capability_tier_skill(
+    context: dict[str, Any],
+    tier: str,
+    *,
+    selected_operations: list[str] | None = None,
+) -> dict[str, Any]:
+    """Load a V2 projection together with its repository-local SOP."""
+
+    projection = project_capability_tier(
+        context,
+        tier,
+        selected_operations=selected_operations,
+    )
+    name = V2_TIER_SKILLS[tier]
+    source = SKILL_ROOT / name / "SKILL.md"
+    instructions = source.read_text(encoding="utf-8")
+    return {
+        **projection,
+        "name": name,
+        "instructions": instructions,
+        "skill_source_path": str(source.resolve()),
+        "instructions_digest_sha256": hashlib.sha256(
+            instructions.encode("utf-8")
+        ).hexdigest(),
     }

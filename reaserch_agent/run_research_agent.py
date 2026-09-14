@@ -44,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Event type to run. Default: bootstrap",
     )
     parser.add_argument(
+        "--contract-version",
+        choices=["v1", "v2"],
+        default="v2",
+        help="Internal agent contract. Default: v2; use v1 for compatibility rollback.",
+    )
+    parser.add_argument(
         "--query",
         help="Human query for the research agent. If omitted, the script will ask interactively.",
     )
@@ -507,6 +513,7 @@ def main() -> int:
 
     agent = ResearchAgent(
         model=model,
+        contract_version=args.contract_version,
         use_llm=not args.disable_llm,
         knowledge_base_dir=args.knowledge_base_dir,
         memory_dir=args.memory_dir,

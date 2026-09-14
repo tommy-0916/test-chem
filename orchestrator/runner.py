@@ -35,6 +35,11 @@ from device_agent.human_quantity_approval import (  # noqa: E402
     approval_contract_template,
     validate_human_quantity_approvals,
 )
+from chem_agent_contracts.adapters import build_observation_event_v2  # noqa: E402
+from chem_agent_contracts.v2 import (  # noqa: E402
+    DeviceWorkflowPackageV2,
+    ResearchActionPackageV2,
+)
 
 from .execution_adapters import BaseExecutionAdapter  # noqa: E402
 from .human_readable import write_human_readable_result  # noqa: E402
@@ -49,6 +54,7 @@ STOP_FEASIBILITY_DEADLOCK = "feasibility_deadlock"
 STOP_DEVICE_ERROR = "device_error"
 STOP_RESEARCH_ERROR = "research_error"
 STOP_REVIEW_REQUIRED = "scientific_review_required"
+STOP_TERMINAL_UNMAPPABLE = "terminal_unmappable"
 
 APPROVAL_FILENAME = "review_approval.json"
 DEVICE_REPAIR_MARKDOWN = "AWAITING_DEVICE_REPAIR.md"
@@ -218,7 +224,9 @@ def feedback_route(package: Dict[str, Any]) -> str:
         for node in nested
     )
 
-    if status == "success":
+    if status == "terminal_unmappable" or route == "terminal":
+        return "terminal"
+    if status in {"success", "ready_for_dispatch"}:
         if failed_device_gate:
             return "device"
         return "success"
@@ -243,7 +251,9 @@ def feedback_route(package: Dict[str, Any]) -> str:
         return "device"
     if feedback_type == "device_internal_error":
         return "device"
-    return "terminal"
+    # Unknown or internally contradictory legacy packages stay at Device.
+    # Campaign termination is reserved for the explicit V2 terminal contract.
+    return "device"
 
 
 def adjustment_requires_scientific_review(value: Any) -> bool:
@@ -668,6 +678,26 @@ class CampaignRunner:
                     )
                     break
 
+                if route == "terminal":
+                    stop_reason = STOP_TERMINAL_UNMAPPABLE
+                    terminal_ids = _as_dict(
+                        package.get("device_workflow_package_v2")
+                    ).get("terminal_macro_step_ids", [])
+                    self._trace.append(
+                        {
+                            "iteration": iteration,
+                            "phase": "device",
+                            "status": "terminal_unmappable",
+                            "macro_step_ids": terminal_ids,
+                            "research_invoked": False,
+                        }
+                    )
+                    self._log(
+                        f"iteration {iteration}: confirmed workstation capability gap "
+                        f"for macro_step_ids={terminal_ids}; campaign terminated"
+                    )
+                    break
+
                 if route == "human":
                     stop_reason = STOP_MANUAL_REQUIRED
                     self._trace.append(
@@ -995,6 +1025,16 @@ class CampaignRunner:
                     "status": "human_review_required_again",
                 }
             )
+        elif route == "terminal":
+            stop_reason = STOP_TERMINAL_UNMAPPABLE
+            self._trace.append(
+                {
+                    "iteration": campaign_iteration,
+                    "phase": "device_repair_resume",
+                    "status": "terminal_unmappable",
+                    "research_invoked": False,
+                }
+            )
         elif route == "success":
             needs_review = package_requires_review(package)
             if needs_review and self.adapter.real_lab_boundary:
@@ -1175,6 +1215,18 @@ class CampaignRunner:
                 route = feedback_route(package)
             if route == "device" and is_transient_device_internal_error(package):
                 stop_reason = STOP_DEVICE_ERROR
+                break
+
+            if route == "terminal":
+                stop_reason = STOP_TERMINAL_UNMAPPABLE
+                self._trace.append(
+                    {
+                        "iteration": iteration,
+                        "phase": "device",
+                        "status": "terminal_unmappable",
+                        "research_invoked": False,
+                    }
+                )
                 break
 
             if route == "human":
@@ -1668,6 +1720,23 @@ class CampaignRunner:
             merged.update(existing)
             execution_context = merged
         enriched["actual_execution_parameters"] = execution_context
+        if str(package.get("contract_version") or "") == "v2":
+            raw_device = _as_dict(package.get("device_workflow_package_v2"))
+            macro_plan = _as_dict(package.get("macro_plan"))
+            raw_research = _as_dict(macro_plan.get("research_action_package_v2"))
+            if raw_device and raw_research:
+                research_contract = ResearchActionPackageV2.model_validate(raw_research)
+                device_contract = DeviceWorkflowPackageV2.model_validate(raw_device)
+                observation_event = build_observation_event_v2(
+                    enriched, research_contract, device_contract
+                ).model_dump(mode="json", exclude_none=True)
+                enriched["observation_event_v2"] = observation_event
+                enriched["macro_parameter_summary"] = copy.deepcopy(
+                    observation_event["macro_parameter_summary"]
+                )
+                enriched["device_parameter_trace"] = copy.deepcopy(
+                    observation_event["device_parameter_trace"]
+                )
         return enriched
 
     @staticmethod

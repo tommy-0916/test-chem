@@ -13,9 +13,11 @@ from agent_skills.capabilities import (
     DEFAULT_INDEX,
     SKILL_ROOT,
     TIER_SKILLS,
+    capability_snapshot_id,
     extract_experiment_capabilities,
     load_capability_skill,
     load_current_capability_index,
+    project_capability_tier,
     project_device_context,
 )
 from chem_resources.generate_workstation_capability_index import (
@@ -57,6 +59,30 @@ class CapabilityProjectionTest(unittest.TestCase):
         self.assertEqual(extract_experiment_capabilities({"station_code": "Unknown_XRD_Station", "description": "开展XRD测试"}), [])
         negative = extract_experiment_capabilities({"station_code": "XRD_V1", "description": "不支持对分散于乙醇中的固体样品进行滴加制样并开展XRD测试"})
         self.assertEqual(negative[0]["support_status"], "unsupported")
+
+    def test_v2_four_tiers_share_one_snapshot_and_device_sees_all_45(self):
+        projections = {
+            tier: project_capability_tier(self.index, tier)
+            for tier in ("stage", "macro_action", "macro_step", "device")
+        }
+        self.assertEqual(
+            len({item["capability_snapshot_id"] for item in projections.values()}),
+            1,
+        )
+        self.assertEqual(projections["device"]["workstation_count"], 45)
+        self.assertEqual(len(projections["device"]["workstations"]), 45)
+        forbidden = {"parameter_contracts", "machine_schema", "station_id"}
+        self.assertFalse(keys(projections["stage"]) & forbidden)
+        self.assertFalse(keys(projections["macro_action"]) & forbidden)
+        self.assertFalse(keys(projections["macro_step"]) & forbidden)
+
+    def test_v2_macro_step_projection_has_no_top_k_elimination(self):
+        projected = project_capability_tier(
+            self.index, "macro_step", selected_operations=["XRD测试"]
+        )
+        self.assertGreaterEqual(len(projected["workstations"]), 1)
+        if projected.get("selection_miss"):
+            self.assertEqual(len(projected["workstations"]), 45)
 
     def test_tiers_do_not_leak_lower_level_contracts(self):
         forbidden = {"input", "output", "container_contract", "parameter_contracts", "scientific_controls", "feedback_contract", "planning_constraints", "audit_content", "compact_workstation_capabilities"}
@@ -225,6 +251,9 @@ class CapabilityProjectionTest(unittest.TestCase):
             audit.write_text("## 整体流程约束\n- 必须有前置搅拌且温度不得超过50℃。\n", encoding="utf-8")
             current = load_current_capability_index(path)
             self.assertNotEqual(current["source_digest_sha256"], initial["source_digest_sha256"])
+            self.assertNotEqual(
+                capability_snapshot_id(current), capability_snapshot_id(initial)
+            )
             self.assertIn("不得超过50℃", json.dumps(current["workstations"][0]["planning_constraints"], ensure_ascii=False))
             self.assertEqual(path.read_bytes(), original)
 

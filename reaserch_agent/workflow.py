@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import math
 import os
@@ -195,6 +196,7 @@ class ResearchAgent(BaseAgent):
         literature_download_pdfs: bool = False,
         enable_web_search: bool | None = None,
         web_search_client: Any = None,
+        contract_version: str = "v1",
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
@@ -203,6 +205,10 @@ class ResearchAgent(BaseAgent):
             raise RuntimeError("ResearchAgent was created with use_llm=True but no LLM model is configured")
 
         super().__init__(model=model)
+        normalized_contract = str(contract_version or "v1").strip().lower()
+        if normalized_contract not in {"v1", "v2"}:
+            raise ValueError("contract_version must be 'v1' or 'v2'")
+        self._contract_version = normalized_contract
         self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
         self._enable_memory = self._resolve_enable_memory(enable_memory)
@@ -301,6 +307,7 @@ class ResearchAgent(BaseAgent):
         # plan chemistry without the compact lab-design-all truth source.
         event.constraints = ensure_device_context(event.constraints or {})
         state = self._build_state_for_event(event, previous_state)
+        state.contract_version = self._contract_version
         if campaign_id.strip():
             state.campaign_id = campaign_id.strip()
         if reference_inputs:
@@ -887,7 +894,11 @@ class ResearchAgent(BaseAgent):
         try:
             protocols = [
                 protocol
-                for protocol in state.extracted_protocols
+                for protocol in (
+                    []
+                    if self._contract_version == "v2"
+                    else state.extracted_protocols
+                )
                 if isinstance(protocol, dict)
             ]
             for step in state.macro_plan:
@@ -1150,6 +1161,11 @@ class ResearchAgent(BaseAgent):
     ) -> Dict[str, Any]:
         """Design an observation-bound action before creating its macro steps."""
         observation_point = self._infer_current_observation_point(state)
+        self._refresh_action_evidence(
+            state,
+            planning_mode=planning_mode,
+            observation_point=observation_point,
+        )
         if self._use_llm:
             task_name = f"macro_action_design_{planning_mode}"
             result = self._invoke_state_json(
@@ -1178,17 +1194,25 @@ class ResearchAgent(BaseAgent):
                 "expected_observation": str(result.get("expected_observation", "")).strip(),
                 "completion_condition": str(result["completion_condition"]).strip(),
                 "current_stage_plan": str(result.get("current_stage_plan", "")).strip(),
+                "experiment_group": self._normalize_experiment_group(
+                    state, result.get("experiment_group")
+                ),
             }
         else:
             # Offline mode uses existing evidence, never the not-yet-created
             # macro plan, to establish the action's operation sequence.
-            operations = self._collect_common_operations(state.knowledge_hits[:2])
+            operations = (
+                []
+                if self._contract_version == "v2"
+                else self._collect_common_operations(state.knowledge_hits[:2])
+            )
             descriptor = {
                 "objective": state.current_stage or state.event.query,
                 "planned_operations": operations or [state.current_stage or "推进到目标观察节点"],
                 "expected_observation": f"获得 {observation_point} 的真实结果",
                 "completion_condition": self._extract_completion_condition(state, observation_point),
                 "current_stage_plan": state.current_stage_plan,
+                "experiment_group": self._normalize_experiment_group(state, None),
             }
         descriptor.update({
             "stage": state.current_stage,
@@ -1199,6 +1223,38 @@ class ResearchAgent(BaseAgent):
         state.pending_macro_action = descriptor
         state.add_log(f"macro action designed before macro steps ({planning_mode})")
         return descriptor
+
+    def _normalize_experiment_group(
+        self, state: ResearchAgentState, raw: Any
+    ) -> Dict[str, Any]:
+        """One action owns exactly one group/sample; later groups wait for observation."""
+
+        raw = raw if isinstance(raw, dict) else {}
+        ordinal = len(state.observations) + 1
+        allowed_roles = {"experimental", "control", "repeat", "calibration"}
+        role = str(raw.get("role") or "experimental").strip().lower()
+        if role not in allowed_roles:
+            role = "experimental"
+        provisional = f"G{ordinal:03d}"
+        group_id = str(raw.get("group_id") or provisional).strip()
+        sample_id = str(raw.get("sample_id") or f"SAMPLE_{group_id}_01").strip()
+        return {
+            "group_id": group_id,
+            "role": role,
+            "sample_id": sample_id,
+            "hypothesis": str(raw.get("hypothesis") or "").strip(),
+            "comparison_to": [
+                str(item)
+                for item in raw.get("comparison_to", []) or []
+                if str(item).strip()
+            ],
+            "variables": (
+                deepcopy(raw.get("variables"))
+                if isinstance(raw.get("variables"), dict)
+                else {}
+            ),
+            "single_group_only": True,
+        }
 
     def _build_macro_action_view(self, state: ResearchAgentState) -> None:
         """Publish the predesigned action and bind its validated steps.
@@ -1228,6 +1284,17 @@ class ResearchAgent(BaseAgent):
             )
 
             step_numbers: List[Any] = []
+            experiment_group = self._normalize_experiment_group(
+                state, state.pending_macro_action.get("experiment_group")
+            )
+            if experiment_group["group_id"].startswith("G"):
+                experiment_group["group_id"] = f"GRP_{macro_action_id}_01"
+            if not experiment_group["sample_id"] or experiment_group[
+                "sample_id"
+            ].startswith("SAMPLE_G"):
+                experiment_group["sample_id"] = (
+                    f"SAMPLE_{experiment_group['group_id']}_01"
+                )
             for step in state.macro_plan:
                 if not isinstance(step, dict):
                     continue
@@ -1235,6 +1302,14 @@ class ResearchAgent(BaseAgent):
                 # instance, so carried-over steps must not keep a stale id.
                 step["macro_action_id"] = macro_action_id
                 step["observation_point_id"] = observation_point_id
+                step_index = len(step_numbers) + 1
+                step["macro_step_id"] = str(
+                    step.get("macro_step_id")
+                    or step.get("logical_step_id")
+                    or f"MS_{macro_action_id}_{step_index:03d}"
+                )
+                step["logical_step_id"] = step["macro_step_id"]
+                step["sample_id"] = experiment_group["sample_id"]
                 step_numbers.append(step.get("步骤序号"))
 
             descriptor = {
@@ -1250,6 +1325,7 @@ class ResearchAgent(BaseAgent):
                     f"获得 {observation_point} 的有效结果" if observation_point else ""
                 ),
                 "macro_step_numbers": step_numbers,
+                "experiment_group": experiment_group,
             }
             state.macro_action = descriptor
             state.pending_macro_action = {}
@@ -1265,6 +1341,7 @@ class ResearchAgent(BaseAgent):
                     "stage",
                     "completion_condition",
                     "planned_operations",
+                    "experiment_group",
                 )
                 if key in descriptor
             }
@@ -1571,6 +1648,128 @@ class ResearchAgent(BaseAgent):
             ),
         }
 
+    def _refresh_action_evidence(
+        self,
+        state: ResearchAgentState,
+        *,
+        planning_mode: str,
+        observation_point: str,
+    ) -> None:
+        """Run one evidence search scoped exclusively to the next V2 action."""
+
+        if self._contract_version != "v2":
+            return
+        invocation_index = 1 + sum(
+            1
+            for item in state.tool_invocations
+            if isinstance(item, dict) and item.get("task") == "macro_action_evidence"
+        )
+        objective = (
+            f"为当前 stage 的下一组实验设计提供可核查的实验步骤和精确参数；"
+            f"目标 observation point: {observation_point}"
+        )
+        summary: Dict[str, Any]
+        try:
+            summary = self._online_research_service(state).run(
+                query=state.event.query,
+                objective=objective,
+                references=[],
+                evidence_depth="full_text",
+                survey_queries=sanitize_search_queries(
+                    [
+                        f"{state.event.query} {state.current_stage}",
+                        f"{state.event.query} {observation_point} experimental protocol",
+                    ]
+                ),
+                mode="bootstrap",
+                stage=state.current_stage,
+            )
+            self._record_tool_invocation(
+                state,
+                "macro_action_evidence",
+                {
+                    "name": "online_research",
+                    "query": state.event.query,
+                    "objective": objective,
+                    "planning_mode": planning_mode,
+                },
+                summary,
+            )
+        except Exception as exc:
+            # V2 explicitly permits a concrete agent-inferred design when
+            # the current invocation returns no usable paper.
+            summary = {
+                "tool": "online_research",
+                "status": "error",
+                "retrieval_status": "provider_failure",
+                "query": state.event.query,
+                "objective": objective,
+                "results": [],
+                "errors": [f"{type(exc).__name__}: {exc}"],
+            }
+            self._record_tool_invocation(
+                state,
+                "macro_action_evidence",
+                {
+                    "name": "online_research",
+                    "query": state.event.query,
+                    "objective": objective,
+                    "planning_mode": planning_mode,
+                },
+                summary,
+            )
+            state.add_error(f"macro action evidence search failed: {exc}")
+        isolated = {
+            "scope": "macro_action",
+            "query": state.event.query,
+            "objective": objective,
+            "planning_mode": planning_mode,
+            "tool_invocation_index": invocation_index,
+            "status": summary.get("status", "unknown"),
+            "retrieval_status": summary.get("retrieval_status", "unknown"),
+            "results": deepcopy(summary.get("results", [])),
+            "errors": [str(item) for item in summary.get("errors", []) or []],
+            "current_invocation_only": True,
+        }
+        isolated["bundle_id"] = "evidence_" + hashlib.sha256(
+            json.dumps(isolated, ensure_ascii=False, sort_keys=True, default=str).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        state.current_evidence_bundle = isolated
+        state.add_log(
+            "V2 macro action evidence refreshed from one isolated invocation: "
+            f"results={len(isolated['results'])}, status={isolated['retrieval_status']}"
+        )
+
+    @staticmethod
+    def _current_action_evidence_records(state: ResearchAgentState) -> List[Dict[str, Any]]:
+        bundle = (
+            state.current_evidence_bundle
+            if isinstance(state.current_evidence_bundle, dict)
+            else {}
+        )
+        return [
+            deepcopy(item)
+            for item in bundle.get("results", []) or []
+            if isinstance(item, dict)
+        ]
+
+    def _publish_v2_contract(self, state: ResearchAgentState) -> None:
+        if self._contract_version != "v2" or not state.macro_plan:
+            state.research_action_package_v2 = {}
+            return
+        from chem_agent_contracts import research_state_to_v2
+
+        package = research_state_to_v2(state.to_dict())
+        state.research_action_package_v2 = package.model_dump(
+            mode="json", exclude_none=True
+        )
+        state.add_log(
+            "ResearchActionPackageV2 published with hash="
+            f"{package.research_contract_hash}"
+        )
+
     @staticmethod
     def _evidence_identity_statuses() -> set[str]:
         return {
@@ -1669,6 +1868,7 @@ class ResearchAgent(BaseAgent):
             self._annotate_macro_plan_sources(state)
             self._build_macro_action_view(state)
 
+            self._publish_v2_contract(state)
             state.persistent_outputs = state.research_layer_internal_outputs()
             state.device_adaptation_handoff = state.device_adaptation_external_handoff()
 
@@ -1834,6 +2034,7 @@ class ResearchAgent(BaseAgent):
         }
         state.stage_progress_status = "device_local_feedback_ignored"
         state.post_observation_repair_path = "device_local_feedback_ignored"
+        self._publish_v2_contract(state)
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.last_completed_branch = "B2"
@@ -2016,6 +2217,7 @@ class ResearchAgent(BaseAgent):
         state.status = "manual_required"
         state.current_branch = "B2"
         state.next_branch = "B8"
+        self._publish_v2_contract(state)
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.route_message = "B2 post_observation could not repair automatically"
@@ -2136,6 +2338,7 @@ class ResearchAgent(BaseAgent):
         self._record_macro_action_outcome(state)
         self._annotate_macro_plan_sources(state)
         self._build_macro_action_view(state)
+        self._publish_v2_contract(state)
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.device_adaptation_handoff = state.device_adaptation_external_handoff()
         state.last_completed_branch = "B2"
@@ -2798,7 +3001,12 @@ class ResearchAgent(BaseAgent):
 
     def _step_post_observation_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         self._step_macro_action_design(state, "post_observation")
-        reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
+        current_evidence = self._current_action_evidence_records(state)
+        reference_context = (
+            json.dumps(current_evidence, ensure_ascii=False, indent=2)
+            if self._contract_version == "v2"
+            else self._format_macro_reference_context(state.knowledge_hits[:2])
+        )
         base_prompt = POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT.format(
             query=state.event.query,
             observation_json=json.dumps(
@@ -2819,6 +3027,14 @@ class ResearchAgent(BaseAgent):
             current_stage_reason=state.current_stage_reason,
             reference_context=reference_context or "当前没有可用参考案例",
         )
+        if self._contract_version == "v2":
+            base_prompt += (
+                "\n\n## 当前 Macro Action 独立联网证据包\n"
+                + json.dumps(
+                    state.current_evidence_bundle, ensure_ascii=False, indent=2
+                )
+                + "\n只允许本证据包支撑论文来源声明；不得引用历史 Action 的检索结果。"
+            )
         if self._use_llm:
             previous_result: Dict[str, Any] | None = None
             previous_issues: List[str] = []
@@ -4128,7 +4344,11 @@ class ResearchAgent(BaseAgent):
             macro_plan = self._next_macro_plan_from_reference(state)
 
         if not macro_plan:
-            reference_plan = self._best_structured_reference_macro_plan(state)
+            reference_plan = (
+                []
+                if self._contract_version == "v2"
+                else self._best_structured_reference_macro_plan(state)
+            )
             if reference_plan:
                 macro_plan = reference_plan
             else:
@@ -5056,12 +5276,23 @@ class ResearchAgent(BaseAgent):
 
     def _step_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         self._step_macro_action_design(state, "bootstrap")
-        reference_context = self._format_macro_reference_context(state.knowledge_hits[:2])
+        current_evidence = self._current_action_evidence_records(state)
+        reference_context = (
+            json.dumps(current_evidence, ensure_ascii=False, indent=2)
+            if self._contract_version == "v2"
+            else self._format_macro_reference_context(state.knowledge_hits[:2])
+        )
         base_prompt = MACRO_PLAN_DESIGN_PROMPT.format(
             query=state.event.query,
             survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
             extracted_protocols_json=json.dumps(
-                state.extracted_protocols, ensure_ascii=False, indent=2
+                (
+                    current_evidence
+                    if self._contract_version == "v2"
+                    else state.extracted_protocols
+                ),
+                ensure_ascii=False,
+                indent=2,
             ),
             stage_route_json=json.dumps(state.stage_route, ensure_ascii=False, indent=2),
             current_stage=state.current_stage,
@@ -5070,6 +5301,11 @@ class ResearchAgent(BaseAgent):
             reference_context=reference_context or "当前没有可用参考案例",
             device_context_json="见已有 workflow 上下文中的 constraints.device_context（step skill）。",
         )
+        if self._contract_version == "v2":
+            base_prompt += (
+                "\n\n本次只能使用 current_evidence_bundle 中的当前检索结果作为论文证据。"
+                "若为空，仍需给出具体实验值，并逐项标记 agent_inferred。"
+            )
         if self._use_llm:
             previous_result: Dict[str, Any] | None = None
             previous_issues: List[str] = []
@@ -5187,6 +5423,11 @@ class ResearchAgent(BaseAgent):
                 "macro plan quality check warning: "
                 + "; ".join(core_issues[:5])
             )
+            if self._contract_version == "v2":
+                raise ValueError(
+                    "V2 macro plan quality check failed: "
+                    + "; ".join(core_issues[:5])
+                )
         # Issue 5: device-boundary doubts become per-step markers, not a verdict.
         if device_markers:
             heuristic_design["macro_plan"] = self._apply_device_validation_markers(
@@ -5489,10 +5730,31 @@ class ResearchAgent(BaseAgent):
             # details. Scientific state above is the explicit memory contract.
             "planned_macro_action": state.pending_macro_action if self._device_tier_for_task(task_name) == "step" else {},
         }
+        if self._contract_version == "v2" and self._device_tier_for_task(
+            task_name
+        ) in {"operation", "step"}:
+            # Each action has an isolated evidence invocation.  Historical KB
+            # hits remain in state for audit but cannot silently support this
+            # action's source claims.
+            payload["knowledge_hits"] = []
+            payload["extracted_protocols"] = []
+            payload["literature_capability_assessments"] = []
+            payload["current_evidence_bundle"] = self._truncate_context_value(
+                state.current_evidence_bundle,
+                max_chars=9000,
+            )
         campaign_memory_context = self._campaign_memory_context(state)
-        if campaign_memory_context:
+        if campaign_memory_context and not (
+            self._contract_version == "v2"
+            and self._device_tier_for_task(task_name) in {"operation", "step"}
+        ):
             payload["campaign_memory_context"] = campaign_memory_context
-        evidence_packet = self._evidence_packet(state)
+        evidence_packet = (
+            {}
+            if self._contract_version == "v2"
+            and self._device_tier_for_task(task_name) in {"operation", "step"}
+            else self._evidence_packet(state)
+        )
         if evidence_packet:
             payload["evidence_packet"] = evidence_packet
         return json.dumps(
@@ -5553,6 +5815,13 @@ class ResearchAgent(BaseAgent):
             "stage_progress": state.stage_progress,
             "post_observation_repair_path": state.post_observation_repair_path,
         }
+        if self._contract_version == "v2":
+            payload["knowledge_hits"] = []
+            payload["extracted_protocols"] = []
+            payload["current_evidence_bundle"] = self._truncate_context_value(
+                state.current_evidence_bundle,
+                max_chars=9000,
+            )
         return json.dumps(
             self._sanitize_planning_context(payload, self._device_tier_for_task(task_name)),
             ensure_ascii=False, indent=2,
@@ -5618,6 +5887,8 @@ class ResearchAgent(BaseAgent):
                 for material in step.get(key, []) or []:
                     if not isinstance(material, dict) or not str(material.get("name", "")).strip():
                         issues.append(f"第 {index} 步 {key} 必须给出具体物质 name")
+            if self._contract_version == "v2":
+                issues.extend(self._v2_macro_step_quality_issues(index, step))
             for container in step.get("container_requirements", []) or []:
                 if not isinstance(container, dict):
                     issues.append(f"第 {index} 步 container_requirements 必须是逻辑容器对象")
@@ -5638,6 +5909,85 @@ class ResearchAgent(BaseAgent):
 
         if state is not None:
             issues.extend(self._macro_return_contract_issues(state, macro_plan))
+        return issues
+
+    @staticmethod
+    def _v2_macro_step_quality_issues(
+        index: int,
+        step: Dict[str, Any],
+    ) -> List[str]:
+        """Enforce the quantity/provenance part of the V2 Research contract.
+
+        Research owns the scientific quantities.  Device may later split an
+        amount across containers, but it must never have to invent the total.
+        Material outputs may use ``all_available`` or ``runtime_measured`` when
+        a yield is unknowable before execution.
+        """
+
+        issues: List[str] = []
+        vague = re.compile(r"适量|按需|若干|少量|足量|合适量|as needed|q\.?s\.?")
+        operation = str(step.get("操作") or step.get("operation") or "")
+        active_addition = bool(
+            re.search(r"加入|加液|滴加|投料|称量|移取|取样|配制|分装|dosing|dispens", operation, re.I)
+        )
+
+        def _quantity_ok(material: Dict[str, Any], *, output: bool) -> bool:
+            quantity = material.get("quantity")
+            if isinstance(quantity, dict):
+                mode = str(quantity.get("mode") or "exact")
+                if mode in {"all_available", "runtime_measured"}:
+                    return True
+                value = quantity.get("value")
+                unit = str(quantity.get("unit") or "").strip()
+                return (
+                    mode == "exact"
+                    and isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and bool(unit)
+                )
+            return bool(PARAMETER_DETAIL_RE.search(str(quantity or "")))
+
+        for key, output in (("material_inputs", False), ("material_outputs", True)):
+            materials = step.get(key, []) or []
+            if not isinstance(materials, list):
+                issues.append(f"第 {index} 步 {key} 必须为数组")
+                continue
+            for material_index, material in enumerate(materials, start=1):
+                if not isinstance(material, dict):
+                    continue
+                if vague.search(json.dumps(material, ensure_ascii=False)):
+                    issues.append(
+                        f"第 {index} 步 {key}[{material_index}] 不得使用模糊用量"
+                    )
+                if not _quantity_ok(material, output=output):
+                    suffix = (
+                        "必须给出数值和单位，未知产率可用 all_available/runtime_measured"
+                        if output
+                        else "主动投料必须给出精确数值和单位；未知产率中间体可用 all_available/runtime_measured"
+                    )
+                    issues.append(f"第 {index} 步 {key}[{material_index}] {suffix}")
+                source = material.get("provenance") or material.get("source")
+                if isinstance(source, dict):
+                    source_kind = str(source.get("kind") or source.get("source_type") or "")
+                    if source_kind == "agent_inferred" and not str(
+                        source.get("rationale") or source.get("reason") or ""
+                    ).strip():
+                        issues.append(
+                            f"第 {index} 步 {key}[{material_index}] 的 agent_inferred 缺少推导理由"
+                        )
+
+        if active_addition and not (step.get("material_inputs") or []):
+            issues.append(f"第 {index} 步主动投料但 material_inputs 为空")
+
+        provenance = step.get("provenance") or step.get("来源")
+        if not isinstance(provenance, dict):
+            issues.append(f"第 {index} 步缺少结构化 provenance")
+        if isinstance(provenance, dict):
+            kind = str(provenance.get("kind") or provenance.get("source_type") or "")
+            if kind == "agent_inferred" and not str(
+                provenance.get("rationale") or provenance.get("reason") or ""
+            ).strip():
+                issues.append(f"第 {index} 步 agent_inferred 参数缺少推导理由")
         return issues
 
     def _macro_return_contract_issues(
@@ -6535,6 +6885,7 @@ class ResearchAgent(BaseAgent):
                     entry[key] = deepcopy(value) if isinstance(value, list) else []
                 for key in (
                     "macro_action_id", "observation_point_id", "logical_step_id",
+                    "macro_step_id", "sample_id", "provenance",
                     "planned_operation", "device_validation_required", "device_validation_notes",
                     "device_validation", "device_validation_note",
                 ):

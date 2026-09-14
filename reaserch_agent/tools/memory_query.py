@@ -6,12 +6,20 @@ import os
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-from ..memory import ChemMemoryLayer, LayeredChemMemory
-from ..memory.adapters import (
-    format_memory_results_for_prompt,
-    memory_result_to_search_hit,
-)
-from ..state import SearchHit
+try:
+    from ..memory import ChemMemoryLayer, LayeredChemMemory
+    from ..memory.adapters import (
+        format_memory_results_for_prompt,
+        memory_result_to_search_hit,
+    )
+    from ..state import SearchHit
+except ImportError:  # unittest discovery with reaserch_agent as start directory
+    from reaserch_agent.memory import ChemMemoryLayer, LayeredChemMemory
+    from reaserch_agent.memory.adapters import (
+        format_memory_results_for_prompt,
+        memory_result_to_search_hit,
+    )
+    from reaserch_agent.state import SearchHit
 from .corpus_search import LocalExperimentCorpus
 
 

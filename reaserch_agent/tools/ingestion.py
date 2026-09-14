@@ -25,7 +25,10 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 import fcntl
 
-from ..memory import LayeredChemMemory
+try:
+    from ..memory import LayeredChemMemory
+except ImportError:  # unittest discovery with reaserch_agent as start directory
+    from reaserch_agent.memory import LayeredChemMemory
 from .corpus_search import LocalExperimentCorpus
 from .paper_download import (
     OpenAccessPdfDownloader,

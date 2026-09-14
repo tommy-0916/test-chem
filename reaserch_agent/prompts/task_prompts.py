@@ -233,6 +233,14 @@ planned_operations 是有序的化学操作语义，不是机器命令，不得�
 {{
   "objective": "本批实验要解决的科学目标",
   "planned_operations": ["配制前驱体", "反应", "分离纯化", "目标表征"],
+  "experiment_group": {{
+    "group_id": "当前单组实验的稳定标识",
+    "role": "experimental|control|repeat|calibration",
+    "sample_id": "当前唯一样品标识",
+    "hypothesis": "本组检验的假设",
+    "comparison_to": [],
+    "variables": {{"变量名": "本组取值"}}
+  }},
   "expected_observation": "下一观察节点预期可获得的信息，不是编造的实验结果",
   "completion_condition": "什么真实 observation 可判定本批完成",
   "current_stage_plan": "本 stage 的推进逻辑、科学变量和完成条件"
@@ -241,6 +249,9 @@ planned_operations 是有序的化学操作语义，不是机器命令，不得�
 当前规划模式：{planning_mode}
 当前 stage：{current_stage}
 下一 observation point：{observation_point}
+
+每次只规划一个实验组和一个样品执行单元。不得同时生成实验组、对照组或重复组的批量矩阵；
+下一组必须等待本组 observation 及计划值、设备设定值、实际值和偏差返回后再规划。
 """
 
 MACRO_STEP_CONTRACT_PROMPT = """
@@ -253,7 +264,9 @@ MACRO_STEP_CONTRACT_PROMPT = """
 {device_context_json}
 
 每个 macro step 保留 步骤序号、操作、试剂/对象、参数、来源、quantity_requirements，并增加：
-- material_inputs / material_outputs：数组；每项 name、state（相态/载体状态）、quantity（有证据才给）及 source。
+- material_inputs / material_outputs：数组；每项 name、state、quantity={{"mode":"exact","value":数值,"unit":"单位"}}
+  及 provenance={{"kind":"paper|user|agent_inferred","reference":"来源","rationale":"推断理由"}}。
+  主动投料必须是 exact；未知产率的中间产物可使用 quantity={{"mode":"all_available"}}。
 - container_requirements：数组；每项 logical_container_id、container_type、count、capacity_ml、lid_state，
   只填有依据的需求；未知数值用 null，不得虚构容器兼容性。logical_container_id 表示同一样品的逻辑容器，
   不是实体瓶号、机器槽位、原液瓶位或工作站编码。保留跨步骤物料与容器连续性。
@@ -268,6 +281,14 @@ MACRO_STEP_CONTRACT_PROMPT = """
   这些返回需求字段必须保留到 Device handoff，不能靠一个非空来源路径声称已声明支持。
 实体工作站、实际瓶号/槽位、开关盖展开、机器参数及编译仍由 Device 决定。
 本段关于逻辑容器需求的约定替代旧模板中笼统的“不选择容器”：允许逻辑要求，不允许实体分配。
+
+V2 具体实验设计要求：
+- 当前输出只允许服务于 macro action 中的一个 experiment_group/sample_id。
+- 所有主动投加的材料必须在 material_inputs 与 quantity_requirements 中给出数值和单位；
+  禁止“适量”“若干”“按需”等模糊投料。
+- 文献没有给出关键参数时，必须给出明确数值，来源写 agent_inferred/agent补全并说明推导理由；
+  这类值可以继续进入 Device，不触发人工审核。
+- 只有无法预知的产物收率或设备运行时测量可以使用 all_available/runtime_measured 语义。
 """
 
 MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
@@ -416,6 +437,27 @@ macro plan design
       "操作": "步骤名称",
       "试剂/对象": "对象",
       "参数": "自然语言参数",
+      "provenance": {{
+        "kind": "paper | user | agent_inferred",
+        "reference": "论文标识、用户要求或当前独立证据包",
+        "rationale": "agent_inferred 时必填：数值推导理由"
+      }},
+      "material_inputs": [
+        {{
+          "name": "主动加入的具体材料",
+          "state": "solid | liquid | solution | suspension",
+          "quantity": {{"mode": "exact", "value": 5, "unit": "mg"}},
+          "provenance": {{"kind": "paper | user | agent_inferred", "reference": "来源", "rationale": "推断理由"}}
+        }}
+      ],
+      "material_outputs": [
+        {{
+          "name": "本步输出物",
+          "state": "solution | suspension | solid | other",
+          "quantity": {{"mode": "all_available"}},
+          "provenance": {{"kind": "agent_inferred", "reference": "mass balance", "rationale": "产率需运行时测量"}}
+        }}
+      ],
       "quantity_requirements": [
         {{
           "kind": "scientific_input_setpoint | target_dose | whole_batch | runtime_measured_inventory",
@@ -436,7 +478,8 @@ macro plan design
 - macro_plan 必须是一个步骤数组
 - 每一步必须包含 步骤序号、操作、试剂/对象、参数
 - 参数保持实验自然语言，不要翻译成 workstation 级动作
-- 每一步可附加可选字段 `来源`：标注该步骤关键参数来自哪个 protocol（paper_id 或文献题目，可带页码如 p.4）；由 agent 依据化学常识补全的写 "agent补全"。不确定时可省略该字段，系统会自动标注，缺失不算错误。
+- 每一步必须给出 `provenance`。文献或用户直接给定值写 paper/user；自行补全写
+  `agent_inferred` 并给出非空 rationale。可同时保留旧字段 `来源` 供 V1 视图使用。
 - `quantity_requirements` 是必需数组。没有数值数量需求但要把产物整批继续处理时，至少输出一条
   `kind=whole_batch`；若一步确实没有物料数量语义，可输出空数组。不得把通用设备摘要中的可配置范围
   端点或示例值抄成当前任务的固定数量。

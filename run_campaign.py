@@ -32,6 +32,7 @@ EXIT_CODES = {
     "device_error": 5,
     "research_error": 6,
     "scientific_review_required": 7,
+    "terminal_unmappable": 8,
 }
 
 
@@ -42,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
             "device agent -> execution adapter -> research B2 -> ... until the "
             "goal is reached or the iteration budget is exhausted."
         )
+    )
+    parser.add_argument(
+        "--contract-version",
+        choices=["v1", "v2"],
+        default="v2",
+        help="Internal agent contract. Default: v2; use v1 for compatibility rollback.",
     )
     parser.add_argument(
         "--query",
@@ -244,7 +251,7 @@ def validate_research_bootstrap_invariants(args: argparse.Namespace) -> None:
 
 def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     validate_research_bootstrap_invariants(args)
-    research_args: list[str] = []
+    research_args: list[str] = ["--contract-version", args.contract_version]
     if args.disable_llm:
         research_args.append("--disable-llm")
     if args.include_device_context:
@@ -264,7 +271,7 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     if args.no_web_search:
         research_args.append("--no-web-search")
 
-    device_args: list[str] = []
+    device_args: list[str] = ["--contract-version", args.contract_version]
     if args.workstations_dir:
         device_args += ["--workstations-dir", args.workstations_dir]
     if args.full_workstations:

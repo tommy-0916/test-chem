@@ -1012,7 +1012,13 @@ def structure_validation_errors(
             if isinstance(step, dict):
                 record.setdefault("workstation", str(step.get("workstation", "")))
                 record.setdefault("operation", str(step.get("operation", "")))
-                for key in ("source_macro_step", "macro_action_id", "observation_point_id"):
+                for key in (
+                    "source_macro_step",
+                    "source_macro_step_id",
+                    "device_step_id",
+                    "macro_action_id",
+                    "observation_point_id",
+                ):
                     if step.get(key) is not None:
                         record[key] = step[key]
         param_match = _PARAM_NAME_RE.search(text)
