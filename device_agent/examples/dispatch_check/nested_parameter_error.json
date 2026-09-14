@@ -1,0 +1,55 @@
+{
+  "example_metadata": {
+    "synthetic": true,
+    "purpose": "离线错误定位演示：第三步原液用量故意写成字符串。仅为合成反例，不是实际实验记录。",
+    "expected_check_status": "failed",
+    "expected_error_pointer": "/steps/2/parameters/加样方案/0/1号原液瓶/原液用量",
+    "contract_bundle": "chem_resources/lab-design-all"
+  },
+  "steps": [
+    {
+      "step_number": 1,
+      "workstation": "General_Material_Station_V1",
+      "id": 1427568512205824,
+      "operation": "物料拿取",
+      "parameters": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [1]
+      }
+    },
+    {
+      "step_number": 2,
+      "workstation": "Liquid_Handling_Station_1ml_V1",
+      "id": 1418510906065920,
+      "operation": "开盖",
+      "parameters": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [1],
+        "开盖的瓶号": [{"瓶号": "1"}],
+        "保留瓶盖": 1
+      }
+    },
+    {
+      "step_number": 3,
+      "workstation": "Liquid_Handling_Station_1ml_V1",
+      "id": 1418510906065920,
+      "operation": "加液_物料绑定",
+      "parameters": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [1],
+        "加样方案": [
+          {
+            "加样瓶号": "1",
+            "1号原液瓶": {
+              "配料名称": "水",
+              "原液用量": "0.5"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

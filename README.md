@@ -114,6 +114,13 @@ print(tool.args_schema.model_json_schema())
 
 Device 先读取 45 站能力目录，再用 `load_workstation_skill(station_code)` 读取选中站完整 SKILL、audit 和机器合同；第一段分配工作站/容器/槽位，第二段翻译机器参数。模型按需加载不影响确定性审计的全目录覆盖。能力标签仅用于文献筛选，不能替代 Device 的执行安全门。
 
+生成后的 workflow 与实际下发 payload 使用
+[workflow-checker Skill](chem_resources/lab-design-all/skills/workflow-checker/SKILL.md)
+进行离线检查，入口为 `chem_resources/lab-design-all/skills/workflow-checker/scripts/check.py`。
+它与 Campaign 执行前检查共享确定性引擎，按步骤/嵌套参数输出 JSON 和 Markdown 报告；
+不调用模型或设备，检查失败或无法验证时不能放行。它属于 Device 下发边界，不是新增的
+Research 能力投影层。
+
 ### 计划版本台账（每次修改/放弃都落盘 + 原因）
 
 `reaserch_agent/plan_ledger.py` → `campaigns/<id>/plan_versions.jsonl`，每轮一条：

@@ -26,8 +26,12 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.paths import workstation_dir
-from skill_contract_audit import parse_operation_schemas
+try:
+    from .utils.paths import workstation_dir
+    from .skill_contract_audit import parse_operation_schemas
+except ImportError:  # Direct script execution from device_agent/.
+    from utils.paths import workstation_dir
+    from skill_contract_audit import parse_operation_schemas
 
 CONVERSION_FILENAME = "0410数据转换.txt"
 

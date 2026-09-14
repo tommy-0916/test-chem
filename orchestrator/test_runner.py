@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List
@@ -204,7 +205,22 @@ def make_runner(
     )
 
 
-class CampaignRunnerTest(unittest.TestCase):
+class IsolatedCampaignTest(unittest.TestCase):
+    """Loop/review fixtures omit device contracts; gate behavior has its own tests."""
+
+    def setUp(self) -> None:
+        checker = patch("orchestrator.runner.check_dispatch", return_value={
+            "status": "passed", "dispatchable": True, "findings": [],
+            "input_sha256": "orchestration-test-fixture",
+        })
+        reports = patch("orchestrator.runner.write_check_report", return_value={})
+        checker.start()
+        reports.start()
+        self.addCleanup(checker.stop)
+        self.addCleanup(reports.stop)
+
+
+class CampaignRunnerTest(IsolatedCampaignTest):
     def test_campaign_iteration_budget_is_capped_at_12(self) -> None:
         self.assertEqual(CampaignConfig(query="q").max_iterations, 12)
         for invalid in (0, 13):
@@ -1020,7 +1036,7 @@ class CampaignRunnerTest(unittest.TestCase):
             self.assertEqual(next_request["repair_generation"], 2)
 
 
-class ReviewGateTest(unittest.TestCase):
+class ReviewGateTest(IsolatedCampaignTest):
     """Review finding 3: review-flagged success must not auto-dispatch."""
 
     def test_package_requires_review_detection(self) -> None:

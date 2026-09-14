@@ -1,18 +1,35 @@
 # Lab Design Skills (all)
 
-本目录是 303 实验室规划与工作流转换资源的 `all` 快照，不是独立的端到端应用。当前只包含三个 Skill；不存在 `experiments-design/`、`run_design.py` 或 `workflow-generator-1.0.0/`。实验方案需要由上层 Agent 依据工作站规则生成，再显式传给转换脚本。
+本目录是 303 实验室规划与工作流转换资源的 `all` 快照，不是独立的端到端应用。当前包含四个 Skill；不存在 `experiments-design/`、`run_design.py` 或 `workflow-generator-1.0.0/`。实验方案需要由上层 Agent 依据工作站规则生成，再显式传给转换脚本。
 
 ## 目录与职责
 
 | 模块 | 作用 | 可执行入口 |
 | --- | --- | --- |
 | [`chemistry-experiment-workstation`](skills/chemistry-experiment-workstation/SKILL.md) | 工作站能力、操作参数、输入输出约束、跨站审计规则和附件模板 | 主要是规则库；不是实验设计 CLI |
+| [`workflow-checker`](skills/workflow-checker/SKILL.md) | 本地核验 Device workflow 与下发 payload，定位步骤和嵌套参数错误 | `skills/workflow-checker/scripts/check.py` |
 | [`workflow-generator`](skills/workflow-generator/SKILL.md) | 将结构化实验步骤提交给工作流解析服务并返回模板信息 | `skills/workflow-generator/scripts/generate.py` |
 | [`lab-operation`](skills/lab-operation/SKILL.md) | 查询实验室、模板、任务、工作站和任务结果；提供下发/启动入口 | `skills/lab-operation/scripts/*.py` |
 
 工作站规则分别位于 `references-Synthesis-Module/`、`references-Reaction-and-Testing-Module/` 和 `references-Characterization-Module/`；跨站约束位于 `references_audit/`，文件型参数模板位于 `references_files/`。当前文件树没有 `references-Macro-operation/`，不要依赖相关入口。
 
-## 环境准备
+## 离线下发检查
+
+`workflow-checker` 与其他 Skill 统一使用 `SKILL.md` 的 `name`、`description` 元数据，
+按需引用 `scripts/` 和 `references/`。它是完整 chem-agent 仓库中的技能入口，复用
+`device_agent` 检查引擎，不复制设备参数规则，也不依赖模型或网络。
+
+在本目录执行：
+
+```bash
+python skills/workflow-checker/scripts/check.py --input /path/to/device_package.json --require-payload --report-dir /path/to/check-report
+```
+
+输出 JSON/Markdown 报告；失败或无法确认时不得继续下发。仅检查 workflow 可省略
+`--require-payload`，但此时缺少实际 payload 的预览通过不代表完成真实下发对照。
+本地静态检查不查询设备在线状态或库存，不改变真实下发与启动的阻断策略。
+
+## 联网工具的环境准备
 
 在本目录执行：
 

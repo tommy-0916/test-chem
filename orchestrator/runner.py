@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -35,6 +36,7 @@ from device_agent.human_quantity_approval import (  # noqa: E402
     approval_contract_template,
     validate_human_quantity_approvals,
 )
+from device_agent.dispatch_checker import check_dispatch, write_check_report  # noqa: E402
 from chem_agent_contracts.adapters import build_observation_event_v2  # noqa: E402
 from chem_agent_contracts.v2 import (  # noqa: E402
     DeviceWorkflowPackageV2,
@@ -101,6 +103,15 @@ SCIENTIFIC_QUANTITY_CHANGE_KINDS = {
 
 class DeviceRepairResumeError(ValueError):
     """Raised when a manual Device override violates a frozen invariant."""
+
+
+class DispatchCheckBlockedError(ValueError):
+    """A fresh local contract check did not authorize an adapter invocation."""
+
+    def __init__(self, report: Dict[str, Any], report_paths: Dict[str, str]) -> None:
+        super().__init__(f"Device dispatch check {report.get('status', 'not_verifiable')}")
+        self.report = report
+        self.report_paths = report_paths
 
 
 def _canonical_json(value: Any) -> str:
@@ -822,10 +833,11 @@ class CampaignRunner:
                             f"review; proceeding on simulated adapter `{self.adapter.name}` "
                             "(review still required before any real dispatch)"
                         )
-                    observation = self._attach_actual_execution_parameters(
-                        self.adapter.execute(package, iteration_dir),
-                        package,
-                    )
+                    try:
+                        observation = self._execute_checked_package(package, iteration_dir)
+                    except DispatchCheckBlockedError:
+                        stop_reason = STOP_DEVICE_ERROR
+                        break
                     observation_path = iteration_dir / "observation_in.json"
                     observation_path.write_text(
                         json.dumps(observation, ensure_ascii=False, indent=2),
@@ -1138,10 +1150,10 @@ class CampaignRunner:
         resume_dir: Path,
         campaign_iteration: int,
     ) -> tuple[str, bool, Dict[str, Any], Path]:
-        observation = self._attach_actual_execution_parameters(
-            self.adapter.execute(package, resume_dir),
-            package,
-        )
+        try:
+            observation = self._execute_checked_package(package, resume_dir)
+        except DispatchCheckBlockedError:
+            return STOP_DEVICE_ERROR, False, state, state_path
         (resume_dir / "observation_in.json").write_text(
             json.dumps(observation, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -1264,10 +1276,11 @@ class CampaignRunner:
                         stop_reason = STOP_REVIEW_REQUIRED
                         self._write_review_request(iteration_dir, package)
                         break
-                observation = self._attach_actual_execution_parameters(
-                    self.adapter.execute(package, iteration_dir),
-                    package,
-                )
+                try:
+                    observation = self._execute_checked_package(package, iteration_dir)
+                except DispatchCheckBlockedError:
+                    stop_reason = STOP_DEVICE_ERROR
+                    break
                 (iteration_dir / "observation_in.json").write_text(
                     json.dumps(observation, ensure_ascii=False, indent=2),
                     encoding="utf-8",
@@ -1565,6 +1578,9 @@ class CampaignRunner:
         if prior_repair_request_path:
             command += ["--prior-repair-request", str(prior_repair_request_path)]
         command += self.config.device_args
+        # Pin generation and dispatch checking to the same selected contract
+        # root. A subprocess .env file must not silently select another source.
+        command += ["--workstations-dir", str(self._dispatch_workstation_root())]
 
         completed = subprocess.run(
             command,
@@ -2284,3 +2300,81 @@ class CampaignRunner:
         report_path = self.campaign_dir / "final_report.md"
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return report_path
+
+    def _dispatch_workstation_root(self) -> Path:
+        """Resolve one source for both the Device subprocess and execution gate."""
+        selected = os.getenv("CHEM_WORKSTATIONS_NEW_DIR", "").strip()
+        for index, argument in enumerate(self.config.device_args):
+            if argument == "--workstations-dir":
+                if index + 1 >= len(self.config.device_args):
+                    raise ValueError("--workstations-dir requires a path")
+                selected = self.config.device_args[index + 1]
+                if not selected.strip() or selected.startswith("--"):
+                    raise ValueError("--workstations-dir requires a non-empty path")
+            elif argument.startswith("--workstations-dir="):
+                selected = argument.split("=", 1)[1]
+                if not selected.strip():
+                    raise ValueError("--workstations-dir requires a non-empty path")
+        if not selected:
+            return (
+                REPO_ROOT / "chem_resources" / "lab-design-all"
+                / "skills" / "chemistry-experiment-workstation"
+            )
+        source = Path(selected).expanduser()
+        return (source if source.is_absolute() else REPO_ROOT / source).resolve()
+
+    def _execute_checked_package(
+        self, package: Dict[str, Any], iteration_dir: Path
+    ) -> Dict[str, Any]:
+        """Recheck the actual package on every execution path, without trusting flags."""
+
+        try:
+            report = check_dispatch(
+                package,
+                source_path=iteration_dir / "device_package.json",
+                artifact_root=iteration_dir,
+                workstation_root=self._dispatch_workstation_root(),
+                require_payload=True,
+            )
+        except Exception as exc:
+            # Contract-loader or checker faults are Device errors, never a
+            # reason to dispatch or to replan the chemistry through Research.
+            report = {
+                "status": "not_verifiable",
+                "dispatchable": False,
+                "findings": [{
+                    "severity": "error", "code": "checker_internal_error",
+                    "path": "", "message": f"{type(exc).__name__}: {exc}",
+                }],
+                "summary": {"errors": 1, "warnings": 0},
+                "checks": {},
+                "input_sha256": _value_signature(package),
+                "source_manifest": {},
+                "checked_steps": [],
+            }
+        paths: Dict[str, str] = {}
+        try:
+            paths = write_check_report(report, iteration_dir)
+        except (OSError, ValueError, TypeError) as exc:
+            self._log(f"Device dispatch check report could not be saved: {exc}")
+            report = dict(report, status="not_verifiable", dispatchable=False)
+        dispatchable = report.get("status") == "passed" and report.get("dispatchable") is True
+        self._trace.append({
+            "phase": "dispatch_check",
+            "status": report.get("status", "not_verifiable"),
+            "dispatchable": dispatchable,
+            "failure_scope": "" if dispatchable else "device_workflow",
+            "input_sha256": report.get("input_sha256", ""),
+            "report_paths": paths,
+            "iteration_dir": str(iteration_dir),
+            "research_invoked": False,
+        })
+        if not dispatchable:
+            self._log(
+                "Device dispatch check blocked execution; "
+                f"status={report.get('status')}, reports={paths}"
+            )
+            raise DispatchCheckBlockedError(report, paths)
+        return self._attach_actual_execution_parameters(
+            self.adapter.execute(package, iteration_dir), package
+        )
