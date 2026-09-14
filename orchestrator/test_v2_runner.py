@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from chem_agent_contracts.adapters import (
     attach_device_v2_contract,
@@ -10,6 +11,8 @@ from chem_agent_contracts.adapters import (
 )
 from orchestrator.execution_adapters import MockExecutionAdapter
 from orchestrator.runner import (
+    STOP_DEVICE_ERROR,
+    STOP_READY_FOR_DISPATCH,
     STOP_TERMINAL_UNMAPPABLE,
     CampaignConfig,
     CampaignRunner,
@@ -92,6 +95,111 @@ def test_terminal_unmappable_stops_campaign_without_research_retry():
         result = runner.run()
     assert result.stop_reason == STOP_TERMINAL_UNMAPPABLE
     assert calls == ["bootstrap"]
+
+
+def test_forward_only_stops_after_first_validated_device_workflow():
+    calls = []
+
+    def research_step(event_type, **kwargs):
+        calls.append(event_type)
+        result = {"status": "completed", "macro_plan": [{"步骤序号": 1}]}
+        path = kwargs["iteration_dir"] / "research_state.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result), encoding="utf-8")
+        return result
+
+    def device_step(state_path, iteration_dir, **kwargs):
+        return {
+            "status": "ready_for_dispatch",
+            "workflow_json": {"steps": [{"device_step_id": "DS_1"}]},
+        }
+
+    class _NoExecutionAdapter(MockExecutionAdapter):
+        def execute(self, package, iteration_dir):
+            raise AssertionError("forward-only mode must not execute the workflow")
+
+    with tempfile.TemporaryDirectory() as temporary:
+        runner = CampaignRunner(
+            CampaignConfig(
+                query="q",
+                campaign_id="CMP_FORWARD_ONLY",
+                campaigns_root=Path(temporary),
+                forward_only=True,
+            ),
+            _NoExecutionAdapter(),
+            research_step=research_step,
+            device_step=device_step,
+        )
+        with patch(
+            "orchestrator.runner.check_dispatch",
+            return_value={
+                "status": "passed",
+                "dispatchable": True,
+                "findings": [],
+                "input_sha256": "forward-only-fixture",
+            },
+        ) as check, patch(
+            "orchestrator.runner.write_check_report", return_value={}
+        ):
+            result = runner.run()
+
+    assert result.stop_reason == STOP_READY_FOR_DISPATCH
+    assert result.iterations_run == 1
+    assert calls == ["bootstrap"]
+    check.assert_called_once()
+    assert check.call_args.kwargs["require_payload"] is True
+
+
+def test_forward_only_rejected_workflow_is_not_ready_for_dispatch():
+    calls = []
+
+    def research_step(event_type, **kwargs):
+        calls.append(event_type)
+        result = {"status": "completed", "macro_plan": [{"步骤序号": 1}]}
+        path = kwargs["iteration_dir"] / "research_state.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result), encoding="utf-8")
+        return result
+
+    def device_step(state_path, iteration_dir, **kwargs):
+        return {
+            "status": "ready_for_dispatch",
+            "workflow_json": {"steps": [{"device_step_id": "DS_1"}]},
+        }
+
+    class _NoExecutionAdapter(MockExecutionAdapter):
+        def execute(self, package, iteration_dir):
+            raise AssertionError("a rejected workflow must not execute")
+
+    rejected = {
+        "status": "rejected",
+        "dispatchable": False,
+        "findings": [{"severity": "error", "code": "invalid_contract"}],
+        "input_sha256": "rejected-forward-only-fixture",
+    }
+    with tempfile.TemporaryDirectory() as temporary:
+        runner = CampaignRunner(
+            CampaignConfig(
+                query="q",
+                campaign_id="CMP_FORWARD_ONLY_REJECTED",
+                campaigns_root=Path(temporary),
+                forward_only=True,
+            ),
+            _NoExecutionAdapter(),
+            research_step=research_step,
+            device_step=device_step,
+        )
+        with patch(
+            "orchestrator.runner.check_dispatch", return_value=rejected
+        ) as check, patch(
+            "orchestrator.runner.write_check_report", return_value={}
+        ):
+            result = runner.run()
+
+    assert result.stop_reason == STOP_DEVICE_ERROR
+    assert result.iterations_run == 1
+    assert calls == ["bootstrap"]
+    check.assert_called_once()
 
 
 def test_v2_observation_trace_is_attached_for_research():

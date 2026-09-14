@@ -45,6 +45,26 @@ class RunCampaignArgsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "online scholarly retrieval"):
             run_campaign.build_step_args(args)
 
+    def test_new_campaign_accepts_explicit_local_knowledge_mode(self) -> None:
+        args = run_campaign.build_parser().parse_args(
+            [
+                "--query",
+                "test query",
+                "--knowledge-base-dir",
+                "reaserch_agent/chem_kb",
+                "--no-online-literature",
+                "--no-web-search",
+            ]
+        )
+
+        research_args, _ = run_campaign.build_step_args(args)
+
+        self.assertIn("--knowledge-base-dir", research_args)
+        self.assertIn("--no-online-literature", research_args)
+        self.assertIn("--no-web-search", research_args)
+        self.assertNotIn("--online-literature", research_args)
+        self.assertNotIn("--web-search", research_args)
+
     def test_programmatic_false_flags_cannot_bypass_retrieval_invariant(self) -> None:
         args = run_campaign.build_parser().parse_args(["--query", "test query"])
         args.online_literature = False

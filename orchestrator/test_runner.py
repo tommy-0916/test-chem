@@ -189,12 +189,14 @@ def make_runner(
     *,
     max_iterations: int = 5,
     deadlock_limit: int = 3,
+    transient_retry_limit: int = 0,
 ):
     config = CampaignConfig(
         query="测试 campaign query",
         campaign_id="cmp_test_runner",
         max_iterations=max_iterations,
         feasibility_deadlock_limit=deadlock_limit,
+        transient_device_retry_limit=transient_retry_limit,
         campaigns_root=Path(tmp),
     )
     return CampaignRunner(
@@ -223,6 +225,7 @@ class IsolatedCampaignTest(unittest.TestCase):
 class CampaignRunnerTest(IsolatedCampaignTest):
     def test_campaign_iteration_budget_is_capped_at_12(self) -> None:
         self.assertEqual(CampaignConfig(query="q").max_iterations, 12)
+        self.assertEqual(CampaignConfig(query="q").transient_device_retry_limit, 0)
         for invalid in (0, 13):
             with self.assertRaises(ValueError):
                 CampaignConfig(query="q", max_iterations=invalid)
@@ -316,7 +319,12 @@ class CampaignRunnerTest(IsolatedCampaignTest):
                 [PLAN_STATE, CLOSURE_STATE],
                 [transient, SUCCESS_PACKAGE],
             )
-            runner = make_runner(tmp, steps, max_iterations=3)
+            runner = make_runner(
+                tmp,
+                steps,
+                max_iterations=3,
+                transient_retry_limit=1,
+            )
 
             result = runner.run()
 
@@ -326,6 +334,25 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             # No Research B2 turn occurs for a transport failure; only the
             # bootstrap and the successful observation turn are present.
             self.assertEqual(len(steps.research_calls), 2)
+
+    def test_transient_device_error_is_not_replayed_by_default(self) -> None:
+        transient = {
+            "status": "failed",
+            "feedback_type": "device_internal_error",
+            "failure_stage": "device_internal_error",
+            "error_package": {
+                "type": "device_internal_error",
+                "blocking_constraints": ["gateway_deadline"],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            steps = FakeSteps([PLAN_STATE], [transient, SUCCESS_PACKAGE])
+
+            result = make_runner(tmp, steps).run()
+
+            self.assertEqual(result.stop_reason, STOP_DEVICE_ERROR)
+            self.assertEqual(len(steps.device_calls), 1)
+            self.assertEqual(len(steps.research_calls), 1)
 
     def test_nontransient_device_internal_error_remains_terminal(self) -> None:
         internal = {

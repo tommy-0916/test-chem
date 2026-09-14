@@ -18,6 +18,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
+from agent_skills.llm_retry import (
+    RetryableGatewayError,
+    call_with_gateway_retry,
+    is_retryable_gateway_error,
+)
+from agent_skills.llm_timing import measure_llm_request
 from utils.paths import default_env_file
 
 try:
@@ -96,6 +102,10 @@ _DEVICE_JSON_ENVELOPE_SCHEMA: Dict[str, Any] = {
 }
 
 
+class _CliOutputSchemaRejected(RuntimeError):
+    """Internal signal for a sanitized CLI output-schema rejection."""
+
+
 @dataclass
 class ChatResponse:
     """Lightweight response wrapper compatible with `.content` access."""
@@ -142,6 +152,8 @@ class CodexResponsesModel:
         self.reasoning_effort = reasoning_effort
         self.timeout = timeout
         self.max_output_tokens = max_output_tokens
+        self._transport_max_retries = configured_max_retries()
+        self.handles_transport_retries = True
         self.codex_path = (
             codex_path
             or shutil.which("codex")
@@ -151,7 +163,9 @@ class CodexResponsesModel:
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
-            max_retries=configured_max_retries(),
+            # Retry explicitly so a provider Retry-After value cannot impose
+            # a 60-second sleep and each request attempt remains measurable.
+            max_retries=0,
         )
         # None means unprobed.  A deterministic CLI/gateway rejection or a
         # successful response that ignores the envelope disables the feature
@@ -181,8 +195,15 @@ class CodexResponsesModel:
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
             try:
-                return self._invoke_direct(prompt)
-            except Exception:
+                return call_with_gateway_retry(
+                    lambda: self._invoke_direct(prompt),
+                    max_retries=self._transport_max_retries,
+                    logger=logger,
+                    operation_name="Device Responses request",
+                )
+            except Exception as exc:
+                if is_retryable_gateway_error(exc):
+                    raise
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
@@ -191,7 +212,12 @@ class CodexResponsesModel:
                 logger.exception(
                     "Direct Responses request failed; falling back to Codex CLI"
                 )
-        return self._invoke_cli(prompt)
+        return call_with_gateway_retry(
+            lambda: self._invoke_cli(prompt),
+            max_retries=self._transport_max_retries,
+            logger=logger,
+            operation_name="Device Codex CLI request",
+        )
 
     def invoke_json_object(self, messages: List[Any]) -> ChatResponse:
         """Invoke a Device JSON task with a CLI structured-output guard.
@@ -209,8 +235,15 @@ class CodexResponsesModel:
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
             try:
-                return self._invoke_direct(prompt)
+                return call_with_gateway_retry(
+                    lambda: self._invoke_direct(prompt),
+                    max_retries=self._transport_max_retries,
+                    logger=logger,
+                    operation_name="Device Responses JSON request",
+                )
             except Exception as exc:
+                if is_retryable_gateway_error(exc):
+                    raise
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
@@ -221,7 +254,12 @@ class CodexResponsesModel:
                     "back to the Codex CLI",
                     type(exc).__name__,
                 )
-        return self._invoke_cli_json_object(prompt)
+        return call_with_gateway_retry(
+            lambda: self._invoke_cli_json_object(prompt),
+            max_retries=self._transport_max_retries,
+            logger=logger,
+            operation_name="Device Codex CLI JSON request",
+        )
 
     def _invoke_direct(self, prompt: str) -> ChatResponse:
         payload: Dict[str, Any] = {
@@ -233,14 +271,17 @@ class CodexResponsesModel:
             payload["reasoning"] = {"effort": self.reasoning_effort}
         if self.max_output_tokens is not None:
             payload["max_output_tokens"] = self.max_output_tokens
-        response = self._client.responses.create(**payload)
-        text = self._extract_response_text(response)
-        if not text:
-            status = getattr(response, "status", "")
-            raise RuntimeError(
-                f"Responses API returned no text output (status={status or 'unknown'})"
-            )
-        return ChatResponse(content=text, raw_response=response)
+        with measure_llm_request(
+            component="device", model=self.model_name, transport="responses"
+        ):
+            response = self._client.responses.create(**payload)
+            text = self._extract_response_text(response)
+            if not text:
+                status = getattr(response, "status", "")
+                raise RuntimeError(
+                    f"Responses API returned no text output (status={status or 'unknown'})"
+                )
+            return ChatResponse(content=text, raw_response=response)
 
     def _invoke_cli(self, prompt: str) -> ChatResponse:
         return self._invoke_cli_request(prompt, request_json_envelope=False)
@@ -301,27 +342,27 @@ class CodexResponsesModel:
             env.pop("OPENAI_API_KEY", None)
             env.pop("REFINER_LLM_API_KEY", None)
 
-            completed = self._run_codex_cli(
-                stateless_prompt=stateless_prompt,
-                output_path=output_path,
-                schema_path=schema_path if use_json_envelope else None,
-                env=env,
-                cwd=tmp_path,
-            )
-            if completed.returncode != 0:
-                if use_json_envelope and self._is_output_schema_rejection(completed):
-                    self._cli_output_schema_supported = False
-                    logger.warning(
-                        "Codex CLI output-schema is unsupported by this CLI/gateway; "
-                        "retrying this JSON request once without the schema"
-                    )
-                    return self._run_plain_cli_fallback(
-                        prompt=prompt,
-                        output_path=output_path,
-                        env=env,
-                        cwd=tmp_path,
-                    )
-                raise RuntimeError(self._cli_failure_diagnostic(completed))
+            try:
+                completed = self._run_checked_codex_cli(
+                    stateless_prompt=stateless_prompt,
+                    output_path=output_path,
+                    schema_path=schema_path if use_json_envelope else None,
+                    env=env,
+                    cwd=tmp_path,
+                    allow_schema_rejection_fallback=use_json_envelope,
+                )
+            except _CliOutputSchemaRejected:
+                self._cli_output_schema_supported = False
+                logger.warning(
+                    "Codex CLI output-schema is unsupported by this CLI/gateway; "
+                    "retrying this JSON request once without the schema"
+                )
+                return self._run_plain_cli_fallback(
+                    prompt=prompt,
+                    output_path=output_path,
+                    env=env,
+                    cwd=tmp_path,
+                )
 
             try:
                 text = self._read_cli_output(output_path)
@@ -382,16 +423,51 @@ class CodexResponsesModel:
             "exactly one requested final JSON object with no prose or Markdown.\n\n"
             + prompt
         )
-        completed = self._run_codex_cli(
+        completed = self._run_checked_codex_cli(
             stateless_prompt=stateless_prompt,
             output_path=output_path,
             schema_path=None,
             env=env,
             cwd=cwd,
+            allow_schema_rejection_fallback=False,
         )
-        if completed.returncode != 0:
-            raise RuntimeError(self._cli_failure_diagnostic(completed))
         return ChatResponse(content=self._read_cli_output(output_path))
+
+    def _run_checked_codex_cli(
+        self,
+        *,
+        stateless_prompt: str,
+        output_path: Path,
+        schema_path: Optional[Path],
+        env: Dict[str, str],
+        cwd: Path,
+        allow_schema_rejection_fallback: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run and validate one measured subprocess transport attempt."""
+
+        with measure_llm_request(
+            component="device",
+            model=self.model_name,
+            transport="codex_cli",
+        ):
+            completed = self._run_codex_cli(
+                stateless_prompt=stateless_prompt,
+                output_path=output_path,
+                schema_path=schema_path,
+                env=env,
+                cwd=cwd,
+            )
+            if completed.returncode == 0:
+                return completed
+            diagnostic = self._cli_failure_diagnostic(completed)
+            if (
+                allow_schema_rejection_fallback
+                and self._is_output_schema_rejection(completed)
+            ):
+                raise _CliOutputSchemaRejected(diagnostic)
+            if self._is_retryable_cli_failure(completed):
+                raise RetryableGatewayError(diagnostic)
+            raise RuntimeError(diagnostic)
 
     def _run_codex_cli(
         self,
@@ -432,14 +508,14 @@ class CodexResponsesModel:
                 cwd=cwd,
                 check=False,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
                 f"Codex responses call timed out after {self.timeout:g} seconds"
-            ) from None
+            ) from exc
         except OSError as exc:
             raise RuntimeError(
                 f"Codex responses CLI launch failed ({type(exc).__name__})"
-            ) from None
+            ) from exc
 
     @staticmethod
     def _read_cli_output(output_path: Path) -> str:
@@ -487,6 +563,77 @@ class CodexResponsesModel:
         return any(marker in detail for marker in schema_markers) and any(
             marker in detail for marker in rejection_markers
         )
+
+    @classmethod
+    def _is_retryable_cli_failure(
+        cls,
+        completed: subprocess.CompletedProcess[str],
+    ) -> bool:
+        """Classify raw CLI output without exposing it beyond this method."""
+
+        detail = f"{completed.stdout or ''}\n{completed.stderr or ''}".lower()
+        status_code = cls._cli_gateway_status_code(detail)
+        if status_code is not None:
+            return status_code in {408, 409, 425, 429} or 500 <= status_code <= 599
+        return any(
+            marker in detail
+            for marker in (
+                "bad gateway",
+                "gateway timeout",
+                "origin_bad_gateway",
+                "too many requests",
+                "too early",
+                "request timeout",
+                "rate limit",
+                "service unavailable",
+                "internal server error",
+                "temporarily unavailable",
+                "upstream connect error",
+                "upstream request timeout",
+                "stream disconnected",
+                "connection closed",
+                "connection reset",
+                "connection refused",
+                "connection timed out",
+                "read timed out",
+                "write timed out",
+                "pool timeout",
+                "transport error",
+                "network error",
+                "error sending request",
+                "deadline exceeded",
+                "unexpected eof",
+            )
+        )
+
+    @staticmethod
+    def _cli_gateway_status_code(detail: str) -> Optional[int]:
+        status_patterns = (
+            re.compile(
+                r"\b(?:http(?:/\d(?:\.\d)?)?|unexpected\s+status|last\s+status|"
+                r"status(?:[\s_-]+code)?|error(?:\s+code)?|code|"
+                r"(?:gateway|upstream)(?:\s+(?:returned|response|status))?)"
+                r"[\"']?\s*[:=]?\s*[\"']?([1-5]\d{2})\b",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\b([1-5]\d{2})\s+(?:bad\s+gateway|gateway\s+timeout|"
+                r"too\s+many\s+requests|request\s+timeout|service\s+unavailable)",
+                re.IGNORECASE,
+            ),
+        )
+        matches = [
+            match
+            for pattern in status_patterns
+            for match in pattern.finditer(detail)
+        ]
+        if not matches:
+            return None
+        last_match = max(matches, key=lambda match: match.start())
+        try:
+            return int(last_match.group(1))
+        except (TypeError, ValueError):
+            return None
 
     @classmethod
     def _cli_failure_diagnostic(
@@ -556,6 +703,8 @@ name = "OpenAI"
 base_url = "{self._escape_toml(self.base_url)}"
 wire_api = "responses"
 requires_openai_auth = true
+request_max_retries = 0
+stream_max_retries = 0
 """
         load_marketplaces = os.getenv(
             "REFINER_CODEX_LOAD_MARKETPLACES", "0"
@@ -627,11 +776,13 @@ class OpenAICompatChatModel:
         self.disable_thinking = disable_thinking
         self.do_sample = do_sample
         self.name = name or f"{self.base_url}:{model}"
+        self._transport_max_retries = configured_max_retries()
+        self.handles_transport_retries = True
         self._client = OpenAI(
             api_key=api_key,
             base_url=self.base_url,
             timeout=self.timeout,
-            max_retries=configured_max_retries(),
+            max_retries=0,
         )
         self._supports_extra_body: Optional[bool] = None
 
@@ -759,7 +910,23 @@ class OpenAICompatChatModel:
         for model_name in self._candidate_models():
             for payload_label, payload in self._payload_variants(messages):
                 try:
-                    response = self._client.chat.completions.create(model=model_name, **payload)
+                    def invoke_chat() -> Any:
+                        with measure_llm_request(
+                            component="device",
+                            model=model_name,
+                            transport="chat_completions",
+                        ):
+                            return self._client.chat.completions.create(
+                                model=model_name,
+                                **payload,
+                            )
+
+                    response = call_with_gateway_retry(
+                        invoke_chat,
+                        max_retries=self._transport_max_retries,
+                        logger=logger,
+                        operation_name="Device chat request",
+                    )
                     message = response.choices[0].message if response and response.choices else None
                     content = self._coerce_content(getattr(message, "content", None))
                     reasoning_content = self._coerce_content(getattr(message, "reasoning_content", None))
@@ -785,7 +952,11 @@ class OpenAICompatChatModel:
                     )
                 except Exception as exc:
                     last_error = exc
-                    if payload_label == "compat" and self._is_deterministic_extra_body_rejection(exc):
+                    deterministic_rejection = (
+                        payload_label == "compat"
+                        and self._is_deterministic_extra_body_rejection(exc)
+                    )
+                    if deterministic_rejection:
                         if self._supports_extra_body is not False:
                             logger.warning(
                                 "LLM backend %s detected deterministic extra_body rejection on model %s; "
@@ -802,6 +973,11 @@ class OpenAICompatChatModel:
                         type(exc).__name__,
                         exc,
                     )
+                    if is_retryable_gateway_error(exc):
+                        # A transient gateway failure says nothing about
+                        # payload compatibility and must not trigger another
+                        # hidden attempt through the plain variant.
+                        raise
                     continue
 
         if last_error is not None:
@@ -825,6 +1001,10 @@ class ModelPoolChatModel:
         self.max_rounds = max(1, max_rounds)
         self.round_backoff_seconds = round_backoff_seconds or [2, 5]
         self._preferred_backend_index = 0
+        # Each concrete backend owns its fixed-delay transport retries.  The
+        # pool performs one failover pass and must not replay those budgets.
+        self.handles_transport_retries = True
+        self._transport_max_retries = 0
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
         """Failover only between native-bound backends, never text invoke()."""
@@ -845,7 +1025,8 @@ class ModelPoolChatModel:
         last_error: Optional[Exception] = None
         failure_notes: List[str] = []
 
-        for round_index in range(self.max_rounds):
+        effective_rounds = 1 if self.handles_transport_retries else self.max_rounds
+        for round_index in range(effective_rounds):
             for backend_index, backend in self._ordered_backend_entries():
                 try:
                     response = backend.invoke(messages)
@@ -862,7 +1043,7 @@ class ModelPoolChatModel:
                     failure_notes.append(
                         "round {round_num}/{round_total} backend {backend_name}: {exc_type}: {exc_msg}".format(
                             round_num=round_index + 1,
-                            round_total=self.max_rounds,
+                            round_total=effective_rounds,
                             backend_name=backend.name,
                             exc_type=type(exc).__name__,
                             exc_msg=exc,
@@ -872,24 +1053,24 @@ class ModelPoolChatModel:
                         "LLM backend %s failed in pool round %s/%s: %s: %s",
                         backend.name,
                         round_index + 1,
-                        self.max_rounds,
+                        effective_rounds,
                         type(exc).__name__,
                         exc,
                     )
 
-            if round_index < self.max_rounds - 1:
+            if round_index < effective_rounds - 1:
                 delay = self.round_backoff_seconds[min(round_index, len(self.round_backoff_seconds) - 1)]
                 logger.warning(
                     "All LLM backends failed in pool round %s/%s, sleeping %ss before retrying the pool",
                     round_index + 1,
-                    self.max_rounds,
+                    effective_rounds,
                     delay,
                 )
                 time.sleep(delay)
 
         recent_failures = " | ".join(failure_notes[-6:])
         message = (
-            f"All configured LLM backends failed after {self.max_rounds} pool round(s). "
+            f"All configured LLM backends failed after {effective_rounds} pool round(s). "
             f"Recent failures: {recent_failures}"
         )
         if last_error is not None:
@@ -904,6 +1085,9 @@ class NativeBoundModelPool:
         from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
 
         self.pool = pool
+        # ``invoke_with_tools`` must not time the whole pool as one request;
+        # each concrete backend attempt is measured below.
+        self.handles_request_timing = True
         self.bound: Dict[int, Any] = {}
         self.unsupported: set[int] = set()
         for index, backend in enumerate(pool.backends):
@@ -922,12 +1106,46 @@ class NativeBoundModelPool:
         from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
 
         last_error: Optional[Exception] = None
-        for round_index in range(self.pool.max_rounds):
+        effective_rounds = (
+            1 if self.pool.handles_transport_retries else self.pool.max_rounds
+        )
+        for round_index in range(effective_rounds):
             for index, _backend in self.pool._ordered_backend_entries():
                 if index in self.unsupported:
                     continue
                 try:
-                    result = self.bound[index].invoke(messages, **kwargs)
+                    backend = self.pool.backends[index]
+                    retry_value = getattr(
+                        backend, "_transport_max_retries", 0
+                    )
+                    retry_budget = (
+                        max(0, retry_value)
+                        if isinstance(retry_value, int)
+                        and not isinstance(retry_value, bool)
+                        else 0
+                    )
+                    model_label = str(
+                        getattr(backend, "model_name", "")
+                        or getattr(backend, "model", "")
+                        or getattr(backend, "_model", "")
+                        or getattr(backend, "name", "")
+                        or type(backend).__name__
+                    )
+
+                    def invoke_backend() -> Any:
+                        with measure_llm_request(
+                            component="device",
+                            model=model_label,
+                            transport="responses_native_tools",
+                        ):
+                            return self.bound[index].invoke(messages, **kwargs)
+
+                    result = call_with_gateway_retry(
+                        invoke_backend,
+                        max_retries=retry_budget,
+                        logger=logger,
+                        operation_name=f"Device native backend {index} request",
+                    )
                     self.pool._preferred_backend_index = index
                     return result
                 except Exception as exc:
@@ -938,7 +1156,7 @@ class NativeBoundModelPool:
                 raise NativeToolConfigurationError(
                     "All configured backends reject native tools; no text/CLI fallback was used"
                 ) from last_error
-            if round_index + 1 < self.pool.max_rounds:
+            if round_index + 1 < effective_rounds:
                 delays = self.pool.round_backoff_seconds
                 time.sleep(delays[min(round_index, len(delays) - 1)])
         raise RuntimeError("All native tool backends failed") from last_error

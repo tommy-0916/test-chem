@@ -20,11 +20,9 @@ wire constraints that Kimi k3 mandates:
   proxy closes any connection that produces no bytes for ~300s, which made
   every prompt above ~100KB fail with 504 in high-thinking mode; streaming
   keeps bytes flowing for the whole generation;
-- transient upstream failures (connection errors, stalls, and HTTP
-  408/409/425/429/500/502/503/504) are retried inside the gateway with
-  backoff, so one client call is carried to a completed response whenever
-  the upstream can produce one. Deterministic rejections (400/401/403 and
-  other 4xx) are forwarded immediately without retry.
+- upstream failures are returned after one request. Chem Agent's shared
+  transport layer owns retries and waits exactly 10 seconds, so this proxy
+  cannot multiply attempts or apply an upstream ``Retry-After`` delay.
 
 No other request or response content is modified; the Authorization header
 is forwarded verbatim and no secrets are stored here. Only transport-level
@@ -46,11 +44,7 @@ UPSTREAM_TIMEOUT_SECONDS = 300
 MIN_MAX_TOKENS = 32768
 REASONING_EFFORT = "high"
 STRIPPED_FIELDS = ("thinking", "do_sample")
-RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
-QUOTA_STATUS = {401, 403}
-MAX_UPSTREAM_ATTEMPTS = 4
-RETRY_BACKOFF_SECONDS = [2, 5, 10]
-QUOTA_BACKOFF_SECONDS = [20, 40, 60]
+MAX_UPSTREAM_ATTEMPTS = 1
 
 
 def adapt_payload(body: bytes) -> bytes:
@@ -276,31 +270,14 @@ class GatewayHandler(BaseHTTPRequestHandler):
         authorization = self.headers.get("Authorization")
 
         started = time.monotonic()
-        status = 0
-        raw = b""
-        for attempt in range(1, MAX_UPSTREAM_ATTEMPTS + 1):
-            attempt_started = time.monotonic()
-            status, raw, retry_after = self._upstream_once(upstream_body, authorization)
-            log(
-                f"POST {path} attempt {attempt}/{MAX_UPSTREAM_ATTEMPTS} -> {status} "
-                f"in {time.monotonic() - attempt_started:.1f}s req={len(upstream_body)}B"
-            )
-            if status == 200 or (
-                status not in RETRYABLE_STATUS and status not in QUOTA_STATUS
-            ):
-                break
-            if attempt < MAX_UPSTREAM_ATTEMPTS:
-                if status in QUOTA_STATUS:
-                    delay = QUOTA_BACKOFF_SECONDS[min(attempt - 1, len(QUOTA_BACKOFF_SECONDS) - 1)]
-                else:
-                    delay = RETRY_BACKOFF_SECONDS[min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)]
-                if retry_after:
-                    try:
-                        delay = max(delay, min(float(retry_after), 60.0))
-                    except ValueError:
-                        pass
-                log(f"retrying upstream in {delay:.0f}s (status {status})")
-                time.sleep(delay)
+        attempt_started = time.monotonic()
+        status, raw, _retry_after = self._upstream_once(
+            upstream_body, authorization
+        )
+        log(
+            f"POST {path} attempt 1/{MAX_UPSTREAM_ATTEMPTS} -> {status} "
+            f"in {time.monotonic() - attempt_started:.1f}s req={len(upstream_body)}B"
+        )
 
         elapsed = time.monotonic() - started
         usage_note = ""

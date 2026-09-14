@@ -33,6 +33,7 @@ EXIT_CODES = {
     "research_error": 6,
     "scientific_review_required": 7,
     "terminal_unmappable": 8,
+    "ready_for_dispatch": 0,
 }
 
 
@@ -98,6 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
             "request. Route or sample-matrix drift is rejected."
         ),
     )
+    parser.add_argument(
+        "--forward-only",
+        action="store_true",
+        help=(
+            "Run one Research -> Device forward pass and stop after a validated "
+            "workflow reaches ready_for_dispatch."
+        ),
+    )
 
     execution = parser.add_argument_group("execution boundary")
     execution.add_argument(
@@ -153,8 +162,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-online-literature",
         action="store_true",
         help=(
-            "Reserved for lower-level diagnostics; rejected for a new public "
-            "campaign because bootstrap retrieval is mandatory."
+            "Disable scholarly network retrieval. For a new campaign this must "
+            "be combined with --no-web-search and --knowledge-base-dir."
         ),
     )
     research.add_argument("--download-pdfs", action="store_true")
@@ -167,8 +176,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-web-search",
         action="store_true",
         help=(
-            "Reserved for lower-level diagnostics; rejected for a new public "
-            "campaign because bootstrap web retrieval is mandatory."
+            "Disable open-web retrieval. For a new campaign this must be combined "
+            "with --no-online-literature and --knowledge-base-dir."
         ),
     )
 
@@ -219,12 +228,10 @@ def build_parser() -> argparse.ArgumentParser:
 def validate_research_bootstrap_invariants(args: argparse.Namespace) -> None:
     """Enforce the public campaign's evidence-before-planning contract.
 
-    A Device-repair resume deliberately skips Research bootstrap.  Every new
-    campaign, however, must load the compact workstation truth and must attempt
-    both scholarly and open-web retrieval before the first Research plan.  The
-    lower-level Research CLI keeps its opt-out switches for isolated/offline
-    diagnostics; the public campaign entrypoint must not silently weaken this
-    production invariant.
+    A Device-repair resume deliberately skips Research bootstrap. New campaigns
+    either use both online retrieval lines or explicitly select a local-only
+    knowledge base. Partial network opt-out remains invalid because it makes the
+    evidence provenance ambiguous.
     """
     if getattr(args, "resume_device_repair", None):
         return
@@ -233,6 +240,13 @@ def validate_research_bootstrap_invariants(args: argparse.Namespace) -> None:
             "new campaigns require the workstation capability context before "
             "Research bootstrap"
         )
+    local_only = (
+        bool(getattr(args, "no_online_literature", False))
+        and bool(getattr(args, "no_web_search", False))
+        and bool(str(getattr(args, "knowledge_base_dir", "") or "").strip())
+    )
+    if local_only:
+        return
     if bool(getattr(args, "no_online_literature", False)) or not bool(
         getattr(args, "online_literature", False)
     ):
@@ -260,16 +274,16 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         research_args.append("--enable-memory")
     if args.knowledge_base_dir:
         research_args += ["--knowledge-base-dir", args.knowledge_base_dir]
-    if args.online_literature:
-        research_args.append("--online-literature")
     if args.no_online_literature:
         research_args.append("--no-online-literature")
+    elif args.online_literature:
+        research_args.append("--online-literature")
     if args.download_pdfs:
         research_args.append("--download-pdfs")
-    if args.web_search:
-        research_args.append("--web-search")
     if args.no_web_search:
         research_args.append("--no-web-search")
+    elif args.web_search:
+        research_args.append("--web-search")
 
     device_args: list[str] = ["--contract-version", args.contract_version]
     if args.workstations_dir:
@@ -353,6 +367,7 @@ def main() -> int:
         device_plan_override=Path(args.device_plan_override).expanduser().resolve()
         if args.device_plan_override
         else None,
+        forward_only=args.forward_only,
     )
 
     try:

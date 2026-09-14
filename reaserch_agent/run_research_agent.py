@@ -470,6 +470,7 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    os.environ["CHEM_LLM_COMPONENT"] = "research"
     configure_model_env(args)
     query = get_query(args)
     constraints = attach_device_context(

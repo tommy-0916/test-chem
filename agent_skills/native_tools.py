@@ -10,6 +10,9 @@ import json
 import os
 from typing import Any, Callable, Sequence
 
+from .llm_retry import call_with_gateway_retry
+from .llm_timing import measure_llm_request
+
 
 class NativeToolConfigurationError(RuntimeError):
     """The configured model/transport cannot serve native tool calls."""
@@ -67,7 +70,8 @@ def make_native_openai_model(
         "api_key": api_key,
         "base_url": base_url,
         "timeout": timeout,
-        "max_retries": max_retries,
+        # Retried by ``invoke_with_tools`` with Chem Agent's fixed delay.
+        "max_retries": 0,
         "use_responses_api": use_responses_api,
     }
     if max_tokens is not None:
@@ -78,7 +82,24 @@ def make_native_openai_model(
             options["reasoning_effort"] = reasoning_effort
     elif temperature is not None:
         options["temperature"] = temperature
-    return ChatOpenAI(**options)
+    native_model = ChatOpenAI(**options)
+    object.__setattr__(native_model, "_chem_gateway_max_retries", max(0, int(max_retries)))
+    return native_model
+
+
+def _model_gateway_retry_budget(model: Any) -> int:
+    """Read only an explicitly numeric retry budget from a model adapter."""
+
+    for attribute in ("_transport_max_retries", "_chem_gateway_max_retries"):
+        value = getattr(model, attribute, None)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return max(0, value)
+        if isinstance(value, str):
+            try:
+                return max(0, int(value))
+            except ValueError:
+                continue
+    return 0
 
 
 def invoke_with_tools(
@@ -126,7 +147,28 @@ def invoke_with_tools(
     for _ in range(budget + 1):
         final_turn = attempts >= budget
         try:
-            response = bound.invoke(history)
+            def invoke_bound() -> Any:
+                # Composite native pools time each concrete backend request.
+                # Wrapping the whole pool here would merge retries and their
+                # 10-second waits into one misleading success event.
+                if getattr(bound, "handles_request_timing", False):
+                    return bound.invoke(history)
+                with measure_llm_request(
+                    component=os.getenv("CHEM_LLM_COMPONENT", "native_tool"),
+                    model=str(
+                        getattr(model, "model_name", "")
+                        or getattr(model, "_model", "")
+                        or type(model).__name__
+                    ),
+                    transport="responses_native_tools",
+                ):
+                    return bound.invoke(history)
+
+            response = call_with_gateway_retry(
+                invoke_bound,
+                max_retries=_model_gateway_retry_budget(model),
+                operation_name="Native-tool gateway request",
+            )
         except Exception as exc:
             if is_tool_support_error(exc):
                 raise NativeToolConfigurationError(

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -12,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from langchain_core.messages import AIMessage
-from agent_skills.native_tools import NativeToolConfigurationError
+from agent_skills.native_tools import NativeToolConfigurationError, invoke_with_tools
 from utils.llm_factory import CodexResponsesModel, ModelPoolChatModel, OpenAICompatChatModel
 
 
@@ -65,6 +67,59 @@ class NativeDeviceTransportTests(unittest.TestCase):
         first.invoke.assert_not_called()
         second.invoke.assert_not_called()
         self.assertEqual(pool._preferred_backend_index, 1)
+
+    def test_native_pool_uses_child_retry_once_without_pool_replay(self):
+        backend = Mock(name="backend")
+        backend._transport_max_retries = 1
+        answer = AIMessage(content="done")
+        backend.bind_tools.return_value.invoke.side_effect = [
+            ConnectionError("offline"),
+            answer,
+        ]
+        messages = [AIMessage(content="previous")]
+        pool = ModelPoolChatModel([backend], max_rounds=8)
+
+        with patch("agent_skills.llm_retry.time.sleep") as sleep:
+            result = pool.bind_tools([]).invoke(messages)
+
+        self.assertIs(result, answer)
+        self.assertEqual(backend.bind_tools.return_value.invoke.call_count, 2)
+        sleep.assert_called_once_with(10.0)
+
+    def test_native_pool_times_each_child_attempt_without_outer_pool_event(self):
+        backend = Mock(name="backend")
+        backend.model_name = "child-model"
+        backend._transport_max_retries = 1
+        backend.bind_tools.return_value.invoke.side_effect = [
+            ConnectionError("offline"),
+            AIMessage(content="done"),
+        ]
+        pool = ModelPoolChatModel([backend], max_rounds=8)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            timing_path = Path(tmp) / "native-timing.jsonl"
+            with patch.dict(
+                os.environ,
+                {"CHEM_LLM_TIMING_JSONL": str(timing_path)},
+            ), patch("agent_skills.llm_retry.time.sleep"):
+                result = invoke_with_tools(pool, [], [])
+            events = [
+                json.loads(line)
+                for line in timing_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(result.content, "done")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(
+            [event["status"] for event in events],
+            ["failed", "success"],
+        )
+        self.assertTrue(
+            all(event["component"] == "device" for event in events)
+        )
+        self.assertTrue(
+            all(event["transport"] == "responses_native_tools" for event in events)
+        )
 
     def test_all_unsupported_fail_fast_without_round_retries(self):
         backends = [Mock(), Mock()]

@@ -9,6 +9,8 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
+from agent_skills.llm_retry import call_with_gateway_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +30,18 @@ class BaseAgent:
                 max_retries = max(1, int(retry_override))
             except ValueError:
                 pass
+        if getattr(model, "handles_transport_retries", False):
+            # The Responses adapter owns retry classification, delay and
+            # request-level timing. Do not multiply those retries here.
+            max_retries = 1
+        self._gateway_retry_budget = int(
+            getattr(model, "_chem_gateway_max_retries", 0) or 0
+        )
+        if self._gateway_retry_budget:
+            # LangChain's OpenAI SDK retry is disabled for this model. Keep
+            # one BaseAgent attempt and apply the shared 10-second policy to
+            # the underlying invocation instead.
+            max_retries = 1
         self._max_retries = max_retries
 
     @property
@@ -105,7 +119,15 @@ class BaseAgent:
 
         for attempt in range(self._max_retries):
             try:
-                response = self._model.invoke(messages)
+                if self._gateway_retry_budget:
+                    response = call_with_gateway_retry(
+                        lambda: self._model.invoke(messages),
+                        max_retries=self._gateway_retry_budget,
+                        logger=logger,
+                        operation_name="Research chat request",
+                    )
+                else:
+                    response = self._model.invoke(messages)
                 return self._normalize_response_content(response)
             except Exception as exc:  # pragma: no cover - depends on remote model
                 last_error = exc

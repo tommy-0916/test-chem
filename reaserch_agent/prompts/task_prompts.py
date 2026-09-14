@@ -609,6 +609,65 @@ stage progress update
 - 不要新增设备语义字段"""
 
 
+V2_MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
+V2 macro step design
+
+## 目标
+把已确定的单个 macro action 细化为 4-8 个可交给 Device Agent 的化学实验步骤，
+从当前起点一直推进到本 stage 的 observation point。
+
+## 当前科学上下文
+- 用户 query：{query}
+- 调研报告：{survey_report_json}
+- 当前证据包的实验信息：{extracted_protocols_json}
+- stage 路线：{stage_route_json}
+- 当前 stage：{current_stage}
+- 路线理由：{stage_route_reason}
+- 当前 stage 理由：{current_stage_reason}
+
+## 规则
+1. 只设计附加的 macro action 中的一个 experiment_group/sample_id；不并行新增对照组、重复组或未来 stage。
+2. 步骤必须覆盖完整样品 lineage，并以可产生真实 observation 的步骤结束。
+3. 只有本调用给出的当前证据包可作为 paper 来源。未在其中找到的数值必须给出明确值，
+   并标记 `agent_inferred`、非空 rationale；不得伪装成文献参数。
+4. 每一项主动投料都必须有数值和单位。禁止“适量”“若干”“按需”。未知产率的整批中间物用
+   `all_available`/`whole_batch`，不得虚构库存质量。
+5. 保持化学实验语义；不选具体工作站、版本、机器参数、实体容器号或槽位。
+   允许声明逻辑容器类型、数量、容量和盖状态要求。
+6. 使用上下文中选中 operation contract 的 I/O、容器、科学控制范围和返回字段作为边界。
+   工作站没有声明的返回值不得当作自动闭环测量。
+7. 若平台限制固体称量或体积，用“外部预配且已装载的原液”和具体小体积；
+   加液与搅拌的时序可表达为固定体积分批加液+批间固定搅拌。
+8. 必须保留化学必需的反应、熟化、分离、定量洗涤、干燥和目标表征；
+   使用固定时间/次数/温度，不用颜色、澄清度或“干燥至”作为设备自动终点。
+
+## 输出
+只输出 JSON object：
+{{
+  "current_stage_plan": "覆盖 stage 目标、逻辑、变量、预期 observation 和完成条件",
+  "macro_plan": [
+    {{
+      "步骤序号": 1,
+      "操作": "短语级化学操作",
+      "试剂/对象": "具体材料或样品",
+      "参数": "带数值和单位的实验条件",
+      "来源": "paper_id/title 或 agent补全",
+      "provenance": {{"kind":"paper|user|agent_inferred","reference":"来源","rationale":"推导理由"}},
+      "material_inputs": [],
+      "material_outputs": [],
+      "quantity_requirements": [],
+      "container_requirements": [],
+      "intermediate_returns": []
+    }}
+  ],
+  "macro_plan_summary": "该步骤组如何推进到 observation point"
+}}
+
+每步的 V2 字段精确合同见下方“已先行确定的 macro action 与步骤接口”。
+输出前检查：序号连续；每步操作/对象/参数完整；主动投料全部定量；lineage 连续；最后一步到达 observation point。
+"""
+
+
 POST_OBSERVATION_MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
 post-observation macro plan design
 

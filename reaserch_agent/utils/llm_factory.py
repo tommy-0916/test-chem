@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -16,11 +17,43 @@ from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
 
+from agent_skills.llm_retry import (
+    RetryableGatewayError,
+    call_with_gateway_retry,
+    is_retryable_gateway_error,
+)
+from agent_skills.llm_timing import measure_llm_request
+
 
 logger = logging.getLogger(__name__)
 
 
 DEFAULT_LLM_MAX_RETRIES = 8
+
+
+class _SingleAttemptGeminiClient:
+    """Disable hidden GAPIC retries and sanitize transient Gemini failures."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+    def generate_content(self, *args: Any, **kwargs: Any) -> Any:
+        # The Google client otherwise owns another retry loop beneath
+        # LangChain.  Its ResourceExhausted handler can also sleep for the
+        # provider's retry_after value even when LangChain max_retries is 0.
+        kwargs["retry"] = None
+        try:
+            return self._client.generate_content(*args, **kwargs)
+        except Exception as exc:
+            if not is_retryable_gateway_error(exc):
+                raise
+            raise RetryableGatewayError(
+                "Gemini gateway request failed with a transient error "
+                f"({type(exc).__name__})"
+            ) from exc
 
 
 def configured_max_retries() -> int:
@@ -118,12 +151,16 @@ class CodexResponsesModel:
         self._reasoning_effort = reasoning_effort
         self._timeout = timeout
         self._max_output_tokens = max_output_tokens
+        self._transport_max_retries = configured_max_retries()
+        self.handles_transport_retries = True
         self._codex_path = codex_path or shutil.which("codex") or "/Applications/Codex.app/Contents/Resources/codex"
         self._client = client or OpenAI(
             api_key=self._api_key,
             base_url=self._base_url,
             timeout=self._timeout,
-            max_retries=configured_max_retries(),
+            # Retry explicitly so Retry-After: 60 cannot stall the campaign
+            # and timing can distinguish every transport attempt.
+            max_retries=0,
         )
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
@@ -149,8 +186,17 @@ class CodexResponsesModel:
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
             try:
-                return self._invoke_direct(prompt)
-            except Exception:
+                return call_with_gateway_retry(
+                    lambda: self._invoke_direct(prompt),
+                    max_retries=self._transport_max_retries,
+                    logger=logger,
+                    operation_name="Research Responses request",
+                )
+            except Exception as exc:
+                if is_retryable_gateway_error(exc):
+                    # CLI targets the same provider and cannot repair an
+                    # exhausted transient gateway failure.
+                    raise
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
@@ -159,7 +205,12 @@ class CodexResponsesModel:
                 logger.exception(
                     "Direct Responses request failed; falling back to Codex CLI"
                 )
-        return self._invoke_cli(prompt)
+        return call_with_gateway_retry(
+            lambda: self._invoke_cli(prompt),
+            max_retries=self._transport_max_retries,
+            logger=logger,
+            operation_name="Research Codex CLI request",
+        )
 
     def _invoke_direct(self, prompt: str) -> Any:
         payload: Dict[str, Any] = {
@@ -171,14 +222,17 @@ class CodexResponsesModel:
             payload["reasoning"] = {"effort": self._reasoning_effort}
         if self._max_output_tokens is not None:
             payload["max_output_tokens"] = self._max_output_tokens
-        response = self._client.responses.create(**payload)
-        text = self._extract_response_text(response)
-        if not text:
-            status = getattr(response, "status", "")
-            raise RuntimeError(
-                f"Responses API returned no text output (status={status or 'unknown'})"
-            )
-        return SimpleNamespace(content=text, raw_response=response)
+        with measure_llm_request(
+            component="research", model=self._model, transport="responses"
+        ):
+            response = self._client.responses.create(**payload)
+            text = self._extract_response_text(response)
+            if not text:
+                status = getattr(response, "status", "")
+                raise RuntimeError(
+                    f"Responses API returned no text output (status={status or 'unknown'})"
+                )
+            return SimpleNamespace(content=text, raw_response=response)
 
     def _invoke_cli(self, prompt: str) -> Any:
         tmpdir = tempfile.mkdtemp(prefix="research-codex-")
@@ -212,21 +266,24 @@ class CodexResponsesModel:
             # because interrupted Codex sessions may persist shell snapshots.
             env.pop("OPENAI_API_KEY", None)
             env.pop("REFINER_LLM_API_KEY", None)
-            completed = subprocess.run(
-                cmd,
-                input=stateless_prompt,
-                text=True,
-                capture_output=True,
-                timeout=self._timeout,
-                env=env,
-                cwd=tmp_path,
-                check=False,
-            )
-            if completed.returncode != 0:
-                stderr = completed.stderr.strip()
-                stdout = completed.stdout.strip()
-                detail = stderr or stdout or f"exit code {completed.returncode}"
-                raise RuntimeError(f"Codex responses call failed: {detail[-2000:]}")
+            with measure_llm_request(
+                component="research", model=self._model, transport="codex_cli"
+            ):
+                completed = subprocess.run(
+                    cmd,
+                    input=stateless_prompt,
+                    text=True,
+                    capture_output=True,
+                    timeout=self._timeout,
+                    env=env,
+                    cwd=tmp_path,
+                    check=False,
+                )
+                if completed.returncode != 0:
+                    diagnostic = self._cli_failure_diagnostic(completed)
+                    if self._is_retryable_cli_failure(completed):
+                        raise RetryableGatewayError(diagnostic)
+                    raise RuntimeError(diagnostic)
             if not output_path.exists():
                 raise RuntimeError(
                     "Codex responses call did not produce output-last-message"
@@ -237,6 +294,57 @@ class CodexResponsesModel:
             return SimpleNamespace(content=text)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @classmethod
+    def _is_retryable_cli_failure(
+        cls,
+        completed: subprocess.CompletedProcess[str],
+    ) -> bool:
+        """Classify private CLI output, then discard it at the boundary."""
+
+        detail = f"{completed.stdout or ''}\n{completed.stderr or ''}".lower()
+        patterns = (
+            re.compile(
+                r"\b(?:http(?:/\d(?:\.\d)?)?|unexpected\s+status|last\s+status|"
+                r"status(?:[\s_-]+code)?|error(?:\s+code)?|code|"
+                r"(?:gateway|upstream)(?:\s+(?:returned|response|status))?)"
+                r"[\"']?\s*[:=]?\s*[\"']?([1-5]\d{2})\b",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\b([1-5]\d{2})\s+(?:bad\s+gateway|gateway\s+timeout|"
+                r"too\s+many\s+requests|request\s+timeout|service\s+unavailable)",
+                re.IGNORECASE,
+            ),
+        )
+        matches = [
+            match
+            for pattern in patterns
+            for match in pattern.finditer(detail)
+        ]
+        if matches:
+            status = int(max(matches, key=lambda match: match.start()).group(1))
+            return status in {408, 409, 425, 429} or 500 <= status <= 599
+        # The shared classifier covers connection, timeout and protocol
+        # markers. It sees this text only inside the current process.
+        return is_retryable_gateway_error(RuntimeError(detail))
+
+    @classmethod
+    def _cli_failure_diagnostic(
+        cls,
+        completed: subprocess.CompletedProcess[str],
+    ) -> str:
+        return (
+            "Codex responses call failed: "
+            f"exit_code={completed.returncode}, "
+            f"stdout_{cls._text_diagnostic(completed.stdout or '')}, "
+            f"stderr_{cls._text_diagnostic(completed.stderr or '')}"
+        )
+
+    @staticmethod
+    def _text_diagnostic(text: str) -> str:
+        digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+        return f"len={len(text)},sha256={digest}"
 
     @staticmethod
     def _extract_response_text(response: Any) -> str:
@@ -288,6 +396,8 @@ name = "OpenAI"
 base_url = "{self._escape_toml(self._base_url)}"
 wire_api = "responses"
 requires_openai_auth = true
+request_max_retries = 0
+stream_max_retries = 0
 """
         load_marketplaces = os.getenv(
             "REFINER_CODEX_LOAD_MARKETPLACES", "0"
@@ -429,13 +539,24 @@ class LLMFactory:
             "temperature": temperature,
             "default_headers": LLMFactory._openai_compatible_headers(),
             "timeout": LLMFactory._openai_compatible_timeout(),
-            "max_retries": configured_max_retries(),
+            # BaseAgent/native_tools own retries so Retry-After: 60 cannot be
+            # honored invisibly inside the SDK.
+            "max_retries": 0,
             "use_responses_api": False,
         }
         if provider_url:
             model_kwargs["base_url"] = normalize_openai_base_url(provider_url)
         model_kwargs.update(kwargs)
-        return ChatOpenAI(**model_kwargs)
+        # A caller-provided LangChain option must not re-enable the SDK's
+        # Retry-After-aware retry loop.
+        model_kwargs["max_retries"] = 0
+        model = ChatOpenAI(**model_kwargs)
+        object.__setattr__(
+            model,
+            "_chem_gateway_max_retries",
+            configured_max_retries(),
+        )
+        return model
 
     @staticmethod
     def _openai_compatible_timeout() -> float:
@@ -486,7 +607,17 @@ class LLMFactory:
         if client_options:
             model_kwargs["client_options"] = client_options
         model_kwargs.update(kwargs)
-        return ChatGoogleGenerativeAI(**model_kwargs)
+        model_kwargs["max_retries"] = 0
+        model = ChatGoogleGenerativeAI(**model_kwargs)
+        client = getattr(model, "client", None)
+        if client is not None:
+            object.__setattr__(model, "client", _SingleAttemptGeminiClient(client))
+        object.__setattr__(
+            model,
+            "_chem_gateway_max_retries",
+            configured_max_retries(),
+        )
+        return model
 
     @staticmethod
     def _looks_like_gemini(

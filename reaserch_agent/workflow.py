@@ -15,15 +15,21 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List, Sequence
 
 from .core import BaseAgent
-from agent_skills.capabilities import load_capability_skill, project_device_context
+from agent_skills.capabilities import (
+    load_capability_skill,
+    load_capability_tier_skill,
+    project_device_context,
+)
 from agent_skills.native_tools import NativeToolConfigurationError
 from .prompts import (
     ABNORMAL_OBSERVATION_SURVEY_EXPANSION_PROMPT,
     ABNORMAL_OBSERVATION_SURVEY_QUERY_GENERATE_PROMPT,
     BOOTSTRAP_SYSTEM_PROMPT,
+    V2_MACRO_PLAN_SYSTEM_PROMPT,
     CURRENT_STAGE_REPAIR_ASSESS_PROMPT,
     DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT,
     MACRO_PLAN_DESIGN_PROMPT,
+    V2_MACRO_PLAN_DESIGN_PROMPT,
     MACRO_ACTION_DESIGN_PROMPT,
     MACRO_STEP_CONTRACT_PROMPT,
     MANUAL_HANDOFF_COMPOSE_PROMPT,
@@ -1662,68 +1668,123 @@ class ResearchAgent(BaseAgent):
         invocation_index = 1 + sum(
             1
             for item in state.tool_invocations
-            if isinstance(item, dict) and item.get("task") == "macro_action_evidence"
+            if isinstance(item, dict)
+            and item.get("task_name") == "macro_action_evidence"
         )
         objective = (
             f"为当前 stage 的下一组实验设计提供可核查的实验步骤和精确参数；"
             f"目标 observation point: {observation_point}"
         )
+        local_only = (
+            getattr(self, "_online_literature", True) is False
+            and not bool(getattr(self, "_web_search_enabled", True))
+        )
         summary: Dict[str, Any]
-        try:
-            summary = self._online_research_service(state).run(
-                query=state.event.query,
-                objective=objective,
-                references=[],
-                evidence_depth="full_text",
-                survey_queries=sanitize_search_queries(
-                    [
-                        f"{state.event.query} {state.current_stage}",
-                        f"{state.event.query} {observation_point} experimental protocol",
-                    ]
-                ),
-                mode="bootstrap",
-                stage=state.current_stage,
+        if local_only:
+            queries = sanitize_search_queries(
+                [
+                    *state.survey_queries[-6:],
+                    f"{state.event.query} {state.current_stage}",
+                    f"{state.event.query} {observation_point} experimental protocol",
+                ]
             )
-            self._record_tool_invocation(
-                state,
-                "macro_action_evidence",
-                {
-                    "name": "online_research",
-                    "query": state.event.query,
-                    "objective": objective,
-                    "planning_mode": planning_mode,
-                },
-                summary,
-            )
-        except Exception as exc:
-            # V2 explicitly permits a concrete agent-inferred design when
-            # the current invocation returns no usable paper.
+            hits = self._knowledge_query.search(queries)
             summary = {
-                "tool": "online_research",
-                "status": "error",
-                "retrieval_status": "provider_failure",
+                "tool": "local_knowledge_search",
+                "status": "success",
+                "retrieval_status": "success" if hits else "empty",
                 "query": state.event.query,
                 "objective": objective,
-                "results": [],
-                "errors": [f"{type(exc).__name__}: {exc}"],
+                "results": [
+                    {
+                        "paper_id": "local_"
+                        + hashlib.sha256(hit.file_path.encode("utf-8")).hexdigest()[:16],
+                        "title": hit.title,
+                        "source": "local_knowledge_base",
+                        "verification_status": "local_file",
+                        "full_text_status": "local_parsed",
+                        "corpus_files": [hit.file_path],
+                        "score": hit.score,
+                        "problem": hit.problem,
+                        "synthesis_summary": hit.synthesis_summary,
+                        "experiment_details": hit.experiment_details,
+                        "steps": deepcopy(hit.steps),
+                        "performance": deepcopy(hit.performance),
+                        "matched_terms": list(hit.matched_terms),
+                    }
+                    for hit in hits
+                ],
+                "errors": [],
             }
             self._record_tool_invocation(
                 state,
                 "macro_action_evidence",
                 {
-                    "name": "online_research",
+                    "name": "local_knowledge_search",
                     "query": state.event.query,
                     "objective": objective,
                     "planning_mode": planning_mode,
+                    "queries": queries,
                 },
                 summary,
             )
-            state.add_error(f"macro action evidence search failed: {exc}")
+        else:
+            try:
+                summary = self._online_research_service(state).run(
+                    query=state.event.query,
+                    objective=objective,
+                    references=[],
+                    evidence_depth="full_text",
+                    survey_queries=sanitize_search_queries(
+                        [
+                            f"{state.event.query} {state.current_stage}",
+                            f"{state.event.query} {observation_point} experimental protocol",
+                        ]
+                    ),
+                    mode="bootstrap",
+                    stage=state.current_stage,
+                )
+                self._record_tool_invocation(
+                    state,
+                    "macro_action_evidence",
+                    {
+                        "name": "online_research",
+                        "query": state.event.query,
+                        "objective": objective,
+                        "planning_mode": planning_mode,
+                    },
+                    summary,
+                )
+            except Exception as exc:
+                # V2 explicitly permits a concrete agent-inferred design when
+                # the current invocation returns no usable paper.
+                summary = {
+                    "tool": "online_research",
+                    "status": "error",
+                    "retrieval_status": "provider_failure",
+                    "query": state.event.query,
+                    "objective": objective,
+                    "results": [],
+                    "errors": [f"{type(exc).__name__}: {exc}"],
+                }
+                self._record_tool_invocation(
+                    state,
+                    "macro_action_evidence",
+                    {
+                        "name": "online_research",
+                        "query": state.event.query,
+                        "objective": objective,
+                        "planning_mode": planning_mode,
+                    },
+                    summary,
+                )
+                state.add_error(f"macro action evidence search failed: {exc}")
         isolated = {
             "scope": "macro_action",
             "query": state.event.query,
             "objective": objective,
             "planning_mode": planning_mode,
+            "retrieval_mode": "local_knowledge" if local_only else "online_research",
             "tool_invocation_index": invocation_index,
             "status": summary.get("status", "unknown"),
             "retrieval_status": summary.get("retrieval_status", "unknown"),
@@ -1738,7 +1799,8 @@ class ResearchAgent(BaseAgent):
         ).hexdigest()
         state.current_evidence_bundle = isolated
         state.add_log(
-            "V2 macro action evidence refreshed from one isolated invocation: "
+            "V2 macro action evidence refreshed from one isolated "
+            f"{'local knowledge' if local_only else 'online'} invocation: "
             f"results={len(isolated['results'])}, status={isolated['retrieval_status']}"
         )
 
@@ -3054,7 +3116,7 @@ class ResearchAgent(BaseAgent):
                             "质量问题：\n"
                             + "\n".join(f"- {issue}" for issue in previous_issues)
                             + "\n\n上一次输出：\n"
-                            + json.dumps(previous_result, ensure_ascii=False, indent=2)
+                            + self._macro_plan_retry_result_json(previous_result)
                         )
                     result = self._invoke_state_json(
                         state,
@@ -5277,23 +5339,57 @@ class ResearchAgent(BaseAgent):
     def _step_macro_plan_design(self, state: ResearchAgentState) -> Dict[str, Any]:
         self._step_macro_action_design(state, "bootstrap")
         current_evidence = self._current_action_evidence_records(state)
-        reference_context = (
-            json.dumps(current_evidence, ensure_ascii=False, indent=2)
-            if self._contract_version == "v2"
-            else self._format_macro_reference_context(state.knowledge_hits[:2])
-        )
-        base_prompt = MACRO_PLAN_DESIGN_PROMPT.format(
-            query=state.event.query,
-            survey_report_json=json.dumps(state.survey_report, ensure_ascii=False, indent=2),
-            extracted_protocols_json=json.dumps(
-                (
-                    current_evidence
-                    if self._contract_version == "v2"
-                    else state.extracted_protocols
-                ),
+        if self._contract_version == "v2":
+            # The full evidence bundle remains in state for traceability. The
+            # planning request gets one bounded projection and does not repeat
+            # the same 40-60 kB records under two different headings.
+            planning_evidence = self._compact_action_evidence_for_planning(
+                current_evidence
+            )
+            extracted_protocols_json = json.dumps(
+                planning_evidence,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            reference_context = (
+                "与上方‘从知识库论文抽取的实验过程’相同；"
+                "本调用不重复注入当前独立证据包。"
+            )
+        else:
+            extracted_protocols_json = json.dumps(
+                state.extracted_protocols,
                 ensure_ascii=False,
                 indent=2,
+            )
+            reference_context = self._format_macro_reference_context(
+                state.knowledge_hits[:2]
+            )
+        macro_plan_prompt = (
+            V2_MACRO_PLAN_DESIGN_PROMPT
+            if self._contract_version == "v2"
+            else MACRO_PLAN_DESIGN_PROMPT
+        )
+        survey_report = state.survey_report
+        if self._contract_version == "v2":
+            survey_report = {
+                "summary": state.survey_report.get("summary", ""),
+                "key_findings": state.survey_report.get("key_findings", [])[:3],
+                "route_implications": state.survey_report.get(
+                    "route_implications", []
+                )[:3],
+                "open_questions": state.survey_report.get("open_questions", [])[:2],
+            }
+        base_prompt = macro_plan_prompt.format(
+            query=state.event.query,
+            survey_report_json=json.dumps(
+                survey_report,
+                ensure_ascii=False,
+                separators=(",", ":")
+                if self._contract_version == "v2"
+                else None,
+                indent=None if self._contract_version == "v2" else 2,
             ),
+            extracted_protocols_json=extracted_protocols_json,
             stage_route_json=json.dumps(state.stage_route, ensure_ascii=False, indent=2),
             current_stage=state.current_stage,
             stage_route_reason=state.stage_route_reason,
@@ -5325,12 +5421,17 @@ class ResearchAgent(BaseAgent):
                             "质量问题：\n"
                             + "\n".join(f"- {issue}" for issue in previous_issues)
                             + "\n\n上一次输出：\n"
-                            + json.dumps(previous_result, ensure_ascii=False, indent=2)
+                            + self._macro_plan_retry_result_json(previous_result)
                         )
                     result = self._invoke_state_json(
                         state,
                         output_key,
                         task_prompt,
+                        system_prompt=(
+                            V2_MACRO_PLAN_SYSTEM_PROMPT
+                            if self._contract_version == "v2"
+                            else BOOTSTRAP_SYSTEM_PROMPT
+                        ),
                     )
                     state.raw_llm_outputs[output_key] = result
                     previous_result = result
@@ -5440,6 +5541,224 @@ class ResearchAgent(BaseAgent):
         self._assert_macro_return_contracts(state, heuristic_design["macro_plan"])
         return heuristic_design
 
+    def _compact_action_evidence_for_planning(
+        self,
+        records: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Project the current evidence call into a small parameter-first view."""
+
+        compact: List[Dict[str, Any]] = []
+        scalar_limits = {
+            "problem": 150,
+            "synthesis_summary": 220,
+            "experiment_details": 260,
+        }
+        metadata_fields = (
+            "paper_id",
+            "title",
+            "doi",
+            "arxiv_id",
+            "source",
+            "verification_status",
+            "full_text_status",
+            "corpus_files",
+            "score",
+        )
+        seen_identities: set[tuple[str, str, str]] = set()
+        unique_records: List[Dict[str, Any]] = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            identity = (
+                str(record.get("doi", "")).strip().casefold(),
+                str(record.get("title", "")).strip().casefold(),
+                str(record.get("source", "")).strip().casefold(),
+            )
+            if identity in seen_identities:
+                continue
+            seen_identities.add(identity)
+            unique_records.append(record)
+
+        parameter_signal = re.compile(
+            r"\d+(?:\.\d+)?\s*(?:mmol|mol|mg|g|ml|l|m|min|h|s|rpm|r/min|"
+            r"℃|°c|%|v|a)|浓度|滴加|搅拌|离心|洗涤|干燥|溶液",
+            flags=re.IGNORECASE,
+        )
+        specific_operation = re.compile(
+            r"配制|加液|混合|反应|共沉淀|搅拌|熟化|陈化|离心|洗涤|干燥|"
+            r"xrd|tem|sem|raman|ftir|表征|测试",
+            flags=re.IGNORECASE,
+        )
+
+        def step_parameter(step: Dict[str, Any]) -> str:
+            return str(
+                step.get("参数", "") or step.get("parameters", "")
+            ).strip()
+
+        def useful_steps(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+            candidates: List[tuple[int, int, Dict[str, Any]]] = []
+            for index, step in enumerate(record.get("steps", []) or []):
+                if not isinstance(step, dict):
+                    continue
+                parameter = step_parameter(step)
+                if not parameter or "文献未说明" in parameter:
+                    continue
+                operation = str(
+                    step.get("操作", "") or step.get("operation", "")
+                )
+                signal_count = len(parameter_signal.findall(parameter))
+                if signal_count == 0:
+                    continue
+                specificity = 1 if specific_operation.search(operation) else 0
+                candidates.append((specificity * 20 + signal_count, index, step))
+            chosen = sorted(candidates, key=lambda item: (-item[0], item[1]))[:3]
+            return [item[2] for item in sorted(chosen, key=lambda item: item[1])]
+
+        def record_rank(record: Dict[str, Any]) -> tuple[float, float]:
+            selected = useful_steps(record)
+            scientific_steps = sum(
+                bool(
+                    specific_operation.search(
+                        str(step.get("操作", "") or step.get("operation", ""))
+                    )
+                )
+                for step in selected
+            )
+            try:
+                source_score = float(record.get("score", 0) or 0)
+            except (TypeError, ValueError):
+                source_score = 0.0
+            return scientific_steps * 5.0 + len(selected) * 2.0 + source_score, source_score
+
+        unique_records.sort(key=record_rank, reverse=True)
+        step_fields = (
+            "步骤序号",
+            "操作",
+            "试剂/对象",
+            "参数",
+            "evidence",
+            "page",
+            "operation",
+            "object",
+            "parameters",
+        )
+        step_limits = {
+            "操作": 100,
+            "operation": 100,
+            "试剂/对象": 160,
+            "object": 160,
+            "参数": 300,
+            "parameters": 300,
+            "evidence": 180,
+        }
+
+        for record in unique_records:
+            item = {
+                key: deepcopy(record[key])
+                for key in metadata_fields
+                if key in record
+            }
+            selected_steps = useful_steps(record)
+            for key, limit in scalar_limits.items():
+                if selected_steps:
+                    continue
+                value = str(record.get(key, "")).strip()
+                if value:
+                    item[key] = value[:limit] + (
+                        "...[truncated]" if len(value) > limit else ""
+                    )
+            if not selected_steps:
+                selected_steps = [
+                    step
+                    for step in (record.get("steps", []) or [])[:1]
+                    if isinstance(step, dict)
+                ]
+            item["steps"] = []
+            for step in selected_steps:
+                projected_step: Dict[str, Any] = {}
+                for key in step_fields:
+                    if key not in step:
+                        continue
+                    value = deepcopy(step[key])
+                    if key in step_limits:
+                        text = str(value).strip()
+                        limit = step_limits[key]
+                        value = text[:limit] + (
+                            "...[truncated]" if len(text) > limit else ""
+                        )
+                    projected_step[key] = value
+                item["steps"].append(projected_step)
+            performance = record.get("performance", [])
+            if isinstance(performance, list):
+                item["performance"] = [
+                    self._truncate_context_value(entry, max_chars=180)
+                    for entry in performance[:1]
+                    if isinstance(entry, dict)
+                ]
+            compact.append(item)
+            if len(compact) >= 2:
+                break
+        return compact
+
+    @staticmethod
+    def _selected_macro_step_operations(
+        pending_macro_action: Dict[str, Any],
+        available_operation_names: Sequence[str] = (),
+    ) -> List[str]:
+        """Expand a scientific action sequence into operation search terms."""
+
+        phrases = [
+            str(item).strip()
+            for item in pending_macro_action.get("planned_operations", []) or []
+            if str(item).strip()
+        ]
+        rules = (
+            (r"拿取|取样|称量|物料", ("物料拿取",)),
+            (r"配制|加液|滴加|加入|投料|移液", ("加液",)),
+            (r"搅拌|共沉淀|熟化|反应", ("搅拌",)),
+            (r"静置|老化|陈化", ("静置",)),
+            (r"离心|固液分离", ("离心", "纯化")),
+            (r"洗涤", ("纯化",)),
+            (r"清洗", ("清洗",)),
+            (r"烘干|干燥", ("烘干",)),
+            (r"超声|分散", ("超声",)),
+            (r"XRD|衍射", ("XRD",)),
+            (r"TEM", ("TEM",)),
+            (r"SEM", ("SEM",)),
+            (r"拉曼|Raman", ("Raman",)),
+            (r"红外|FTIR|IR", ("IR",)),
+            (r"紫外|UV", ("UV",)),
+        )
+        def normalized_name(value: Any) -> str:
+            return re.sub(
+                r"[\s_\-—:：]+", "", str(value or "")
+            ).casefold()
+
+        exact_names = {
+            normalized_name(name)
+            for name in available_operation_names
+            if str(name).strip()
+        }
+        selected: List[str] = []
+        for phrase in phrases:
+            # V2 Macro Actions normally prefix each description with the exact
+            # operation name. Use that stable label so explanatory clauses
+            # such as "avoid static aging" cannot pull unrelated contracts.
+            # Free-form callers without a label retain keyword expansion.
+            parts = re.split(r"[：:]", phrase, maxsplit=1)
+            operation_label = parts[0].strip()
+            if normalized_name(operation_label) in exact_names:
+                selected.append(operation_label)
+                continue
+            semantic_terms: List[str] = []
+            for pattern, terms in rules:
+                if re.search(pattern, operation_label, flags=re.IGNORECASE):
+                    semantic_terms.extend(terms)
+            # Preserve a truly unknown label so the projection can report a
+            # capability miss. A known synonym needs only its canonical terms.
+            selected.extend(semantic_terms or [operation_label])
+        return list(dict.fromkeys(selected))
+
     @staticmethod
     def _device_tier_for_task(task_name: str) -> str:
         if task_name.startswith("macro_action_design"):
@@ -5454,9 +5773,55 @@ class ResearchAgent(BaseAgent):
             for key, value in (state.event.constraints or {}).items()
             if key not in {"device_context", "device_context_path", "device_workstations_dir"}
         }
-        constraints["device_context"] = load_capability_skill(
-            (state.event.constraints or {}).get("device_context") or {}, tier
-        )
+        device_context = (state.event.constraints or {}).get("device_context") or {}
+        if self._contract_version == "v2" and tier == "step":
+            available_operation_names = [
+                str(operation.get("name", "")).strip()
+                for workstation in device_context.get("workstations", []) or []
+                if isinstance(workstation, dict)
+                for operation in workstation.get("operations", []) or []
+                if isinstance(operation, dict)
+                and str(operation.get("name", "")).strip()
+            ]
+            selected_operations = self._selected_macro_step_operations(
+                state.pending_macro_action,
+                available_operation_names,
+            )
+            step_context = load_capability_tier_skill(
+                device_context,
+                "macro_step",
+                selected_operations=selected_operations,
+            )
+            if not available_operation_names:
+                # A persisted stage/macro-action projection may contain only
+                # workstation identities.  The capability loader has now
+                # rebuilt authoritative operation contracts from its source,
+                # so use those names to distinguish exact colon-prefixed
+                # operations from broad semantic fallbacks.  Reproject only
+                # when that distinction removes false alternatives.
+                refined_operations = self._selected_macro_step_operations(
+                    state.pending_macro_action,
+                    [
+                        str(operation.get("name", "")).strip()
+                        for operation in step_context.get(
+                            "operation_contracts", []
+                        )
+                        if isinstance(operation, dict)
+                        and str(operation.get("name", "")).strip()
+                    ],
+                )
+                if refined_operations != selected_operations:
+                    step_context = load_capability_tier_skill(
+                        device_context,
+                        "macro_step",
+                        selected_operations=refined_operations,
+                    )
+            constraints["device_context"] = step_context
+        else:
+            constraints["device_context"] = load_capability_skill(
+                device_context,
+                tier,
+            )
         return constraints
 
     def _sanitize_planning_context(self, value: Any, tier: str, _path: tuple = ()) -> Any:
@@ -5481,7 +5846,16 @@ class ResearchAgent(BaseAgent):
                 continue
             if key == "device_context" and isinstance(item, dict):
                 if _path == ("constraints",):
-                    result[key] = deepcopy(item) if item.get("tier") == tier else project_device_context(item, tier)
+                    equivalent_tiers = {
+                        "experiment": {"experiment", "stage"},
+                        "operation": {"operation", "macro_action"},
+                        "step": {"step", "macro_step"},
+                    }
+                    result[key] = (
+                        deepcopy(item)
+                        if item.get("tier") in equivalent_tiers[tier]
+                        else project_device_context(item, tier)
+                    )
                 # The single canonical projection already includes the active
                 # capability snapshot; old feedback copies must not repeat it.
             elif key == "device_capabilities" and isinstance(item, dict) and "workstations" in item:
@@ -5529,7 +5903,11 @@ class ResearchAgent(BaseAgent):
         tier = self._device_tier_for_task(task_name)
         if tier == "step" and state.pending_macro_action:
             task_prompt += MACRO_STEP_CONTRACT_PROMPT.format(
-                macro_action_json=json.dumps(state.pending_macro_action, ensure_ascii=False, indent=2),
+                macro_action_json=json.dumps(
+                    state.pending_macro_action,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
                 device_context_json="见已有 workflow 上下文中的 constraints.device_context；不重复加载设备契约。",
             )
         contextual_prompt = (
@@ -5676,6 +6054,11 @@ class ResearchAgent(BaseAgent):
     def _compact_state_context(self, state: ResearchAgentState, task_name: str) -> str:
         if task_name.startswith("device_adaptation_macro_plan_design"):
             return self._compact_device_adaptation_state_context(state, task_name)
+        if self._contract_version == "v2" and (
+            task_name == "macro_plan_design"
+            or task_name.startswith("macro_plan_design_retry_")
+        ):
+            return self._compact_initial_macro_plan_state_context(state, task_name)
 
         payload: Dict[str, Any] = {
             "task_name": task_name,
@@ -5761,6 +6144,411 @@ class ResearchAgent(BaseAgent):
             self._sanitize_planning_context(payload, self._device_tier_for_task(task_name)),
             ensure_ascii=False, indent=2,
         )
+
+    def _macro_plan_retry_result_json(
+        self,
+        previous_result: Dict[str, Any],
+        *,
+        max_chars: int = 6000,
+    ) -> str:
+        """Keep a V2 quality-retry request bounded and valid JSON.
+
+        A malformed or overlong first answer must not make the corrective call
+        larger than the original request.  The retry needs the stage summary
+        and candidate Macro Steps, while the complete raw answer remains in
+        ``state.raw_llm_outputs`` for audit.
+        """
+
+        if self._contract_version != "v2":
+            return json.dumps(previous_result, ensure_ascii=False, indent=2)
+
+        projected: Dict[str, Any] = {
+            "current_stage_plan": str(
+                previous_result.get("current_stage_plan", "")
+            )[:1200],
+            "macro_plan": [],
+        }
+        macro_plan = previous_result.get("macro_plan", [])
+        if not isinstance(macro_plan, list):
+            macro_plan = []
+        for raw_step in macro_plan[:12]:
+            if not isinstance(raw_step, dict):
+                continue
+            step: Dict[str, Any] = {}
+            for key in (
+                "macro_step_id",
+                "步骤序号",
+                "操作",
+                "试剂/对象",
+                "参数",
+                "sample_id",
+                "input_sample_ids",
+                "output_sample_ids",
+                "material_inputs",
+                "material_outputs",
+                "container_requirements",
+                "intermediate_returns",
+                "expected_return",
+            ):
+                if key not in raw_step:
+                    continue
+                value = raw_step[key]
+                if isinstance(value, list):
+                    value = value[:6]
+                step[key] = self._truncate_context_value(value, max_chars=360)
+            candidate = {
+                **projected,
+                "macro_plan": [*projected["macro_plan"], step],
+            }
+            encoded = json.dumps(
+                candidate,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            if len(encoded) > max_chars:
+                break
+            projected = candidate
+
+        encoded = json.dumps(
+            projected,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if len(encoded) <= max_chars:
+            return encoded
+
+        # A very long stage description can be the only remaining source of
+        # overflow. Keep valid JSON and reserve a small structural margin.
+        projected["current_stage_plan"] = str(
+            projected["current_stage_plan"]
+        )[: max(0, max_chars - 100)]
+        return json.dumps(
+            projected,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    def _compact_initial_macro_plan_state_context(
+        self,
+        state: ResearchAgentState,
+        task_name: str,
+    ) -> str:
+        """Keep the initial Macro Step call below common gateway limits.
+
+        The task prompt already carries the survey report, current evidence
+        projection and pending Macro Action contract. This context therefore
+        supplies only the capability contract and stage identity needed to
+        interpret them; the complete state remains persisted outside the LLM.
+        """
+
+        bundle = state.current_evidence_bundle or {}
+        constraints = self._projected_constraints(state, "step")
+        constraints["device_context"] = (
+            self._compact_macro_step_device_context_for_prompt(
+                constraints.get("device_context", {})
+            )
+        )
+        payload = {
+            "task_name": task_name,
+            "event_type": state.event.event_type,
+            "constraints": constraints,
+            "current_evidence_bundle_reference": {
+                "bundle_id": bundle.get("bundle_id", ""),
+                "retrieval_mode": bundle.get("retrieval_mode", ""),
+                "status": bundle.get("status", ""),
+                "current_invocation_only": bundle.get(
+                    "current_invocation_only",
+                    self._contract_version == "v2",
+                ),
+                "result_count": len(bundle.get("results", []) or []),
+            },
+        }
+        return json.dumps(
+            self._sanitize_planning_context(payload, "step"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _compact_macro_step_device_context_for_prompt(
+        device_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Keep the Macro Step capability contract complete but concise.
+
+        The persisted projection retains source locations and audit metadata.
+        Step planning still needs the selected operation I/O, live status,
+        quantity semantics, workstation constraints, planning policy, and
+        dependency closure.  Strip provenance noise here without dropping those
+        executable planning facts; Device binding reloads the full Skills later.
+        """
+
+        def endpoint(value: Any) -> Dict[str, Any]:
+            source = value if isinstance(value, dict) else {}
+            return {
+                key: deepcopy(source[key])
+                for key in (
+                    "container_type_raw",
+                    "containers",
+                    "container_states",
+                    "sample_states",
+                    "template_requirements",
+                    "same_as_input",
+                    "declaration_status",
+                )
+                if key in source and source[key] not in (None, [], {}, False, "")
+            }
+
+        def scientific_control(value: Any) -> Dict[str, Any]:
+            source = value if isinstance(value, dict) else {}
+            return {
+                key: deepcopy(source[key])
+                for key in (
+                    "name",
+                    "required",
+                    "unit",
+                    "range",
+                    "options",
+                    "role",
+                    "note",
+                )
+                if key in source
+            }
+
+        def compact_constraint(value: Any) -> Dict[str, Any]:
+            if isinstance(value, dict):
+                return {
+                    key: deepcopy(value[key])
+                    for key in ("text", "operation", "side")
+                    if key in value and value[key] not in (None, "", [], {})
+                }
+            text = str(value).strip()
+            return {"text": text} if text else {}
+
+        def compact_dependency(value: Any) -> Dict[str, Any]:
+            if not isinstance(value, dict):
+                return {}
+            result = {
+                key: deepcopy(value[key])
+                for key in ("relation", "station_codes", "resolution")
+                if key in value and value[key] is not None
+            }
+            evidence = value.get("evidence", {})
+            if isinstance(evidence, dict):
+                # The quote can carry the condition for an unresolved dependency;
+                # line numbers and document names are provenance-only duplication.
+                compact_evidence = {
+                    key: deepcopy(evidence[key])
+                    for key in ("section", "quote")
+                    if key in evidence
+                    and evidence[key] not in (None, "", [], {})
+                }
+                if compact_evidence:
+                    result["evidence"] = compact_evidence
+            return result
+
+        def deduplicated(items: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            result: List[Dict[str, Any]] = []
+            seen: set[str] = set()
+            for item in items:
+                if not item:
+                    continue
+                identity = json.dumps(
+                    item,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                result.append(item)
+            return result
+
+        operation_contracts: List[Dict[str, Any]] = []
+        for operation in device_context.get("operation_contracts", []) or []:
+            if not isinstance(operation, dict):
+                continue
+            controls: List[Dict[str, Any]] = []
+            seen_controls: set[str] = set()
+            for raw_control in operation.get("scientific_controls", []) or []:
+                if not isinstance(raw_control, dict):
+                    continue
+                control = scientific_control(raw_control)
+                identity = json.dumps(
+                    control,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                if identity in seen_controls:
+                    continue
+                seen_controls.add(identity)
+                controls.append(control)
+
+            feedback: Dict[str, Any] = {}
+            raw_feedback = operation.get("feedback_contract", {})
+            if isinstance(raw_feedback, dict):
+                for feedback_kind in ("returned_data", "intermediate_feedback"):
+                    declaration = raw_feedback.get(feedback_kind, {})
+                    if not isinstance(declaration, dict):
+                        continue
+                    feedback_declaration = {
+                        key: deepcopy(declaration[key])
+                        for key in ("status", "fields")
+                        if key in declaration
+                    }
+                    if (
+                        feedback_declaration.get("status", "unknown")
+                        != "unknown"
+                        or feedback_declaration.get("fields")
+                    ):
+                        feedback[feedback_kind] = feedback_declaration
+
+            station_code = str(operation.get("station_code", ""))
+            status = {
+                key: deepcopy(operation[key])
+                for key in ("availability", "currently_usable")
+                if key in operation
+            }
+            operation_contracts.append(
+                {
+                    "station_code": station_code,
+                    "name": operation.get("name", ""),
+                    **status,
+                    "input": endpoint(operation.get("input")),
+                    "output": endpoint(operation.get("output")),
+                    "container_contract": deepcopy(
+                        operation.get("container_contract", {})
+                    ),
+                    "scientific_controls": controls,
+                    "quantity_semantics": deepcopy(
+                        operation.get("quantity_semantics", {})
+                    ),
+                    "feedback_contract": feedback,
+                }
+            )
+
+        unavailable_statuses = {
+            "offline",
+            "unavailable",
+            "down",
+            "maintenance",
+            "fault",
+            "disabled",
+            "停机",
+            "维修",
+            "故障",
+            "不可用",
+            "禁用",
+        }
+        operation_station_codes = {
+            str(operation.get("station_code", ""))
+            for operation in operation_contracts
+            if str(operation.get("station_code", ""))
+        }
+        workstations: List[Dict[str, Any]] = []
+        for workstation in device_context.get("workstations", []) or []:
+            if not isinstance(workstation, dict):
+                continue
+            station_code = str(workstation.get("station_code", ""))
+            compact_workstation = {
+                key: deepcopy(workstation[key])
+                for key in (
+                    "station_code",
+                    "display_name",
+                    "availability",
+                    "availability_note",
+                    "currently_usable",
+                )
+                if key in workstation
+            }
+            if (
+                station_code not in operation_station_codes
+                and workstation.get("capability_description")
+            ):
+                # Selected stations are described by their operation
+                # contracts. Dependency-only stations need this short role
+                # description so their presence is not an opaque code.
+                compact_workstation["capability_description"] = deepcopy(
+                    workstation["capability_description"]
+                )
+            if (
+                "currently_usable" not in compact_workstation
+                and compact_workstation.get("availability")
+            ):
+                availability = str(
+                    compact_workstation["availability"]
+                ).strip().lower()
+                compact_workstation["currently_usable"] = (
+                    "unknown"
+                    if availability == "unknown"
+                    else availability not in unavailable_statuses
+                )
+            planning_constraints = deduplicated(
+                [
+                    compact_constraint(item)
+                    for item in workstation.get("planning_constraints", []) or []
+                ]
+            )
+            if planning_constraints:
+                compact_workstation["planning_constraints"] = planning_constraints
+            dependencies = deduplicated(
+                [
+                    compact_dependency(item)
+                    for item in workstation.get("dependencies", []) or []
+                ]
+            )
+            if dependencies:
+                compact_workstation["dependencies"] = dependencies
+            workstations.append(compact_workstation)
+
+        global_constraints = deduplicated(
+            [
+                compact_constraint(item)
+                for item in device_context.get("global_constraints", []) or []
+            ]
+        )
+
+        return {
+            key: deepcopy(device_context[key])
+            for key in (
+                "tier",
+                "skill",
+                "projection_version",
+                "legacy_tier",
+                "name",
+                "capability_snapshot_id",
+                "planning_policy",
+                "additional_planning_policy",
+                "selection_policy",
+                "selected_operations",
+                "selection_miss",
+                "unmatched_operations",
+                "restrictions",
+                "excluded_capabilities",
+                "allowed_capabilities",
+                "allowed_operations",
+                "declaration_status",
+                "note",
+                "container_list",
+                "sample_carrier_list",
+                "dependency_station_codes",
+                "instructions",
+            )
+            if key in device_context
+        } | {
+            "workstations": workstations,
+            "operation_contracts": operation_contracts,
+            "feedback_default": {
+                "returned_data": {"status": "unknown", "fields": []},
+                "intermediate_feedback": {"status": "unknown", "fields": []},
+                "planning_rule": (
+                    "unknown/undeclared feedback 不得作为自动闭环测量；"
+                    "仅 operation feedback_contract 的显式覆盖可替换默认值。"
+                ),
+            },
+            "global_constraints": global_constraints,
+        }
 
     def _compact_device_adaptation_state_context(
         self,

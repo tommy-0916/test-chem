@@ -84,6 +84,24 @@ class CapabilityProjectionTest(unittest.TestCase):
         if projected.get("selection_miss"):
             self.assertEqual(len(projected["workstations"]), 45)
 
+    def test_partial_macro_step_match_keeps_unknown_operation_visible(self):
+        projected = project_capability_tier(
+            self.index,
+            "macro_step",
+            selected_operations=["开始搅拌", "不存在的自动化操作"],
+        )
+
+        self.assertIn(
+            "开始搅拌",
+            {item["name"] for item in projected["operation_contracts"]},
+        )
+        self.assertIs(projected["selection_miss"], True)
+        self.assertEqual(
+            projected["unmatched_operations"],
+            ["不存在的自动化操作"],
+        )
+        self.assertIn("partial", projected["selection_policy"])
+
     def test_tiers_do_not_leak_lower_level_contracts(self):
         forbidden = {"input", "output", "container_contract", "parameter_contracts", "scientific_controls", "feedback_contract", "planning_constraints", "audit_content", "compact_workstation_capabilities"}
         for tier in ("experiment", "operation"):

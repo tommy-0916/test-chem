@@ -586,12 +586,19 @@ def _filter_macro_step_projection(
         return projection
     contracts = []
     station_codes: set[str] = set()
+    matched_requested: set[str] = set()
     for item in projection.get("operation_contracts", []):
         if not isinstance(item, dict):
             continue
         name = _normalized_operation_name(item.get("name"))
-        if not any(token in name or name in token for token in requested if name):
+        matches = {
+            token
+            for token in requested
+            if name and (token in name or name in token)
+        }
+        if not matches:
             continue
+        matched_requested.update(matches)
         contracts.append(copy.deepcopy(item))
         station_codes.add(str(item.get("station_code", "")))
     if not contracts:
@@ -627,9 +634,23 @@ def _filter_macro_step_projection(
     ]
     filtered["selected_operations"] = list(selected_operations)
     filtered["dependency_station_codes"] = sorted(dependency_codes)
-    filtered["selection_policy"] = (
-        "all operation-name matches plus declared dependency closure; no Top-K"
-    )
+    unmatched = [
+        item
+        for item in selected_operations
+        if _normalized_operation_name(item) not in matched_requested
+    ]
+    if unmatched:
+        filtered["selection_miss"] = True
+        filtered["unmatched_operations"] = unmatched
+        filtered["selection_policy"] = (
+            "partial operation-name match; unmatched_operations remain an explicit "
+            "capability gap; matched contracts include declared dependency closure; "
+            "no Top-K"
+        )
+    else:
+        filtered["selection_policy"] = (
+            "all operation-name matches plus declared dependency closure; no Top-K"
+        )
     return filtered
 
 

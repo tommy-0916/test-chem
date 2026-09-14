@@ -57,6 +57,7 @@ STOP_DEVICE_ERROR = "device_error"
 STOP_RESEARCH_ERROR = "research_error"
 STOP_REVIEW_REQUIRED = "scientific_review_required"
 STOP_TERMINAL_UNMAPPABLE = "terminal_unmappable"
+STOP_READY_FOR_DISPATCH = "ready_for_dispatch"
 
 APPROVAL_FILENAME = "review_approval.json"
 DEVICE_REPAIR_MARKDOWN = "AWAITING_DEVICE_REPAIR.md"
@@ -518,12 +519,16 @@ class CampaignConfig:
     references: List[str] = field(default_factory=list)
     max_iterations: int = MAX_CAMPAIGN_ITERATIONS
     feasibility_deadlock_limit: int = 3
-    transient_device_retry_limit: int = 3
+    # Transport adapters own gateway retries.  Re-running the complete Device
+    # mapping here would multiply those requests and repeat already-completed
+    # LLM work, so same-layer workflow retries are opt-in.
+    transient_device_retry_limit: int = 0
     campaigns_root: Optional[Path] = None
     research_args: List[str] = field(default_factory=list)
     device_args: List[str] = field(default_factory=list)
     resume_device_repair: Optional[Path] = None
     device_plan_override: Optional[Path] = None
+    forward_only: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= self.max_iterations <= MAX_CAMPAIGN_ITERATIONS:
@@ -789,6 +794,31 @@ class CampaignRunner:
                 elif route == "success":
                     consecutive_feasibility = 0
                     previous_feasibility_keys = set()
+                    if self.config.forward_only:
+                        try:
+                            self._check_package_for_dispatch(package, iteration_dir)
+                        except DispatchCheckBlockedError:
+                            stop_reason = STOP_DEVICE_ERROR
+                            break
+                        stop_reason = STOP_READY_FOR_DISPATCH
+                        self._trace.append(
+                            {
+                                "iteration": iteration,
+                                "phase": "device",
+                                "status": package_status or "ready_for_dispatch",
+                                "forward_only": True,
+                                "workflow_steps": len(
+                                    _as_dict(package.get("workflow_json")).get(
+                                        "steps", []
+                                    )
+                                ),
+                            }
+                        )
+                        self._log(
+                            f"iteration {iteration}: forward-only workflow is "
+                            "ready for dispatch; stopping before execution"
+                        )
+                        break
                     needs_review = package_requires_review(package)
                     if needs_review and self.adapter.real_lab_boundary:
                         approval = load_review_approval(iteration_dir)
@@ -2323,10 +2353,10 @@ class CampaignRunner:
         source = Path(selected).expanduser()
         return (source if source.is_absolute() else REPO_ROOT / source).resolve()
 
-    def _execute_checked_package(
+    def _check_package_for_dispatch(
         self, package: Dict[str, Any], iteration_dir: Path
     ) -> Dict[str, Any]:
-        """Recheck the actual package on every execution path, without trusting flags."""
+        """Recheck a package against the current dispatch contract."""
 
         try:
             report = check_dispatch(
@@ -2375,6 +2405,14 @@ class CampaignRunner:
                 f"status={report.get('status')}, reports={paths}"
             )
             raise DispatchCheckBlockedError(report, paths)
+        return report
+
+    def _execute_checked_package(
+        self, package: Dict[str, Any], iteration_dir: Path
+    ) -> Dict[str, Any]:
+        """Recheck the package and execute it only after the check passes."""
+
+        self._check_package_for_dispatch(package, iteration_dir)
         return self._attach_actual_execution_parameters(
             self.adapter.execute(package, iteration_dir), package
         )

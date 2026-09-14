@@ -36,6 +36,22 @@ class ScriptedNativeModel:
         return next(self.responses)
 
 
+class RetryableNativeModel(ScriptedNativeModel):
+    _transport_max_retries = 1
+
+    def __init__(self):
+        super().__init__([AIMessage(content="done")])
+        self.attempts = 0
+
+    def invoke(self, messages):
+        self.attempts += 1
+        if self.attempts == 1:
+            error = RuntimeError("bad gateway")
+            error.status_code = 502
+            raise error
+        return super().invoke(messages)
+
+
 class NativeToolRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.executed = []
@@ -68,6 +84,14 @@ class NativeToolRuntimeTests(unittest.TestCase):
         with self.assertRaises(NativeToolConfigurationError):
             invoke_with_tools(model, [], [self.lookup])
         model.invoke.assert_not_called()
+
+    def test_native_gateway_failure_retries_after_ten_seconds(self):
+        model = RetryableNativeModel()
+        with patch("agent_skills.llm_retry.time.sleep") as sleep:
+            response = invoke_with_tools(model, [], [self.lookup])
+        self.assertEqual(response.content, "done")
+        self.assertEqual(model.attempts, 2)
+        sleep.assert_called_once_with(10.0)
 
     def test_legacy_text_request_is_never_executed(self):
         text = '{"tool_request":{"tool":"lookup","value":4}}'

@@ -252,7 +252,7 @@ class DispatchGateTest(unittest.TestCase):
                 runner.config.device_args = ["--workstations-dir", "explicit-contracts"]
                 self.assertEqual(runner._dispatch_workstation_root(), REPO_ROOT / "explicit-contracts")
                 runner.config.device_args = []
-                self.assertEqual(runner._dispatch_workstation_root(), Path(tmp))
+                self.assertEqual(runner._dispatch_workstation_root(), Path(tmp).resolve())
 
     def test_cli_real_invalid_workflow_emits_reports_and_nonzero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

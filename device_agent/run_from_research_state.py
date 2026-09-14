@@ -441,6 +441,7 @@ def dump_json(path_text: str | None, data: Any) -> None:
 
 def main() -> int:
     args = build_parser().parse_args()
+    os.environ["CHEM_LLM_COMPONENT"] = "device"
     configure_model_env(args)
 
     from utils.llm_factory import LLMFactory
