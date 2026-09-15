@@ -55,6 +55,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for saving only the terminal package JSON.",
     )
     parser.add_argument(
+        "--checkpoint-dir",
+        help=(
+            "Directory for atomic Device semantic/feasibility checkpoints. "
+            "Matching completed fragments resume automatically. Defaults to "
+            "the repository-stable ignored result/device_checkpoints cache."
+        ),
+    )
+    parser.add_argument(
+        "--no-resume-checkpoints",
+        action="store_true",
+        help="Save fresh checkpoints without reusing completed stages.",
+    )
+    parser.add_argument(
         "--device-plan-override",
         help=(
             "Validated manual Device-plan override JSON. Used only with a frozen "
@@ -439,6 +452,16 @@ def dump_json(path_text: str | None, data: Any) -> None:
         json.dump(data, handle, ensure_ascii=False, indent=2)
 
 
+def default_checkpoint_dir(_research_state_path: str) -> str:
+    """Keep retries stable across timestamped Research and output paths.
+
+    DeviceCheckpointStore partitions this shared ignored cache by the full
+    Research-content binding, so a moved-but-identical handoff can resume while
+    a changed campaign cannot.
+    """
+    return str((REPO_ROOT / "result" / "device_checkpoints").resolve())
+
+
 def main() -> int:
     args = build_parser().parse_args()
     os.environ["CHEM_LLM_COMPONENT"] = "device"
@@ -513,6 +536,9 @@ def main() -> int:
             ),
         }
     macro_plan_text = device_input_package_to_text(device_input_package)
+    checkpoint_dir = args.checkpoint_dir or default_checkpoint_dir(
+        args.research_state
+    )
 
     print(
         "starting device agent: "
@@ -520,7 +546,9 @@ def main() -> int:
         "mode=single_agent, "
         f"model={args.model_name or os.getenv('REFINER_LLM_MODEL_NAME', 'env/default')}, "
         f"wire_api={args.wire_api}, "
-        f"workstations_dir={args.workstations_dir or os.getenv('CHEM_WORKSTATIONS_NEW_DIR', 'default')}",
+        f"workstations_dir={args.workstations_dir or os.getenv('CHEM_WORKSTATIONS_NEW_DIR', 'default')}, "
+        f"checkpoint_dir={checkpoint_dir}, "
+        f"resume_checkpoints={not args.no_resume_checkpoints}",
         flush=True,
     )
     if args.print_macro_plan:
@@ -539,6 +567,12 @@ def main() -> int:
         contract_version=args.contract_version,
     )
     run_kwargs: Dict[str, Any] = {"exp_id": args.exp_id}
+    run_kwargs.update(
+        {
+            "checkpoint_dir": checkpoint_dir,
+            "resume_checkpoints": not args.no_resume_checkpoints,
+        }
+    )
     if device_plan_override:
         run_kwargs.update(
             {

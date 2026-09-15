@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -10,6 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_skills.llm_retry import RetryableGatewayError, is_terminal_gateway_error
+from agent_skills.responses_stream import ResponsesProtocolError, ResponsesTerminalError
 from utils.llm_factory import (
     CodexResponsesModel,
     ModelPoolChatModel,
@@ -25,10 +28,16 @@ class _FakeResponses:
 
     def create(self, **payload):
         self.payloads.append(payload)
-        return SimpleNamespace(
+        response = SimpleNamespace(
             output_text='{"status":"ok"}',
             status="completed",
         )
+        if payload.get("stream"):
+            self.stream = _FakeStream(
+                [SimpleNamespace(type="response.completed", response=response)]
+            )
+            return self.stream
+        return response
 
 
 class _RetryableGatewayError(RuntimeError):
@@ -84,8 +93,32 @@ def test_direct_responses_transport_has_no_agent_tools():
     assert payload["store"] is False
     assert payload["reasoning"] == {"effort": "xhigh"}
     assert payload["max_output_tokens"] == 32768
+    assert payload["stream"] is True
+    assert responses.stream.closed is True
     assert "tools" not in payload
     assert "Return JSON." in payload["input"]
+
+
+def test_direct_responses_request_emits_metadata_only_timing(tmp_path, monkeypatch):
+    timing_path = tmp_path / "device-timing.jsonl"
+    monkeypatch.setenv("CHEM_LLM_TIMING_JSONL", str(timing_path))
+    monkeypatch.setenv("REFINER_RESPONSES_TRANSPORT", "direct")
+    monkeypatch.setenv("REFINER_RESPONSES_CLI_FALLBACK", "0")
+    model = CodexResponsesModel(
+        model="gpt-5.6-sol",
+        api_key="PRIVATE_KEY",
+        base_url="https://provider.invalid",
+        client=SimpleNamespace(responses=_FakeResponses()),
+    )
+
+    model.invoke([{"role": "user", "content": "PRIVATE_PROMPT"}])
+
+    raw = timing_path.read_text()
+    assert "PRIVATE" not in raw
+    events = [json.loads(line) for line in raw.splitlines()]
+    assert events[0]["status"] == "started"
+    assert events[-1]["status"] == "success"
+    assert events[-1]["last_event_type"] == "response.completed"
 
 
 def test_direct_responses_streaming_aggregates_text(monkeypatch):
@@ -151,7 +184,7 @@ def test_responses_adapter_owns_retries_while_sdk_retries_are_disabled(monkeypat
 
 def test_responses_retry_wait_is_ten_seconds(monkeypatch):
     responses = _FakeResponses()
-    successful = responses.create()
+    successful = responses.create(stream=True)
     calls = iter([_RetryableGatewayError(), successful])
 
     payloads = []
@@ -203,7 +236,9 @@ def test_retryable_direct_failure_never_replays_through_cli(monkeypatch):
     cli_calls = []
     model._invoke_cli = lambda prompt: cli_calls.append(prompt)
 
-    with pytest.raises(_RetryableGatewayError):
+    # The adapter keeps retry semantics but strips provider-controlled text
+    # before the exception crosses the backend boundary.
+    with pytest.raises(RetryableGatewayError):
         model.invoke([{"role": "user", "content": "Plan."}])
 
     assert cli_calls == []
@@ -441,12 +476,21 @@ def test_cli_timing_records_each_subprocess_retry_attempt(monkeypatch, tmp_path)
         json.loads(line)
         for line in timing_path.read_text(encoding="utf-8").splitlines()
     ]
+    request_events = [
+        event
+        for event in events
+        if event.get("transport") == "device_codex_cli"
+    ]
+    completed_events = [
+        event
+        for event in request_events
+        if event["status"] in {"failed", "success"}
+    ]
     assert response.content == '{"status":"ok"}'
     assert len(calls) == 2
-    assert [event["transport"] for event in events] == ["codex_cli", "codex_cli"]
-    assert [event["status"] for event in events] == ["failed", "success"]
-    assert events[0]["error_type"] == "RetryableGatewayError"
-    assert events[0]["counted_llm_seconds"] == 0.0
+    assert [event["status"] for event in completed_events] == ["failed", "success"]
+    assert completed_events[0]["error_type"] == "RetryableGatewayError"
+    assert completed_events[0]["counted_llm_seconds"] == 0.0
 
 
 @pytest.mark.parametrize(
@@ -495,7 +539,9 @@ def test_chat_gateway_failure_does_not_fall_through_to_plain_payload(monkeypatch
         chat=SimpleNamespace(completions=SimpleNamespace(create=create))
     )
 
-    with pytest.raises(_RetryableGatewayError):
+    # Provider-controlled exception text is redacted after the configured
+    # retry budget is exhausted.
+    with pytest.raises(RetryableGatewayError):
         model.invoke([{"role": "user", "content": "Plan."}])
 
     assert len(calls) == 2
@@ -525,11 +571,51 @@ def test_chat_network_failure_keeps_compat_payload(monkeypatch, network_error):
         chat=SimpleNamespace(completions=SimpleNamespace(create=create))
     )
 
-    with pytest.raises(type(network_error)):
+    # Connection exception messages can contain provider URLs or response
+    # fragments, so the public boundary returns the sanitized retryable type.
+    with pytest.raises(RetryableGatewayError):
         model.invoke([{"role": "user", "content": "Plan."}])
 
     assert len(calls) == 1
     assert "extra_body" in calls[0]
+
+
+def test_chat_gateway_error_does_not_leak_provider_body_or_url(
+    monkeypatch, caplog,
+):
+    class PrivateForbidden(RuntimeError):
+        status_code = 403
+        body = {
+            "error": {
+                "code": "access_terminated_error",
+                "message": "PRIVATE_PROMPT PRIVATE_KEY",
+            }
+        }
+
+        def __str__(self):
+            return "PRIVATE_PROMPT https://provider.invalid/?key=PRIVATE_KEY"
+
+    def fail(**kwargs):
+        raise PrivateForbidden()
+
+    model = OpenAICompatChatModel(
+        model="gpt-5.6-sol",
+        api_key="unit-test-key",
+        base_url="https://provider.invalid",
+        timeout=12,
+        temperature=0,
+    )
+    model._transport_max_retries = 0
+    model._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=fail))
+    )
+    with caplog.at_level(logging.WARNING), pytest.raises(Exception) as captured:
+        model.invoke([{"role": "user", "content": "test"}])
+
+    assert "PRIVATE" not in str(captured.value)
+    assert "PRIVATE" not in caplog.text
+    assert getattr(captured.value, "status_code", None) == 403
+    assert is_terminal_gateway_error(captured.value)
 
 
 def test_model_pool_does_not_replay_backend_transport_budget(monkeypatch):
@@ -688,8 +774,9 @@ def test_cli_json_object_uses_envelope_unwraps_and_cleans_temp(monkeypatch):
         "required": ["payload_json"],
         "additionalProperties": False,
     }
-    assert captured["schema_mode"] == 0o600
-    assert captured["auth_mode"] == 0o600
+    if os.name != "nt":
+        assert captured["schema_mode"] == 0o600
+        assert captured["auth_mode"] == 0o600
     assert "OPENAI_API_KEY" not in captured["env"]
     assert "REFINER_LLM_API_KEY" not in captured["env"]
     assert test_key not in " ".join(captured["cmd"])

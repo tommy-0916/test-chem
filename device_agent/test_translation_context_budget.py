@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_skills.native_tools import NativeToolConfigurationError
 from single_agent import SingleDeviceAgent, SingleDeviceAgentState
+from utils.llm_factory import _sanitized_gateway_exception
 
 
 class ContextLimitError(RuntimeError):
@@ -183,6 +184,37 @@ def test_structured_provider_error_code_is_recognized_without_message_guessing()
     error = RuntimeError("Bad Request")
     error.body = {"error": {"code": "context_length_exceeded"}}
     assert SingleDeviceAgent._is_translation_context_limit_error(error)
+
+
+def test_sanitized_chat_context_limit_still_triggers_local_bisection():
+    class PrivateContextError(RuntimeError):
+        status_code = 400
+        body = {
+            "error": {
+                "code": "context_length_exceeded",
+                "message": "PRIVATE_CONTEXT_BODY",
+            }
+        }
+
+    safe_error = _sanitized_gateway_exception(
+        PrivateContextError("PRIVATE_CONTEXT_BODY")
+    )
+    assert "PRIVATE_CONTEXT_BODY" not in str(safe_error)
+    assert SingleDeviceAgent._is_translation_context_limit_error(safe_error)
+
+    plan = make_plan(2)
+    agent, _, state = agent_with_model(plan)
+    half = {"workflow_json": {"steps": []}, "workflow_txt": ""}
+    agent._invoke_translation_chunk = Mock(
+        side_effect=[safe_error, copy.deepcopy(half), copy.deepcopy(half)]
+    )
+
+    result = agent._invoke_translation_chunk_bounded(
+        state, plan, plan["device_plan"], 0, 1, {}
+    )
+
+    assert result == half
+    assert agent._invoke_translation_chunk.call_count == 3
 
 
 def test_partial_split_failure_never_replaces_the_logical_chunk_cache():

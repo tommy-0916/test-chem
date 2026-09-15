@@ -55,7 +55,10 @@ def test_transport_retry_model_is_not_retried_again_by_base_agent():
     model = _TransportRetryModel()
     agent = BaseAgent(model=model, max_retries=8)
 
-    with pytest.raises(RuntimeError, match="failed after 1 retries"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"retry_owner=model, max_retries=0",
+    ):
         agent.invoke_text("system", "task")
 
     assert model.calls == 1

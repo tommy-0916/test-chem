@@ -496,13 +496,17 @@ def main() -> int:
         flush=True,
     )
     if args.wire_api == "codex_responses":
-        streaming = os.getenv("REFINER_RESPONSES_STREAM", "0").strip().lower() in {
-            "1", "true", "yes", "on"
-        }
+        from agent_skills.responses_stream import configured_responses_streaming
+
+        transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
+        response_mode = (
+            "explicit CLI"
+            if transport in {"cli", "codex_cli"}
+            else "streaming API" if configured_responses_streaming() else "non-streaming API"
+        )
         print(
-            "codex_responses transport: "
-            + ("streaming" if streaming else "non-streaming")
-            + "; the terminal reports progress after each LLM step.",
+            f"codex_responses transport={response_mode}; the terminal may stay quiet "
+            "until each complete LLM result is validated.",
             flush=True,
         )
 

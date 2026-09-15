@@ -428,13 +428,18 @@ def project_device_context(context: dict[str, Any], tier: str) -> dict[str, Any]
         else:
             return _sanitize_projection(context, tier)
     metadata, stations = _resolve_context(context or {})
+    # Checked-in projections must remain valid when the repository is cloned
+    # into a different absolute directory (for example on CI or in WSL).
+    default_index_reference = DEFAULT_INDEX.relative_to(REPO_ROOT).as_posix()
     result: dict[str, Any] = {
         "tier": tier, "skill": TIER_SKILLS[tier], "projection_version": PROJECTION_VERSION,
         "source": str(metadata.get("source", "explicit device context")),
         "source_kind": str(metadata.get("source_kind", "explicit device context")),
         "source_digest_sha256": str(metadata.get("source_digest_sha256", "")),
         "semantic_mapping_digest": str(metadata.get("semantic_mapping_digest", "")),
-        "source_index": str(metadata.get("capability_index") or DEFAULT_INDEX) if str(metadata.get("source_kind", "")).startswith("lab-design-all") else "",
+        "source_index": str(
+            metadata.get("capability_index") or default_index_reference
+        ) if str(metadata.get("source_kind", "")).startswith("lab-design-all") else "",
         "planning_policy": {
             "experiment": "Use declared experiment types to search and design stages. A capability is not proof that every route or parameterization is executable. Unlisted techniques are unknown, not invented support. Respect unavailable stations.",
             "operation": "Compose macro actions from the listed operations. This layer deliberately does not expose operation inputs, outputs or machine parameters. Respect unavailable stations.",

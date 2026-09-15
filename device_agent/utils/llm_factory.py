@@ -5,6 +5,7 @@ LLM instance factory and pooled backend runtime.
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -18,17 +19,33 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
+from utils.paths import default_env_file
 from agent_skills.llm_retry import (
+    absolute_call_budget,
+    LogicalCallDeadlineExceeded,
+    NonRetryableGatewayError,
     RetryableGatewayError,
     call_with_gateway_retry,
     is_retryable_gateway_error,
+    is_terminal_gateway_error,
+    logical_call_budget,
+    logical_deadline,
+    remaining_timeout,
+    safe_gateway_error_code,
+    safe_gateway_error_metadata,
+)
+from agent_skills.responses_stream import (
+    ResponsesProtocolError,
+    ResponsesStreamError,
+    configured_responses_streaming,
+    invoke_responses,
+)
+from agent_skills.responses_diagnostics import (
+    attach_responses_diagnostics,
+    format_responses_failure,
+    get_responses_diagnostics,
 )
 from agent_skills.llm_timing import measure_llm_request
-from agent_skills.responses_stream import (
-    consume_responses_stream,
-    responses_streaming_enabled,
-)
-from utils.paths import default_env_file
 
 try:
     from dotenv import load_dotenv
@@ -55,6 +72,38 @@ except ModuleNotFoundError:  # pragma: no cover - depends on optional local deps
         return True
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitized_gateway_exception(exc: Exception) -> Exception:
+    """Drop provider text/URLs while preserving retry and terminal semantics."""
+
+    error_type, http_status = safe_gateway_error_metadata(exc)
+    terminal = is_terminal_gateway_error(exc)
+    error_class = (
+        RetryableGatewayError
+        if is_retryable_gateway_error(exc)
+        else NonRetryableGatewayError
+    )
+    status_suffix = (
+        f" http_status={http_status}" if http_status is not None else ""
+    )
+    sanitized = error_class(
+        f"Device gateway request failed: {error_type}{status_suffix}"
+    )
+    if http_status is not None:
+        setattr(sanitized, "status_code", http_status)
+    safe_code = safe_gateway_error_code(exc)
+    if safe_code is not None:
+        setattr(sanitized, "_chem_gateway_error_code", safe_code)
+    if terminal:
+        # Preserve the auth/quota decision as metadata, without retaining a
+        # provider-controlled code/message. Pools use this bit to avoid retrying
+        # another backend that has the same endpoint and credential.
+        setattr(sanitized, "_chem_terminal_gateway_error", True)
+    diagnostics = get_responses_diagnostics(exc)
+    if diagnostics is not None:
+        attach_responses_diagnostics(sanitized, diagnostics)
+    return sanitized
 
 
 DEFAULT_LLM_MAX_RETRIES = 8
@@ -138,6 +187,8 @@ class CodexResponsesModel:
     deterministic because the CLI may invoke workspace tools before answering.
     """
 
+    handles_request_timing = True
+
     def __init__(
         self,
         *,
@@ -167,8 +218,7 @@ class CodexResponsesModel:
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
-            # Retry explicitly so a provider Retry-After value cannot impose
-            # a 60-second sleep and each request attempt remains measurable.
+            # The shared middleware is the sole transport-retry owner.
             max_retries=0,
         )
         # None means unprobed.  A deterministic CLI/gateway rejection or a
@@ -188,13 +238,14 @@ class CodexResponsesModel:
                 base_url=self.base_url,
                 timeout=self.timeout,
                 max_tokens=self.max_output_tokens,
-                max_retries=configured_max_retries(),
+                max_retries=self._transport_max_retries,
                 use_responses_api=True,
                 reasoning_effort=self.reasoning_effort,
             )
         return self._native_tool_model.bind_tools(tools, **kwargs)
 
     def invoke(self, messages: List[Any]) -> ChatResponse:
+        deadline = logical_deadline(self.timeout)
         prompt = self._messages_to_prompt(messages)
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
@@ -202,23 +253,52 @@ class CodexResponsesModel:
                 return call_with_gateway_retry(
                     lambda: self._invoke_direct(prompt),
                     max_retries=self._transport_max_retries,
+                    deadline=deadline,
                     logger=logger,
                     operation_name="Device Responses request",
                 )
             except Exception as exc:
-                if is_retryable_gateway_error(exc):
+                if isinstance(
+                    exc, (LogicalCallDeadlineExceeded, ResponsesStreamError)
+                ):
+                    # A broken or incomplete stream must not replay this task
+                    # through the historical CLI fallback.
                     raise
+                if (
+                    configured_responses_streaming()
+                    or is_retryable_gateway_error(exc)
+                    or is_terminal_gateway_error(exc)
+                ):
+                    # SDK exceptions may carry provider response bodies and
+                    # request URLs. Preserve only bounded classification
+                    # metadata at the public Device boundary.
+                    raise _sanitized_gateway_exception(exc) from None
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
                 if fallback in {"0", "off", "false", "no"}:
                     raise
-                logger.exception(
-                    "Direct Responses request failed; falling back to Codex CLI"
-                )
+                safe_failure = format_responses_failure(exc)
+                if safe_failure is not None:
+                    logger.warning(
+                        "Direct Responses request failed; falling back to Codex CLI: %s",
+                        safe_failure,
+                    )
+                else:
+                    error_type, http_status = safe_gateway_error_metadata(exc)
+                    logger.warning(
+                        "Direct Responses request failed; falling back to Codex CLI: %s%s",
+                        error_type,
+                        (
+                            f" http_status={http_status}"
+                            if http_status is not None
+                            else ""
+                        ),
+                    )
         return call_with_gateway_retry(
             lambda: self._invoke_cli(prompt),
             max_retries=self._transport_max_retries,
+            deadline=deadline,
             logger=logger,
             operation_name="Device Codex CLI request",
         )
@@ -235,6 +315,7 @@ class CodexResponsesModel:
         existing Device parser remains responsible for validating the inner
         task-specific object.
         """
+        deadline = logical_deadline(self.timeout)
         prompt = self._messages_to_prompt(messages)
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
@@ -242,12 +323,21 @@ class CodexResponsesModel:
                 return call_with_gateway_retry(
                     lambda: self._invoke_direct(prompt),
                     max_retries=self._transport_max_retries,
+                    deadline=deadline,
                     logger=logger,
                     operation_name="Device Responses JSON request",
                 )
             except Exception as exc:
-                if is_retryable_gateway_error(exc):
+                if isinstance(
+                    exc, (LogicalCallDeadlineExceeded, ResponsesStreamError)
+                ):
                     raise
+                if (
+                    configured_responses_streaming()
+                    or is_retryable_gateway_error(exc)
+                    or is_terminal_gateway_error(exc)
+                ):
+                    raise _sanitized_gateway_exception(exc) from None
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
@@ -261,6 +351,7 @@ class CodexResponsesModel:
         return call_with_gateway_retry(
             lambda: self._invoke_cli_json_object(prompt),
             max_retries=self._transport_max_retries,
+            deadline=deadline,
             logger=logger,
             operation_name="Device Codex CLI JSON request",
         )
@@ -276,21 +367,20 @@ class CodexResponsesModel:
         if self.max_output_tokens is not None:
             payload["max_output_tokens"] = self.max_output_tokens
         with measure_llm_request(
-            component="device", model=self.model_name, transport="responses"
-        ):
-            if responses_streaming_enabled():
-                stream = self._client.responses.create(**payload, stream=True)
-                streamed_text, response = consume_responses_stream(stream)
-                text = self._extract_response_text(response) or streamed_text
-            else:
-                response = self._client.responses.create(**payload)
-                text = self._extract_response_text(response)
-            if not text:
-                status = getattr(response, "status", "")
-                raise RuntimeError(
-                    f"Responses API returned no text output (status={status or 'unknown'})"
-                )
-            return ChatResponse(content=text, raw_response=response)
+            component=os.getenv("CHEM_LLM_COMPONENT", "device"),
+            model=self.model_name,
+            transport="device_responses",
+        ) as timing:
+            response = invoke_responses(
+                self._client, payload, on_event=timing.observe,
+            )
+        text = self._extract_response_text(response)
+        if not text:
+            status = getattr(response, "status", "")
+            raise RuntimeError(
+                f"Responses API returned no text output (status={status or 'unknown'})"
+            )
+        return ChatResponse(content=text, raw_response=response)
 
     def _invoke_cli(self, prompt: str) -> ChatResponse:
         return self._invoke_cli_request(prompt, request_json_envelope=False)
@@ -432,7 +522,7 @@ class CodexResponsesModel:
             "exactly one requested final JSON object with no prose or Markdown.\n\n"
             + prompt
         )
-        completed = self._run_checked_codex_cli(
+        self._run_checked_codex_cli(
             stateless_prompt=stateless_prompt,
             output_path=output_path,
             schema_path=None,
@@ -452,12 +542,12 @@ class CodexResponsesModel:
         cwd: Path,
         allow_schema_rejection_fallback: bool,
     ) -> subprocess.CompletedProcess[str]:
-        """Run and validate one measured subprocess transport attempt."""
+        """Run and validate one measured, provider-text-safe CLI attempt."""
 
         with measure_llm_request(
-            component="device",
+            component=os.getenv("CHEM_LLM_COMPONENT", "device"),
             model=self.model_name,
-            transport="codex_cli",
+            transport="device_codex_cli",
         ):
             completed = self._run_codex_cli(
                 stateless_prompt=stateless_prompt,
@@ -762,6 +852,8 @@ source = "{self._escape_toml(str(primary_runtime_marketplace))}"
 class OpenAICompatChatModel:
     """Minimal OpenAI-compatible chat model wrapper for one backend."""
 
+    handles_request_timing = True
+
     def __init__(
         self,
         *,
@@ -810,7 +902,7 @@ class OpenAICompatChatModel:
                 base_url=self.base_url,
                 timeout=self.timeout,
                 max_tokens=self.max_tokens,
-                max_retries=configured_max_retries(),
+                max_retries=self._transport_max_retries,
                 use_responses_api=responses,
                 reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
                 temperature=self.temperature,
@@ -874,7 +966,7 @@ class OpenAICompatChatModel:
     def _build_payload(self, messages: List[Any], include_extra_body: bool) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "messages": self._normalize_messages(messages),
-            "timeout": self.timeout,
+            "timeout": remaining_timeout(self.timeout),
             "temperature": self.temperature,
         }
         if self.max_tokens is not None:
@@ -914,25 +1006,26 @@ class OpenAICompatChatModel:
         return variants
 
     def invoke(self, messages: List[Any]) -> ChatResponse:
+        deadline = logical_deadline(self.timeout)
         last_error: Optional[Exception] = None
 
         for model_name in self._candidate_models():
             for payload_label, payload in self._payload_variants(messages):
                 try:
-                    def invoke_chat() -> Any:
+                    def request() -> Any:
                         with measure_llm_request(
-                            component="device",
+                            component=os.getenv("CHEM_LLM_COMPONENT", "device"),
                             model=model_name,
-                            transport="chat_completions",
+                            transport="device_chat",
                         ):
                             return self._client.chat.completions.create(
-                                model=model_name,
-                                **payload,
+                                model=model_name, **payload
                             )
 
                     response = call_with_gateway_retry(
-                        invoke_chat,
+                        request,
                         max_retries=self._transport_max_retries,
+                        deadline=deadline,
                         logger=logger,
                         operation_name="Device chat request",
                     )
@@ -948,8 +1041,7 @@ class OpenAICompatChatModel:
                         self.disable_thinking or not self.do_sample
                     ):
                         logger.warning(
-                            "LLM backend %s recovered by retrying model %s without extra_body",
-                            self.name,
+                            "LLM backend recovered by retrying model %s without extra_body",
                             model_name,
                         )
 
@@ -961,37 +1053,40 @@ class OpenAICompatChatModel:
                     )
                 except Exception as exc:
                     last_error = exc
-                    deterministic_rejection = (
-                        payload_label == "compat"
-                        and self._is_deterministic_extra_body_rejection(exc)
-                    )
-                    if deterministic_rejection:
+                    if payload_label == "compat" and self._is_deterministic_extra_body_rejection(exc):
                         if self._supports_extra_body is not False:
                             logger.warning(
-                                "LLM backend %s detected deterministic extra_body rejection on model %s; "
+                                "LLM backend detected deterministic extra_body rejection on model %s; "
                                 "future calls will skip compat payloads for this backend",
-                                self.name,
                                 model_name,
                             )
                         self._supports_extra_body = False
+                    error_type, http_status = safe_gateway_error_metadata(exc)
                     logger.warning(
-                        "LLM backend %s model %s failed with %s payload: %s: %s",
-                        self.name,
+                        "LLM backend model %s failed with %s payload: %s%s",
                         model_name,
                         payload_label,
-                        type(exc).__name__,
-                        exc,
+                        error_type,
+                        (
+                            f" http_status={http_status}"
+                            if http_status is not None
+                            else ""
+                        ),
                     )
-                    if is_retryable_gateway_error(exc):
-                        # A transient gateway failure says nothing about
-                        # payload compatibility and must not trigger another
-                        # hidden attempt through the plain variant.
+                    if isinstance(
+                        exc, (LogicalCallDeadlineExceeded, ResponsesProtocolError)
+                    ):
                         raise
+                    if is_retryable_gateway_error(exc) or is_terminal_gateway_error(exc):
+                        raise _sanitized_gateway_exception(exc) from None
                     continue
 
         if last_error is not None:
+            _, http_status = safe_gateway_error_metadata(last_error)
+            if http_status is not None:
+                raise _sanitized_gateway_exception(last_error) from None
             raise last_error
-        raise RuntimeError(f"No available model candidates for backend {self.name}")
+        raise RuntimeError("No available model candidates for configured backend")
 
 
 class ModelPoolChatModel:
@@ -1003,6 +1098,7 @@ class ModelPoolChatModel:
         *,
         max_rounds: int = 2,
         round_backoff_seconds: Optional[List[int]] = None,
+        wall_timeout_seconds: Optional[float] = None,
     ) -> None:
         if not backends:
             raise ValueError("ModelPoolChatModel requires at least one backend")
@@ -1010,10 +1106,24 @@ class ModelPoolChatModel:
         self.max_rounds = max(1, max_rounds)
         self.round_backoff_seconds = round_backoff_seconds or [2, 5]
         self._preferred_backend_index = 0
-        # Each concrete backend owns its fixed-delay transport retries.  The
-        # pool performs one failover pass and must not replay those budgets.
+        # Concrete backends already own their bounded transport retry.  The
+        # pool may fail over once across distinct backends, but must not replay
+        # the whole pool in additional rounds.
         self.handles_transport_retries = True
+        self.handles_request_timing = True
         self._transport_max_retries = 0
+        if wall_timeout_seconds is None:
+            candidate = getattr(backends[0], "timeout", 240.0)
+            try:
+                wall_timeout_seconds = float(candidate)
+            except (TypeError, ValueError):
+                # Lightweight fake/custom backends do not necessarily expose
+                # a numeric timeout. Production construction passes this
+                # value explicitly from ``LLMFactory.create``.
+                wall_timeout_seconds = 240.0
+        self.wall_timeout_seconds = float(wall_timeout_seconds)
+        if not math.isfinite(self.wall_timeout_seconds) or self.wall_timeout_seconds <= 0:
+            raise ValueError("ModelPoolChatModel wall timeout must be finite and positive")
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
         """Failover only between native-bound backends, never text invoke()."""
@@ -1030,41 +1140,129 @@ class ModelPoolChatModel:
             ordered.append((index, self.backends[index]))
         return ordered
 
+    @staticmethod
+    def _backend_slice_deadline(
+        deadline: float,
+        candidates_left: int,
+    ) -> float:
+        """Reserve a fair share of the remaining wall budget for failover."""
+
+        now = time.monotonic()
+        remaining = deadline - now
+        if remaining <= 0:
+            raise LogicalCallDeadlineExceeded(
+                "LLM model pool exhausted its shared wall budget"
+            )
+        return now + remaining / max(1, candidates_left)
+
+    @staticmethod
+    def _backend_auth_identity(backend: Any) -> str:
+        """Return a non-secret identity for one endpoint/credential pair."""
+
+        base_url = getattr(backend, "base_url", None)
+        api_key = getattr(backend, "api_key", None)
+        if isinstance(base_url, str) and isinstance(api_key, str):
+            material = f"{base_url.rstrip('/')}\0{api_key}".encode("utf-8")
+            return hashlib.sha256(material).hexdigest()
+        # Unknown/custom backends cannot be proven to share credentials, so
+        # preserve the pool's normal failover contract between distinct
+        # backend objects.
+        return f"backend-object:{id(backend)}"
+
     def invoke(self, messages: List[Any]) -> ChatResponse:
+        # One user-visible model invocation gets one wall-clock budget.  Each
+        # concrete backend derives its own transport deadline through
+        # ``logical_deadline()``, whose ambient clamp prevents failover from
+        # resetting the clock for every backend.
+        with logical_call_budget(self.wall_timeout_seconds):
+            deadline = logical_deadline(self.wall_timeout_seconds)
+            return self._invoke_with_shared_deadline(messages, deadline)
+
+    def _invoke_with_shared_deadline(
+        self,
+        messages: List[Any],
+        deadline: float,
+    ) -> ChatResponse:
         last_error: Optional[Exception] = None
         failure_notes: List[str] = []
+        terminal_auth_identities: set[str] = set()
 
         effective_rounds = 1 if self.handles_transport_retries else self.max_rounds
         for round_index in range(effective_rounds):
-            for backend_index, backend in self._ordered_backend_entries():
+            ordered_entries = self._ordered_backend_entries()
+            for position, (backend_index, backend) in enumerate(ordered_entries):
+                auth_identity = self._backend_auth_identity(backend)
+                if auth_identity in terminal_auth_identities:
+                    continue
+                if time.monotonic() >= deadline:
+                    raise LogicalCallDeadlineExceeded(
+                        "LLM model pool exhausted its shared wall budget before failover"
+                    ) from last_error
                 try:
-                    response = backend.invoke(messages)
+                    candidates_left = sum(
+                        1
+                        for _, candidate in ordered_entries[position:]
+                        if self._backend_auth_identity(candidate)
+                        not in terminal_auth_identities
+                    )
+                    child_deadline = self._backend_slice_deadline(
+                        deadline, candidates_left
+                    )
+                    with absolute_call_budget(child_deadline):
+                        response = backend.invoke(messages)
+                    if time.monotonic() >= deadline:
+                        raise LogicalCallDeadlineExceeded(
+                            "LLM model pool backend completed after the shared wall deadline"
+                        )
                     if backend_index != self._preferred_backend_index:
                         logger.warning(
-                            "LLM backend failover activated: %s -> %s",
-                            self.backends[self._preferred_backend_index].name,
-                            backend.name,
+                            "LLM backend failover activated: backend_%s -> backend_%s",
+                            self._preferred_backend_index + 1,
+                            backend_index + 1,
                         )
                     self._preferred_backend_index = backend_index
                     return response
                 except Exception as exc:
                     last_error = exc
+                    exc_type, http_status = safe_gateway_error_metadata(exc)
+                    if isinstance(exc, ResponsesProtocolError):
+                        raise
+                    if (
+                        isinstance(exc, LogicalCallDeadlineExceeded)
+                        and time.monotonic() >= deadline
+                    ):
+                        raise
+                    if is_terminal_gateway_error(exc):
+                        # Authentication/quota failures must never retry the
+                        # same endpoint/credential. A heterogeneous pool may,
+                        # however, fail over once to a genuinely distinct
+                        # provider identity.
+                        terminal_auth_identities.add(auth_identity)
                     failure_notes.append(
-                        "round {round_num}/{round_total} backend {backend_name}: {exc_type}: {exc_msg}".format(
+                        "round {round_num}/{round_total} backend_{backend_index}: "
+                        "{exc_type}{status}".format(
                             round_num=round_index + 1,
                             round_total=effective_rounds,
-                            backend_name=backend.name,
-                            exc_type=type(exc).__name__,
-                            exc_msg=exc,
+                            backend_index=backend_index + 1,
+                            exc_type=exc_type,
+                            status=(
+                                f" http_status={http_status}"
+                                if http_status is not None
+                                else ""
+                            ),
                         )
                     )
                     logger.warning(
-                        "LLM backend %s failed in pool round %s/%s: %s: %s",
-                        backend.name,
+                        "LLM backend_%s failed in pool round %s/%s: %s%s",
+                        backend_index + 1,
                         round_index + 1,
                         effective_rounds,
-                        type(exc).__name__,
-                        exc,
+                        exc_type,
+                        (
+                            f" http_status={http_status}"
+                            if http_status is not None
+                            else ""
+                        ),
                     )
 
             if round_index < effective_rounds - 1:
@@ -1083,7 +1281,11 @@ class ModelPoolChatModel:
             f"Recent failures: {recent_failures}"
         )
         if last_error is not None:
-            raise RuntimeError(message) from last_error
+            # Do not let an SDK exception body, request URL, or credential
+            # escape through the pool boundary. Retry/terminal classification
+            # remains attached as finite metadata on the sanitized exception.
+            safe_error = _sanitized_gateway_exception(last_error)
+            raise RuntimeError(message) from safe_error
         raise RuntimeError(message)
 
 
@@ -1094,16 +1296,38 @@ class NativeBoundModelPool:
         from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
 
         self.pool = pool
-        # ``invoke_with_tools`` must not time the whole pool as one request;
-        # each concrete backend attempt is measured below.
+        self.handles_transport_retries = True
         self.handles_request_timing = True
         self.bound: Dict[int, Any] = {}
+        self.child_handles_request_timing: Dict[int, bool] = {}
+        self.child_retry_budgets: Dict[int, int] = {}
         self.unsupported: set[int] = set()
         for index, backend in enumerate(pool.backends):
             try:
                 if not callable(getattr(backend, "bind_tools", None)):
                     raise NativeToolConfigurationError("Backend is text-only")
                 self.bound[index] = backend.bind_tools(tools, **bind_kwargs)
+                native_model = getattr(backend, "_native_tool_model", None)
+                retry_value = getattr(native_model, "_chem_gateway_max_retries", None)
+                # Mock/custom backends may synthesize arbitrary attributes.
+                # Only a concrete integer from the native model owns a retry
+                # budget; otherwise inherit the declared backend budget.
+                if not isinstance(retry_value, int) or isinstance(retry_value, bool):
+                    retry_value = getattr(backend, "_transport_max_retries", 0)
+                self.child_retry_budgets[index] = (
+                    max(0, retry_value)
+                    if isinstance(retry_value, int)
+                    and not isinstance(retry_value, bool)
+                    else 0
+                )
+                underlying = getattr(self.bound[index], "bound", None)
+                self.child_handles_request_timing[index] = any(
+                    getattr(candidate, "handles_request_timing", False) is True
+                    for candidate in (
+                        self.bound[index], underlying, native_model,
+                    )
+                    if candidate is not None
+                )
             except Exception as exc:
                 if not is_tool_support_error(exc):
                     raise
@@ -1112,53 +1336,97 @@ class NativeBoundModelPool:
             raise NativeToolConfigurationError("No configured pool backend supports native tools")
 
     def invoke(self, messages: List[Any], **kwargs: Any) -> Any:
+        with logical_call_budget(self.pool.wall_timeout_seconds):
+            deadline = logical_deadline(self.pool.wall_timeout_seconds)
+            return self._invoke_with_shared_deadline(messages, deadline, **kwargs)
+
+    def _invoke_with_shared_deadline(
+        self,
+        messages: List[Any],
+        deadline: float,
+        **kwargs: Any,
+    ) -> Any:
         from agent_skills.native_tools import NativeToolConfigurationError, is_tool_support_error
 
         last_error: Optional[Exception] = None
+        terminal_auth_identities: set[str] = set()
         effective_rounds = (
             1 if self.pool.handles_transport_retries else self.pool.max_rounds
         )
         for round_index in range(effective_rounds):
-            for index, _backend in self.pool._ordered_backend_entries():
+            ordered_entries = self.pool._ordered_backend_entries()
+            for position, (index, _backend) in enumerate(ordered_entries):
                 if index in self.unsupported:
                     continue
+                auth_identity = self.pool._backend_auth_identity(_backend)
+                if auth_identity in terminal_auth_identities:
+                    continue
+                if time.monotonic() >= deadline:
+                    raise LogicalCallDeadlineExceeded(
+                        "Native LLM model pool exhausted its shared wall budget before failover"
+                    ) from last_error
                 try:
-                    backend = self.pool.backends[index]
-                    retry_value = getattr(
-                        backend, "_transport_max_retries", 0
+                    candidates_left = sum(
+                        1
+                        for candidate_index, candidate in ordered_entries[position:]
+                        if candidate_index not in self.unsupported
+                        and self.pool._backend_auth_identity(candidate)
+                        not in terminal_auth_identities
                     )
-                    retry_budget = (
-                        max(0, retry_value)
-                        if isinstance(retry_value, int)
-                        and not isinstance(retry_value, bool)
-                        else 0
+                    child_deadline = self.pool._backend_slice_deadline(
+                        deadline, candidates_left
                     )
-                    model_label = str(
-                        getattr(backend, "model_name", "")
-                        or getattr(backend, "model", "")
-                        or getattr(backend, "_model", "")
-                        or getattr(backend, "name", "")
-                        or type(backend).__name__
-                    )
-
-                    def invoke_backend() -> Any:
+                    # Native LangChain backends do not all enter the shared
+                    # retry middleware themselves (notably Chat Completions).
+                    # The zero-retry bounded attempt is therefore required to
+                    # preempt a blocked request-establishment/read instead of
+                    # merely noticing the overrun after it eventually returns.
+                    def request() -> Any:
+                        if self.child_handles_request_timing.get(index, False):
+                            return self.bound[index].invoke(messages, **kwargs)
                         with measure_llm_request(
-                            component="device",
-                            model=model_label,
-                            transport="responses_native_tools",
+                            component=os.getenv("CHEM_LLM_COMPONENT", "device"),
+                            model=str(
+                                getattr(_backend, "model_name", "")
+                                or type(_backend).__name__
+                            ),
+                            transport="device_native_pool",
                         ):
                             return self.bound[index].invoke(messages, **kwargs)
 
-                    result = call_with_gateway_retry(
-                        invoke_backend,
-                        max_retries=retry_budget,
-                        logger=logger,
-                        operation_name=f"Device native backend {index} request",
-                    )
+                    with absolute_call_budget(child_deadline):
+                        if getattr(
+                            self.bound[index], "handles_transport_retries", False
+                        ) is True:
+                            result = request()
+                        else:
+                            result = call_with_gateway_retry(
+                                request,
+                                max_retries=self.child_retry_budgets.get(index, 0),
+                                deadline=child_deadline,
+                                logger=logger,
+                                operation_name=(
+                                    f"Device native pool backend_{index + 1} request"
+                                ),
+                            )
+                    if time.monotonic() >= deadline:
+                        raise LogicalCallDeadlineExceeded(
+                            "Native LLM model pool backend completed after the shared wall deadline"
+                        )
                     self.pool._preferred_backend_index = index
                     return result
                 except Exception as exc:
+                    if (
+                        isinstance(exc, LogicalCallDeadlineExceeded)
+                        and time.monotonic() >= deadline
+                    ):
+                        raise
                     last_error = exc
+                    if is_terminal_gateway_error(exc):
+                        terminal_auth_identities.add(auth_identity)
+                        continue
+                    if isinstance(exc, ResponsesStreamError):
+                        raise
                     if is_tool_support_error(exc):
                         self.unsupported.add(index)
             if len(self.unsupported) == len(self.pool.backends):
@@ -1168,7 +1436,10 @@ class NativeBoundModelPool:
             if round_index + 1 < effective_rounds:
                 delays = self.pool.round_backoff_seconds
                 time.sleep(delays[min(round_index, len(delays) - 1)])
-        raise RuntimeError("All native tool backends failed") from last_error
+        if last_error is not None:
+            safe_error = _sanitized_gateway_exception(last_error)
+            raise RuntimeError("All native tool backends failed") from safe_error
+        raise RuntimeError("All native tool backends failed")
 
 
 class LLMFactory:
@@ -1362,6 +1633,7 @@ class LLMFactory:
                 models,
                 max_rounds=pool_max_rounds or runtime_config["max_rounds"],
                 round_backoff_seconds=pool_backoff_seconds or runtime_config["round_backoff_seconds"],
+                wall_timeout_seconds=timeout,
             )
 
         resolved_provider = provider or config["provider"]

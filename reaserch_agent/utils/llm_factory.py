@@ -18,15 +18,22 @@ from urllib.parse import urlsplit, urlunsplit
 from openai import OpenAI
 
 from agent_skills.llm_retry import (
+    LogicalCallDeadlineExceeded,
     RetryableGatewayError,
     call_with_gateway_retry,
     is_retryable_gateway_error,
+    is_terminal_gateway_error,
+    logical_deadline,
+    safe_gateway_error_code,
+    safe_gateway_error_metadata,
 )
 from agent_skills.llm_timing import measure_llm_request
 from agent_skills.responses_stream import (
-    consume_responses_stream,
-    responses_streaming_enabled,
+    ResponsesProtocolError,
+    configured_responses_streaming,
+    invoke_responses,
 )
+from agent_skills.responses_diagnostics import format_responses_failure
 
 
 logger = logging.getLogger(__name__)
@@ -137,6 +144,10 @@ def default_env_file() -> Path:
 class CodexResponsesModel:
     """Stateless direct Responses adapter with an optional CLI fallback."""
 
+    # Direct Responses and the isolated CLI fallback are both timed at their
+    # concrete request boundaries, so BaseAgent must not add an outer timer.
+    handles_request_timing = True
+
     def __init__(
         self,
         *,
@@ -162,8 +173,8 @@ class CodexResponsesModel:
             api_key=self._api_key,
             base_url=self._base_url,
             timeout=self._timeout,
-            # Retry explicitly so Retry-After: 60 cannot stall the campaign
-            # and timing can distinguish every transport attempt.
+            # Chem Agent owns the only retry loop so provider Retry-After
+            # cannot silently multiply a logical Research request.
             max_retries=0,
         )
 
@@ -179,13 +190,14 @@ class CodexResponsesModel:
                 base_url=self._base_url,
                 timeout=self._timeout,
                 max_tokens=self._max_output_tokens,
-                max_retries=configured_max_retries(),
+                max_retries=self._transport_max_retries,
                 use_responses_api=True,
                 reasoning_effort=self._reasoning_effort,
             )
         return self._native_tool_model.bind_tools(tools, **kwargs)
 
     def invoke(self, messages: Any) -> Any:
+        deadline = logical_deadline(self._timeout)
         prompt = self._messages_to_prompt(messages)
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
         if transport not in {"cli", "codex_cli"}:
@@ -193,25 +205,45 @@ class CodexResponsesModel:
                 return call_with_gateway_retry(
                     lambda: self._invoke_direct(prompt),
                     max_retries=self._transport_max_retries,
+                    deadline=deadline,
                     logger=logger,
                     operation_name="Research Responses request",
                 )
             except Exception as exc:
-                if is_retryable_gateway_error(exc):
-                    # CLI targets the same provider and cannot repair an
-                    # exhausted transient gateway failure.
+                # A failed stream must not silently turn into a different
+                # non-streaming/CLI request or return partial generated text.
+                if (
+                    configured_responses_streaming()
+                    or isinstance(exc, (LogicalCallDeadlineExceeded, ResponsesProtocolError))
+                    or is_retryable_gateway_error(exc)
+                    or is_terminal_gateway_error(exc)
+                ):
                     raise
                 fallback = os.getenv(
                     "REFINER_RESPONSES_CLI_FALLBACK", "1"
                 ).strip().lower()
                 if fallback in {"0", "off", "false", "no"}:
                     raise
-                logger.exception(
-                    "Direct Responses request failed; falling back to Codex CLI"
-                )
+                safe_failure = format_responses_failure(exc)
+                if safe_failure is not None:
+                    logger.warning(
+                        "Direct Responses request failed; falling back to Codex CLI: %s",
+                        safe_failure,
+                    )
+                else:
+                    error_type, http_status = safe_gateway_error_metadata(exc)
+                    error_code = safe_gateway_error_code(exc)
+                    logger.warning(
+                        "Direct Responses request failed; falling back to Codex CLI "
+                        "(type=%s status=%s code=%s)",
+                        error_type,
+                        http_status if http_status is not None else "unknown",
+                        error_code or "unknown",
+                    )
         return call_with_gateway_retry(
             lambda: self._invoke_cli(prompt),
             max_retries=self._transport_max_retries,
+            deadline=deadline,
             logger=logger,
             operation_name="Research Codex CLI request",
         )
@@ -227,21 +259,20 @@ class CodexResponsesModel:
         if self._max_output_tokens is not None:
             payload["max_output_tokens"] = self._max_output_tokens
         with measure_llm_request(
-            component="research", model=self._model, transport="responses"
-        ):
-            if responses_streaming_enabled():
-                stream = self._client.responses.create(**payload, stream=True)
-                streamed_text, response = consume_responses_stream(stream)
-                text = self._extract_response_text(response) or streamed_text
-            else:
-                response = self._client.responses.create(**payload)
-                text = self._extract_response_text(response)
-            if not text:
-                status = getattr(response, "status", "")
-                raise RuntimeError(
-                    f"Responses API returned no text output (status={status or 'unknown'})"
-                )
-            return SimpleNamespace(content=text, raw_response=response)
+            component=os.getenv("CHEM_LLM_COMPONENT", "research"),
+            model=self._model,
+            transport="research_responses",
+        ) as timing:
+            response = invoke_responses(
+                self._client, payload, on_event=timing.observe,
+            )
+        text = self._extract_response_text(response)
+        if not text:
+            status = getattr(response, "status", "")
+            raise RuntimeError(
+                f"Responses API returned no text output (status={status or 'unknown'})"
+            )
+        return SimpleNamespace(content=text, raw_response=response)
 
     def _invoke_cli(self, prompt: str) -> Any:
         tmpdir = tempfile.mkdtemp(prefix="research-codex-")
@@ -276,7 +307,9 @@ class CodexResponsesModel:
             env.pop("OPENAI_API_KEY", None)
             env.pop("REFINER_LLM_API_KEY", None)
             with measure_llm_request(
-                component="research", model=self._model, transport="codex_cli"
+                component=os.getenv("CHEM_LLM_COMPONENT", "research"),
+                model=self._model,
+                transport="research_codex_cli",
             ):
                 completed = subprocess.run(
                     cmd,
@@ -288,11 +321,11 @@ class CodexResponsesModel:
                     cwd=tmp_path,
                     check=False,
                 )
-                if completed.returncode != 0:
-                    diagnostic = self._cli_failure_diagnostic(completed)
-                    if self._is_retryable_cli_failure(completed):
-                        raise RetryableGatewayError(diagnostic)
-                    raise RuntimeError(diagnostic)
+            if completed.returncode != 0:
+                diagnostic = self._cli_failure_diagnostic(completed)
+                if self._is_retryable_cli_failure(completed):
+                    raise RetryableGatewayError(diagnostic)
+                raise RuntimeError(diagnostic)
             if not output_path.exists():
                 raise RuntimeError(
                     "Codex responses call did not produce output-last-message"
@@ -548,22 +581,24 @@ class LLMFactory:
             "temperature": temperature,
             "default_headers": LLMFactory._openai_compatible_headers(),
             "timeout": LLMFactory._openai_compatible_timeout(),
-            # BaseAgent/native_tools own retries so Retry-After: 60 cannot be
-            # honored invisibly inside the SDK.
+            # The shared llm_retry middleware is the sole retry owner.
             "max_retries": 0,
             "use_responses_api": False,
         }
         if provider_url:
             model_kwargs["base_url"] = normalize_openai_base_url(provider_url)
         model_kwargs.update(kwargs)
-        # A caller-provided LangChain option must not re-enable the SDK's
-        # Retry-After-aware retry loop.
+        # Do not allow a generic caller override to re-enable hidden SDK
+        # retries and multiply BaseAgent's observable shared retry budget.
         model_kwargs["max_retries"] = 0
         model = ChatOpenAI(**model_kwargs)
         object.__setattr__(
+            model, "_chem_gateway_max_retries", configured_max_retries()
+        )
+        object.__setattr__(
             model,
-            "_chem_gateway_max_retries",
-            configured_max_retries(),
+            "_chem_wall_timeout_seconds",
+            LLMFactory._openai_compatible_timeout(),
         )
         return model
 
@@ -618,14 +653,17 @@ class LLMFactory:
         model_kwargs.update(kwargs)
         model_kwargs["max_retries"] = 0
         model = ChatGoogleGenerativeAI(**model_kwargs)
+        object.__setattr__(
+            model, "_chem_gateway_max_retries", configured_max_retries()
+        )
+        object.__setattr__(
+            model,
+            "_chem_wall_timeout_seconds",
+            LLMFactory._openai_compatible_timeout(),
+        )
         client = getattr(model, "client", None)
         if client is not None:
             object.__setattr__(model, "client", _SingleAttemptGeminiClient(client))
-        object.__setattr__(
-            model,
-            "_chem_gateway_max_retries",
-            configured_max_retries(),
-        )
         return model
 
     @staticmethod

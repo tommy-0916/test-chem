@@ -11,6 +11,7 @@ import json
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
+from .container_requirements import parse_logical_container_requirements
 from .v2 import (
     CONTRACT_VERSION_V2,
     DeviceStepV2,
@@ -18,7 +19,6 @@ from .v2 import (
     EvidenceBundleV2,
     EvidenceItemV2,
     ExperimentGroupV2,
-    LogicalContainerV2,
     MacroActionV2,
     MacroStepV2,
     MaterialPortV2,
@@ -257,21 +257,9 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             or step.get("logical_step_id")
             or f"MS_{_slug(action_id, 'ACTION')}_{sequence:03d}"
         )
-        logical_containers = []
-        for index, raw in enumerate(_items(step.get("container_requirements")), start=1):
-            logical_containers.append(
-                LogicalContainerV2(
-                    logical_container_id=str(raw.get("logical_container_id") or f"LC_{step_id}_{index}"),
-                    container_type=str(raw.get("container_type") or "unknown"),
-                    count=int(raw.get("count") or 1),
-                    capacity_ml=(
-                        float(raw["capacity_ml"])
-                        if isinstance(raw.get("capacity_ml"), (int, float)) and raw.get("capacity_ml")
-                        else None
-                    ),
-                    lid_state=str(raw.get("lid_state") or "unknown"),
-                )
-            )
+        logical_containers = parse_logical_container_requirements(
+            step, sequence=sequence, step_id=step_id,
+        )
         provenance = _source(
             step.get("provenance") or step.get("来源") or step.get("source"),
             fallback_reason="Research generated this concrete macro step",

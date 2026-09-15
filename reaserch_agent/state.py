@@ -105,6 +105,7 @@ class ResearchAgentState:
     tool_invocations: List[Dict[str, Any]] = field(default_factory=list)
 
     errors: List[str] = field(default_factory=list)
+    llm_diagnostics: List[Dict[str, Any]] = field(default_factory=list)
     logs: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 

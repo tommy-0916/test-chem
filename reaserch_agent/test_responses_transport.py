@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from agent_skills.llm_retry import call_with_gateway_retry
+from agent_skills.responses_stream import ResponsesProtocolError, ResponsesTerminalError
 from reaserch_agent.utils.llm_factory import (
     CodexResponsesModel,
     LLMFactory,
@@ -27,12 +28,18 @@ class _FakeResponses:
 
     def create(self, **payload):
         self.payloads.append(payload)
-        return {
+        response = {
             "status": "completed",
             "output": [
                 {"content": [{"type": "output_text", "text": '{"ok":true}'}]}
             ],
         }
+        if payload.get("stream"):
+            self.stream = _FakeStream(
+                [{"type": "response.completed", "response": response}]
+            )
+            return self.stream
+        return response
 
 
 class _RetryableGatewayError(RuntimeError):
@@ -82,17 +89,11 @@ class DirectResponsesTransportTest(unittest.TestCase):
         self.assertTrue(stream.closed)
         self.assertIs(responses.create.call_args.kwargs["stream"], True)
 
-    def test_truncated_stream_retries_directly_after_ten_seconds(self) -> None:
+    def test_truncated_stream_fails_closed_without_replay(self) -> None:
         truncated = _FakeStream([
             SimpleNamespace(type="response.output_text.delta", delta="partial")
         ])
-        final = SimpleNamespace(status="completed", output_text='{"ok":true}')
-        complete = _FakeStream([
-            SimpleNamespace(type="response.completed", response=final)
-        ])
-        responses = SimpleNamespace(
-            create=Mock(side_effect=[truncated, complete])
-        )
+        responses = SimpleNamespace(create=Mock(return_value=truncated))
         model = CodexResponsesModel(
             model="gpt-5.6-sol",
             api_key="test-key",
@@ -111,13 +112,12 @@ class DirectResponsesTransportTest(unittest.TestCase):
         ), patch("agent_skills.llm_retry.time.sleep") as sleep, patch.object(
             model, "_invoke_cli"
         ) as cli:
-            response = model.invoke([{"role": "user", "content": "Plan."}])
+            with self.assertRaises(ResponsesProtocolError):
+                model.invoke([{"role": "user", "content": "Plan."}])
 
-        self.assertEqual(response.content, '{"ok":true}')
-        self.assertEqual(responses.create.call_count, 2)
+        self.assertEqual(responses.create.call_count, 1)
         self.assertTrue(truncated.closed)
-        self.assertTrue(complete.closed)
-        sleep.assert_called_once_with(10.0)
+        sleep.assert_not_called()
         cli.assert_not_called()
 
     def test_adapter_owns_configured_retries_and_sdk_retries_are_disabled(self) -> None:
@@ -134,7 +134,9 @@ class DirectResponsesTransportTest(unittest.TestCase):
     def test_retryable_gateway_failure_retries_after_ten_seconds(self) -> None:
         responses = _FakeResponses()
         original_create = responses.create
-        responses.create = Mock(side_effect=[_RetryableGatewayError(), original_create()])
+        responses.create = Mock(
+            side_effect=[_RetryableGatewayError(), original_create(stream=True)]
+        )
         client = SimpleNamespace(responses=responses)
 
         with patch.dict(
@@ -383,7 +385,109 @@ class DirectResponsesTransportTest(unittest.TestCase):
         self.assertEqual(payload["reasoning"], {"effort": "high"})
         self.assertEqual(payload["max_output_tokens"], 32768)
         self.assertFalse(payload["store"])
+        self.assertTrue(payload["stream"])
+        self.assertTrue(responses.stream.closed)
         self.assertNotIn("tools", payload)
+
+    def test_nonstream_requires_explicit_opt_out(self) -> None:
+        responses = _FakeResponses()
+        model = CodexResponsesModel(
+            model="test",
+            api_key="fake",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=responses),
+        )
+        with patch.dict(os.environ, {"REFINER_RESPONSES_STREAM": "0"}):
+            result = model.invoke([{"role": "user", "content": "test"}])
+        self.assertEqual(result.content, '{"ok":true}')
+        self.assertFalse(responses.payloads[0]["stream"])
+
+    def test_incomplete_stream_cannot_fall_back_to_cli(self) -> None:
+        stream = _FakeStream([
+            {"type": "response.output_text.delta", "delta": '{"partial":true}'},
+            {
+                "type": "response.incomplete",
+                "response": {"status": "incomplete"},
+            },
+        ])
+        responses = SimpleNamespace(create=lambda **payload: stream)
+        model = CodexResponsesModel(
+            model="test",
+            api_key="fake",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=responses),
+        )
+        with patch.dict(
+            os.environ, {"REFINER_RESPONSES_CLI_FALLBACK": "1"}
+        ), patch.object(model, "_invoke_cli") as cli:
+            with self.assertRaises(ResponsesTerminalError):
+                model.invoke([{"role": "user", "content": "test"}])
+        cli.assert_not_called()
+        self.assertTrue(stream.closed)
+
+    def test_stream_eof_cannot_return_partial_text(self) -> None:
+        stream = _FakeStream([
+            {"type": "response.output_text.delta", "delta": '{"partial":true}'}
+        ])
+        model = CodexResponsesModel(
+            model="test",
+            api_key="fake",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(
+                responses=SimpleNamespace(create=lambda **payload: stream)
+            ),
+        )
+        with self.assertRaises(ResponsesProtocolError):
+            model.invoke([{"role": "user", "content": "test"}])
+        self.assertTrue(stream.closed)
+
+    def test_request_failure_cannot_silently_downgrade(self) -> None:
+        responses = _FakeResponses()
+        model = CodexResponsesModel(
+            model="test",
+            api_key="fake",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=responses),
+        )
+        model._transport_max_retries = 0
+        failure = TimeoutError("fake transport timeout")
+        with patch.dict(
+            os.environ, {"REFINER_RESPONSES_CLI_FALLBACK": "1"}
+        ), patch.object(
+            responses, "create", side_effect=failure
+        ) as create, patch.object(model, "_invoke_cli") as cli:
+            with self.assertRaises(TimeoutError) as caught:
+                model.invoke([{"role": "user", "content": "test"}])
+        self.assertIs(caught.exception, failure)
+        create.assert_called_once()
+        self.assertTrue(create.call_args.kwargs["stream"])
+        cli.assert_not_called()
+
+    def test_terminal_403_cannot_fall_back_to_cli_in_nonstream_mode(self) -> None:
+        model = CodexResponsesModel(
+            model="test",
+            api_key="fake",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=_FakeResponses()),
+        )
+        model._transport_max_retries = 0
+        failure = RuntimeError("private provider body")
+        failure.status_code = 403
+        with patch.dict(
+            os.environ,
+            {
+                "REFINER_RESPONSES_STREAM": "0",
+                "REFINER_RESPONSES_CLI_FALLBACK": "1",
+            },
+        ), patch.object(
+            model, "_invoke_direct", side_effect=failure
+        ) as direct, patch.object(model, "_invoke_cli") as cli:
+            with self.assertRaises(RuntimeError) as caught:
+                model.invoke([{"role": "user", "content": "test"}])
+
+        self.assertIs(caught.exception, failure)
+        direct.assert_called_once()
+        cli.assert_not_called()
 
     def test_cli_transport_is_stateless_and_isolated(self) -> None:
         captured = {}
@@ -434,8 +538,9 @@ class DirectResponsesTransportTest(unittest.TestCase):
         self.assertIn("Do not call tools", captured["input"])
         self.assertIn("Plan chemistry.", captured["input"])
         self.assertTrue(Path(captured["cwd"]).name.startswith("research-codex-"))
-        self.assertEqual(captured["config_mode"], 0o600)
-        self.assertEqual(captured["auth_mode"], 0o600)
+        if os.name != "nt":
+            self.assertEqual(captured["config_mode"], 0o600)
+            self.assertEqual(captured["auth_mode"], 0o600)
         self.assertIn("request_max_retries = 0", captured["config_text"])
         self.assertIn("stream_max_retries = 0", captured["config_text"])
         self.assertNotIn("OPENAI_API_KEY", captured["env"])
@@ -470,10 +575,10 @@ class DirectResponsesTransportTest(unittest.TestCase):
                 json.loads(line)
                 for line in timing_path.read_text(encoding="utf-8").splitlines()
             ]
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["component"], "research")
-        self.assertEqual(events[0]["transport"], "codex_cli")
-        self.assertEqual(events[0]["status"], "success")
+        completed = [event for event in events if event["status"] == "success"]
+        self.assertEqual(len(completed), 1)
+        self.assertEqual(completed[0]["component"], "research")
+        self.assertEqual(completed[0]["transport"], "research_codex_cli")
 
 
 if __name__ == "__main__":

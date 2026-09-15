@@ -1,5 +1,7 @@
 """Task prompts for the research agent workflows."""
 
+from chem_agent_contracts.v2 import LOGICAL_LID_STATE_PROMPT
+
 SURVEY_QUERY_GENERATE_PROMPT = """## 任务名称
 survey query generate
 
@@ -270,6 +272,8 @@ MACRO_STEP_CONTRACT_PROMPT = """
 - container_requirements：数组；每项 logical_container_id、container_type、count、capacity_ml、lid_state，
   只填有依据的需求；未知数值用 null，不得虚构容器兼容性。logical_container_id 表示同一样品的逻辑容器，
   不是实体瓶号、机器槽位、原液瓶位或工作站编码。保留跨步骤物料与容器连续性。
+  __LOGICAL_LID_STATE_PROMPT__
+  count 必须为正整数或 null，capacity_ml 必须为有限正数或 null；禁止字符串数值和布尔值。
 - intermediate_returns：数组；每项 name、availability（declared/undeclared）、required_for_next_step、source。
   declared 必须引用当前 step 投影的真实字段：name 与 fields 中字段完全一致，source 为包含
   station_code、operation 的对象，feedback_kind 为 returned_data（操作完成后返回）或
@@ -290,6 +294,10 @@ V2 具体实验设计要求：
   这类值可以继续进入 Device，不触发人工审核。
 - 只有无法预知的产物收率或设备运行时测量可以使用 all_available/runtime_measured 语义。
 """
+
+MACRO_STEP_CONTRACT_PROMPT = MACRO_STEP_CONTRACT_PROMPT.replace(
+    "__LOGICAL_LID_STATE_PROMPT__", LOGICAL_LID_STATE_PROMPT
+)
 
 MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
 macro plan design

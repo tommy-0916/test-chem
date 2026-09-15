@@ -13,12 +13,58 @@ import logging
 import math
 import os
 import re
+import uuid
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from agent_skills.responses_diagnostics import (
+    format_responses_failure,
+    get_responses_diagnostics,
+)
+from agent_skills.llm_retry import (
+    LogicalCallDeadlineExceeded,
+    NonRetryableGatewayError,
+    RetryableGatewayError,
+    call_with_gateway_retry,
+    is_retryable_gateway_error,
+    is_terminal_gateway_error,
+    safe_gateway_error_code,
+    safe_gateway_error_metadata,
+)
+from agent_skills.llm_timing import measure_llm_request
+try:
+    from .feasibility_fragments import (
+        FeasibilityFragmentError,
+        build_fragment_instruction,
+        build_fragment_request_context,
+        merge_fragment,
+    )
+except ImportError:
+    from feasibility_fragments import (
+        FeasibilityFragmentError,
+        build_fragment_instruction,
+        build_fragment_request_context,
+        merge_fragment,
+    )
+try:
+    from .checkpoints import (
+        DeviceCheckpointStore,
+        digest as checkpoint_digest,
+        file_digest as checkpoint_file_digest,
+        implementation_digest,
+    )
+except ImportError:
+    from checkpoints import (
+        DeviceCheckpointStore,
+        digest as checkpoint_digest,
+        file_digest as checkpoint_file_digest,
+        implementation_digest,
+    )
 
 from utils.paths import chem_resources_root, format_reference_path, workstation_dir
 from utils.workstation_loader import WorkstationLoader
@@ -84,6 +130,47 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_gateway_failure(exc: BaseException) -> bool:
+    _, http_status = safe_gateway_error_metadata(exc)
+    return bool(
+        get_responses_diagnostics(exc) is not None
+        or isinstance(
+            exc,
+            (
+                LogicalCallDeadlineExceeded,
+                NonRetryableGatewayError,
+                RetryableGatewayError,
+            ),
+        )
+        or http_status is not None
+        or is_retryable_gateway_error(exc)
+        or is_terminal_gateway_error(exc)
+    )
+
+
+def _safe_model_failure_text(exc: BaseException) -> str:
+    """Format model failures without persisting SDK bodies or request URLs."""
+
+    responses_text = format_responses_failure(exc)
+    if responses_text:
+        return responses_text
+    error_type, http_status = safe_gateway_error_metadata(exc)
+    if _is_gateway_failure(exc):
+        classification = (
+            "terminal"
+            if is_terminal_gateway_error(exc)
+            else "retryable"
+            if is_retryable_gateway_error(exc)
+            else "non_retryable"
+        )
+        status = f" http_status={http_status}" if http_status is not None else ""
+        return (
+            f"Gateway request failed: {error_type}{status} "
+            f"classification={classification}"
+        )
+    return str(exc)
 
 
 DEFAULT_WORKFLOW_REPAIR_LIMIT = 8
@@ -1447,6 +1534,10 @@ class SingleDeviceAgentState:
     workflow_repair_cycles: List[Dict[str, Any]] = field(default_factory=list)
     device_plan_rewrite_count: int = 0
     errors: List[str] = field(default_factory=list)
+    llm_diagnostics: List[Dict[str, Any]] = field(default_factory=list)
+    llm_request_attempts: List[Dict[str, Any]] = field(default_factory=list)
+    feasibility_progress: List[Dict[str, Any]] = field(default_factory=list)
+    checkpoints: Dict[str, Any] = field(default_factory=dict)
     logs: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -1491,6 +1582,7 @@ class SingleDeviceAgent:
         # analysis and kept in runtime state.  Model-generated plan JSON cannot
         # overwrite this contract.
         self._active_semantic_analysis: Dict[str, Any] = {}
+        self._checkpoint_store: Optional[DeviceCheckpointStore] = None
         self._workstation_loader = workstation_loader or WorkstationLoader(
             use_new_format=use_new_format
         )
@@ -1607,6 +1699,143 @@ class SingleDeviceAgent:
             default=str,
         ).encode("utf-8")
         return f"{prefix}_{hashlib.sha256(encoded).hexdigest()}"
+
+    @staticmethod
+    def _safe_model_attribute(model: Any, name: str) -> Any:
+        try:
+            value = getattr(model, name, None)
+        except Exception:
+            return None
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, (list, tuple)) and all(
+            isinstance(item, (str, int, float, bool)) for item in value
+        ):
+            return list(value)
+        return None
+
+    @classmethod
+    def _planning_model_checkpoint_binding(cls, model: Any) -> Dict[str, Any]:
+        """Describe output-affecting model config without persisting secrets."""
+
+        def sanitized_endpoint(endpoint_text: str) -> Tuple[str, str]:
+            """Keep routing identity while removing URL credentials."""
+            credential_query_names = {
+                "api_key", "apikey", "key", "token", "access_token",
+                "auth", "authorization", "credential", "credentials",
+                "password", "passwd", "secret", "signature", "sig",
+                "subscription_key",
+            }
+
+            def is_credential_query(name: str) -> bool:
+                normalized = name.strip().lower().replace("-", "_").replace(".", "_")
+                return normalized in credential_query_names or normalized.endswith(
+                    ("_api_key", "_token", "_secret", "_password", "_signature")
+                )
+
+            try:
+                parsed = urlsplit(endpoint_text)
+                hostname = (parsed.hostname or "").lower()
+                if not hostname:
+                    raise ValueError("endpoint has no hostname")
+                host_for_url = f"[{hostname}]" if ":" in hostname else hostname
+                netloc = host_for_url
+                if parsed.port is not None:
+                    netloc += f":{parsed.port}"
+                safe_query = urlencode(
+                    sorted(
+                        (name, value)
+                        for name, value in parse_qsl(
+                            parsed.query, keep_blank_values=True
+                        )
+                        if not is_credential_query(name)
+                    ),
+                    doseq=True,
+                )
+                sanitized = urlunsplit(
+                    (
+                        parsed.scheme.lower(),
+                        netloc,
+                        parsed.path,
+                        safe_query,
+                        "",
+                    )
+                )
+                return hostname, sanitized
+            except (TypeError, ValueError):
+                # Never hash a malformed raw endpoint: it may itself be a
+                # credential-bearing string. Keep only a non-secret marker.
+                return "", "invalid_or_relative_endpoint"
+
+        def one(candidate: Any) -> Dict[str, Any]:
+            candidate_type = type(candidate)
+            identity: Dict[str, Any] = {
+                "adapter": (
+                    f"{candidate_type.__module__}."
+                    f"{candidate_type.__qualname__}"
+                )
+            }
+            for attribute in (
+                "model_name",
+                "model",
+                "reasoning_effort",
+                "_reasoning_effort",
+                "max_output_tokens",
+                "max_tokens",
+                "temperature",
+                "disable_thinking",
+                "do_sample",
+            ):
+                value = cls._safe_model_attribute(candidate, attribute)
+                if value not in (None, ""):
+                    identity[attribute] = value
+            endpoint = None
+            for attribute in ("base_url", "endpoint_url", "_base_url"):
+                endpoint = cls._safe_model_attribute(candidate, attribute)
+                if endpoint not in (None, ""):
+                    break
+            if endpoint not in (None, ""):
+                endpoint_text = str(endpoint)
+                endpoint_host, endpoint_route = sanitized_endpoint(endpoint_text)
+                if endpoint_host:
+                    identity["endpoint_host"] = endpoint_host
+                # Userinfo, credential query values and fragment are removed
+                # before hashing. Non-secret query parameters such as an API
+                # version remain part of the logical route binding.
+                identity["endpoint_config_sha256"] = checkpoint_digest(
+                    endpoint_route
+                )
+            return identity
+
+        # Inspect pool members only after a guarded getattr; never stringify
+        # backend objects because clients may retain credentials internally.
+        try:
+            raw_backends = getattr(model, "backends", None)
+        except Exception:
+            raw_backends = None
+        candidates = (
+            list(raw_backends)
+            if isinstance(raw_backends, (list, tuple)) and raw_backends
+            else [model]
+        )
+        binding: Dict[str, Any] = {
+            "adapter": one(model)["adapter"],
+            "backends": [one(candidate) for candidate in candidates],
+            "wire_api": os.getenv("REFINER_LLM_WIRE_API", "chat")
+            .strip()
+            .lower(),
+            "provider": os.getenv("REFINER_LLM_MODEL_PROVIDER", "")
+            .strip()
+            .lower(),
+            "feasibility_reasoning_effort": os.getenv(
+                "CHEM_DEVICE_FEASIBILITY_REASONING_EFFORT", ""
+            ).strip(),
+        }
+        for attribute in ("max_rounds", "round_backoff_seconds"):
+            value = cls._safe_model_attribute(model, attribute)
+            if value not in (None, ""):
+                binding[attribute] = value
+        return binding
 
     @classmethod
     def _strip_untrusted_approval_fields(
@@ -10273,15 +10502,19 @@ class SingleDeviceAgent:
         exp_id: Optional[str] = None,
         iteration_id: int = 0,
         workflow_id: int = 0,
+        checkpoint_dir: Optional[str] = None,
+        resume_checkpoints: bool = True,
         device_plan_override: Optional[Dict[str, Any]] = None,
         prior_repair_request: Optional[Dict[str, Any]] = None,
         human_quantity_approval_bundle: Optional[
             ValidatedHumanQuantityApprovalBundle
         ] = None,
     ) -> SingleDeviceAgentState:
+        explicit_exp_id = exp_id
         exp_id = exp_id or self._default_exp_id()
         self._active_trusted_human_quantity_approvals = []
         self._active_semantic_analysis = {}
+        self._checkpoint_store = None
         research_handoff, _ = self._strip_untrusted_approval_fields(
             research_handoff
         )
@@ -10317,6 +10550,40 @@ class SingleDeviceAgent:
             state.json_format_reference = self._json_format_reference
             self._assert_workstation_snapshot_current(state)
             resumed_from_manual = device_plan_override is not None
+            if checkpoint_dir and not resumed_from_manual:
+                fragment_contract_path = Path(__file__).with_name(
+                    "feasibility_fragments.py"
+                )
+                self._checkpoint_store = DeviceCheckpointStore(
+                    checkpoint_dir,
+                    {
+                        "research_handoff_sha256": checkpoint_digest(
+                            state.research_handoff
+                        ),
+                        "device_truth_sha256": state.device_truth_sha256,
+                        "contract_version": self._contract_version,
+                        "semantic_analysis_enabled": (
+                            self._llm_semantic_analysis_enabled()
+                        ),
+                        "feasibility_mode": os.getenv(
+                            "CHEM_DEVICE_FEASIBILITY_MODE", ""
+                        ).strip().lower(),
+                        "fragment_contract_sha256": checkpoint_file_digest(
+                            fragment_contract_path
+                        ),
+                        "implementation_sha256": implementation_digest(),
+                        "planning_model": self._planning_model_checkpoint_binding(
+                            self._model
+                        ),
+                    },
+                    resume=resume_checkpoints,
+                    metadata={"exp_id": exp_id},
+                )
+                if explicit_exp_id is None:
+                    state.exp_id = str(
+                        self._checkpoint_store.metadata.get("exp_id") or exp_id
+                    )
+                state.checkpoints = self._checkpoint_store.summary()
             if self._llm_semantic_analysis_enabled():
                 frozen_semantics: Any = None
                 if resumed_from_manual:
@@ -10337,7 +10604,12 @@ class SingleDeviceAgent:
                     self._active_semantic_analysis = copy.deepcopy(frozen_semantics)
                     state.add_log("restored frozen LLM semantic analysis from certificate")
                 else:
-                    self._active_semantic_analysis = self._invoke_semantic_analysis(state)
+                    self._active_semantic_analysis = self._checkpoint_stage(
+                        state,
+                        "semantic_analysis",
+                        state.research_handoff,
+                        lambda: self._invoke_semantic_analysis(state),
+                    )
                 state.semantic_analysis = copy.deepcopy(self._active_semantic_analysis)
                 state.research_handoff = self._apply_semantic_analysis_to_handoff(
                     state.research_handoff
@@ -10431,6 +10703,11 @@ class SingleDeviceAgent:
                 package = self._attach_v2_contract(state, package)
             self._assert_workstation_snapshot_current(state)
             state.terminal_package = package
+            if package.get("feedback_type") == "device_internal_error" and result.get("llm_diagnostics"):
+                error_package = package.setdefault("error_package", {})
+                error_package["llm_diagnostics"] = copy.deepcopy(result["llm_diagnostics"])
+                error_package["llm_failure_step"] = result["llm_failure_step"]
+                error_package["llm_exception_type"] = result["llm_exception_type"]
             package_status = str(package.get("status", ""))
             if package_status in {"feasibility_error", "terminal_unmappable"}:
                 state.status = "feasibility_error"
@@ -10443,10 +10720,15 @@ class SingleDeviceAgent:
             state.workflow_txt = str(package.get("workflow_txt", ""))
             workflow_json = package.get("workflow_json")
             state.workflow_json = workflow_json if isinstance(workflow_json, dict) else {}
+            self._finalize_checkpoint_run(state, package)
             state.add_log(f"SingleDeviceAgent completed with status={state.status}")
             return state
         except Exception as exc:
-            error_text = f"{type(exc).__name__}: {exc}"
+            diagnostics = get_responses_diagnostics(exc)
+            error_text = (
+                f"{type(exc).__name__}: "
+                f"{_safe_model_failure_text(exc)}"
+            )
             configuration_error = isinstance(exc, DeviceConfigurationError)
             if self._skill_session is not None:
                 self._sync_skill_load_state(state)
@@ -10465,6 +10747,7 @@ class SingleDeviceAgent:
                 "loaded_workstation_skills": state.loaded_workstation_skills,
                 "skill_load_events": state.skill_load_events,
                 "feasibility_accepted": state.feasibility_accepted,
+                "checkpoints": copy.deepcopy(state.checkpoints),
                 "feasibility_certificate": copy.deepcopy(
                     state.feasibility_certificate
                 ),
@@ -10481,12 +10764,161 @@ class SingleDeviceAgent:
                     ),
                 },
             }
+            if diagnostics is not None:
+                record = next(
+                    (
+                        item for item in reversed(state.llm_diagnostics)
+                        if item.get("diagnostics") == diagnostics
+                    ),
+                    None,
+                )
+                if record is None:
+                    record = {
+                        "task_name": "device_runtime",
+                        "exception_type": type(exc).__name__,
+                        "diagnostics": diagnostics,
+                    }
+                    state.llm_diagnostics.append(record)
+                state.terminal_package["error_package"].update({
+                    "llm_diagnostics": copy.deepcopy(diagnostics),
+                    "llm_failure_step": record["task_name"],
+                    "llm_exception_type": record["exception_type"],
+                })
+            if state.feasibility_progress and state.feasibility_progress[-1].get("status") == "failed":
+                progress = state.feasibility_progress[-1]
+                state.terminal_package["error_package"]["planning_progress"] = {
+                    "failed_step": progress.get("active_step"),
+                    "failed_macro_id": progress.get("active_macro_id"),
+                    "completed_chunks": len(progress.get("completed_chunks", [])),
+                    "partial_candidate_dispatchable": False,
+                }
+            # Runtime/model failures deliberately leave the run active.  A
+            # retry with the same frozen binding can then restore the last
+            # fully accepted fragment, while no partial candidate is granted
+            # dispatch authority.
+            self._finalize_checkpoint_run(state, state.terminal_package)
             state.add_log("SingleDeviceAgent returned a terminal runtime-error package")
-            logger.exception("SingleDeviceAgent failed")
+            if _is_gateway_failure(exc):
+                # An SDK HTTP exception may retain its raw body and headers.
+                logger.error("SingleDeviceAgent failed: %s", error_text)
+            else:
+                logger.exception("SingleDeviceAgent failed")
             return state
 
     def run(self, research_handoff: Dict[str, Any]) -> Dict[str, Any]:
         return self.run_state(research_handoff).terminal_package
+
+    @staticmethod
+    def _checkpoint_terminal_outcome(package: Dict[str, Any]) -> bool:
+        """Return whether a package closes, rather than interrupts, a run."""
+        status = str(package.get("status", "")).strip().lower()
+        return bool(
+            package.get("dispatchable") is True
+            or status in {
+                "success",
+                "manual_required",
+                "feasibility_error",
+                "terminal_unmappable",
+            }
+        )
+
+    def _finalize_checkpoint_run(
+        self,
+        state: SingleDeviceAgentState,
+        package: Dict[str, Any],
+    ) -> None:
+        """Publish lifecycle state without changing workflow authority."""
+        store = getattr(self, "_checkpoint_store", None)
+        if store is None:
+            return
+        status = str(package.get("status", "")).strip().lower()
+        dispatchable = bool(
+            package.get("dispatchable") is True or status == "success"
+        )
+        if self._checkpoint_terminal_outcome(package):
+            store.complete(
+                terminal_status=status or "dispatchable",
+                dispatchable=dispatchable,
+            )
+        state.checkpoints = store.summary()
+        package["checkpoints"] = copy.deepcopy(state.checkpoints)
+
+    def _restore_checkpoint_skill_state(
+        self,
+        state: SingleDeviceAgentState,
+        payload: Dict[str, Any],
+    ) -> None:
+        """Restore only workstation reads needed by a later uncached stage."""
+        loaded = payload.get("loaded_workstation_skills")
+        if not isinstance(loaded, list) or not loaded:
+            return
+        session = self._workstation_skill_session()
+        for item in loaded:
+            if not isinstance(item, dict):
+                continue
+            station_code = str(item.get("station_code") or "").strip()
+            if station_code and station_code not in session.loaded:
+                session.load(station_code, origin="checkpoint_restore")
+        self._sync_skill_load_state(state)
+
+    def _checkpoint_stage(
+        self,
+        state: SingleDeviceAgentState,
+        stage: str,
+        inputs: Any,
+        compute: Any,
+    ) -> Dict[str, Any]:
+        """Checkpoint one completed JSON-producing stage.
+
+        This wrapper deliberately does not checkpoint exceptions or terminal
+        runtime-error sentinels.  Its payload carries no dispatch authority.
+        """
+        store = getattr(self, "_checkpoint_store", None)
+        if store is None:
+            return compute()
+        self._assert_workstation_snapshot_current(state)
+        key = store.key(stage, inputs)
+        cached = store.read(key, record_reuse=False)
+        if (
+            isinstance(cached, dict)
+            and cached.get("schema_version") == 1
+            and isinstance(cached.get("result"), dict)
+            and cached.get("result_sha256")
+            == checkpoint_digest(cached.get("result"))
+            and cached.get("dispatchable") is False
+        ):
+            store.confirm_reuse(key, stage)
+            self._restore_checkpoint_skill_state(state, cached)
+            state.checkpoints = store.summary()
+            state.add_log(f"resumed Device checkpoint: {stage}")
+            print(
+                f"[single-device-agent] checkpoint restored: {stage}",
+                flush=True,
+            )
+            return copy.deepcopy(cached["result"])
+
+        with store.scope(key):
+            result = compute()
+        if not isinstance(result, dict):
+            raise TypeError(f"checkpoint stage {stage} must return one JSON object")
+        self._assert_workstation_snapshot_current(state)
+        self._sync_skill_load_state(state)
+        store.write(
+            key,
+            stage,
+            {
+                "schema_version": 1,
+                "result": copy.deepcopy(result),
+                "result_sha256": checkpoint_digest(result),
+                "loaded_workstation_skills": copy.deepcopy(
+                    state.loaded_workstation_skills
+                ),
+                "dispatchable": False,
+            },
+        )
+        state.checkpoints = store.summary()
+        state.add_log(f"saved Device checkpoint: {stage}")
+        return result
 
     def _use_full_workstation_prompt(self) -> bool:
         """Discovery is complete; full contracts are progressively disclosed."""
@@ -10933,29 +11365,388 @@ class SingleDeviceAgent:
             "ultrasonic_dispersion": _ULTRASONIC_DISPERSION_WORKSTATIONS,
         }.get(category, frozenset())
 
+    def _fragment_checkpoint_inputs(
+        self,
+        state: SingleDeviceAgentState,
+        *,
+        macro_id: str,
+        macro_ids: List[str],
+        matrix: Any,
+        aggregate: Dict[str, Any],
+        index: int,
+        extra_instruction: str,
+    ) -> Dict[str, Any]:
+        """Freeze every value that can change one fragment or its merge."""
+        return {
+            "schema_version": 1,
+            "research_handoff_sha256": checkpoint_digest(
+                state.research_handoff
+            ),
+            "semantic_analysis_sha256": checkpoint_digest(
+                self._active_semantic_analysis
+            ),
+            "device_truth_sha256": state.device_truth_sha256,
+            "macro_id": macro_id,
+            "macro_ids": list(macro_ids),
+            "chunk_index": index,
+            "chunk_count": len(macro_ids),
+            "sample_control_matrix_sha256": checkpoint_digest(matrix),
+            "accepted_prefix_sha256": checkpoint_digest(aggregate),
+            "extra_instruction_sha256": checkpoint_digest(extra_instruction),
+        }
+
+    def _restore_fragment_checkpoint(
+        self,
+        state: SingleDeviceAgentState,
+        *,
+        key: str,
+        checkpoint_inputs: Dict[str, Any],
+        step_name: str,
+        macro_id: str,
+        macro_ids: List[str],
+        matrix: Any,
+        aggregate: Dict[str, Any],
+        index: int,
+    ) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]]:
+        """Return a contract-revalidated completed fragment, never a partial."""
+        store = getattr(self, "_checkpoint_store", None)
+        if store is None:
+            return None
+        cached = store.read(key, record_reuse=False)
+        if not isinstance(cached, dict):
+            return None
+        fragment = cached.get("fragment")
+        candidate = cached.get("candidate")
+        if (
+            cached.get("schema_version") != 1
+            or cached.get("dispatchable") is not False
+            or cached.get("feasibility_accepted") is not False
+            or cached.get("workflow_json") != {}
+            or cached.get("macro_id") != macro_id
+            or cached.get("chunk_index") != index
+            or cached.get("chunk_count") != len(macro_ids)
+            or cached.get("step_name") != step_name
+            or cached.get("fragment_binding") != checkpoint_inputs
+            or cached.get("fragment_binding_sha256")
+            != checkpoint_digest(checkpoint_inputs)
+            or cached.get("prefix_sha256") != checkpoint_digest(aggregate)
+            or not isinstance(fragment, dict)
+            or not isinstance(candidate, dict)
+            or cached.get("fragment_sha256") != checkpoint_digest(fragment)
+            or cached.get("candidate_sha256") != checkpoint_digest(candidate)
+            or candidate.get("status")
+            not in {
+                "device_plan",
+                "success",
+                "manual_required",
+                "human_review_required",
+            }
+        ):
+            return None
+        try:
+            recomputed = merge_fragment(
+                copy.deepcopy(aggregate),
+                copy.deepcopy(fragment),
+                macro_id,
+                macro_ids,
+                matrix,
+            )
+        except FeasibilityFragmentError:
+            return None
+        if checkpoint_digest(recomputed) != checkpoint_digest(candidate):
+            return None
+        completed = cached.get("completed_chunk")
+        if not isinstance(completed, dict) or completed != {
+            "macro_id": macro_id,
+            "step_name": step_name,
+            "fragment_digest": self._stable_digest(fragment),
+            "candidate_digest": self._stable_digest(recomputed),
+            "plan_step_count": len(recomputed.get("device_plan", [])),
+        }:
+            return None
+        store.confirm_reuse(key, step_name)
+        self._restore_checkpoint_skill_state(state, cached)
+        state.checkpoints = store.summary()
+        state.add_log(f"{step_name}: restored completed fragment checkpoint")
+        print(
+            f"[single-device-agent] checkpoint restored: {step_name}",
+            flush=True,
+        )
+        return copy.deepcopy(fragment), recomputed, copy.deepcopy(completed)
+
+    def _save_fragment_checkpoint(
+        self,
+        state: SingleDeviceAgentState,
+        *,
+        key: str,
+        checkpoint_inputs: Dict[str, Any],
+        step_name: str,
+        macro_id: str,
+        macro_ids: List[str],
+        index: int,
+        prefix: Dict[str, Any],
+        fragment: Dict[str, Any],
+        candidate: Dict[str, Any],
+        completed: Dict[str, Any],
+    ) -> None:
+        """Atomically save only a successfully merged non-dispatchable prefix."""
+        store = getattr(self, "_checkpoint_store", None)
+        if store is None or candidate.get("status") not in {
+            "device_plan",
+            "success",
+            "manual_required",
+            "human_review_required",
+        }:
+            return
+        self._assert_workstation_snapshot_current(state)
+        self._sync_skill_load_state(state)
+        store.write(
+            key,
+            step_name,
+            {
+                "schema_version": 1,
+                "macro_id": macro_id,
+                "chunk_index": index,
+                "chunk_count": len(macro_ids),
+                "step_name": step_name,
+                "fragment_binding": copy.deepcopy(checkpoint_inputs),
+                "fragment_binding_sha256": checkpoint_digest(
+                    checkpoint_inputs
+                ),
+                "prefix_sha256": checkpoint_digest(prefix),
+                "fragment": copy.deepcopy(fragment),
+                "fragment_sha256": checkpoint_digest(fragment),
+                "candidate": copy.deepcopy(candidate),
+                "candidate_sha256": checkpoint_digest(candidate),
+                "completed_chunk": copy.deepcopy(completed),
+                "loaded_workstation_skills": copy.deepcopy(
+                    state.loaded_workstation_skills
+                ),
+                "feasibility_accepted": False,
+                "workflow_json": {},
+                "dispatchable": False,
+            },
+        )
+        state.checkpoints = store.summary()
+        state.add_log(f"{step_name}: saved completed fragment checkpoint")
+
     def _invoke_feasibility_plan(
         self,
         state: SingleDeviceAgentState,
         *,
         extra_instruction: str = "",
     ) -> Dict[str, Any]:
-        """Stage 1: feasibility verdict + device_plan (no workflow_json)."""
-        prompt = FEASIBILITY_PLAN_TASK_PROMPT
-        prompt_handoff = copy.deepcopy(state.research_handoff)
-        prompt_handoff["observation_evidence_catalog"] = (
-            self._observation_evidence_catalog(state.research_handoff)
+        """Build one complete candidate before any global approval or translation."""
+        mode = os.getenv("CHEM_DEVICE_FEASIBILITY_MODE", "").strip().lower()
+        if mode not in {"", "single", "fragmented"}:
+            raise DeviceConfigurationError(
+                "CHEM_DEVICE_FEASIBILITY_MODE must be single or fragmented"
+            )
+        fragmented = mode == "fragmented" or (
+            not mode and self._contract_version == "v2"
         )
+        if not fragmented:
+            return self._invoke_feasibility_request(
+                state, extra_instruction=extra_instruction,
+            )
+        macros = state.research_handoff.get("macro_action_steps")
+        if not isinstance(macros, list) or not macros or any(
+            not isinstance(step, dict) for step in macros
+        ):
+            raise FeasibilityFragmentError("macro_action_steps must be a nonempty object array")
+        macro_ids = [self._semantic_macro_id(step, i) for i, step in enumerate(macros, 1)]
+        if any(not value for value in macro_ids) or len(set(macro_ids)) != len(macro_ids):
+            raise FeasibilityFragmentError("macro_action_steps must have unique nonempty source IDs")
+        matrix = self._sample_matrix_contract_value(state.research_handoff)
+        aggregate: Dict[str, Any] = {}
+        progress: Dict[str, Any] = {
+            "candidate_number": len(state.feasibility_progress) + 1,
+            "status": "running",
+            "research_handoff_digest": self._stable_digest(state.research_handoff),
+            "semantic_analysis_digest": self._stable_digest(self._active_semantic_analysis),
+            "device_truth_sha256": state.device_truth_sha256,
+            "completed_chunks": [],
+            "candidate": {},
+        }
+        state.feasibility_progress.append(progress)
+        try:
+            for index, macro_id in enumerate(macro_ids, 1):
+                step_name = f"feasibility_device_plan_chunk_{index}_of_{len(macros)}"
+                progress["active_macro_id"] = macro_id
+                progress["active_step"] = step_name
+                prefix = copy.deepcopy(aggregate)
+                fragment_context = build_fragment_request_context(
+                    state.research_handoff,
+                    self._active_semantic_analysis,
+                    aggregate,
+                    macro_id,
+                    macro_ids,
+                    matrix,
+                )
+                fragment_context["observation_evidence_catalog"] = (
+                    self._observation_evidence_catalog(state.research_handoff)
+                )
+                instruction = extra_instruction + "\n\n" + build_fragment_instruction(
+                    aggregate, macro_id, macro_ids, matrix,
+                )
+                store = getattr(self, "_checkpoint_store", None)
+                checkpoint_key = ""
+                checkpoint_inputs: Dict[str, Any] = {}
+                if store is not None:
+                    checkpoint_inputs = self._fragment_checkpoint_inputs(
+                        state,
+                        macro_id=macro_id,
+                        macro_ids=macro_ids,
+                        matrix=matrix,
+                        aggregate=aggregate,
+                        index=index,
+                        extra_instruction=extra_instruction,
+                    )
+                    checkpoint_key = store.key(
+                        step_name,
+                        checkpoint_inputs,
+                    )
+                restored = (
+                    self._restore_fragment_checkpoint(
+                        state,
+                        key=checkpoint_key,
+                        checkpoint_inputs=checkpoint_inputs,
+                        step_name=step_name,
+                        macro_id=macro_id,
+                        macro_ids=macro_ids,
+                        matrix=matrix,
+                        aggregate=aggregate,
+                        index=index,
+                    )
+                    if checkpoint_key
+                    else None
+                )
+                if restored is not None:
+                    fragment, merged, completed = restored
+                else:
+                    # A merge failure is a local fragment-contract repair. It
+                    # never mutates the accepted prefix or consumes a Research
+                    # iteration. The scope also prevents nested checkpoint-key
+                    # collisions if fragment planning gains sub-stages later.
+                    scope = (
+                        store.scope(checkpoint_key)
+                        if store is not None
+                        else nullcontext()
+                    )
+                    with scope:
+                        for fragment_attempt in range(2):
+                            fragment = self._invoke_feasibility_request(
+                                state,
+                                extra_instruction=instruction,
+                                step_name=step_name,
+                                fragment_context=fragment_context,
+                            )
+                            try:
+                                merged = merge_fragment(
+                                    aggregate,
+                                    fragment,
+                                    macro_id,
+                                    macro_ids,
+                                    matrix,
+                                )
+                                break
+                            except FeasibilityFragmentError as exc:
+                                if fragment_attempt:
+                                    raise
+                                state.add_log(
+                                    f"{step_name}: fragment contract rejected; "
+                                    f"one scoped repair: {exc}"
+                                )
+                                instruction += (
+                                    "\n\n本块未通过合并合同，前序 candidate 未变。"
+                                    "只重写当前块："
+                                    + str(exc)
+                                    + "\n被拒绝的本块："
+                                    + json.dumps(
+                                        fragment,
+                                        ensure_ascii=False,
+                                        separators=(",", ":"),
+                                    )
+                                )
+                    completed = {
+                        "macro_id": macro_id,
+                        "step_name": step_name,
+                        "fragment_digest": self._stable_digest(fragment),
+                        "candidate_digest": self._stable_digest(merged),
+                        "plan_step_count": len(merged.get("device_plan", [])),
+                    }
+                    self._save_fragment_checkpoint(
+                        state,
+                        key=checkpoint_key,
+                        checkpoint_inputs=checkpoint_inputs,
+                        step_name=step_name,
+                        macro_id=macro_id,
+                        macro_ids=macro_ids,
+                        index=index,
+                        prefix=prefix,
+                        fragment=fragment,
+                        candidate=merged,
+                        completed=completed,
+                    )
+                aggregate = merged
+                self._assert_workstation_snapshot_current(state)
+                progress["candidate"] = copy.deepcopy(aggregate)
+                progress["completed_chunks"].append(completed)
+                self._sync_skill_load_state(state)
+                state.add_log(f"{step_name}: merged; {len(aggregate.get('device_plan', []))} total plan steps; global approval pending")
+                if aggregate.get("status") not in {"device_plan", "success", "manual_required", "human_review_required"}:
+                    progress["status"] = "blocked"
+                    return aggregate
+            progress["status"] = "assembled_pending_global_audit"
+            progress["active_macro_id"] = None
+            return aggregate
+        except Exception:
+            progress["status"] = "failed"
+            # Partial candidates remain diagnostic state, never workflow input.
+            raise
+
+    def _invoke_feasibility_request(
+        self,
+        state: SingleDeviceAgentState,
+        *,
+        extra_instruction: str = "",
+        step_name: str = "feasibility_device_plan",
+        fragment_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Run one Stage-1 request with full or bounded fragment context."""
+        prompt = FEASIBILITY_PLAN_TASK_PROMPT
+        if fragment_context is None:
+            prompt_handoff = copy.deepcopy(state.research_handoff)
+            prompt_handoff["observation_evidence_catalog"] = (
+                self._observation_evidence_catalog(state.research_handoff)
+            )
+            prompt_semantic = copy.deepcopy(self._active_semantic_analysis)
+        else:
+            prompt_handoff = copy.deepcopy(fragment_context)
+            prompt_semantic = {
+                "context_contract": fragment_context.get("context_contract"),
+                "current_macro_id": fragment_context.get("current_macro_id"),
+                "semantic_assessment": copy.deepcopy(
+                    fragment_context.get("semantic_assessment", [])
+                ),
+                "material_identity_registry": copy.deepcopy(
+                    fragment_context.get("material_identity_registry", [])
+                ),
+                "semantic_analysis_sha256": fragment_context.get(
+                    "semantic_analysis_sha256"
+                ),
+            }
         replacements = {
             "{research_handoff_json}": json.dumps(
                 prompt_handoff,
                 ensure_ascii=False,
-                indent=2,
+                separators=(",", ":"),
             ),
             "{workstation_descriptions}": "完整能力目录、全局规则和所选合同见本轮原生工具上下文。",
             "{semantic_analysis_json}": json.dumps(
-                self._active_semantic_analysis,
+                prompt_semantic,
                 ensure_ascii=False,
-                indent=2,
+                separators=(",", ":"),
             ),
         }
         for placeholder, value in replacements.items():
@@ -10989,18 +11780,18 @@ class SingleDeviceAgent:
                         f"{original_effort} -> {effort_override}"
                     )
                     break
-        print("[single-device-agent] LLM step start: feasibility_device_plan", flush=True)
+        print(f"[single-device-agent] LLM step start: {step_name}", flush=True)
         try:
             result = self._invoke_json_object_with_format_retry(
                 state,
                 messages,
-                step_name="feasibility_device_plan",
+                step_name=step_name,
                 workstation_tools=True,
             )
         finally:
             if effort_attr:
                 setattr(self._model, effort_attr, original_effort)
-        print("[single-device-agent] LLM step done: feasibility_device_plan", flush=True)
+        print(f"[single-device-agent] LLM step done: {step_name}", flush=True)
         return result
 
     def _invoke_translation_chunk(
@@ -11179,7 +11970,10 @@ class SingleDeviceAgent:
         try:
             retry_result = self._invoke_feasibility_plan(state, extra_instruction=instruction)
         except Exception as exc:  # pragma: no cover - remote model dependent
-            state.add_log(f"adaptation retry failed with Device internal error: {exc}")
+            state.add_log(
+                "adaptation retry failed with Device internal error: "
+                f"{_safe_model_failure_text(exc)}"
+            )
             raise
         if isinstance(retry_result, dict):
             return retry_result
@@ -12969,7 +13763,7 @@ class SingleDeviceAgent:
             except Exception as exc:  # pragma: no cover - remote model dependent
                 state.add_log(
                     "plan-level repair call failed with Device internal error: "
-                    f"{exc}"
+                    f"{_safe_model_failure_text(exc)}"
                 )
                 raise
             if not isinstance(retried, dict):
@@ -13561,7 +14355,11 @@ class SingleDeviceAgent:
             return False
         body = getattr(exc, "body", None)
         error = body.get("error", body) if isinstance(body, dict) else {}
-        codes = [getattr(exc, "code", None)]
+        codes = [
+            safe_gateway_error_code(exc),
+            getattr(exc, "_chem_gateway_error_code", None),
+            getattr(exc, "code", None),
+        ]
         if isinstance(error, dict):
             codes.append(error.get("code"))
         if any(code in ("context_length_exceeded", "context_window_exceeded", "max_context_length_exceeded") for code in codes):
@@ -13709,7 +14507,7 @@ class SingleDeviceAgent:
                 except Exception as exc:  # pragma: no cover - remote dependent
                     state.add_error(
                         f"translation chunk {index + 1} internal failure: "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{type(exc).__name__}: {_safe_model_failure_text(exc)}"
                     )
                     # API/parse/runtime failures are Device-internal.  Do not
                     # disguise them as an empty workflow candidate and burn
@@ -14272,6 +15070,10 @@ class SingleDeviceAgent:
                 result["feedback_type"] = "device_internal_error"
                 result["feedback_route"] = "device"
                 result["failure_scope"] = "device_internal"
+                if review.get("llm_diagnostics"):
+                    result["llm_diagnostics"] = copy.deepcopy(review["llm_diagnostics"])
+                    result["llm_failure_step"] = review["llm_failure_step"]
+                    result["llm_exception_type"] = review["internal_error_type"]
                 break
 
             if verdict != "rewritten":
@@ -14610,19 +15412,24 @@ class SingleDeviceAgent:
                 ):
                     review["workflow_txt"] = self._workflow_txt_from_json(replacement)
         except Exception as exc:
+            failure_text = _safe_model_failure_text(exc)
             review = {
                 "verdict": "not_executable",
-                "summary": f"workflow Skill review failed: {type(exc).__name__}: {exc}",
+                "summary": f"workflow Skill review failed: {type(exc).__name__}: {failure_text}",
                 "_device_internal_error": True,
                 "internal_error_type": type(exc).__name__,
                 "issues": [
                     {
                         "code": "skill_review_failed",
                         "severity": "error",
-                        "reason": str(exc),
+                        "reason": failure_text,
                     }
                 ],
             }
+            diagnostics = get_responses_diagnostics(exc)
+            if diagnostics is not None:
+                review["llm_diagnostics"] = diagnostics
+                review["llm_failure_step"] = f"workflow_skill_review_round_{round_number}"
         print(
             f"[single-device-agent] LLM step done: workflow_skill_review "
             f"(round {round_number})",
@@ -16244,6 +17051,36 @@ class SingleDeviceAgent:
         workstation_tools: bool = False,
         skill_codes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
+        """Record failures with the business step; native upstream retry is scoped below."""
+        try:
+            return self._invoke_json_object_with_format_retry_impl(
+                state, messages, step_name=step_name,
+                retry_instruction=retry_instruction,
+                workstation_tools=workstation_tools, skill_codes=skill_codes,
+            )
+        except Exception as exc:
+            diagnostics = get_responses_diagnostics(exc)
+            if diagnostics is not None and not any(
+                item.get("task_name") == step_name and item.get("diagnostics") == diagnostics
+                for item in state.llm_diagnostics
+            ):
+                state.llm_diagnostics.append({
+                    "task_name": step_name,
+                    "exception_type": type(exc).__name__,
+                    "diagnostics": diagnostics,
+                })
+            raise
+
+    def _invoke_json_object_with_format_retry_impl(
+        self,
+        state: SingleDeviceAgentState,
+        messages: List[Any],
+        *,
+        step_name: str,
+        retry_instruction: str = "",
+        workstation_tools: bool = False,
+        skill_codes: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """Invoke one Device LLM step with bounded format-only retries.
 
         An ambiguous response is discarded in full.  We never choose the
@@ -16273,11 +17110,57 @@ class SingleDeviceAgent:
                 ]
             structured_invoke = getattr(self._model, "invoke_json_object", None)
             self._assert_workstation_snapshot_current(state)
-            response = (
-                structured_invoke(current_messages)
-                if callable(structured_invoke)
-                else self._model.invoke(current_messages)
-            )
+
+            def invoke_model() -> Any:
+                return (
+                    structured_invoke(current_messages)
+                    if callable(structured_invoke)
+                    else self._model.invoke(current_messages)
+                )
+
+            if getattr(self._model, "handles_transport_retries", False) is True:
+                response = invoke_model()
+            else:
+                def timed_invoke() -> Any:
+                    if getattr(self._model, "handles_request_timing", False) is True:
+                        return invoke_model()
+                    with measure_llm_request(
+                        component=os.getenv("CHEM_LLM_COMPONENT", "device"),
+                        model=str(
+                            getattr(self._model, "model_name", "")
+                            or type(self._model).__name__
+                        ),
+                        transport="device_injected_model",
+                    ):
+                        return invoke_model()
+
+                configured_retries = 0
+                for attribute in (
+                    "_transport_max_retries", "_chem_gateway_max_retries",
+                ):
+                    value = getattr(self._model, attribute, None)
+                    if isinstance(value, int) and not isinstance(value, bool):
+                        configured_retries = max(0, value)
+                        break
+                    if isinstance(value, str):
+                        try:
+                            configured_retries = max(0, int(value))
+                            break
+                        except ValueError:
+                            continue
+                wall_timeout = getattr(
+                    self._model, "_chem_wall_timeout_seconds", None
+                )
+                if not isinstance(wall_timeout, (int, float)) or isinstance(
+                    wall_timeout, bool
+                ):
+                    wall_timeout = None
+                response = call_with_gateway_retry(
+                    timed_invoke,
+                    max_retries=configured_retries,
+                    wall_timeout_seconds=wall_timeout,
+                    operation_name=f"Device {step_name}",
+                )
             self._assert_workstation_snapshot_current(state)
             content = self._coerce_text(getattr(response, "content", response))
             try:
@@ -16338,6 +17221,26 @@ class SingleDeviceAgent:
         candidate_feedback = ""
         remaining_tool_calls = max(2, len(session.codes) + 4)
 
+        def record_attempt(event: Dict[str, Any]) -> None:
+            # The native helper emits metadata only, never requests or output.
+            record = {"task_name": step_name, **copy.deepcopy(event)}
+            state.llm_request_attempts.append(record)
+            if event.get("event") == "model_attempt_failed":
+                diagnostic = event.get("responses_diagnostics")
+                if diagnostic is not None:
+                    state.llm_diagnostics.append({
+                        "task_name": step_name,
+                        "exception_type": event.get("exception_type", "ResponsesTerminalError"),
+                        "diagnostics": copy.deepcopy(diagnostic),
+                        "retry_scheduled": event.get("retry_scheduled", False),
+                        "model_turn": event.get("model_turn"),
+                        "attempt": event.get("attempt"),
+                    })
+                if event.get("retry_scheduled"):
+                    state.add_log(f"{step_name}: upstream_error; retrying only the failed model turn with completed tool results")
+                    print(f"[single-device-agent] {step_name}: upstream_error; scoped retry", flush=True)
+            self._assert_workstation_snapshot_current(state)
+
         def record_load(request: Dict[str, Any], output: Dict[str, Any]) -> None:
             nonlocal remaining_tool_calls
             remaining_tool_calls = max(0, remaining_tool_calls - 1)
@@ -16369,10 +17272,18 @@ class SingleDeviceAgent:
                         + session.format_contracts(sorted(visible), origin="format_retry")
                     ))
                 session.assert_current()
+                retry_options: Dict[str, Any] = {}
+                if step_name == "feasibility_device_plan" or step_name.startswith("feasibility_device_plan_chunk_"):
+                    retry_options = {
+                        "retry_upstream_errors": True,
+                        "max_upstream_retries": 1,
+                        "on_model_attempt": record_attempt,
+                    }
                 response = invoke_with_tools(
                     self._model, attempt_messages, [session.tool()],
                     max_rounds=remaining_tool_calls,
                     on_tool_result=record_load,
+                    **retry_options,
                 )
                 session.assert_current()
                 content = self._coerce_text(getattr(response, "content", response))
@@ -16616,5 +17527,8 @@ class SingleDeviceAgent:
         return path.read_text(encoding="utf-8")
 
     def _default_exp_id(self) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"single_device_{timestamp}"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        # A terminal checkpoint must never cause a later run to inherit the
+        # previous workflow identity, including two invocations in one clock
+        # tick or from concurrent workers.
+        return f"single_device_{timestamp}_{uuid.uuid4().hex[:8]}"

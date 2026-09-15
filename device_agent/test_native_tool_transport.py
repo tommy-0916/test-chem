@@ -109,16 +109,32 @@ class NativeDeviceTransportTests(unittest.TestCase):
             ]
 
         self.assertEqual(result.content, "done")
-        self.assertEqual(len(events), 2)
+        request_events = [
+            event
+            for event in events
+            if event.get("transport") == "device_native_pool"
+        ]
+        terminal_events = [
+            event
+            for event in request_events
+            if event["status"] in {"failed", "success"}
+        ]
+        retry_events = [
+            event
+            for event in events
+            if event["status"] in {"retry_sleep_started", "retry_sleep"}
+        ]
         self.assertEqual(
-            [event["status"] for event in events],
+            [event["status"] for event in request_events],
+            ["started", "failed", "started", "success"],
+        )
+        self.assertEqual(
+            [event["status"] for event in terminal_events],
             ["failed", "success"],
         )
+        self.assertEqual(len(retry_events), 2)
         self.assertTrue(
-            all(event["component"] == "device" for event in events)
-        )
-        self.assertTrue(
-            all(event["transport"] == "responses_native_tools" for event in events)
+            all(event["component"] == "device" for event in request_events)
         )
 
     def test_all_unsupported_fail_fast_without_round_retries(self):

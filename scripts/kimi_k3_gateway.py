@@ -24,16 +24,22 @@ wire constraints that Kimi k3 mandates:
   transport layer owns retries and waits exactly 10 seconds, so this proxy
   cannot multiply attempts or apply an upstream ``Retry-After`` delay.
 
-No other request or response content is modified; the Authorization header
-is forwarded verbatim and no secrets are stored here. Only transport-level
-metadata (byte counts, status, token usage) is logged.
+Successful request and response content is otherwise preserved. Provider
+failure bodies are reduced to an allowlisted classification, and malformed
+stream metadata is rejected without echoing provider-controlled values. The
+Authorization header is forwarded verbatim and no secrets are stored here.
+Only bounded transport-level metadata (byte counts, status, integer token
+usage) is logged.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
+import queue
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -41,10 +47,36 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM_URL = "https://api.kimi.com/coding/v1/chat/completions"
 UPSTREAM_TIMEOUT_SECONDS = 300
+# Socket read-idle remains 300s. The independent total deadline must be at
+# least as large as Device's supported long-generation budget (600s), or an
+# otherwise healthy byte-active stream is cut off halfway through reasoning.
+UPSTREAM_WALL_TIMEOUT_SECONDS = 600
 MIN_MAX_TOKENS = 32768
 REASONING_EFFORT = "high"
 STRIPPED_FIELDS = ("thinking", "do_sample")
 MAX_UPSTREAM_ATTEMPTS = 1
+SUCCESS_FINISH_REASONS = {"stop", "tool_calls", "function_call"}
+MAX_SAFE_METADATA_INTEGER = (1 << 63) - 1
+SAFE_UPSTREAM_ERROR_CODES = {
+    "access_terminated_error",
+    "authentication_error",
+    "gateway_error",
+    "insufficient_quota",
+    "internal_error",
+    "invalid_api_key",
+    "overloaded",
+    "permission_denied",
+    "rate_limit_error",
+    "rate_limit_exceeded",
+    "server_error",
+    "service_unavailable",
+    "upstream_error",
+}
+SAFE_UPSTREAM_ERROR_TYPES = SAFE_UPSTREAM_ERROR_CODES | {
+    "api_error",
+    "http_error",
+    "invalid_request_error",
+}
 
 
 def adapt_payload(body: bytes) -> bytes:
@@ -72,9 +104,73 @@ class StreamAggregationError(RuntimeError):
     pass
 
 
+def _bounded_nonnegative_int(value, field: str, *, default: int = 0) -> int:
+    """Accept only JSON integers that are safe to retain as metadata."""
+    if value is None:
+        return default
+    # bool is an int subclass in Python, but is never valid numeric metadata.
+    if type(value) is not int or not 0 <= value <= MAX_SAFE_METADATA_INTEGER:
+        raise StreamAggregationError(f"invalid {field} metadata")
+    return value
+
+
+def _usage_log_note(raw: bytes) -> str:
+    """Return a bounded, injection-safe token-usage suffix for gateway logs."""
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return ""
+    usage = parsed.get("usage") if isinstance(parsed, dict) else None
+    if not isinstance(usage, dict):
+        return ""
+
+    fields = []
+    for name in ("prompt_tokens", "completion_tokens"):
+        value = usage.get(name)
+        if type(value) is int and 0 <= value <= MAX_SAFE_METADATA_INTEGER:
+            fields.append(f"{name}={value}")
+    return " " + " ".join(fields) if fields else ""
+
+
+def sanitize_upstream_http_error(status: int, raw: bytes) -> bytes:
+    """Preserve retry classification without echoing provider-controlled text."""
+
+    def safe_symbol(value, fallback: str, allowlist: set[str]) -> str:
+        if isinstance(value, str) and value in allowlist:
+            return value
+        return fallback
+
+    code = "upstream_http_error"
+    error_type = "http_error"
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            source = error if isinstance(error, dict) else payload
+            code = safe_symbol(
+                source.get("code"), code, SAFE_UPSTREAM_ERROR_CODES
+            )
+            error_type = safe_symbol(
+                source.get("type"), error_type, SAFE_UPSTREAM_ERROR_TYPES
+            )
+    except (UnicodeDecodeError, ValueError):
+        pass
+    return json.dumps(
+        {
+            "error": {
+                "code": code,
+                "type": error_type,
+                "message": f"upstream returned HTTP {int(status)}",
+            }
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
 def consume_stream(response) -> dict:
     """Aggregate SSE chat.completion.chunk frames into one response object."""
     choices: dict[int, dict] = {}
+    saw_done = False
     usage: dict | None = None
     response_id = ""
     created = 0
@@ -86,19 +182,21 @@ def consume_stream(response) -> dict:
             continue
         data = line[len("data:"):].strip()
         if data == "[DONE]":
+            saw_done = True
             break
         try:
             chunk = json.loads(data)
         except ValueError as exc:
-            raise StreamAggregationError(f"undecodable SSE chunk: {data[:200]}") from exc
+            raise StreamAggregationError("undecodable SSE chunk") from exc
         if not isinstance(chunk, dict):
             continue
         if isinstance(chunk.get("error"), dict):
-            raise StreamAggregationError(
-                f"upstream stream error: {str(chunk['error'])[:300]}"
-            )
+            raise StreamAggregationError("upstream stream error")
         response_id = response_id or str(chunk.get("id") or "")
-        created = created or int(chunk.get("created") or 0)
+        chunk_created = _bounded_nonnegative_int(
+            chunk.get("created"), "created", default=0
+        )
+        created = created or chunk_created
         model = model or str(chunk.get("model") or "")
         fingerprint = str(chunk.get("system_fingerprint") or fingerprint)
         if isinstance(chunk.get("usage"), dict):
@@ -106,7 +204,9 @@ def consume_stream(response) -> dict:
         for choice in chunk.get("choices") or []:
             if not isinstance(choice, dict):
                 continue
-            index = int(choice.get("index") or 0)
+            index = _bounded_nonnegative_int(
+                choice.get("index"), "choice index", default=0
+            )
             slot = choices.setdefault(
                 index,
                 {
@@ -129,7 +229,9 @@ def consume_stream(response) -> dict:
             for tool_call in delta.get("tool_calls") or []:
                 if not isinstance(tool_call, dict):
                     continue
-                tc_index = int(tool_call.get("index") or 0)
+                tc_index = _bounded_nonnegative_int(
+                    tool_call.get("index"), "tool-call index", default=0
+                )
                 stored = slot["tool_calls"].setdefault(
                     tc_index,
                     {"id": "", "type": "function",
@@ -152,6 +254,29 @@ def consume_stream(response) -> dict:
 
     if not choices:
         raise StreamAggregationError("stream ended without any choice chunks")
+    if not saw_done:
+        raise StreamAggregationError("stream ended before the [DONE] sentinel")
+    unfinished = [
+        index for index, slot in choices.items()
+        if not slot.get("finish_reason")
+    ]
+    if unfinished:
+        raise StreamAggregationError(
+            "stream ended without a terminal finish_reason for choices: "
+            + ",".join(str(index) for index in sorted(unfinished))
+        )
+    rejected = {
+        index: slot["finish_reason"]
+        for index, slot in choices.items()
+        if slot.get("finish_reason") not in SUCCESS_FINISH_REASONS
+    }
+    if rejected:
+        raise StreamAggregationError(
+            "stream ended with a non-success finish_reason for choices: "
+            + ",".join(
+                f"{index}={reason}" for index, reason in sorted(rejected.items())
+            )
+        )
 
     result_choices = []
     for index in sorted(choices):
@@ -170,7 +295,7 @@ def consume_stream(response) -> dict:
             {
                 "index": index,
                 "message": message,
-                "finish_reason": slot["finish_reason"] or "stop",
+                "finish_reason": slot["finish_reason"],
             }
         )
 
@@ -186,6 +311,76 @@ def consume_stream(response) -> dict:
     if fingerprint:
         result["system_fingerprint"] = fingerprint
     return result
+
+
+def consume_stream_bounded(response, wall_timeout_seconds: float) -> dict:
+    """Preempt even a byte-active stream that never reaches a terminal."""
+    if wall_timeout_seconds <= 0:
+        raise ValueError("wall_timeout_seconds must be positive")
+    result: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
+
+    def run() -> None:
+        try:
+            result.put((True, consume_stream(response)))
+        except BaseException as exc:
+            result.put((False, exc))
+
+    threading.Thread(
+        target=run,
+        name="kimi-gateway-stream-reader",
+        daemon=True,
+    ).start()
+    try:
+        ok, value = result.get(timeout=wall_timeout_seconds)
+    except queue.Empty:
+        close = getattr(response, "close", None)
+        if callable(close):
+            threading.Thread(
+                target=close,
+                name="kimi-gateway-stream-close",
+                daemon=True,
+            ).start()
+        raise StreamAggregationError(
+            "upstream stream exceeded its absolute wall deadline"
+        ) from None
+    if not ok:
+        raise value
+    return value
+
+
+def read_body_bounded(response, wall_timeout_seconds: float) -> bytes:
+    """Read a small error body without escaping the request's wall deadline."""
+    if wall_timeout_seconds <= 0:
+        raise StreamAggregationError("upstream request exhausted its wall deadline")
+    result: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
+
+    def run() -> None:
+        try:
+            result.put((True, response.read()))
+        except BaseException as exc:
+            result.put((False, exc))
+
+    threading.Thread(
+        target=run,
+        name="kimi-gateway-error-reader",
+        daemon=True,
+    ).start()
+    try:
+        ok, value = result.get(timeout=wall_timeout_seconds)
+    except queue.Empty:
+        close = getattr(response, "close", None)
+        if callable(close):
+            threading.Thread(
+                target=close,
+                name="kimi-gateway-error-close",
+                daemon=True,
+            ).start()
+        raise StreamAggregationError(
+            "upstream error body exceeded its absolute wall deadline"
+        ) from None
+    if not ok:
+        raise value
+    return value if isinstance(value, bytes) else bytes(value)
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -216,6 +411,16 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
     def _upstream_once(self, upstream_body: bytes, authorization: str | None):
         """Single upstream attempt. Returns (status, raw_body, retry_after)."""
+        wall_deadline = time.monotonic() + UPSTREAM_WALL_TIMEOUT_SECONDS
+
+        def remaining_wall() -> float:
+            remaining = wall_deadline - time.monotonic()
+            if remaining <= 0:
+                raise StreamAggregationError(
+                    "upstream request exceeded its absolute wall deadline"
+                )
+            return remaining
+
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -231,21 +436,42 @@ class GatewayHandler(BaseHTTPRequestHandler):
         )
         try:
             with urllib.request.urlopen(
-                request, timeout=UPSTREAM_TIMEOUT_SECONDS
+                request,
+                timeout=min(
+                    UPSTREAM_TIMEOUT_SECONDS, remaining_wall(),
+                ),
             ) as response:
                 status = response.status
                 if status == 200:
-                    aggregated = consume_stream(response)
+                    aggregated = consume_stream_bounded(
+                        response, remaining_wall(),
+                    )
                     raw = json.dumps(aggregated, ensure_ascii=False).encode("utf-8")
                 else:
-                    raw = response.read()
+                    raw = sanitize_upstream_http_error(
+                        status, read_body_bounded(response, remaining_wall())
+                    )
                 return status, raw, None
         except urllib.error.HTTPError as exc:
             retry_after = exc.headers.get("Retry-After") if exc.headers else None
-            return exc.code, exc.read(), retry_after
+            try:
+                error_body = read_body_bounded(exc, remaining_wall())
+            except StreamAggregationError:
+                error_body = b""
+            return (
+                exc.code,
+                sanitize_upstream_http_error(exc.code, error_body),
+                retry_after,
+            )
         except (urllib.error.URLError, TimeoutError, OSError, StreamAggregationError) as exc:
             raw = json.dumps(
-                {"error": {"message": f"gateway upstream error: {exc}"}},
+                {
+                    "error": {
+                        "code": "gateway_upstream_error",
+                        "message": "gateway upstream request failed",
+                        "error_type": type(exc).__name__,
+                    }
+                },
                 ensure_ascii=False,
             ).encode("utf-8")
             return 502, raw, None
@@ -280,17 +506,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         )
 
         elapsed = time.monotonic() - started
-        usage_note = ""
-        try:
-            parsed = json.loads(raw.decode("utf-8", errors="replace"))
-            usage = parsed.get("usage") if isinstance(parsed, dict) else None
-            if isinstance(usage, dict):
-                usage_note = (
-                    f" prompt_tokens={usage.get('prompt_tokens')}"
-                    f" completion_tokens={usage.get('completion_tokens')}"
-                )
-        except ValueError:
-            pass
+        usage_note = _usage_log_note(raw)
         log(
             f"POST {path} -> {status} in {elapsed:.1f}s "
             f"req={len(upstream_body)}B resp={len(raw)}B{usage_note}"
@@ -304,10 +520,26 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
+    global UPSTREAM_WALL_TIMEOUT_SECONDS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18765)
+    parser.add_argument(
+        "--upstream-wall-timeout",
+        type=float,
+        default=UPSTREAM_WALL_TIMEOUT_SECONDS,
+        help=(
+            "absolute seconds allowed for one byte-active upstream stream "
+            "(default: 600; socket read-idle remains 300)"
+        ),
+    )
     args = parser.parse_args()
+    if (
+        not math.isfinite(args.upstream_wall_timeout)
+        or args.upstream_wall_timeout <= 0
+    ):
+        parser.error("--upstream-wall-timeout must be finite and positive")
+    UPSTREAM_WALL_TIMEOUT_SECONDS = args.upstream_wall_timeout
     server = ThreadingHTTPServer((args.host, args.port), GatewayHandler)
     server.daemon_threads = True
     log(f"kimi k3 gateway listening on http://{args.host}:{args.port}/v1")

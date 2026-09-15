@@ -121,6 +121,31 @@ Device 先读取 45 站能力目录，再用 `load_workstation_skill(station_cod
 不调用模型或设备，检查失败或无法验证时不能放行。它属于 Device 下发边界，不是新增的
 Research 能力投影层。
 
+### Research V2 逻辑容器契约与有限修复
+
+`chem_agent_contracts/container_requirements.py` 复用 `LogicalContainerV2`，同时用于
+Research 宏步骤生成后的质量检查和最终 V2 交接，检查本身不调用模型。提示词中的盖状态
+取值与解释来自同一契约定义，不另写一份枚举。
+
+`lid_state` 只接受 `open / closed / none / unknown`：`open/closed` 是有盖结构容器的
+开/关盖要求；`none` 表示盖子概念不适用（如 XRD 基底片），`unknown` 表示尚未确定。
+后两者都不能证明真实进样瓶已经开盖；Device 的实际状态和下发检查仍独立严格执行。
+不会把 `not_applicable` 等别名静默替换成合法值。
+
+非法字段返回宏步骤 ID、容器 ID、实际值、允许值及 JSON Pointer，例如
+`/macro_plan/7/container_requirements/2/lid_state` 是第 8 步第 3 个容器。
+错误进入已有的 **首次生成 + 至多一次修复** 流程（bootstrap、post-observation、
+device-adaptation 三个入口均适用）；修复仍使用原生成调用链，只重写当前宏计划，
+不重跑整个 Research。失败耗尽则停止，不发布无效交接包。最终发布也重复校验并清空
+此前的旧包，防止新计划失败后误用旧结果。本地契约错误分类为 `macro_quality_error`，
+不再因为 Pydantic 帮助链接被误标为网络错误。
+
+兼容默认：缺失/null/空字符串逻辑 ID 自动生成，容器类型默认为 `unknown`；
+缺失/null 的 count 仍按旧适配规则取 1，capacity_ml 缺失/null 表示未知，lid_state
+缺失默认为 `unknown`。显式非法盖状态（包括 null）、非数组容器需求、非对象容器、
+布尔/字符串/非整数 count、非有限或非正数 capacity_ml 及实体瓶号/槽位均拒绝。
+额外说明性元数据仍保留在原始 Research 计划中，不进入 V2 逻辑容器模型。
+
 ### 计划版本台账（每次修改/放弃都落盘 + 原因）
 
 `reaserch_agent/plan_ledger.py` → `campaigns/<id>/plan_versions.jsonl`，每轮一条：
@@ -209,7 +234,56 @@ python -m pip install -r device_agent/requirements.txt
 cp .env.example .env
 ```
 
-LLM 配置读根目录 `.env`。研究层按 `REFINER_LLM_*` → `GEMINI_*` → `OPENAI_*` 回退；设备层只读取 `REFINER_LLM_*`。OpenAI 兼容后端由已锁定依赖支持；Gemini 仅研究层可用，需额外安装 `langchain-google-genai`；`codex_responses` 还要求本机存在 `codex` CLI 和 endpoint URL。
+LLM 配置读根目录 `.env`。研究层按 `REFINER_LLM_*` → `GEMINI_*` → `OPENAI_*` 回退；设备层只读取 `REFINER_LLM_*`。OpenAI 兼容后端由已锁定依赖支持；Gemini 仅研究层可用，需额外安装 `langchain-google-genai`。`codex_responses` 默认使用直连 Responses API，需要 endpoint URL 和 API key；只有显式选择 CLI 路径时才需要本机 `codex` CLI。
+
+### Responses 流式调用
+
+`REFINER_RESPONSES_STREAM=1`（默认）使 Research、Device 的直连文本调用及原生工具调用使用 Responses 流式传输。仅增加 `stream=true`，不会自动降低推理强度、修改模型或裁剪提示词。SDK 事件迭代必须正常结束且包含有效的 `response.completed` / `status=completed`；错误、`failed`、`incomplete`、缺少终态或冲突终态均失败，半截文本或工具参数不会作为成功结果交给后续步骤。校验覆盖 SDK 暴露的事件，不宣称检查 SDK 在 `[DONE]` 后未暴露的原始字节。原生工具仍使用 LangChain 的消息转换，工具执行要等完整响应校验通过，避免提前执行部分参数。
+
+流式开启时失败不会自动降级为非流式或 CLI。确需兼容非流式后端时，可显式设置 `REFINER_RESPONSES_STREAM=0`；该路径仍检查最终响应状态。`REFINER_RESPONSES_TRANSPORT=cli` 是单独的显式文本传输选择，不支持原生工具。示例配置关闭 `REFINER_RESPONSES_CLI_FALLBACK`，避免旧兼容路径意外回退。
+
+`REFINER_LLM_TIMEOUT_SECONDS` 是底层客户端的网络超时设置，不代表整次模型生成的总时间，也不能提高中转网关自己的读取时限。流式可在长生成期间持续接收事件，但不保证每个后端都会及时发送数据或永不超时；中途断流仍按失败处理。同步 `.invoke()` 仍等完整结果才返回，流式传输不等同用户界面的逐字输出。接收层负责完成校验；Device 可行性调用的局部恢复策略见下节。
+
+#### Device 分步可行性规划与局部恢复
+
+V2 默认按原始 macro step 顺序生成 `device_plan` 片段。每次请求仍读取完整 Research handoff、冻结语义合同、前序计划和完整设备能力目录，输出仅限当前块；Research 的数组位置和来源路径保持不变。一个物理动作可以关联多个 macro step，后续块通过 `reused_plan_steps` 引用它，避免重复执行。
+
+`device_agent/feasibility_fragments.py` 用确定规则合并全局步骤 ID、容器、原液、数量、批次和物料谱系：相同记录只复用，冲突拒绝；跨块 consumer 分配只能通过显式 `prior_record_updates` 追加，不得改动既有数量、样品或来源。样品矩阵绑定 Research。片段合同错误最多重写当前块一次；所有块完成后才运行原有全局审计、可行性签发、workflow 翻译及下发校验。中途失败保存已有计划供诊断，不会把它送入 workflow 翻译。
+
+仅 Device 的 `feasibility_device_plan*` 原生工具会话开启 `upstream_error` 恢复：明确收到 `response.failed/status=failed/error.code=upstream_error` 时，重发当前模型请求，保留此前完成的工具消息。每个原生工具会话最多额外重试一次，不重跑已完成工具或 Research；SDK 和本地 Kimi 网关自身的自动重试均关闭，传输重试只由共享应用层负责，JSON/合同修复仍使用各自独立的业务预算。`incomplete`、协议错误、鉴权失败和额度终止等不会触发传输重试，失败输出不能成为成功候选。
+
+状态 JSON 的 `feasibility_progress` 保存候选轮次、当前宏步骤、已完成块和合并候选；`llm_request_attempts` 保存模型请求起止/失败元数据，`llm_diagnostics` 保留恢复过的错误与最终失败。错误包的 `planning_progress` 给出失败块及已完成块数。这些是运行中状态并随 CLI 最终状态保存，不是跨进程自动恢复接口，也不代表审批通过。
+
+`CHEM_DEVICE_FEASIBILITY_MODE=single` 可显式恢复整计划调用；`fragmented` 可显式开启分块；留空时 V2 分块、V1 保持整计划调用。拆分降低单次输出任务的规模，不保证第三方网关稳定，也不能据此把上游所有失败时长算作网络空闲。
+
+#### Responses 失败诊断
+
+共享接收层 `agent_skills/responses_stream.py` 在流式终态失败、断流、HTTP 错误和非流式失败时，将白名单诊断附到异常的 `responses_diagnostics` 属性。`agent_skills/responses_diagnostics.py` 统一提取、脱敏和格式化；不改变底层 HTTP/超时异常类型，不增加重试，也不接受部分输出。
+
+Research 和 Device 的状态 JSON 新增 `llm_diagnostics` 数组，每条记录包含业务步骤 `task_name`、该层捕获的异常类型 `exception_type` 和诊断 `diagnostics`。Research 的应用层重试还记录 `application_attempt`。Device 的终止错误包同时包含 `error_package.llm_diagnostics`、`llm_failure_step` 和 `llm_exception_type`；这些字段也适用于被工作流 Skill 审查捕获的模型失败。正常结果与没有诊断的旧状态保持兼容。
+
+以下是**模拟失败示例，不是历史 A02 运行的真实错误原因**：
+
+```json
+{
+  "task_name": "feasibility_device_plan",
+  "exception_type": "ResponsesTerminalError",
+  "diagnostics": {
+    "schema_version": 1,
+    "phase": "stream_event",
+    "event_type": "response.failed",
+    "response_status": "failed",
+    "http_status": 200,
+    "response_id": "resp_example",
+    "request_id": "req_example",
+    "error": {"code": "server_error", "message": "Provider could not complete the response"}
+  }
+}
+```
+
+诊断按服务端实际提供的字段保存：错误 `code/message/type/param`、响应/请求 ID、终态、不完整原因、模型、配置的输出上限、可用的 token 用量，以及 `request` / `stream_event` / `stream_read` / `stream_eof` / `stream_close` / `nonstream_response` 阶段。缺失字段省略，不推断错误码或 token 用量；HTTP 200 与 `response.failed` 可以同时存在，并不等于网络超时。诊断用于后续定位，不能恢复旧日志未保存的内容，也不能凭此直接计算“应扣除的 API 卡住时间”。
+
+只读取上述白名单，不把请求正文、完整响应、模型输出、工具参数或整组请求头复制到诊断中。文本会脱敏当前客户端 API key、常见密钥形式、Bearer 凭据与 URL 查询参数；普通字段最多 256 字符，错误消息最多 1000 字符，日志摘要最多 4096 字符。服务端自由文本仍可能回显其他敏感内容，分享结果前应复核；脱敏不是对任意秘密的完整识别保证。
 
 其他常用环境变量：`SEMANTIC_SCHOLAR_API_KEY`（兼容 `S2_API_KEY`）、`CROSSREF_MAILTO`、`OPENALEX_MAILTO`、`NCBI_API_KEY`（学术 API）；`UNPAYWALL_EMAIL`、`CORE_API_KEY`（PDF）；`TAVILY_API_KEY`（可用逗号配置多个 Key 并轮换）、`SERPER_API_KEY`、`BRAVE_API_KEY`、`SEARXNG_BASE_URL`、`JINA_API_KEY`（Web 搜索/阅读）。完整占位配置见 `.env.example`；运行开关还有 `RESEARCH_ONLINE_LITERATURE`、`RESEARCH_WEB_SEARCH` 和 `RESEARCH_EXTERNAL_TOOL_MAX_ROUNDS`。
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -84,12 +84,29 @@ class ScientificParameterV2(StrictModel):
     provenance: ProvenanceV2
 
 
+LogicalLidStateV2 = Literal["open", "closed", "none", "unknown"]
+LOGICAL_LID_STATE_DESCRIPTIONS = {
+    "open": "有盖结构的容器当前要求开盖/无盖",
+    "closed": "有盖结构的容器当前要求关盖/有盖",
+    "none": "容器结构不适用盖子概念（例如无盖结构的 XRD 基底片），不是未知盖状态",
+    "unknown": "尚未确定盖状态，不表示已开盖",
+}
+LOGICAL_LID_STATE_PROMPT = (
+    "lid_state 只能为 " + ", ".join(get_args(LogicalLidStateV2)) + "；"
+    + "；".join(f"{value}：{LOGICAL_LID_STATE_DESCRIPTIONS[value]}"
+               for value in get_args(LogicalLidStateV2))
+    + "。不得输出 not_applicable、null 或其他别名。none/unknown 都不能替代真实进样瓶等的开盖要求。"
+)
+
+
 class LogicalContainerV2(StrictModel):
     logical_container_id: str = Field(min_length=1)
     container_type: str = "unknown"
     count: int = Field(default=1, ge=1)
-    capacity_ml: Optional[float] = Field(default=None, gt=0)
-    lid_state: Literal["open", "closed", "none", "unknown"] = "unknown"
+    capacity_ml: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    lid_state: LogicalLidStateV2 = Field(
+        default="unknown", description=LOGICAL_LID_STATE_PROMPT
+    )
 
 
 class EvidenceItemV2(StrictModel):

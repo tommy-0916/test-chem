@@ -6611,7 +6611,11 @@ def test_stage1_retry_timeout_is_device_internal_not_research_feedback():
     state = agent.run_state(RESEARCH_HANDOFF, exp_id="stage1_retry_timeout")
 
     package = state.terminal_package
-    assert model.calls == 2
+    # The first call is the successful (but adaptable) feasibility verdict.
+    # Its Device-local business retry then gets exactly one shared transport
+    # retry for the transient timeout: 1 + 2 wire calls, without an SDK/proxy
+    # retry layer multiplying the request count.
+    assert model.calls == 3
     assert package["status"] == "failed"
     assert package["feedback_type"] == "device_internal_error"
     assert package["feedback_route"] == "device"
