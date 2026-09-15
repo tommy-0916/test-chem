@@ -16563,7 +16563,26 @@ class SingleDeviceAgent:
                 if isinstance(item, str):
                     parts.append(item)
                 elif isinstance(item, dict):
-                    parts.append(str(item.get("text") or item.get("content") or item))
+                    # Responses/v1 returns typed content blocks.  Reasoning and
+                    # function-call blocks can themselves contain JSON-looking
+                    # text; stringifying those blocks contaminates the actual
+                    # assistant output and makes a single JSON object appear to
+                    # be multiple top-level values.  Only textual blocks belong
+                    # in the payload passed to the strict JSON parser.
+                    block_type = str(item.get("type") or "").strip().lower()
+                    text_value = item.get("text")
+                    content_value = item.get("content")
+                    if isinstance(text_value, str) and block_type in {
+                        "",
+                        "text",
+                        "output_text",
+                    }:
+                        parts.append(text_value)
+                    elif (
+                        isinstance(content_value, str)
+                        and block_type in {"", "text", "output_text"}
+                    ):
+                        parts.append(content_value)
                 elif item is not None:
                     parts.append(str(item))
             return "\n".join(part.strip() for part in parts if part).strip()

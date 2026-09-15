@@ -801,6 +801,39 @@ def test_device_json_parser_accepts_one_exact_fenced_or_prose_wrapped_value():
     ) == {"status": "ok"}
 
 
+def test_device_coerce_text_ignores_responses_reasoning_and_tool_blocks():
+    agent = SingleDeviceAgent(
+        model=FakeModel({}), workstation_loader=FakeWorkstationLoader()
+    )
+    output = '{"status":"device_plan","device_plan":[]}'
+    content = [
+        {
+            "type": "reasoning",
+            "summary": [
+                {
+                    "type": "summary_text",
+                    "text": '{"draft":"must not enter parsed output"}',
+                }
+            ],
+        },
+        {
+            "type": "function_call",
+            "name": "load_workstation_skill",
+            "arguments": '{"station_code":"XRD_V1"}',
+        },
+        {"type": "text", "text": output},
+        {"type": "text", "text": ""},
+    ]
+
+    coerced = agent._coerce_text(content)
+
+    assert coerced == output
+    assert agent._parse_json(coerced) == {
+        "status": "device_plan",
+        "device_plan": [],
+    }
+
+
 def test_device_json_parser_rejects_ambiguous_or_trailing_structured_output():
     agent = SingleDeviceAgent(
         model=FakeModel({}), workstation_loader=FakeWorkstationLoader()
