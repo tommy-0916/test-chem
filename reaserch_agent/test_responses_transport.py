@@ -39,7 +39,87 @@ class _RetryableGatewayError(RuntimeError):
     status_code = 502
 
 
+class _FakeStream:
+    def __init__(self, events):
+        self.events = list(events)
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self.events)
+
+    def close(self):
+        self.closed = True
+
+
 class DirectResponsesTransportTest(unittest.TestCase):
+    def test_direct_responses_streaming_aggregates_text(self) -> None:
+        final = SimpleNamespace(status="completed", output_text='{"ok":true}')
+        stream = _FakeStream([
+            SimpleNamespace(type="response.output_text.delta", delta='{"ok":'),
+            SimpleNamespace(type="response.output_text.delta", delta="true}"),
+            SimpleNamespace(type="response.completed", response=final),
+        ])
+        responses = SimpleNamespace(create=Mock(return_value=stream))
+        model = CodexResponsesModel(
+            model="gpt-5.6-sol",
+            api_key="test-key",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=responses),
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "REFINER_RESPONSES_TRANSPORT": "direct",
+                "REFINER_RESPONSES_STREAM": "1",
+                "REFINER_RESPONSES_CLI_FALLBACK": "0",
+            },
+        ):
+            response = model.invoke([{"role": "user", "content": "Plan."}])
+
+        self.assertEqual(response.content, '{"ok":true}')
+        self.assertIs(response.raw_response, final)
+        self.assertTrue(stream.closed)
+        self.assertIs(responses.create.call_args.kwargs["stream"], True)
+
+    def test_truncated_stream_retries_directly_after_ten_seconds(self) -> None:
+        truncated = _FakeStream([
+            SimpleNamespace(type="response.output_text.delta", delta="partial")
+        ])
+        final = SimpleNamespace(status="completed", output_text='{"ok":true}')
+        complete = _FakeStream([
+            SimpleNamespace(type="response.completed", response=final)
+        ])
+        responses = SimpleNamespace(
+            create=Mock(side_effect=[truncated, complete])
+        )
+        model = CodexResponsesModel(
+            model="gpt-5.6-sol",
+            api_key="test-key",
+            base_url="https://provider.invalid",
+            client=SimpleNamespace(responses=responses),
+        )
+        model._transport_max_retries = 1
+
+        with patch.dict(
+            os.environ,
+            {
+                "REFINER_RESPONSES_TRANSPORT": "direct",
+                "REFINER_RESPONSES_STREAM": "1",
+                "REFINER_RESPONSES_CLI_FALLBACK": "1",
+            },
+        ), patch("agent_skills.llm_retry.time.sleep") as sleep, patch.object(
+            model, "_invoke_cli"
+        ) as cli:
+            response = model.invoke([{"role": "user", "content": "Plan."}])
+
+        self.assertEqual(response.content, '{"ok":true}')
+        self.assertEqual(responses.create.call_count, 2)
+        self.assertTrue(truncated.closed)
+        self.assertTrue(complete.closed)
+        sleep.assert_called_once_with(10.0)
+        cli.assert_not_called()
+
     def test_adapter_owns_configured_retries_and_sdk_retries_are_disabled(self) -> None:
         with patch.dict(os.environ, {"REFINER_LLM_MAX_RETRIES": "8"}):
             model = CodexResponsesModel(

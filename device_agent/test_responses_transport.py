@@ -35,6 +35,18 @@ class _RetryableGatewayError(RuntimeError):
     status_code = 502
 
 
+class _FakeStream:
+    def __init__(self, events):
+        self.events = list(events)
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self.events)
+
+    def close(self):
+        self.closed = True
+
+
 def test_direct_responses_transport_has_no_agent_tools():
     responses = _FakeResponses()
     client = SimpleNamespace(responses=responses)
@@ -74,6 +86,34 @@ def test_direct_responses_transport_has_no_agent_tools():
     assert payload["max_output_tokens"] == 32768
     assert "tools" not in payload
     assert "Return JSON." in payload["input"]
+
+
+def test_direct_responses_streaming_aggregates_text(monkeypatch):
+    final = SimpleNamespace(status="completed", output_text='{"status":"ok"}')
+    stream = _FakeStream([
+        SimpleNamespace(type="response.output_text.delta", delta='{"status":"'),
+        SimpleNamespace(type="response.output_text.delta", delta='ok"}'),
+        SimpleNamespace(type="response.completed", response=final),
+    ])
+    responses = SimpleNamespace(create=lambda **payload: stream)
+    client = SimpleNamespace(responses=responses)
+    monkeypatch.setenv("REFINER_RESPONSES_TRANSPORT", "direct")
+    monkeypatch.setenv("REFINER_RESPONSES_STREAM", "1")
+    monkeypatch.setenv("REFINER_RESPONSES_CLI_FALLBACK", "0")
+    model = CodexResponsesModel(
+        model="gpt-5.6-sol",
+        api_key="test-key",
+        base_url="https://provider.invalid",
+        client=client,
+    )
+
+    response = model.invoke_json_object([
+        {"role": "user", "content": "Return JSON."}
+    ])
+
+    assert response.content == '{"status":"ok"}'
+    assert response.raw_response is final
+    assert stream.closed is True
 
 
 def test_openai_base_url_adds_v1_once():

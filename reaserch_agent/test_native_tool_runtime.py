@@ -207,6 +207,23 @@ class NativeToolRuntimeTests(unittest.TestCase):
         self.assertFalse(model.store)
         self.assertFalse(model.use_previous_response_id)
 
+    def test_model_builder_enables_native_responses_streaming(self):
+        with patch.dict(
+            os.environ,
+            {
+                "REFINER_RESPONSES_TRANSPORT": "direct",
+                "REFINER_RESPONSES_STREAM": "1",
+            },
+        ):
+            model = make_native_openai_model(
+                model="test",
+                api_key="fake",
+                base_url="https://example.test/v1",
+                timeout=3,
+                use_responses_api=True,
+            )
+        self.assertTrue(model.streaming)
+
 
 if __name__ == "__main__":
     unittest.main()

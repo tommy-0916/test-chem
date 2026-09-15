@@ -496,9 +496,13 @@ def main() -> int:
         flush=True,
     )
     if args.wire_api == "codex_responses":
+        streaming = os.getenv("REFINER_RESPONSES_STREAM", "0").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
         print(
-            "codex_responses is non-streaming here; the terminal may stay quiet "
-            "until each LLM step finishes.",
+            "codex_responses transport: "
+            + ("streaming" if streaming else "non-streaming")
+            + "; the terminal reports progress after each LLM step.",
             flush=True,
         )
 

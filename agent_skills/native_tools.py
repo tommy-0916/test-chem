@@ -12,6 +12,7 @@ from typing import Any, Callable, Sequence
 
 from .llm_retry import call_with_gateway_retry
 from .llm_timing import measure_llm_request
+from .responses_stream import responses_streaming_enabled
 
 
 class NativeToolConfigurationError(RuntimeError):
@@ -77,7 +78,11 @@ def make_native_openai_model(
     if max_tokens is not None:
         options["max_tokens"] = max_tokens
     if use_responses_api:
-        options.update(store=False, use_previous_response_id=False)
+        options.update(
+            store=False,
+            use_previous_response_id=False,
+            streaming=responses_streaming_enabled(),
+        )
         if reasoning_effort:
             options["reasoning_effort"] = reasoning_effort
     elif temperature is not None:

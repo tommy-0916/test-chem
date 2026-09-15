@@ -23,6 +23,10 @@ from agent_skills.llm_retry import (
     is_retryable_gateway_error,
 )
 from agent_skills.llm_timing import measure_llm_request
+from agent_skills.responses_stream import (
+    consume_responses_stream,
+    responses_streaming_enabled,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -225,8 +229,13 @@ class CodexResponsesModel:
         with measure_llm_request(
             component="research", model=self._model, transport="responses"
         ):
-            response = self._client.responses.create(**payload)
-            text = self._extract_response_text(response)
+            if responses_streaming_enabled():
+                stream = self._client.responses.create(**payload, stream=True)
+                streamed_text, response = consume_responses_stream(stream)
+                text = self._extract_response_text(response) or streamed_text
+            else:
+                response = self._client.responses.create(**payload)
+                text = self._extract_response_text(response)
             if not text:
                 status = getattr(response, "status", "")
                 raise RuntimeError(
