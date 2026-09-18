@@ -1,0 +1,2471 @@
+{
+  "version": 1,
+  "stage": "feasibility_device_plan_chunk_5_of_6",
+  "binding": {
+    "research_handoff_sha256": "000de5da3bfac0b778d4c017876cb940233b1c0d5a68b0164e9de869a5628fc7",
+    "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+    "contract_version": "v2",
+    "semantic_analysis_enabled": true,
+    "feasibility_mode": "",
+    "fragment_contract_sha256": "a2209c914406c8fd0002729d28923cd826ff495478ef62422c5c43a814143f7d",
+    "implementation_sha256": "b6347f5bb56fafac644a0a26993fc6d97cb2471fad3970d8c35f544ed0310114",
+    "planning_model": {
+      "adapter": "utils.llm_factory.CodexResponsesModel",
+      "backends": [
+        {
+          "adapter": "utils.llm_factory.CodexResponsesModel",
+          "model_name": "kimi-k3",
+          "reasoning_effort": "high",
+          "max_output_tokens": 32768,
+          "endpoint_host": "api.kimi.com",
+          "endpoint_config_sha256": "19bd69ccec294d9a1ecfb4ea237d3699f5477a2da13ca9ddd283e948593c49b7"
+        }
+      ],
+      "wire_api": "codex_responses",
+      "provider": "openai",
+      "feasibility_reasoning_effort": ""
+    }
+  },
+  "created_at": "2026-09-17T18:08:28.425417+00:00",
+  "payload_sha256": "f86751e187c956900337e1fc4d34f5ece2bcff3c39429dd4074b3ed153b4e486",
+  "payload": {
+    "schema_version": 1,
+    "macro_id": "5",
+    "chunk_index": 5,
+    "chunk_count": 6,
+    "step_name": "feasibility_device_plan_chunk_5_of_6",
+    "fragment_binding": {
+      "schema_version": 1,
+      "research_handoff_sha256": "f1089edc24ccba7c3a83e648aaa163c2484cd0dfda3acd8dccc0715d6b0d7765",
+      "semantic_analysis_sha256": "2a0b779c69ab813ab70d353af09574ad586d790b58c0bb49abf9c066d2a749dc",
+      "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+      "skill_manifest_sha256": "fa9bff4a8f201f216dd31f14afbe8a3843e003b39cf6966890adb63c6f68e0c3",
+      "macro_id": "5",
+      "macro_ids": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "chunk_index": 5,
+      "chunk_count": 6,
+      "sample_control_matrix_sha256": "59fd86b180692ee845184f5f6471dda3cfdc0e695f1d5a390df7e5fd5624400a",
+      "accepted_prefix_sha256": "43d7663d6e132c1e53c30f71f44ecd3427d02893479644e5131ce07c8eaf923c",
+      "extra_instruction_sha256": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+    },
+    "fragment_binding_sha256": "944c6163cf727bf63759a0edeaa35b48aee18d4c89058b853a8d97513fcb2f79",
+    "prefix_sha256": "43d7663d6e132c1e53c30f71f44ecd3427d02893479644e5131ce07c8eaf923c",
+    "fragment": {
+      "status": "device_plan",
+      "feasibility": {
+        "is_feasible": true,
+        "blocking_constraints": [],
+        "device_layer_adaptations": [
+          "10 mg 未反应母批分样按设备内规范固体称量链路实现：进样瓶1开盖 -> 固体样品转移工作站_V1 将母批干粉转入料斗1 -> 多通道固体称量工作站_V1 文件传参向新进样瓶3定量进样 0.010 g（料罐号1），不交给人工称取",
+          "4.50 mL 无水乙醇超出移液平台_1ml_V1 单液 3 mL 上限，沿用前缀已建立的移液平台_5ml_V1 2号原液瓶（无水乙醇）一次加注 4.50 mL，满足 XRD 总液量 ≥4.0 mL 强约束",
+          "超声分散 10 min 换算为超声分散仪_V1 清洗时间 600 s",
+          "macro 的 600 rpm/5 min 搅拌由常温磁力搅拌工作站_V1 执行（600∈[500,1500] r/min）；测试前再次混匀映射为谱学磁力搅拌工作站_V1 样品架放置，同时为 macro 6 XRD 滴液检测全流程的谱学磁力搅拌前置就位",
+          "母批进样瓶1在分样后立即关盖复封，恢复干燥密封保存供后续 XPS/SEM/TEM/OER stage 使用；悬浊液瓶3保持无盖，作为 macro 6 XRD 的合法无盖输入",
+          "batch_005 的整批总消费者沿用已接受前缀的 macro_5_xrd_aliquot_pending，不再追加第二个总消费者；10 mg 分样以称量站 target_dose 与 ledger 分录实现对账，不修改既有 whole_batch 绑定"
+        ]
+      },
+      "macro_plan_summary": "将 macro 5 的“10 mg 母批分样 + 4.50 mL 乙醇分散 + 超声10 min + 600 rpm搅拌5 min + 测试前混匀”映射为：物料站取进样瓶3 -> 开盖（瓶1+瓶3）-> 母批粉体经料斗1转入多通道固体称量站定量进样0.010 g -> 母批瓶1复封 -> 5ml移液平台加4.50 mL无水乙醇 -> 超声600 s -> 常温搅拌600 r/min×5 min -> 谱学磁力搅拌站测试前混匀，进样瓶3以无盖、≥4.0 mL均匀悬浊液状态移交 macro 6。",
+      "device_self_check": {
+        "container_continuity": "pass：进样瓶1全程保持 batch_005 母批身份，分样后复封；新进样瓶3类型一致且生命周期完整声明；无容器类型冲突",
+        "transfer_minimality": "pass：仅 1 次必要换瓶（母批瓶1 -> 分样瓶3，macro 规定 10 mg 分样）+ 1 次固体称量链必需的料斗转移；无 A->B->A 往返",
+        "sample_container_lineage": "pass：SAMPLE_GRP_MA_S01_R00_01_01：进样瓶1(母批) -> 料斗1(solid_hopper) -> 进样瓶3(aliquot, qa_001) -> 4.50 mL 乙醇悬浊液；两段转移 trace_complete=true",
+        "macro_semantic_coverage": "pass：10 mg 分样、4.50 mL 乙醇、超声10 min、600 rpm搅拌5 min、测试前再次混匀、总液量≥4.0 mL 全部逐项覆盖且顺序一致",
+        "material_conservation": "pass：分样 0.010 g 有 qa_001 与 mt_005 双边记录及母批扣减台账；悬浊液整批 1->1 进入 macro_6_xrd_pending，无静默削减；batch_005 的 whole_batch 总消费者保持前缀唯一绑定 macro_5_xrd_aliquot_pending，不追加第二消费者",
+        "volume_and_capacity": "pass：进样瓶3 总液量 4.50 mL，同类型瓶此前已承载 8.00 mL；5ml 平台单液 4.50 mL ≤5 mL 单次上限且 ≤30 mL 总量上限",
+        "centrifuge_balancing": "not_applicable：本 macro 无离心",
+        "addition_mode_preserved": "pass：乙醇一次定量加入与 macro 一致（macro 未要求滴加）",
+        "workstation_constraints": "pass：固体转移输入无盖固体（满足）、称量站输入无盖无溶液（满足）、超声/常温搅拌输入悬浊液（满足）、谱学搅拌输入无盖悬浊液（满足）、XRD 前置混匀已就位"
+      },
+      "device_plan": [
+        {
+          "plan_step": 23,
+          "workstation": "常规物料站",
+          "objective": "取得 XRD 悬浊液制样用新进样瓶，承接 10 mg 母批分样",
+          "operation_intent": "物料拿取（进样瓶×1，有盖）",
+          "key_values": {
+            "容器数量": "1 个",
+            "容器编号": "[3]"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "为分样新建唯一必要容器；母批瓶1继续保留母批余量，符合最短样品链；物料站后继接移液平台开盖，满足该站整体流程约束"
+        },
+        {
+          "plan_step": 24,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开母批瓶1与新瓶3，为固体转移/定量进样建立无盖输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 3]",
+            "开盖的瓶号": "[{\"瓶号\":\"1\"},{\"瓶号\":\"3\"}]",
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 25,
+          "workstation": "固体样品转移工作站_V1",
+          "objective": "将进样瓶1中的未反应 NiFe LDH 母批干粉转入料斗，建立定量称量进料接口",
+          "operation_intent": "固体样品转移（进样瓶 -> 料斗）",
+          "key_values": {
+            "源容器": "进样瓶 1（无盖、固体）",
+            "目标料斗": "料斗 1",
+            "转移语义": "母批粉体进料斗作为称量进料接口；母批身份不变"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_005"
+          ],
+          "sample_lineage": {
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "source_container": {
+              "container_type": "进样瓶",
+              "container_id": "1"
+            },
+            "destination_container": {
+              "container_type": "料斗",
+              "container_id": "1"
+            },
+            "transfer_reason": "solid_hopper",
+            "trace_complete": true
+          }
+        },
+        {
+          "plan_step": 26,
+          "workstation": "多通道固体称量工作站_V1",
+          "objective": "向进样瓶3定量加入 10 mg（0.010 g）未反应 NiFe LDH 分样粉体",
+          "operation_intent": "固体进样-文件传参-机器人（定量分样）",
+          "key_values": {
+            "上传文件配方行": "瓶号1（对应容器编号3）, 加样量 0.010 g, 料罐号 1",
+            "加样量范围核对": "0.010∈[0,50] g",
+            "料罐来源": "料斗1中的 batch_005 母批粉体",
+            "目标容器状态": "进样瓶3 无盖、无溶液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "split_same_material",
+          "material_transition_ids": [
+            "mt_005"
+          ],
+          "sample_lineage": {
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "source_container": {
+              "container_type": "料斗",
+              "container_id": "1"
+            },
+            "destination_container": {
+              "container_type": "进样瓶",
+              "container_id": "3"
+            },
+            "transfer_reason": "aliquot",
+            "justification_evidence_refs": [
+              "qa_001"
+            ],
+            "trace_complete": true
+          }
+        },
+        {
+          "plan_step": 27,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "分样完成后立即关盖复封母批瓶1，恢复干燥密封保存",
+          "operation_intent": "关盖",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "关盖的瓶号": "[{\"瓶号\":\"1\"}]",
+            "封存状态": "未反应 NiFe LDH 母批余量（batch_005），密封供后续 stage"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 28,
+          "workstation": "移液平台_5ml_V1",
+          "objective": "向进样瓶3加入 4.50 mL 无水乙醇，使总液量满足 XRD ≥4.0 mL 强约束",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "2号原液瓶 无水乙醇": "4.50 mL",
+            "一瓶一液": "2号位仅无水乙醇（沿用前缀槽位）",
+            "单次/总量核对": "4.50≤5 mL 单次上限且≤30 mL 总量上限",
+            "总液量": "4.50 mL ≥ 4.0 mL"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder",
+            "ethanol",
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 29,
+          "workstation": "超声分散仪_V1",
+          "objective": "超声分散 10 min，使 NiFe LDH 粉体在乙醇中解聚分散",
+          "operation_intent": "超声清洗",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "清洗时间": "600 s（= 10 min）"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension",
+            "ethanol"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 30,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "室温 600 r/min 搅拌 5 min，获得均匀悬浊液",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "搅拌速度": "600 r/min（∈[500,1500]）",
+            "搅拌时间": "5 min",
+            "温度语义": "室温固定环境能力，不下发"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 31,
+          "workstation": "谱学磁力搅拌工作站_V1",
+          "objective": "测试前再次混匀，并满足 XRD 滴液检测全流程的谱学磁力搅拌前置",
+          "operation_intent": "样品架放置-夹具识别",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "语义": "macro 要求的测试前再次混匀；输出保持无盖、≥4.0 mL 均匀悬浊液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ],
+          "notes": "本步为 macro 5 终点；进样瓶3以无盖均匀悬浊液状态作为 macro 6 XRD 观察的合法输入，属于测试场景链路，不额外补置放或倒回步骤"
+        }
+      ],
+      "batch_plan": [
+        {
+          "batch_id": "batch_006",
+          "quantity_mode": "numeric_inventory",
+          "material_id": "nife_ldh_powder_xrd_aliquot",
+          "material_identity_id": "nife_ldh_powder",
+          "parent_batch_id": "batch_005",
+          "is_root_batch": false,
+          "transition_kind": "split_same_material",
+          "total_quantity": {
+            "value": 0.01,
+            "unit": "g"
+          },
+          "source_plan_steps": [
+            25,
+            26
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "material_transition:mt_006"
+          ],
+          "allocation": {
+            "material_transition:mt_006": {
+              "value": 0.01,
+              "unit": "g"
+            }
+          },
+          "source_kind": "derived",
+          "source_refs": [
+            "macro_step:5",
+            "material_transition:mt_005"
+          ],
+          "calculation": "10 mg = 0.010 g，由多通道固体称量工作站 target dose 设定",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_007",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_xrd_suspension_ready",
+          "material_identity_id": "nife_ldh_xrd_suspension",
+          "parent_batch_id": "batch_006",
+          "is_root_batch": false,
+          "transition_kind": "state_change",
+          "source_plan_steps": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "macro_6_xrd_pending"
+          ],
+          "source_kind": "derived",
+          "source_refs": [
+            "macro_step:5",
+            "material_transition:mt_006"
+          ],
+          "calculation": "0.010 g 粉体 + 4.50 mL 无水乙醇整批形成悬浊液，总液量≥4.0 mL 由加液设定保证",
+          "pooling_policy": "not_pooled"
+        }
+      ],
+      "material_transitions": [
+        {
+          "transition_id": "mt_005",
+          "transition_kind": "split_same_material",
+          "parent_batch_ids": [
+            "batch_005"
+          ],
+          "child_batch_ids": [
+            "batch_006"
+          ],
+          "source_plan_steps": [
+            25,
+            26
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "quantity_basis": "conserved_inventory",
+          "input_allocations": [
+            {
+              "batch_id": "batch_005",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "output_allocations": [
+            {
+              "batch_id": "batch_006",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "before_material_state": "干燥密封的未反应 NiFe LDH 母批粉体（进样瓶1，经料斗1）",
+          "after_material_state": "10 mg 未反应 NiFe LDH 分样粉体（进样瓶3）",
+          "calculation_or_basis": "经料斗的定量分样，target dose 0.010 g 与 Research 10 mg 一致；分样不猜母批实测总量，母批余量保持 batch_005 身份；batch_005 的 whole_batch 总消费者仍为前缀绑定的 macro_5_xrd_aliquot_pending，本 transition 的分样扣减仅在 ledger 以对账分录呈现，不追加 batch 级第二消费者"
+        },
+        {
+          "transition_id": "mt_006",
+          "transition_kind": "state_change",
+          "parent_batch_ids": [
+            "batch_006"
+          ],
+          "child_batch_ids": [
+            "batch_007"
+          ],
+          "source_plan_steps": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "quantity_basis": "whole_batch",
+          "input_allocations": [
+            {
+              "batch_id": "batch_006",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "output_allocations": [
+            {
+              "batch_id": "batch_007",
+              "quantity": {
+                "value": 4.5,
+                "unit": "mL"
+              }
+            }
+          ],
+          "before_material_state": "10 mg 干粉分样（进样瓶3，无盖）",
+          "after_material_state": "均匀分散的未反应 NiFe LDH/乙醇悬浊液 4.50 mL（≥4.0 mL，进样瓶3，无盖）",
+          "calculation_or_basis": "加 4.50 mL 无水乙醇后经超声与搅拌整批转为悬浊液；液体总体积由加液设定保证满足 XRD ≥4.0 mL，不猜固含收率"
+        }
+      ],
+      "material_ledger": {
+        "entries": [
+          {
+            "entry_id": "material_005b",
+            "quantity_mode": "numeric_inventory",
+            "material_id": "nife_ldh_powder_mother_batch",
+            "batch_id": "batch_005",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "material_transition:mt_005",
+            "processing_step_refs": [
+              25,
+              26
+            ],
+            "consumed": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "reserved": {
+              "value": 0,
+              "unit": "g"
+            },
+            "source_kind": "derived",
+            "source_refs": [
+              "macro_step:5"
+            ],
+            "calculation": "从 whole_batch 母批定额分取 0.010 g；母批为 whole_batch 未登记总量，余额以 batch_005 身份继续封存，不虚构实测总量"
+          },
+          {
+            "entry_id": "material_006",
+            "quantity_mode": "numeric_inventory",
+            "material_id": "nife_ldh_powder_xrd_aliquot",
+            "batch_id": "batch_006",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "material_transition:mt_006",
+            "processing_step_refs": [
+              25,
+              26
+            ],
+            "produced": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "consumed": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "reserved": {
+              "value": 0,
+              "unit": "g"
+            },
+            "balance": {
+              "value": 0,
+              "unit": "g"
+            },
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_005"
+            ],
+            "calculation": "produced-consumed-reserved"
+          },
+          {
+            "entry_id": "material_007",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_xrd_suspension_ready",
+            "batch_id": "batch_007",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "macro_6_xrd_pending",
+            "processing_step_refs": [
+              28,
+              29,
+              30,
+              31
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_006"
+            ],
+            "calculation": "whole_batch：整批悬浊液移交 macro 6 XRD 观察，不拆分数值库存"
+          }
+        ]
+      },
+      "container_plan": [
+        {
+          "容器编号": 3,
+          "容器类型": "进样瓶",
+          "用途": "macro 5 XRD 悬浊液制样容器（10 mg 分样 + 4.50 mL 乙醇），并作为 macro 6 XRD 滴液检测的无盖输入容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "空瓶有盖取得 -> 移液平台开盖（保留瓶盖）-> 多通道固体称量站定量进样 0.010 g 母批粉体（无盖）-> 加入 4.50 mL 无水乙醇 -> 超声 600 s -> 600 r/min 搅拌 5 min -> 谱学磁力搅拌站测试前混匀 -> 无盖、≥4.0 mL 悬浊液移交 macro 6 XRD；XRD 结束后由后续片段决定去向"
+        }
+      ],
+      "quantity_adjustments": [
+        {
+          "adjustment_id": "qa_001",
+          "kind": "split_transfer",
+          "before": {
+            "value": "whole_batch",
+            "unit": "batch_005 干燥母批粉体（进样瓶1）"
+          },
+          "after": {
+            "value": 0.01,
+            "unit": "g（10 mg XRD 分样子样，进样瓶3）"
+          },
+          "source_kind": "research",
+          "source_refs": [
+            "macro_step:5"
+          ],
+          "calculation": "Research 规定分取 10 mg = 0.010 g；仅分样，不改变母批总量语义，余量保持同一 batch_005 身份密封保存",
+          "preserved_invariants": [
+            "route",
+            "reagent_identity",
+            "sample_matrix"
+          ],
+          "route_changed": false,
+          "requires_scientific_review": false
+        }
+      ],
+      "quantity_requirement_dispositions": [
+        {
+          "source_macro_step": 5,
+          "requirement_index": 0,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 26,
+          "workstation": "多通道固体称量工作站_V1",
+          "operation": "固体进样-文件传参-机器人",
+          "parameter": "上传文件（加样量列，单位 g）",
+          "reason": "10 mg 为 Research 规定的 XRD 分样 target_dose，属 scientific_input_setpoint；真源称量站以文件传参加样量(g)下发，0.010 g 落在 [0,50] g 范围，料罐号全局统一取 1",
+          "evidence_refs": [
+            "current_macro.参数",
+            "Multi_Channel_Solid_Weighing_Workstation_V1.固体进样-文件传参-机器人.上传文件"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 5,
+          "requirement_index": 1,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 28,
+          "workstation": "移液平台_5ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "原液用量",
+          "reason": "4.50 mL 无水乙醇及总液量≥4.0 mL 为 XRD 滴液制样强约束输入；4.50 mL 超出 1ml 平台单液 3 mL 上限，故绑定 5ml 平台 2号原液瓶（无水乙醇，前缀已建立槽位），单次 4.50 mL ≤5 mL 单次上限且 ≤30 mL 总量上限",
+          "evidence_refs": [
+            "current_macro.参数",
+            "XRD_V1.整体流程约束.测试溶液体积校验",
+            "Liquid_Handling_Station_5ml_V1.加液_物料绑定.原液用量"
+          ],
+          "requires_scientific_review": false
+        }
+      ],
+      "offline_handoffs": [],
+      "temporal_adaptations": [],
+      "reused_plan_steps": []
+    },
+    "fragment_sha256": "e78f5b1c0e90d431bc10a31d6d3bbff941825a90b6f384517c370d19c5459c84",
+    "candidate": {
+      "device_plan": [
+        {
+          "plan_step": 1,
+          "workstation": "常规物料站",
+          "objective": "取得共沉淀反应容器及离心配平备用瓶，建立本 stage 容器台账",
+          "operation_intent": "物料拿取（进样瓶×2，有盖）",
+          "key_values": {
+            "容器数量": "2 个",
+            "容器编号": "[1, 2]"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "输出进样瓶后紧接移液平台，满足常规物料站直接后继约束；2 号瓶为 macro 3 偶数配平预留，容器总数全程保持 2"
+        },
+        {
+          "plan_step": 2,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开反应瓶盖，为前驱体加液建立无盖输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "保留瓶盖=1：macro 2 仍需在同一容器上加 Na2CO3/NaOH，macro 3 离心前才关盖；2 号配平瓶保持有盖不开"
+        },
+        {
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "向反应瓶定量加入两种金属盐原液与去离子水，形成 Ni/Fe=3:1、6.50 mL 的共沉淀前驱体混合液",
+          "operation_intent": "加液_物料绑定（按固定原液槽位顺序定量加液）",
+          "key_values": {
+            "1号原液瓶 Ni(NO3)2 0.15 mol/L": "3.00 mL（0.45 mmol Ni）",
+            "2号原液瓶 Fe(NO3)3 0.15 mol/L": "1.00 mL（0.15 mmol Fe）",
+            "3号原液瓶 去离子水": "2.50 mL",
+            "合计体积": "6.50 mL",
+            "Ni/Fe 摩尔比": "3:1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1,
+            2
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "ni_no3_2_stock",
+            "fe_no3_3_stock",
+            "di_water"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "单种溶液 0.30–3.00 mL 均满足 1ml 站单液 ≤3 mL/单次枪头 1 mL 限制（Ni(NO3)2 3.00 mL 贴上限，合法）；本物理步同时实现 macro 2 的首段'金属盐+水混合'，macro 2 片段从 600 rpm 预搅拌 5 min 起继续，Na2CO3(槽4)与 NaOH(槽5,12批)在 macro 2 按节拍加入，本步不提前执行"
+        },
+        {
+          "plan_step": 4,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "将前驱体混合液在室温下预混，建立共沉淀前均匀液相",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "搅拌速度": "600 r/min",
+            "搅拌时间": "5 min",
+            "温度语义": "室温/25±2 ℃ 固定环境能力，不下发"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 2,
+          "source_macro_steps": [
+            2
+          ],
+          "source_reagent_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "source_material_identity_ids": [
+            "ni_no3_2_stock",
+            "fe_no3_3_stock",
+            "di_water"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "承接plan_step 3后的6.50 mL无盖前驱液；仅均化，不改变物料身份。"
+        },
+        {
+          "plan_step": 5,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "向预混前驱液加入碳酸根，启动LDH层板间阴离子供给",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "4号原液瓶 Na2CO3 0.50 mol/L": "0.30 mL",
+            "累计液体体积": "6.80 mL",
+            "一瓶一液": "4号位仅Na2CO3"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 2,
+          "source_macro_steps": [
+            2
+          ],
+          "source_reagent_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "source_material_identity_ids": [
+            "na2co3_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "输入容器保持无盖；输出为纯液态/初期反应液。"
+        },
+        {
+          "plan_step": 6,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "Na2CO3加入后继续室温搅拌，使碳酸根均匀分布",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "搅拌速度": "600 r/min",
+            "搅拌时间": "5 min",
+            "温度语义": "室温/25±2 ℃ 固定环境能力，不下发"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 2,
+          "source_macro_steps": [
+            2
+          ],
+          "source_reagent_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "source_material_identity_ids": [
+            "na2co3_stock",
+            "di_water"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "保持同一进样瓶1；为后续NaOH节拍加液建立均匀基底。"
+        },
+        {
+          "plan_step": 7,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "按12批等量节拍加入NaOH，诱导NiFe LDH室温共沉淀",
+          "operation_intent": "加液_物料绑定（12批节拍加液，批间转常温搅拌）",
+          "key_values": {
+            "5号原液瓶 NaOH 1.0 mol/L": "总1.20 mL",
+            "分批": "12批×0.10 mL",
+            "节拍": "每1 min一批；单批≤1 mL且总量≤3 mL",
+            "批间处理": "每批后加入后立即以平台默认联通转常温磁力搅拌600 r/min约55 s，再回移液平台下一批",
+            "累计液体体积": "8.00 mL"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 2,
+          "source_macro_steps": [
+            2
+          ],
+          "source_reagent_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "source_material_identity_ids": [
+            "naoh_stock",
+            "nife_ldh_suspension"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_002"
+          ],
+          "notes": "translation agent按同一参数展开12个加液/搅拌交替子步；不复制容器、不新增样品。"
+        },
+        {
+          "plan_step": 8,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "加碱完成后持续室温搅拌熟化，形成均匀NiFe LDH共沉淀悬浊液",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "搅拌速度": "600 r/min",
+            "搅拌时间": "720 min",
+            "温度语义": "25±2 ℃按常温固定能力执行，不下发温度字段",
+            "终点物料": "8.00 mL熟化NiFe LDH悬浊液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 2,
+          "source_macro_steps": [
+            2
+          ],
+          "source_reagent_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "source_material_identity_ids": [
+            "nife_ldh_suspension"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_002"
+          ],
+          "notes": "与plan_step 7共同构成mt_002状态建立；结束后保持无盖/悬浊液进入macro 3前再按后续块关盖离心。"
+        },
+        {
+          "plan_step": 9,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开配平瓶，为加入首轮离心配平水建立无盖输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[2]",
+            "开盖的瓶号": "[{\"瓶号\":\"2\"}]",
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 10,
+          "workstation": "移液平台_5ml_V1",
+          "objective": "向配平瓶加入与主样悬浊液近似等体积的去离子水，满足首轮纯化偶数瓶配平",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[2]",
+            "1号原液瓶 去离子水": "8.00 mL",
+            "单站单液总量": "8.00 mL，低于 30 mL 上限",
+            "用途": "仅配平，不进入样品谱系"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [
+            "di_water"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "主样瓶 1 当前已有 8.00 mL 熟化悬浊液并保持无盖；配平瓶 2 加至 8.00 mL。"
+        },
+        {
+          "plan_step": 11,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "关闭主样瓶和配平瓶，满足纯化工作站有盖输入要求",
+          "operation_intent": "关盖",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "关盖的瓶号": "[{\"瓶号\":\"1\"},{\"瓶号\":\"2\"}]"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 12,
+          "workstation": "纯化工作站_V1",
+          "objective": "对完整 8.00 mL 熟化悬浊液进行初始固液分离，并完成 3 次固定体积水洗",
+          "operation_intent": "纯化离心（初始分离 + 3 次水洗，留固）",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "方案": "留固（2）",
+            "速度": "8000 r/min",
+            "时间": "5 min",
+            "清洗次数": "3",
+            "清洗液": "水（1）",
+            "自动设置加液状态": "是（0）",
+            "手动设置加液量": "6.0 mL/次",
+            "是否保留清洗液": "否（0）",
+            "保留清洗液参数": "不适用",
+            "固定终点": "3 次水洗，不使用在线 pH 或电导判据"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_suspension",
+            "di_water",
+            "nife_ldh_wet"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_003"
+          ],
+          "notes": "纯化工作站在每次水洗中去上清、加入 6.0 mL 水并重分散；主样瓶中的固体始终保留。"
+        },
+        {
+          "plan_step": 13,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开水洗后的主样瓶和配平瓶，为乙醇重分散建立无盖输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "开盖的瓶号": "[{\"瓶号\":\"1\"},{\"瓶号\":\"2\"}]",
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 14,
+          "workstation": "移液平台_5ml_V1",
+          "objective": "向水洗后的 NiFe LDH 湿沉淀加入固定体积无水乙醇，并向配平瓶加入等量乙醇",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "2号原液瓶 无水乙醇": "每瓶 6.00 mL",
+            "单站单液总量": "12.00 mL，低于 30 mL 上限",
+            "主样瓶": "进样瓶 1，用于 macro 规定的 6.0 mL 乙醇重分散",
+            "配平瓶": "进样瓶 2，仅用于次轮离心配平"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_wet",
+            "ethanol"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_003"
+          ]
+        },
+        {
+          "plan_step": 15,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "将湿沉淀在 6.00 mL 无水乙醇中重分散为均匀悬浊液",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "搅拌速度": "600 r/min",
+            "搅拌时间": "2 min",
+            "温度语义": "室温固定环境能力，不下发",
+            "主样瓶状态": "NiFe LDH/乙醇悬浊液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_wet",
+            "ethanol"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_003"
+          ],
+          "notes": "2 min 为设备级重分散节拍，不改变 macro 规定的乙醇体积、洗涤次数或离心条件。"
+        },
+        {
+          "plan_step": 16,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "关闭乙醇悬浊液主样瓶和配平瓶，满足第二次纯化有盖输入要求",
+          "operation_intent": "关盖",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "关盖的瓶号": "[{\"瓶号\":\"1\"},{\"瓶号\":\"2\"}]"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 17,
+          "workstation": "纯化工作站_V1",
+          "objective": "完成 macro 规定的一次无水乙醇洗涤离心并去除乙醇上清，获得待干燥湿沉淀",
+          "operation_intent": "纯化离心（1 次乙醇洗，留固）",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 2]",
+            "方案": "留固（2）",
+            "速度": "8000 r/min",
+            "时间": "5 min",
+            "清洗次数": "1",
+            "清洗液": "酒精（2）",
+            "自动设置加液状态": "否（1）",
+            "乙醇来源": "6.00 mL 已在步骤 14 定量加入，步骤 15 已重分散",
+            "是否保留清洗液": "否（0）",
+            "保留清洗液参数": "不适用",
+            "终点物料": "乙醇洗涤后的 NiFe LDH 湿沉淀，保留于进样瓶 1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2
+            ]
+          },
+          "source_macro_step": 3,
+          "source_macro_steps": [
+            3
+          ],
+          "source_reagent_identity": "熟化后的 NiFe LDH 悬浊液、去离子水和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_wet",
+            "ethanol"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_003"
+          ],
+          "notes": "本步不再自动加入额外乙醇，避免把 macro 的 6.0 mL 单次乙醇洗扩展成 12.0 mL；输出为有盖进样瓶中的湿沉淀，可直接进入后续干燥宏步骤。"
+        },
+        {
+          "plan_step": 18,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开乙醇洗涤后湿沉淀所在主样瓶，为低温烘干建立可挥发除溶剂的输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "开盖的瓶号": "[{\"瓶号\":\"1\"}]",
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 4,
+          "source_macro_steps": [
+            4
+          ],
+          "source_reagent_identity": "洗涤后的 NiFe LDH 湿沉淀",
+          "source_material_identity_ids": [
+            "nife_ldh_wet"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "后续有关盖封存步骤，因此保留瓶盖=1。"
+        },
+        {
+          "plan_step": 19,
+          "workstation": "烘干机_V1",
+          "objective": "将洗涤后的 NiFe LDH 湿沉淀在 60 ℃下低温干燥 720 min，不进行高温煅烧",
+          "operation_intent": "烘干主流程",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "恒温温度": "60 ℃",
+            "烘干时间": "720 min",
+            "温度范围核对": "60∈[26,210] ℃；720∈[1,14400] min",
+            "明确排除": "不执行马弗炉/煅烧"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 4,
+          "source_macro_steps": [
+            4
+          ],
+          "source_reagent_identity": "洗涤后的 NiFe LDH 湿沉淀",
+          "source_material_identity_ids": [
+            "nife_ldh_wet",
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_004"
+          ]
+        },
+        {
+          "plan_step": 20,
+          "workstation": "容器置放平台_V1",
+          "objective": "干燥后在室温环境静置冷却并轻柔均化，建立同一未反应母批身份",
+          "operation_intent": "静置",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "静置时间": "30 min",
+            "冷却语义": "由 60 ℃烘干终点自然冷却至室温；不使用>40 ℃冷却工作站",
+            "均化语义": "开盖状态下静置/周转轻柔均化，不引入机械高温或煅烧"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 4,
+          "source_macro_steps": [
+            4
+          ],
+          "source_reagent_identity": "洗涤后的 NiFe LDH 湿沉淀",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_004"
+          ],
+          "notes": "derived_process_constraint：'冷却至室温'无单独开放温度字段，用固定室温静置实现；10 mg XRD 分样不在本步提前执行。"
+        },
+        {
+          "plan_step": 21,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "关闭干燥母批所在进样瓶，满足密封、干燥保存并避免与碱性电解液接触",
+          "operation_intent": "关盖",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "关盖的瓶号": "[{\"瓶号\":\"1\"}]",
+            "封存状态": "未反应 NiFe LDH 母批，干燥密封保存"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 4,
+          "source_macro_steps": [
+            4
+          ],
+          "source_reagent_identity": "洗涤后的 NiFe LDH 湿沉淀",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 22,
+          "workstation": "容器置放平台_V1",
+          "objective": "将已封存的未反应 NiFe LDH 母批放入周转/保存位，供后续 XPS、SEM、TEM、电极制备和 OER 时间序列 stage 使用",
+          "operation_intent": "物料放置",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "样品标识": "SAMPLE_GRP_MA_S01_R00_01_01 / batch_005",
+            "未来分样": "10 mg XRD aliquot 作为下一宏步骤固体称量 target dose；其余母批保持密封"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 4,
+          "source_macro_steps": [
+            4
+          ],
+          "source_reagent_identity": "洗涤后的 NiFe LDH 湿沉淀",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 23,
+          "workstation": "常规物料站",
+          "objective": "取得 XRD 悬浊液制样用新进样瓶，承接 10 mg 母批分样",
+          "operation_intent": "物料拿取（进样瓶×1，有盖）",
+          "key_values": {
+            "容器数量": "1 个",
+            "容器编号": "[3]"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "为分样新建唯一必要容器；母批瓶1继续保留母批余量，符合最短样品链；物料站后继接移液平台开盖，满足该站整体流程约束"
+        },
+        {
+          "plan_step": 24,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开母批瓶1与新瓶3，为固体转移/定量进样建立无盖输入状态",
+          "operation_intent": "开盖（保留瓶盖）",
+          "key_values": {
+            "容器数量": "2",
+            "容器编号": "[1, 3]",
+            "开盖的瓶号": "[{\"瓶号\":\"1\"},{\"瓶号\":\"3\"}]",
+            "保留瓶盖": "1"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 25,
+          "workstation": "固体样品转移工作站_V1",
+          "objective": "将进样瓶1中的未反应 NiFe LDH 母批干粉转入料斗，建立定量称量进料接口",
+          "operation_intent": "固体样品转移（进样瓶 -> 料斗）",
+          "key_values": {
+            "源容器": "进样瓶 1（无盖、固体）",
+            "目标料斗": "料斗 1",
+            "转移语义": "母批粉体进料斗作为称量进料接口；母批身份不变"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_005"
+          ],
+          "sample_lineage": {
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "source_container": {
+              "container_type": "进样瓶",
+              "container_id": "1"
+            },
+            "destination_container": {
+              "container_type": "料斗",
+              "container_id": "1"
+            },
+            "transfer_reason": "solid_hopper",
+            "trace_complete": true
+          }
+        },
+        {
+          "plan_step": 26,
+          "workstation": "多通道固体称量工作站_V1",
+          "objective": "向进样瓶3定量加入 10 mg（0.010 g）未反应 NiFe LDH 分样粉体",
+          "operation_intent": "固体进样-文件传参-机器人（定量分样）",
+          "key_values": {
+            "上传文件配方行": "瓶号1（对应容器编号3）, 加样量 0.010 g, 料罐号 1",
+            "加样量范围核对": "0.010∈[0,50] g",
+            "料罐来源": "料斗1中的 batch_005 母批粉体",
+            "目标容器状态": "进样瓶3 无盖、无溶液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "split_same_material",
+          "material_transition_ids": [
+            "mt_005"
+          ],
+          "sample_lineage": {
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "source_container": {
+              "container_type": "料斗",
+              "container_id": "1"
+            },
+            "destination_container": {
+              "container_type": "进样瓶",
+              "container_id": "3"
+            },
+            "transfer_reason": "aliquot",
+            "justification_evidence_refs": [
+              "qa_001"
+            ],
+            "trace_complete": true
+          }
+        },
+        {
+          "plan_step": 27,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "分样完成后立即关盖复封母批瓶1，恢复干燥密封保存",
+          "operation_intent": "关盖",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[1]",
+            "关盖的瓶号": "[{\"瓶号\":\"1\"}]",
+            "封存状态": "未反应 NiFe LDH 母批余量（batch_005），密封供后续 stage"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": []
+        },
+        {
+          "plan_step": 28,
+          "workstation": "移液平台_5ml_V1",
+          "objective": "向进样瓶3加入 4.50 mL 无水乙醇，使总液量满足 XRD ≥4.0 mL 强约束",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "2号原液瓶 无水乙醇": "4.50 mL",
+            "一瓶一液": "2号位仅无水乙醇（沿用前缀槽位）",
+            "单次/总量核对": "4.50≤5 mL 单次上限且≤30 mL 总量上限",
+            "总液量": "4.50 mL ≥ 4.0 mL"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_powder",
+            "ethanol",
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "state_change",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 29,
+          "workstation": "超声分散仪_V1",
+          "objective": "超声分散 10 min，使 NiFe LDH 粉体在乙醇中解聚分散",
+          "operation_intent": "超声清洗",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "清洗时间": "600 s（= 10 min）"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension",
+            "ethanol"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 30,
+          "workstation": "常温磁力搅拌工作站_V1",
+          "objective": "室温 600 r/min 搅拌 5 min，获得均匀悬浊液",
+          "operation_intent": "开始搅拌",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "搅拌速度": "600 r/min（∈[500,1500]）",
+            "搅拌时间": "5 min",
+            "温度语义": "室温固定环境能力，不下发"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ]
+        },
+        {
+          "plan_step": 31,
+          "workstation": "谱学磁力搅拌工作站_V1",
+          "objective": "测试前再次混匀，并满足 XRD 滴液检测全流程的谱学磁力搅拌前置",
+          "operation_intent": "样品架放置-夹具识别",
+          "key_values": {
+            "容器数量": "1",
+            "容器编号": "[3]",
+            "语义": "macro 要求的测试前再次混匀；输出保持无盖、≥4.0 mL 均匀悬浊液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              3
+            ]
+          },
+          "source_macro_step": 5,
+          "source_macro_steps": [
+            5
+          ],
+          "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+          "source_material_identity_ids": [
+            "nife_ldh_xrd_suspension"
+          ],
+          "material_event_kind": "process_same_material",
+          "material_transition_ids": [
+            "mt_006"
+          ],
+          "notes": "本步为 macro 5 终点；进样瓶3以无盖均匀悬浊液状态作为 macro 6 XRD 观察的合法输入，属于测试场景链路，不额外补置放或倒回步骤"
+        }
+      ],
+      "sample_control_matrix": [
+        {
+          "group_id": "GRP_MA_S01_R00_01",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "variables": {}
+        },
+        {
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01"
+        }
+      ],
+      "status": "device_plan",
+      "container_plan": [
+        {
+          "容器编号": 1,
+          "容器类型": "进样瓶",
+          "用途": "共沉淀反应/熟化/洗涤全程主容器（NiFe LDH 母批）",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "空瓶有盖 -> 移液平台开盖（保留瓶盖）-> 加入金属盐+水 6.50 mL 前驱体混合液（无盖）-> macro 2 加 Na2CO3/NaOH 并搅拌熟化得 8.00 mL 悬浊液 -> macro 3 前关盖、离心洗涤 -> macro 4 干燥 -> macro 5 XRD 悬浊液制样"
+        },
+        {
+          "容器编号": 2,
+          "容器类型": "进样瓶",
+          "用途": "macro 3 纯化离心配平备用瓶（纯化站要求偶数带盖容器）",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "空瓶有盖取得备用 -> macro 3 注入与主瓶相近体积去离子水作配平 -> 随纯化离心使用 -> 该 stage 结束后退出活跃库存"
+        },
+        {
+          "容器编号": 3,
+          "容器类型": "进样瓶",
+          "用途": "macro 5 XRD 悬浊液制样容器（10 mg 分样 + 4.50 mL 乙醇），并作为 macro 6 XRD 滴液检测的无盖输入容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "空瓶有盖取得 -> 移液平台开盖（保留瓶盖）-> 多通道固体称量站定量进样 0.010 g 母批粉体（无盖）-> 加入 4.50 mL 无水乙醇 -> 超声 600 s -> 600 r/min 搅拌 5 min -> 谱学磁力搅拌站测试前混匀 -> 无盖、≥4.0 mL 悬浊液移交 macro 6 XRD；XRD 结束后由后续片段决定去向"
+        }
+      ],
+      "reagent_slot_plan": [
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 1,
+          "名称": "Ni(NO3)2 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本片段取用 3.00 mL（0.45 mmol Ni）",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 2,
+          "名称": "Fe(NO3)3 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本片段取用 1.00 mL（0.15 mmol Fe），Ni/Fe=3:1",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 3,
+          "名称": "去离子水",
+          "浓度或说明": "本片段取用 2.50 mL；macro 3 洗涤用水由纯化工作站内置清洗液供给，不占用此槽",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 4,
+          "名称": "Na2CO3 原液",
+          "浓度或说明": "0.50 mol/L 水溶液，外部预配装载；macro 2 取用 0.30 mL，本片段仅登记槽位",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 5,
+          "名称": "NaOH 原液",
+          "浓度或说明": "1.0 mol/L 水溶液，外部预配装载；macro 2 分 12 批共取用 1.20 mL，本片段仅登记槽位",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_5ml_V1",
+          "原液编号": 1,
+          "名称": "去离子水",
+          "浓度或说明": "macro 3 洗涤和首轮离心配平用水；本工作站本地 1 号槽位，一瓶一液",
+          "来源": "macro step 3"
+        },
+        {
+          "工作站": "移液平台_5ml_V1",
+          "原液编号": 2,
+          "名称": "无水乙醇",
+          "浓度或说明": "macro 3 终洗和次轮离心配平用乙醇；本工作站本地 2 号槽位，一瓶一液",
+          "来源": "macro step 3"
+        }
+      ],
+      "feasibility": {
+        "is_feasible": true,
+        "blocking_constraints": [],
+        "device_layer_adaptations": [
+          "选择进样瓶作为全程反应容器：反应为室温（<80℃），常规物料站可供取；常温磁力搅拌站（600 rpm 在[500,1500]内）与纯化离心站均接受进样瓶，无需换瓶",
+          "选用移液平台_1ml_V1 完成开盖+加液：5 种溶液单种总量 0.30–3.00 mL 均不超过 3 mL 上限、共 5 种 ≤8 种；Ni(NO3)2 3.00 mL 恰好贴上限，合法但无余量，选择此站是因开盖/加液/关盖同站完成且 5ml_V1 无开关盖能力",
+          "原液编号为移液平台_1ml_V1 本地槽位 1-5，一瓶一液、顺序全程固定；Na2CO3(槽4)与NaOH(槽5)本片段不取用，仅登记供 macro 2 分段加料复用同一槽位",
+          "macro 2 要求'金属盐+水混合后搅拌5min再加Na2CO3'，本片段的加液步物理上实现了该首段混合（macro 2 片段从 600 rpm 预搅拌 5 min 起继续，不复加），NaOH 12 批节拍加料留待 macro 2 展开",
+          "提前取得进样瓶2号作为 macro 3 纯化离心的配平备用瓶（纯化站要求容器数为偶数且带盖），容器总数全程保持 2 不增加",
+          "开盖保留瓶盖=1：macro 2 还需在同一容器上加 Na2CO3/NaOH，macro 3 前才关盖",
+          "沿用已建立进样瓶1为唯一反应容器：前序已开盖并加入 Ni/Fe/水 6.50 mL，本块不新增容器、不换瓶。",
+          "Na2CO3 0.30 mL 与 NaOH 总 1.20 mL 均满足移液平台_1ml_V1 单种溶液≤3 mL、单次≤1 mL 限制；NaOH 拆成 12×0.10 mL 节拍加液。",
+          "将“每批 NaOH 加入后保持 600 rpm 搅拌”的同步语义派生为移液平台小份加液与常温磁力搅拌 1 min 批间节拍交替，最终再由常温磁力搅拌完成 720 min 熟化。",
+          "25±2 ℃ 按常温磁力搅拌工作站的环境常温固定能力处理，不下发温度字段；不执行任何高温煅烧。",
+          "将 macro 3 的初始固液分离和 3 次水洗映射为一次纯化离心程序：8000 r/min、5 min、每次由纯化工作站加入 6.0 mL 水，固定 3 次，不采用在线 pH 或电导终点。",
+          "纯化工作站要求偶数且有盖容器，沿用既有进样瓶 2 作为配平瓶；首次离心前向其加入 8.00 mL 去离子水，使其与主样瓶的 8.00 mL 悬浊液近似配平。",
+          "第一次纯化输出湿固体后，为恢复纯化工作站可接受的悬浊输入状态，显式加入 6.00 mL 无水乙醇并进行 600 r/min、2 min 重分散，再执行一次乙醇离心；样品始终保留在进样瓶 1。",
+          "第二次纯化不额外自动加液，乙醇用量已由前一步固定加入；清洗次数 1 表示一次乙醇重分散后的固定离心/去上清过程。",
+          "60 ℃/720 min 低温干燥直接映射到 烘干机_V1-烘干主流程；'不进行高温煅烧'为否定约束，不生成马弗炉步骤。",
+          "湿沉淀保留在既有主容器 进样瓶1 内完成干燥、室温冷却和封存，不新增换瓶；进样瓶1 的 lifecycle 已在前序 container_plan 中覆盖 macro 4 干燥与 macro 5 制样。",
+          "干燥后冷却到室温派生为 容器置放平台_V1 固定静置 30 min；不送入不接受该语义的高温冷却站。",
+          "“记录干燥产物质量”不虚构读数：当前真源固体称量站只提供 target dose 下发能力，未声明整批干粉质量 Report；本块仅建立母批身份，10 mg XRD 分样作为下一宏步骤固体称量 target dose 绑定，不作为离线人工称量。",
+          "配平瓶 进样瓶2 在 macro 3 结束后退出活跃库存，本块不新增全局活跃容器。",
+          "10 mg 未反应母批分样按设备内规范固体称量链路实现：进样瓶1开盖 -> 固体样品转移工作站_V1 将母批干粉转入料斗1 -> 多通道固体称量工作站_V1 文件传参向新进样瓶3定量进样 0.010 g（料罐号1），不交给人工称取",
+          "4.50 mL 无水乙醇超出移液平台_1ml_V1 单液 3 mL 上限，沿用前缀已建立的移液平台_5ml_V1 2号原液瓶（无水乙醇）一次加注 4.50 mL，满足 XRD 总液量 ≥4.0 mL 强约束",
+          "超声分散 10 min 换算为超声分散仪_V1 清洗时间 600 s",
+          "macro 的 600 rpm/5 min 搅拌由常温磁力搅拌工作站_V1 执行（600∈[500,1500] r/min）；测试前再次混匀映射为谱学磁力搅拌工作站_V1 样品架放置，同时为 macro 6 XRD 滴液检测全流程的谱学磁力搅拌前置就位",
+          "母批进样瓶1在分样后立即关盖复封，恢复干燥密封保存供后续 XPS/SEM/TEM/OER stage 使用；悬浊液瓶3保持无盖，作为 macro 6 XRD 的合法无盖输入",
+          "batch_005 的整批总消费者沿用已接受前缀的 macro_5_xrd_aliquot_pending，不再追加第二个总消费者；10 mg 分样以称量站 target_dose 与 ledger 分录实现对账，不修改既有 whole_batch 绑定"
+        ]
+      },
+      "device_self_check": {
+        "container_continuity": "pass：进样瓶1号为本样品唯一主容器，类型全程一致；2号为配平备用瓶\npass：全程使用既有进样瓶1，无新增活跃容器；进样瓶2仍为后续离心配平备用。\npass：NiFe LDH 样品全程保留在进样瓶 1；进样瓶 2 仅作离心配平，容器类型和编号不发生变化。\npass：全程沿用进样瓶1，类型不变；进样瓶2已退出。\npass：进样瓶1全程保持 batch_005 母批身份，分样后复封；新进样瓶3类型一致且生命周期完整声明；无容器类型冲突",
+        "transfer_minimality": "pass：0 次换瓶，同一容器跨站移动不算换瓶\npass：换瓶次数0；仅同一容器在移液平台与常温搅拌站之间按节拍往返移动。\npass：0 次换瓶；所有跨站移动均为同一容器按平台默认联通转移，没有 A→B→A 往返。\npass：0 次换瓶；开盖/关盖仅为干燥与封存盖态过渡。\npass：仅 1 次必要换瓶（母批瓶1 -> 分样瓶3，macro 规定 10 mg 分样）+ 1 次固体称量链必需的料斗转移；无 A->B->A 往返",
+        "sample_container_lineage": "pass：SAMPLE_GRP_MA_S01_R00_01_01 -> 进样瓶1号（空瓶有盖->开盖->6.50 mL 前驱体液），无转移步\npass：SAMPLE_GRP_MA_S01_R00_01_01 保持 进样瓶1 内从前驱液到共沉淀悬浊液的连续谱系。\npass：SAMPLE_GRP_MA_S01_R00_01_01 的样品链为进样瓶 1 中熟化悬浊液 → 水洗湿沉淀 → 乙醇悬浊液 → 乙醇洗涤湿沉淀；无样品转移步骤。\npass：batch_004 湿沉淀 -> mt_004 -> batch_005 干燥母批，sample_id 不变，container 1 不变。\npass：SAMPLE_GRP_MA_S01_R00_01_01：进样瓶1(母批) -> 料斗1(solid_hopper) -> 进样瓶3(aliquot, qa_001) -> 4.50 mL 乙醇悬浊液；两段转移 trace_complete=true",
+        "macro_semantic_coverage": "pass：macro 1 的四种原液+水备齐语义映射为槽位登记+前驱体三液定量取用；Na2CO3/NaOH 取用属 macro 2 时序不在此提前执行\npass：预混5 min、Na2CO3后搅5 min、12批NaOH/12 min节拍、720 min熟化均显式覆盖。\npass：覆盖完整 8.00 mL 悬浊液固液分离、3 次 6.0 mL 水洗、1 次 6.0 mL 乙醇重分散/离心和固定次数终点。\npass：覆盖 60 ℃×720 min、冷却至室温、母批身份建立、密封保存；10 mg 分样绑定为后续 target dose，不提前执行 macro 5/6。\npass：10 mg 分样、4.50 mL 乙醇、超声10 min、600 rpm搅拌5 min、测试前再次混匀、总液量≥4.0 mL 全部逐项覆盖且顺序一致",
+        "material_conservation": "pass：本步仅定量加液，3.00+1.00+2.50=6.50 mL 全部进入进样瓶1号，无分装/合并\npass：6.50+0.30+1.20=8.00 mL，整批保留为悬浊液，无分装/合并。\npass：主样整批处理，无分装、合并或取样；洗液加入和上清去除只改变液相状态，样品谱系保持单一父批次到单一子批次。\npass：whole_batch 1→1 进入干燥，无分装/合并；不猜干燥收率。\npass：分样 0.010 g 有 qa_001 与 mt_005 双边记录及母批扣减台账；悬浊液整批 1->1 进入 macro_6_xrd_pending，无静默削减；batch_005 的 whole_batch 总消费者保持前缀唯一绑定 macro_5_xrd_aliquot_pending，不追加第二消费者",
+        "volume_and_capacity": "pass：单瓶 6.50 mL（macro 2 完成后 8.00 mL、macro 3 单次洗涤+6.0 mL 后约 14 mL）在进样瓶常规容量内；各单液 ≤3 mL 满足 1ml 站上限\npass：终点8.00 mL沿用前序已接受体积；各单种原液≤3 mL。\npass：首次离心主瓶 8.00 mL、配平瓶 8.00 mL；每次洗涤 6.0 mL，低于纯化工作站手动加液上限 50 mL。\npass：干燥对象为离心后湿沉淀，无液体超限；进样瓶数量上限内。\npass：进样瓶3 总液量 4.50 mL，同类型瓶此前已承载 8.00 mL；5ml 平台单液 4.50 mL ≤5 mL 单次上限且 ≤30 mL 总量上限",
+        "centrifuge_balancing": "not_applicable：本片段无离心；已预留进样瓶2号供 macro 3 偶数配平\nnot_applicable：本块不离心；配平瓶2留待macro 3。\npass：两次纯化均使用 2 个有盖进样瓶；配平瓶在首轮为水、次轮为等量乙醇。\nnot_applicable：本宏步骤无离心。\nnot_applicable：本 macro 无离心",
+        "addition_mode_preserved": "pass：macro 1 无滴加/分批要求；macro 2 的 12 批 NaOH 节拍未被本片段破坏（NaOH 留待 macro 2 分批加入）\npass：NaOH缓慢加入保留为12×0.10 mL、每1 min一批的近似节拍，非一次性加入。\npass：保留固定体积、固定次数洗涤；未改成一次性大体积洗涤，也未引入在线 pH/电导判据。\nnot_applicable：本宏步骤无加液节拍。\npass：乙醇一次定量加入与 macro 一致（macro 未要求滴加）",
+        "workstation_constraints": "pass：常规物料站输出进样瓶后紧接移液平台，满足直接后继约束；开盖输入有盖、加液输入无盖、输出悬浊液/纯液态约束均满足\npass：搅拌速度600 r/min在[500,1500]；加液输入需无盖，进样瓶1已处于无盖状态。\npass：纯化输入为偶数有盖进样瓶；8000 r/min 在 (0,12000] 内，5 min 在 [1,99] 内，清洗次数 3 和 1 均在 [1,10] 内；5 mL 移液平台单次加液任务总量低于 30 mL。\npass：烘干机接受进样瓶且盖态不限；开盖/关盖仅由移液平台_1ml_V1执行；置放平台接受进样瓶。\npass：固体转移输入无盖固体（满足）、称量站输入无盖无溶液（满足）、超声/常温搅拌输入悬浊液（满足）、谱学搅拌输入无盖悬浊液（满足）、XRD 前置混匀已就位"
+      },
+      "requires_scientific_review": true,
+      "macro_plan_summary": "将 macro step 1 的前驱体配料映射为：常规物料站取 2 个进样瓶（1 号反应瓶+2 号离心配平备用瓶）→ 移液平台_1ml_V1 开 1 号瓶盖（保留）→ 同站按固定槽位顺序加入 Ni(NO3)2 3.00 mL + Fe(NO3)3 1.00 mL + 去离子水 2.50 mL 形成 6.50 mL 金属前驱体混合液；Na2CO3/NaOH 槽位登记备用，分段加料与搅拌熟化在 macro 2 片段展开。\nmacro 2 在进样瓶1内完成：600 rpm 预搅拌5 min → 加 Na2CO3 0.30 mL → 600 rpm 搅5 min → NaOH 12×0.10 mL 节拍加液并批间600 rpm搅拌 → 25±2 ℃/600 rpm 熟化720 min，得到8.00 mL NiFe LDH悬浊液。\nmacro 3 映射为“配平瓶准备—关盖—三次水洗纯化—乙醇重分散—一次乙醇纯化”的同容器设备链，保留 8000 r/min、5 min、6.0 mL 和 3+1 次固定洗涤语义。\n将 macro 4 的湿沉淀低温干燥、冷却、均化/母批建立与封存映射为：开盖→烘干机 60 ℃ 720 min→室温静置冷却→关盖密封→置放保存，干燥粉末母批继续沿用 SAMPLE_GRP_MA_S01_R00_01_01 与进样瓶1，10 mg XRD 分样保留为后续固体称量 target dose。\n将 macro 5 的“10 mg 母批分样 + 4.50 mL 乙醇分散 + 超声10 min + 600 rpm搅拌5 min + 测试前混匀”映射为：物料站取进样瓶3 -> 开盖（瓶1+瓶3）-> 母批粉体经料斗1转入多通道固体称量站定量进样0.010 g -> 母批瓶1复封 -> 5ml移液平台加4.50 mL无水乙醇 -> 超声600 s -> 常温搅拌600 r/min×5 min -> 谱学磁力搅拌站测试前混匀，进样瓶3以无盖、≥4.0 mL均匀悬浊液状态移交 macro 6。",
+      "_feasibility_fragments": {
+        "completed_macro_ids": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ]
+      },
+      "quantity_requirement_dispositions": [
+        {
+          "source_macro_step": 2,
+          "requirement_index": 0,
+          "decision": "replace_with_whole_batch",
+          "reason": "macro 2未声明冻结quantity_requirements；反应进料与熟化悬浊液为同容器整批1→1转化，下游macro 3为整批洗涤，无固定取样量或拆批，故不建立数值库存审计。",
+          "evidence_refs": [
+            "macro_action_steps[1].参数",
+            "remaining_semantic_dependency_view[source_macro_step=2].quantity_semantics"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 4,
+          "requirement_index": 0,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 19,
+          "workstation": "烘干机_V1",
+          "operation": "烘干主流程",
+          "parameter": "恒温温度/烘干时间",
+          "reason": "60 ℃与720 min是冻结宏步骤明确给出的固定干燥条件，且为烘干机必填开放参数，必须绑定下发；'不煅烧'不生成任何高温步骤。",
+          "evidence_refs": [
+            "current_macro.参数",
+            "Drying_Oven_V1.烘干主流程.恒温温度",
+            "Drying_Oven_V1.烘干主流程.烘干时间"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 4,
+          "requirement_index": 1,
+          "decision": "adapt_within_device_bounds",
+          "reason": "10 mg XRD 分样属于 target dose 语义；当前块只建立干燥母批并保留 sample/material 谱系，实际 0.010 g 定量分样应由下一宏步骤经固体样品转移/多通道固体称量设备路径执行。整批干粉质量无 Skill Report，不虚构为实测库存。",
+          "evidence_refs": [
+            "current_macro.参数",
+            "remaining_semantic_dependency_view[source_macro_step=4].quantity_semantics",
+            "Multi_Channel_Solid_Weighing_Workstation_V1.固体进样-文件传参-机器人",
+            "Single_Channel_Solid_Weighing_Workstation_V1.固体进样"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 5,
+          "requirement_index": 0,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 26,
+          "workstation": "多通道固体称量工作站_V1",
+          "operation": "固体进样-文件传参-机器人",
+          "parameter": "上传文件（加样量列，单位 g）",
+          "reason": "10 mg 为 Research 规定的 XRD 分样 target_dose，属 scientific_input_setpoint；真源称量站以文件传参加样量(g)下发，0.010 g 落在 [0,50] g 范围，料罐号全局统一取 1",
+          "evidence_refs": [
+            "current_macro.参数",
+            "Multi_Channel_Solid_Weighing_Workstation_V1.固体进样-文件传参-机器人.上传文件"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 5,
+          "requirement_index": 1,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 28,
+          "workstation": "移液平台_5ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "原液用量",
+          "reason": "4.50 mL 无水乙醇及总液量≥4.0 mL 为 XRD 滴液制样强约束输入；4.50 mL 超出 1ml 平台单液 3 mL 上限，故绑定 5ml 平台 2号原液瓶（无水乙醇，前缀已建立槽位），单次 4.50 mL ≤5 mL 单次上限且 ≤30 mL 总量上限",
+          "evidence_refs": [
+            "current_macro.参数",
+            "XRD_V1.整体流程约束.测试溶液体积校验",
+            "Liquid_Handling_Station_5ml_V1.加液_物料绑定.原液用量"
+          ],
+          "requires_scientific_review": false
+        }
+      ],
+      "batch_plan": [
+        {
+          "batch_id": "batch_002",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_coprecipitation_feed",
+          "material_identity_id": "nife_ldh_suspension",
+          "research_material_identity_id": "nife_ldh_suspension",
+          "is_root_batch": true,
+          "research_material_identity": "Ni(NO3)2/Fe(NO3)3 混合前驱体、NaOH、Na2CO3和去离子水",
+          "research_source_refs": [
+            {
+              "source_path": "macro_action_steps[1].参数",
+              "source_macro_step": 2,
+              "source_field": "参数",
+              "source_context": "先将两种金属盐原液与 2.50 mL 去离子水混合，在室温、600 rpm 下搅拌 5 min；加入 0.30 mL 0.50 mol/L Na2CO3 后继续搅拌 5 min。将 1.20 mL 1.0 mol/L NaOH 分成 12 个等体积批次",
+              "material_identity_id": "nife_ldh_suspension",
+              "quantity_scope": "total"
+            }
+          ],
+          "source_plan_steps": [
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "source_macro_steps": [
+            1,
+            2
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "material_transition:mt_002"
+          ],
+          "source_kind": "research",
+          "source_refs": [
+            "macro_step:2",
+            "plan_step:3"
+          ],
+          "calculation": "整批8.00 mL反应进料1→1进入共沉淀熟化，不建立数值库存",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_003",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_suspension_aged",
+          "material_identity_id": "nife_ldh_suspension",
+          "parent_batch_id": "batch_002",
+          "is_root_batch": false,
+          "transition_kind": "state_change",
+          "source_plan_steps": [
+            7,
+            8
+          ],
+          "source_macro_steps": [
+            2
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "macro_3_wash_pending"
+          ],
+          "source_kind": "derived",
+          "source_refs": [
+            "material_transition:mt_002"
+          ],
+          "calculation": "共沉淀+熟化后的整批悬浊液；宏观3洗涤为其唯一后续消费者",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_004",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_wet_precipitate",
+          "material_identity_id": "nife_ldh_wet",
+          "parent_batch_id": "batch_003",
+          "is_root_batch": false,
+          "transition_kind": "state_change",
+          "source_plan_steps": [
+            12,
+            14,
+            15,
+            17
+          ],
+          "source_macro_steps": [
+            3
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "macro_4_drying_pending"
+          ],
+          "source_kind": "device_operational",
+          "source_refs": [
+            "macro_step:3",
+            "material_transition:mt_003"
+          ],
+          "calculation": "batch_003 的 8.00 mL 熟化悬浊液整批完成固液分离、3 次水洗和 1 次乙醇洗，生成乙醇洗涤后的 NiFe LDH 湿沉淀；不推断干燥前质量或收率。",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_005",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_powder_mother_batch",
+          "material_identity_id": "nife_ldh_powder",
+          "parent_batch_id": "batch_004",
+          "is_root_batch": false,
+          "transition_kind": "state_change",
+          "source_plan_steps": [
+            19,
+            20
+          ],
+          "source_macro_steps": [
+            4
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "macro_5_xrd_aliquot_pending"
+          ],
+          "source_kind": "device_operational",
+          "source_refs": [
+            "material_transition:mt_004",
+            "macro_step:4"
+          ],
+          "calculation": "batch_004 湿沉淀整批经 60 ℃/720 min 干燥并室温冷却后转为干燥母批；不猜干燥收率，10 mg XRD 分样留作后续 target dose。",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_006",
+          "quantity_mode": "numeric_inventory",
+          "material_id": "nife_ldh_powder_xrd_aliquot",
+          "material_identity_id": "nife_ldh_powder",
+          "parent_batch_id": "batch_005",
+          "is_root_batch": false,
+          "transition_kind": "split_same_material",
+          "total_quantity": {
+            "value": 0.01,
+            "unit": "g"
+          },
+          "source_plan_steps": [
+            25,
+            26
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "material_transition:mt_006"
+          ],
+          "allocation": {
+            "material_transition:mt_006": {
+              "value": 0.01,
+              "unit": "g"
+            }
+          },
+          "source_kind": "derived",
+          "source_refs": [
+            "macro_step:5",
+            "material_transition:mt_005"
+          ],
+          "calculation": "10 mg = 0.010 g，由多通道固体称量工作站 target dose 设定",
+          "pooling_policy": "not_pooled"
+        },
+        {
+          "batch_id": "batch_007",
+          "quantity_mode": "whole_batch",
+          "material_id": "nife_ldh_xrd_suspension_ready",
+          "material_identity_id": "nife_ldh_xrd_suspension",
+          "parent_batch_id": "batch_006",
+          "is_root_batch": false,
+          "transition_kind": "state_change",
+          "source_plan_steps": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "consumer_ids": [
+            "macro_6_xrd_pending"
+          ],
+          "source_kind": "derived",
+          "source_refs": [
+            "macro_step:5",
+            "material_transition:mt_006"
+          ],
+          "calculation": "0.010 g 粉体 + 4.50 mL 无水乙醇整批形成悬浊液，总液量≥4.0 mL 由加液设定保证",
+          "pooling_policy": "not_pooled"
+        }
+      ],
+      "material_transitions": [
+        {
+          "transition_id": "mt_002",
+          "transition_kind": "state_change",
+          "parent_batch_ids": [
+            "batch_002"
+          ],
+          "child_batch_ids": [
+            "batch_003"
+          ],
+          "source_plan_steps": [
+            7,
+            8
+          ],
+          "source_macro_steps": [
+            2
+          ],
+          "quantity_basis": "whole_batch",
+          "before_material_state": "Ni/Fe/Na2CO3/水反应进料液",
+          "after_material_state": "熟化后的NiFe LDH共沉淀悬浊液",
+          "calculation_or_basis": "NaOH节拍加液触发室温共沉淀，随后720 min熟化；整批1→1转化，不猜收率"
+        },
+        {
+          "transition_id": "mt_003",
+          "transition_kind": "state_change",
+          "parent_batch_ids": [
+            "batch_003"
+          ],
+          "child_batch_ids": [
+            "batch_004"
+          ],
+          "source_plan_steps": [
+            12,
+            14,
+            15,
+            17
+          ],
+          "source_macro_steps": [
+            3
+          ],
+          "quantity_basis": "whole_batch",
+          "before_material_state": "进样瓶 1 中 8.00 mL 熟化 NiFe LDH 共沉淀悬浊液",
+          "after_material_state": "进样瓶 1 中经 3 次水洗和 1 次乙醇洗后的 NiFe LDH 湿沉淀",
+          "calculation_or_basis": "整批纯化处理；水洗液和乙醇按固定体积加入并去上清，不猜测湿固体质量或收率。"
+        },
+        {
+          "transition_id": "mt_004",
+          "transition_kind": "state_change",
+          "parent_batch_ids": [
+            "batch_004"
+          ],
+          "child_batch_ids": [
+            "batch_005"
+          ],
+          "source_plan_steps": [
+            19,
+            20
+          ],
+          "source_macro_steps": [
+            4
+          ],
+          "quantity_basis": "whole_batch",
+          "before_material_state": "乙醇洗涤后的 NiFe LDH 湿沉淀，保留于进样瓶1",
+          "after_material_state": "干燥均化后的未反应 NiFe LDH 母批粉体，密封保存于进样瓶1",
+          "calculation_or_basis": "低温干燥+室温静置冷却将湿沉淀整批转为干燥母批；whole_batch 不填数值 edge，未知收率不猜测。"
+        },
+        {
+          "transition_id": "mt_005",
+          "transition_kind": "split_same_material",
+          "parent_batch_ids": [
+            "batch_005"
+          ],
+          "child_batch_ids": [
+            "batch_006"
+          ],
+          "source_plan_steps": [
+            25,
+            26
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "quantity_basis": "conserved_inventory",
+          "input_allocations": [
+            {
+              "batch_id": "batch_005",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "output_allocations": [
+            {
+              "batch_id": "batch_006",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "before_material_state": "干燥密封的未反应 NiFe LDH 母批粉体（进样瓶1，经料斗1）",
+          "after_material_state": "10 mg 未反应 NiFe LDH 分样粉体（进样瓶3）",
+          "calculation_or_basis": "经料斗的定量分样，target dose 0.010 g 与 Research 10 mg 一致；分样不猜母批实测总量，母批余量保持 batch_005 身份；batch_005 的 whole_batch 总消费者仍为前缀绑定的 macro_5_xrd_aliquot_pending，本 transition 的分样扣减仅在 ledger 以对账分录呈现，不追加 batch 级第二消费者"
+        },
+        {
+          "transition_id": "mt_006",
+          "transition_kind": "state_change",
+          "parent_batch_ids": [
+            "batch_006"
+          ],
+          "child_batch_ids": [
+            "batch_007"
+          ],
+          "source_plan_steps": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "source_macro_steps": [
+            5
+          ],
+          "quantity_basis": "whole_batch",
+          "input_allocations": [
+            {
+              "batch_id": "batch_006",
+              "quantity": {
+                "value": 0.01,
+                "unit": "g"
+              }
+            }
+          ],
+          "output_allocations": [
+            {
+              "batch_id": "batch_007",
+              "quantity": {
+                "value": 4.5,
+                "unit": "mL"
+              }
+            }
+          ],
+          "before_material_state": "10 mg 干粉分样（进样瓶3，无盖）",
+          "after_material_state": "均匀分散的未反应 NiFe LDH/乙醇悬浊液 4.50 mL（≥4.0 mL，进样瓶3，无盖）",
+          "calculation_or_basis": "加 4.50 mL 无水乙醇后经超声与搅拌整批转为悬浊液；液体总体积由加液设定保证满足 XRD ≥4.0 mL，不猜固含收率"
+        }
+      ],
+      "material_ledger": {
+        "entries": [
+          {
+            "entry_id": "material_002",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_coprecipitation_feed",
+            "batch_id": "batch_002",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "material_transition:mt_002",
+            "processing_step_refs": [
+              7,
+              8
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "macro_step:2",
+              "plan_step:3"
+            ],
+            "calculation": "整批进料在mt_002中被完全消费为悬浊液，无数值扣减"
+          },
+          {
+            "entry_id": "material_003",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_suspension_aged",
+            "batch_id": "batch_003",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "macro_3_wash_pending",
+            "processing_step_refs": [
+              7,
+              8
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_002"
+            ],
+            "calculation": "mt_002产出整批熟化悬浊液，保留给macro 3离心洗涤"
+          },
+          {
+            "entry_id": "material_004",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_wet_precipitate",
+            "batch_id": "batch_004",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "macro_4_drying_pending",
+            "processing_step_refs": [
+              12,
+              14,
+              15,
+              17
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_003"
+            ],
+            "calculation": "produced=whole_batch(batch_004)；reserved/consumed=0；下一总消费者为 macro_4_drying_pending；不填写未知湿固体质量。"
+          },
+          {
+            "entry_id": "material_005",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_powder_mother_batch",
+            "batch_id": "batch_005",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "macro_5_xrd_aliquot_pending",
+            "processing_step_refs": [
+              19,
+              20
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_004"
+            ],
+            "calculation": "whole_batch produced by mt_004；reserved for future XRD aliquot and later stages；无数值质量读数不入账。"
+          },
+          {
+            "entry_id": "material_005b",
+            "quantity_mode": "numeric_inventory",
+            "material_id": "nife_ldh_powder_mother_batch",
+            "batch_id": "batch_005",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "material_transition:mt_005",
+            "processing_step_refs": [
+              25,
+              26
+            ],
+            "consumed": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "reserved": {
+              "value": 0,
+              "unit": "g"
+            },
+            "source_kind": "derived",
+            "source_refs": [
+              "macro_step:5"
+            ],
+            "calculation": "从 whole_batch 母批定额分取 0.010 g；母批为 whole_batch 未登记总量，余额以 batch_005 身份继续封存，不虚构实测总量"
+          },
+          {
+            "entry_id": "material_006",
+            "quantity_mode": "numeric_inventory",
+            "material_id": "nife_ldh_powder_xrd_aliquot",
+            "batch_id": "batch_006",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "material_transition:mt_006",
+            "processing_step_refs": [
+              25,
+              26
+            ],
+            "produced": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "consumed": {
+              "value": 0.01,
+              "unit": "g"
+            },
+            "reserved": {
+              "value": 0,
+              "unit": "g"
+            },
+            "balance": {
+              "value": 0,
+              "unit": "g"
+            },
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_005"
+            ],
+            "calculation": "produced-consumed-reserved"
+          },
+          {
+            "entry_id": "material_007",
+            "quantity_mode": "whole_batch",
+            "material_id": "nife_ldh_xrd_suspension_ready",
+            "batch_id": "batch_007",
+            "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+            "consumer_id": "macro_6_xrd_pending",
+            "processing_step_refs": [
+              28,
+              29,
+              30,
+              31
+            ],
+            "source_kind": "derived",
+            "source_refs": [
+              "material_transition:mt_006"
+            ],
+            "calculation": "whole_batch：整批悬浊液移交 macro 6 XRD 观察，不拆分数值库存"
+          }
+        ]
+      },
+      "temporal_adaptations": [
+        {
+          "original_requirement": "1.20 mL NaOH分12批、12 min内每隔1 min加入一批，每批加入后保持600 rpm搅拌；随后25±2 ℃、600 rpm熟化720 min",
+          "execution_fidelity": "approximated",
+          "adaptation_schedule": "预搅拌5 min → 加Na2CO3后搅5 min → 移液平台0.10 mL小份加液 → 常温搅拌600 r/min批间节拍 → 重复12次 → 常温搅拌600 r/min连续720 min",
+          "requires_scientific_review": true
+        }
+      ],
+      "offline_handoffs": [],
+      "quantity_adjustments": [
+        {
+          "adjustment_id": "qa_001",
+          "kind": "split_transfer",
+          "before": {
+            "value": "whole_batch",
+            "unit": "batch_005 干燥母批粉体（进样瓶1）"
+          },
+          "after": {
+            "value": 0.01,
+            "unit": "g（10 mg XRD 分样子样，进样瓶3）"
+          },
+          "source_kind": "research",
+          "source_refs": [
+            "macro_step:5"
+          ],
+          "calculation": "Research 规定分取 10 mg = 0.010 g；仅分样，不改变母批总量语义，余量保持同一 batch_005 身份密封保存",
+          "preserved_invariants": [
+            "route",
+            "reagent_identity",
+            "sample_matrix"
+          ],
+          "route_changed": false,
+          "requires_scientific_review": false
+        }
+      ]
+    },
+    "candidate_sha256": "23ca3fbf6101a431f6d3caf14d872046a6dacc1452e104192f12d86b6d954c99",
+    "completed_chunk": {
+      "macro_id": "5",
+      "step_name": "feasibility_device_plan_chunk_5_of_6",
+      "fragment_digest": "sha256_e78f5b1c0e90d431bc10a31d6d3bbff941825a90b6f384517c370d19c5459c84",
+      "candidate_digest": "sha256_23ca3fbf6101a431f6d3caf14d872046a6dacc1452e104192f12d86b6d954c99",
+      "plan_step_count": 31
+    },
+    "loaded_workstation_skills": [
+      {
+        "station_code": "Container_storaging_Station_V1",
+        "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Container_storaging_Station_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Drying_Oven_V1",
+        "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Drying_Oven_V1\\SKILL.md"
+      },
+      {
+        "station_code": "General_Material_Station_V1",
+        "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\General_Material_Station_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Liquid_Handling_Station_1ml_V1",
+        "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_1ml_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Liquid_Handling_Station_5ml_V1",
+        "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_5ml_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+        "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Multi_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Purification_Workstation_V1",
+        "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Purification_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Room_Temperture_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+        "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Single_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Solid_Sample_Transfer_Workstation_V1",
+        "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Solid_Sample_Transfer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+        "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Spectroscopy_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Ultrasonic_Disperser_V1",
+        "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Ultrasonic_Disperser_V1\\SKILL.md"
+      },
+      {
+        "station_code": "XRD_V1",
+        "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Characterization-Module\\XRD_V1\\SKILL.md"
+      }
+    ],
+    "feasibility_accepted": false,
+    "workflow_json": {},
+    "dispatchable": false
+  }
+}

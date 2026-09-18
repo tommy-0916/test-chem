@@ -1,0 +1,101 @@
+[
+  {
+    "progress": 2,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_6_of_6",
+    "ok": false,
+    "error_code": "CONTRACT_VIOLATION",
+    "error_path": "reused_plan_steps",
+    "error_msg": "reused_plan_steps: prior physical step does not cover the current macro",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 2,
+    "attempt": 2,
+    "step": "feasibility_device_plan_chunk_6_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_1_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_2_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_3_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_4_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_5_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 1,
+    "step": "feasibility_device_plan_chunk_6_of_6",
+    "ok": false,
+    "error_code": "CONTRACT_VIOLATION",
+    "error_path": "reused_plan_steps",
+    "error_msg": "reused_plan_steps: prior physical step does not cover the current macro",
+    "failed_findings": [],
+    "finding_msgs": []
+  },
+  {
+    "progress": 3,
+    "attempt": 2,
+    "step": "feasibility_device_plan_chunk_6_of_6",
+    "ok": true,
+    "error_code": null,
+    "error_path": null,
+    "error_msg": "",
+    "failed_findings": [],
+    "finding_msgs": []
+  }
+]

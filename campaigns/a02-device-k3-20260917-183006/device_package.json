@@ -1,0 +1,962 @@
+{
+  "status": "failed",
+  "feedback_type": "device_internal_error",
+  "feedback_route": "device",
+  "failure_scope": "device_internal",
+  "failure_stage": "device_internal_error",
+  "exp_id": "single_device_20260917_183008_210871_4c55b398",
+  "iteration_id": 0,
+  "workflow_id": 0,
+  "device_snapshot_id": "ws_df1802c0c025",
+  "loaded_workstation_skills": [
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Container_storaging_Station_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Drying_Oven_V1\\SKILL.md"
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\General_Material_Station_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_1ml_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_5ml_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Multi_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Purification_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Room_Temperture_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Single_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Solid_Sample_Transfer_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Spectroscopy_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Ultrasonic_Disperser_V1\\SKILL.md"
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Characterization-Module\\XRD_V1\\SKILL.md"
+    }
+  ],
+  "skill_load_events": [
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_0_299e7384"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_1_81d14384"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_2_871be9cc"
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_3_0ea7ad31"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_a9c29aa8"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_4a35117c"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_2_07d55992"
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_c483751a"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_68b83c7d"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_2_b8fa6d81"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_eb7e7a3a"
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_0_ac78cd06"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_1_c4669b92"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_2_3015cf60"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_fba8f234"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_4_13b193ed"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_5_84d8ac75"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_5b61ccbd"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_8f5af863"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_2_6668a975"
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_3_7e4ab883"
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_4_2005b39f"
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": false,
+      "tool_call_id": "load_workstation_skill_5_992d51b4"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_6_acfdd677"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_7_d43474f6"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_8_25a53f73"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_8489dd91"
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_10f2641f"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_03bbb41d"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_81da2532"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_305e7acb"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_2_1aa491d8"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_e7acbb85"
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_a3845f1e"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_6f9316ba"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_7c52718b"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_1c74b5aa"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_2_1559b757"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_47a501a8"
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_4_28b30714"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_5_678259d0"
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_6_4a22a6e2"
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_7_0446e862"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_8_59213818"
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_78eb956e"
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_8d97c6d7"
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_0c7ac8ec"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_0617aa0e"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_e6808ffb"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_3ef854e4"
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_7095a35a"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_7f16756b"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_2_291b5eef"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_b79b8151"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "format_retry",
+      "cached": true
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_b000d924"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_1_8969189a"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_2_798b4ddd"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_3_a359e7ad"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_4_ec37f4b6"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_5_a980f3f4"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "candidate_reference",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+      "origin": "selected_context",
+      "cached": true
+    },
+    {
+      "station_code": "XRD_V1",
+      "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+      "origin": "tool",
+      "cached": true,
+      "tool_call_id": "load_workstation_skill_0_c0d09b33"
+    }
+  ],
+  "feasibility_accepted": false,
+  "checkpoints": {
+    "version": 1,
+    "run_id": "01b2263b4e254001a69d690d7c44030b",
+    "directory": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c\\01b2263b4e254001a69d690d7c44030b",
+    "binding_sha256": "fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c",
+    "binding": {
+      "research_handoff_sha256": "000de5da3bfac0b778d4c017876cb940233b1c0d5a68b0164e9de869a5628fc7",
+      "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+      "contract_version": "v2",
+      "semantic_analysis_enabled": true,
+      "feasibility_mode": "",
+      "fragment_contract_sha256": "a2209c914406c8fd0002729d28923cd826ff495478ef62422c5c43a814143f7d",
+      "implementation_sha256": "b6347f5bb56fafac644a0a26993fc6d97cb2471fad3970d8c35f544ed0310114",
+      "planning_model": {
+        "adapter": "utils.llm_factory.CodexResponsesModel",
+        "backends": [
+          {
+            "adapter": "utils.llm_factory.CodexResponsesModel",
+            "model_name": "kimi-k3",
+            "reasoning_effort": "high",
+            "max_output_tokens": 32768,
+            "endpoint_host": "api.kimi.com",
+            "endpoint_config_sha256": "19bd69ccec294d9a1ecfb4ea237d3699f5477a2da13ca9ddd283e948593c49b7"
+          }
+        ],
+        "wire_api": "codex_responses",
+        "provider": "openai",
+        "feasibility_reasoning_effort": ""
+      }
+    },
+    "lifecycle_state": "active",
+    "terminal_status": "",
+    "dispatchable": false,
+    "latest": {
+      "stage": "feasibility_device_plan_chunk_5_of_6",
+      "path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c\\01b2263b4e254001a69d690d7c44030b\\feasibility_device_plan_chunk_5_of_6-a00014107f69f5908dd672b8f68229e05a0260684ce752b35ddcfa0eb2e11231-0.json"
+    },
+    "resumed_stages": []
+  },
+  "feasibility_certificate": {},
+  "workflow_txt": "",
+  "workflow_json": {},
+  "requires_scientific_review": false,
+  "error_package": {
+    "type": "device_internal_error",
+    "assessment_source": "single_device_agent_runtime",
+    "blocking_constraints": [
+      "PermissionDeniedError: Responses failure: {\"error\":{\"message\":\"You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?[REDACTED]\",\"type\":\"access_terminated_error\"},\"http_status\":403,\"max_output_tokens\":32768,\"model\":\"kimi-k3\",\"phase\":\"request\",\"schema_version\":1}"
+    ],
+    "message": "Device Agent 在生成或验证工作流时发生运行错误；未产生可下发工作流，不得伪装为设备可行性结论。",
+    "llm_diagnostics": {
+      "schema_version": 1,
+      "model": "kimi-k3",
+      "phase": "request",
+      "max_output_tokens": 32768,
+      "http_status": 403,
+      "error": {
+        "message": "You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?[REDACTED]",
+        "type": "access_terminated_error"
+      }
+    },
+    "llm_failure_step": "feasibility_device_plan_chunk_6_of_6",
+    "llm_exception_type": "PermissionDeniedError",
+    "planning_progress": {
+      "failed_step": "feasibility_device_plan_chunk_6_of_6",
+      "failed_macro_id": "6",
+      "completed_chunks": 5,
+      "partial_candidate_dispatchable": false
+    }
+  }
+}

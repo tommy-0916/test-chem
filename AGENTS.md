@@ -4,7 +4,7 @@
 
 This repository contains a chemistry planning pipeline split into two Python agents. `reaserch_agent/` is the research-layer package, with workflow logic in `workflow.py`, state models in `state.py`, prompts in `prompts/`, retrieval tools in `tools/`, memory code in `memory/`, and tests named `test_*.py`. Keep the directory name `reaserch_agent` unchanged unless all imports are migrated.
 
-`device_agent/` maps research macro plans to workstation workflows. Its entry point is `run_from_research_state.py`, core mapper is `single_agent.py`, utilities are in `utils/`, and generated packages are under `device_agent/output/`. `chem_resources/` stores workstation truth sources, format references, and knowledge text. `structured_outputs/` contains paper extraction JSON. `chem-eval/` holds evaluation notes.
+`device_agent/` maps research macro plans to workstation workflows. Its entry point is `run_from_research_state.py`, core mapper is `single_agent.py`, utilities are in `utils/`, and generated packages are under `device_agent/output/`. `fragment_replay.py` replays recorded feasibility fragments offline, and `plan_repair.py` runs the persistent, permission-constrained local repair flow (RepairCase, repair context, deterministic patches) against a saved device state. `chem_resources/` stores workstation truth sources, format references, and knowledge text. `structured_outputs/` contains paper extraction JSON. `chem-eval/` holds evaluation notes.
 
 ## Build, Test, and Development Commands
 

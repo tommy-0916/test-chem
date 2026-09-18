@@ -41,14 +41,18 @@ try:
     from .feasibility_fragments import (
         FeasibilityFragmentError,
         build_fragment_instruction,
+        build_fragment_repair_instruction,
         build_fragment_request_context,
+        diagnose_fragment,
         merge_fragment,
     )
 except ImportError:
     from feasibility_fragments import (
         FeasibilityFragmentError,
         build_fragment_instruction,
+        build_fragment_repair_instruction,
         build_fragment_request_context,
+        diagnose_fragment,
         merge_fragment,
     )
 try:
@@ -175,9 +179,289 @@ def _safe_model_failure_text(exc: BaseException) -> str:
 
 DEFAULT_WORKFLOW_REPAIR_LIMIT = 8
 DEFAULT_STAGE1_PLAN_REPAIR_LIMIT = 3
+DEFAULT_STAGE1_PATCH_REPAIR_LIMIT = 3
 DEFAULT_JSON_FORMAT_RETRY_LIMIT = 2
 DEFAULT_SEMANTIC_CONTRACT_REPAIR_LIMIT = 2
 FEASIBILITY_CERTIFICATE_VERSION = "2.2"
+
+# Single source of truth for the file-dosing recipe contract.  The
+# deterministic audit, the repair-context builder and the patch validator all
+# consume this table so the prompt-side contract can never drift from the
+# validator-side contract.
+RECIPE_FIELD_CONTRACT: Dict[str, Any] = {
+    "contract_name": "file_dosing_recipe",
+    "bottle_keys": {"瓶号", "瓶编号", "目标瓶号", "bottle_id", "vial_id"},
+    "mass_keys": {"加样量(g)", "加样质量(g)", "质量(g)", "mass_g"},
+    "hopper_keys": {"料罐号", "料罐编号", "料斗号", "料斗编号", "hopper_id"},
+    "wrapper_keys": {"配方行", "逐瓶配方", "recipe_rows"},
+    "value_rules": {
+        "bottle": {"rule": "json_integer", "expected": "正整数 JSON number（不接受字符串）"},
+        "mass": {"rule": "json_number", "expected": ">0 的 JSON number（不接受字符串）"},
+        "hopper": {"rule": "json_integer", "expected": "正整数 JSON number（不接受字符串）"},
+    },
+}
+
+
+def _recipe_contract_fingerprint() -> str:
+    canonical: Dict[str, Any] = {}
+    for key, value in RECIPE_FIELD_CONTRACT.items():
+        if isinstance(value, (set, frozenset)):
+            canonical[key] = sorted(value)
+        elif isinstance(value, dict):
+            canonical[key] = {
+                inner: (
+                    sorted(nested)
+                    if isinstance(nested, (set, frozenset))
+                    else nested
+                )
+                for inner, nested in sorted(value.items())
+            }
+        else:
+            canonical[key] = value
+    return hashlib.sha256(
+        json.dumps(canonical, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:16]
+
+
+RECIPE_FIELD_CONTRACT_VERSION = _recipe_contract_fingerprint()
+
+
+def _recipe_normalized_key(value: Any) -> str:
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace("（", "(")
+        .replace("）", ")")
+        .replace(" ", "")
+    )
+
+
+def _recipe_field_value(row: Dict[str, Any], aliases: Set[str]) -> Any:
+    for key, value in row.items():
+        if _recipe_normalized_key(key) in aliases:
+            return value
+    return None
+
+
+def _recipe_positive_number(value: Any) -> bool:
+    # Recipe files require JSON numbers.  Strings such as "0.005",
+    # "按实测质量" or "运行时确定" are deliberately not coercible:
+    # accepting them here would only postpone the same ambiguity to
+    # XLSX materialization.
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+        and float(value) > 0
+    )
+
+
+def _recipe_positive_integer(value: Any) -> bool:
+    return _recipe_positive_number(value) and float(value).is_integer()
+
+
+def _recipe_structured_rows(
+    value: Any,
+) -> Tuple[bool, List[Tuple[Any, str]]]:
+    """Return whether a structured recipe was declared and its rows.
+
+    Rows may be nested under file/batch lists.  An explicit 配方行
+    collection is authoritative even when it is empty or contains a
+    non-object, so malformed structured data cannot fall back to a
+    permissive prose match.  Each row carries its real key path (relative
+    to the ``key_values`` root) so diagnostics can point at the exact
+    location a repair may touch.
+    """
+    contract = RECIPE_FIELD_CONTRACT
+    bottle_keys = contract["bottle_keys"]
+    mass_keys = contract["mass_keys"]
+    hopper_keys = contract["hopper_keys"]
+    recipe_row_keys = contract["wrapper_keys"]
+    declared = False
+    rows: List[Tuple[Any, str]] = []
+
+    def render_trail(trail: List[str]) -> str:
+        rendered = ""
+        for segment in trail:
+            if segment.startswith("["):
+                rendered += segment
+            else:
+                rendered += ("." if rendered else "") + segment
+        return rendered
+
+    def walk(node: Any, trail: List[str]) -> None:
+        nonlocal declared
+        if isinstance(node, list):
+            for index, item in enumerate(node):
+                walk(item, trail + [f"[{index}]"])
+            return
+        if not isinstance(node, dict):
+            return
+
+        normalized = {_recipe_normalized_key(key): item for key, item in node.items()}
+        categories = sum(
+            bool(set(normalized) & aliases)
+            for aliases in (bottle_keys, mass_keys, hopper_keys)
+        )
+        # Also support a direct row object without a 配方行 wrapper.
+        if categories >= 2:
+            declared = True
+            rows.append((node, render_trail(trail)))
+            return
+
+        for key, item in node.items():
+            if _recipe_normalized_key(key) in recipe_row_keys:
+                declared = True
+                if isinstance(item, list):
+                    for index, sub in enumerate(item):
+                        rows.append((sub, render_trail(trail + [key, f"[{index}]"])))
+                else:
+                    rows.append((item, render_trail(trail + [key])))
+            else:
+                walk(item, trail + [key])
+
+    walk(value, [])
+    return declared, rows
+
+
+def _recipe_valid_legacy_text(value: Any) -> bool:
+    """Conservative compatibility path for old prose-only plans."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    candidate_lines = [
+        part.strip()
+        for part in re.split(r"[；;\n]+", value)
+        if re.search(r"瓶(?:号)?\s*\d+|料(?:罐|斗)(?:号|编号)?", part)
+    ]
+    if not candidate_lines:
+        return False
+    number = r"(?:\d+(?:\.\d+)?|\.\d+)"
+    for line in candidate_lines:
+        if not re.search(r"瓶(?:号)?\s*[:=]?\s*\d+", line, re.I):
+            return False
+        if not re.search(
+            rf"加样(?:量|质量)(?:\s*\(g\))?\s*[:=]\s*{number}\s*g\b",
+            line,
+            re.I,
+        ):
+            return False
+        if not re.search(
+            r"料(?:罐|斗)(?:号|编号)?\s*[:=]\s*\d+", line, re.I
+        ):
+            return False
+    return True
+
+
+def recipe_step_is_file_dosing(step: Dict[str, Any]) -> bool:
+    station = str(step.get("workstation", ""))
+    intent = str(step.get("operation_intent", ""))
+    return (
+        "Multi_Channel_Solid_Weighing_Workstation_V1" in station
+        or "多通道固体称量工作站_V1" in station
+        or "文件传参" in intent
+    )
+
+
+def _recipe_field_key(row: Dict[str, Any], aliases: Set[str]) -> Optional[str]:
+    for key in row:
+        if _recipe_normalized_key(key) in aliases:
+            return key
+    return None
+
+
+def recipe_step_diagnostics(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Field-level recipe diagnostics for one file-dosing weighing step.
+
+    Returns None when the step satisfies the recipe contract.  Otherwise
+    returns every checkable failure at once (never short-circuits), each
+    annotated with the failed rule, the expected type and the actual
+    value/type, so a repair pass can patch precisely instead of regenerating
+    the whole plan.  The validator generates these diagnostics; no LLM
+    paraphrase is involved.
+    """
+    contract = RECIPE_FIELD_CONTRACT
+    declared, rows = _recipe_structured_rows(step.get("key_values", {}))
+    if declared:
+        checks: List[Dict[str, Any]] = []
+        if not rows:
+            checks.append(
+                {
+                    "field": "配方行",
+                    "path": "key_values.配方行",
+                    "rule": "non_empty_recipe_rows",
+                    "expected": "≥1 配方行",
+                    "actual": [],
+                    "actual_type": "list",
+                    "status": "failed",
+                }
+            )
+        for row, row_path in rows:
+            if not isinstance(row, dict):
+                checks.append(
+                    {
+                        "field": row_path,
+                        "path": f"key_values.{row_path}",
+                        "rule": "recipe_row_object",
+                        "expected": "object",
+                        "actual": row,
+                        "actual_type": type(row).__name__,
+                        "status": "failed",
+                    }
+                )
+                continue
+            for field_label, aliases_key, rule_key in (
+                ("瓶号", "bottle_keys", "bottle"),
+                ("加样量(g)", "mass_keys", "mass"),
+                ("料罐号", "hopper_keys", "hopper"),
+            ):
+                rule = contract["value_rules"][rule_key]["rule"]
+                actual_key = _recipe_field_key(row, contract[aliases_key])
+                actual = row.get(actual_key) if actual_key is not None else None
+                ok = (
+                    _recipe_positive_integer(actual)
+                    if rule == "json_integer"
+                    else _recipe_positive_number(actual)
+                )
+                field_path = f"key_values.{row_path}"
+                if actual_key is not None:
+                    field_path = f"{field_path}.{actual_key}"
+                checks.append(
+                    {
+                        "field": field_label,
+                        "path": field_path,
+                        "rule": rule,
+                        "expected": contract["value_rules"][rule_key]["expected"],
+                        "actual": actual,
+                        "actual_type": type(actual).__name__,
+                        "status": "passed" if ok else "failed",
+                    }
+                )
+        if rows and all(check["status"] == "passed" for check in checks):
+            return None
+    else:
+        notes = step.get("notes", "")
+        legacy_ok = _recipe_valid_legacy_text(notes)
+        if legacy_ok:
+            return None
+        checks = [
+            {
+                "field": "notes",
+                "path": "notes",
+                "rule": "legacy_text_recipe",
+                "expected": "逐行给出 瓶号/加样量(g)/料罐号 的散文配方",
+                "actual": notes if isinstance(notes, str) else type(notes).__name__,
+                "actual_type": type(notes).__name__,
+                "status": "passed" if legacy_ok else "failed",
+            }
+        ]
+    return {
+        "contract_version": RECIPE_FIELD_CONTRACT_VERSION,
+        "plan_step": step.get("plan_step"),
+        "path": f"device_plan[step={step.get('plan_step', '?')}].key_values",
+        "declared": declared,
+        "checks": checks,
+    }
 
 
 class DeviceConfigurationError(RuntimeError):
@@ -719,6 +1003,25 @@ def _needs_temporal_mapping_retry(result: Dict[str, Any], handoff: Dict[str, Any
         and re.search(r"fail|失败|不通过|未通过", _json_text(self_check))
         and re.search(r"addition|加液|滴加|搅拌|节拍|同步", _json_text(self_check))
     )
+
+
+def _device_chunk_upstream_retry_budget() -> int:
+    """Per-step native upstream retry budget for feasibility chunks.
+
+    Defaults to 1 (the historical behavior asserted by offline tests).  Flaky
+    relays that drop SSE streams mid-read (httpx RemoteProtocolError at phase
+    stream_read) burn the whole step on a single break; operators may raise
+    the budget via CHEM_DEVICE_CHUNK_UPSTREAM_RETRIES.  ``invoke_with_tools``
+    caps the value at 3, and retries only re-send the completed conversation,
+    never replay tools, so output semantics are unchanged.
+    """
+    raw = os.getenv("CHEM_DEVICE_CHUNK_UPSTREAM_RETRIES", "").strip()
+    if not raw:
+        return 1
+    try:
+        return max(0, min(3, int(raw)))
+    except ValueError:
+        return 1
 
 
 FEASIBILITY_PLAN_SYSTEM_PROMPT = """
@@ -10730,6 +11033,16 @@ class SingleDeviceAgent:
                 f"{_safe_model_failure_text(exc)}"
             )
             configuration_error = isinstance(exc, DeviceConfigurationError)
+            contract_error = (
+                {
+                    "code": getattr(exc, "code", "") or "CONTRACT_VIOLATION",
+                    "path": getattr(exc, "path", ""),
+                    "message": str(exc),
+                    "details": getattr(exc, "details", {}) or {},
+                }
+                if isinstance(exc, FeasibilityFragmentError)
+                else None
+            )
             if self._skill_session is not None:
                 self._sync_skill_load_state(state)
             state.add_error(f"SingleDeviceAgent failed: {error_text}")
@@ -10762,6 +11075,7 @@ class SingleDeviceAgent:
                         "Device Agent 在生成或验证工作流时发生运行错误；"
                         "未产生可下发工作流，不得伪装为设备可行性结论。"
                     ),
+                    **({"fragment_contract_error": contract_error} if contract_error else {}),
                 },
             }
             if diagnostics is not None:
@@ -11377,6 +11691,14 @@ class SingleDeviceAgent:
         extra_instruction: str,
     ) -> Dict[str, Any]:
         """Freeze every value that can change one fragment or its merge."""
+        # The set of workstation contracts loaded so far shapes the fragment;
+        # bind it so a resume with a different loaded set re-plans instead of
+        # reusing a chunk whose capability basis changed.  ``_skill_session``
+        # is absent on bare test agents, which means nothing was loaded.
+        skill_session = getattr(self, "_skill_session", None)
+        skill_manifest = (
+            skill_session.manifest() if skill_session is not None else []
+        )
         return {
             "schema_version": 1,
             "research_handoff_sha256": checkpoint_digest(
@@ -11386,6 +11708,7 @@ class SingleDeviceAgent:
                 self._active_semantic_analysis
             ),
             "device_truth_sha256": state.device_truth_sha256,
+            "skill_manifest_sha256": checkpoint_digest(skill_manifest),
             "macro_id": macro_id,
             "macro_ids": list(macro_ids),
             "chunk_index": index,
@@ -11628,18 +11951,41 @@ class SingleDeviceAgent:
                     # never mutates the accepted prefix or consumes a Research
                     # iteration. The scope also prevents nested checkpoint-key
                     # collisions if fragment planning gains sub-stages later.
+                    # Routing is by machine-readable error code: frozen-state
+                    # violations reject the whole candidate without repair;
+                    # every other contract error gets a bounded, constrained
+                    # format-repair directive that replaces (never stacks onto)
+                    # the previous one.
                     scope = (
                         store.scope(checkpoint_key)
                         if store is not None
                         else nullcontext()
                     )
                     with scope:
-                        for fragment_attempt in range(2):
+                        previous_repair_signature = ""
+                        for fragment_attempt in range(3):
                             fragment = self._invoke_feasibility_request(
                                 state,
                                 extra_instruction=instruction,
                                 step_name=step_name,
                                 fragment_context=fragment_context,
+                            )
+                            attempt_record: Dict[str, Any] = {
+                                "attempt": fragment_attempt + 1,
+                                "step_name": step_name,
+                                "current_macro_id": macro_id,
+                                "prefix_sha256": self._stable_digest(aggregate),
+                                "fragment_sha256": self._stable_digest(fragment),
+                            }
+                            if fragment_attempt == 0:
+                                # Self-contained replay evidence: the exact
+                                # accepted prefix, frozen matrix and macro id
+                                # namespace this chunk started from.
+                                attempt_record["prefix"] = copy.deepcopy(aggregate)
+                                attempt_record["matrix"] = copy.deepcopy(matrix)
+                                attempt_record["all_macro_ids"] = list(macro_ids)
+                            progress.setdefault("fragment_attempts", []).append(
+                                attempt_record
                             )
                             try:
                                 merged = merge_fragment(
@@ -11649,23 +11995,76 @@ class SingleDeviceAgent:
                                     macro_ids,
                                     matrix,
                                 )
+                                attempt_record["ok"] = True
+                                attempt_record["fragment"] = copy.deepcopy(fragment)
                                 break
                             except FeasibilityFragmentError as exc:
+                                code = getattr(exc, "code", "") or "CONTRACT_VIOLATION"
+                                attempt_record["ok"] = False
+                                attempt_record["error"] = {
+                                    "code": code,
+                                    "path": getattr(exc, "path", ""),
+                                    "message": str(exc),
+                                    "details": getattr(exc, "details", {}) or {},
+                                }
+                                attempt_record["fragment"] = copy.deepcopy(fragment)
                                 if fragment_attempt:
+                                    attempt_record["repair_directive"] = instruction
+                                try:
+                                    attempt_record["diagnostics"] = diagnose_fragment(
+                                        aggregate, fragment, macro_id, macro_ids, matrix
+                                    )
+                                except Exception as diagnostic_error:
+                                    attempt_record["diagnostics_error"] = type(
+                                        diagnostic_error
+                                    ).__name__
+                                if code == "FROZEN_MATRIX_MISMATCH":
+                                    # A frozen-state edit is never repaired in
+                                    # place: sibling content may already have
+                                    # drifted along with the altered matrix, so
+                                    # the whole candidate is rejected and the
+                                    # frozen prefix stays authoritative.
+                                    state.add_log(
+                                        f"{step_name}: frozen-state violation "
+                                        f"({code}); candidate rejected without "
+                                        f"scoped repair: {exc}"
+                                    )
                                     raise
-                                state.add_log(
-                                    f"{step_name}: fragment contract rejected; "
-                                    f"one scoped repair: {exc}"
+                                if fragment_attempt >= 2:
+                                    state.add_log(
+                                        f"{step_name}: fragment contract rejected "
+                                        f"({code}); format-repair budget "
+                                        f"exhausted: {exc}"
+                                    )
+                                    raise
+                                signature = (
+                                    f"{code}|{getattr(exc, 'path', '')}|{exc}"
                                 )
-                                instruction += (
-                                    "\n\n本块未通过合并合同，前序 candidate 未变。"
-                                    "只重写当前块："
-                                    + str(exc)
-                                    + "\n被拒绝的本块："
-                                    + json.dumps(
+                                if signature == previous_repair_signature:
+                                    state.add_log(
+                                        f"{step_name}: identical contract error "
+                                        f"repeated ({code}); stopping repairs "
+                                        "early instead of spending budget"
+                                    )
+                                    raise
+                                previous_repair_signature = signature
+                                state.add_log(
+                                    f"{step_name}: fragment contract rejected "
+                                    f"({code}); constrained repair "
+                                    f"{fragment_attempt + 1}/2: {exc}"
+                                )
+                                instruction = (
+                                    extra_instruction
+                                    + "\n\n"
+                                    + build_fragment_instruction(
+                                        aggregate, macro_id, macro_ids, matrix,
+                                    )
+                                    + "\n\n"
+                                    + build_fragment_repair_instruction(
                                         fragment,
-                                        ensure_ascii=False,
-                                        separators=(",", ":"),
+                                        exc,
+                                        attempt=fragment_attempt + 1,
+                                        max_attempts=2,
                                     )
                                 )
                     completed = {
@@ -13677,6 +14076,68 @@ class SingleDeviceAgent:
             unique.append(normalized)
         return unique
 
+    @staticmethod
+    def _repair_findings_are_patchable(findings: List[Dict[str, Any]]) -> bool:
+        """Only recipe-contract findings with field-level details go patch-first.
+
+        Anything else (route gaps, matrix drift, omissions, ...) needs
+        judgement and stays on the controlled regeneration path.
+        """
+        if not findings:
+            return False
+        for finding in findings:
+            if finding.get("type") != "missing_concrete_recipe_evidence":
+                return False
+            details = finding.get("details") or {}
+            if not details.get("checks"):
+                return False
+        return True
+
+    def _run_patch_first_repair(
+        self,
+        state: "SingleDeviceAgentState",
+        plan_result: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Try the persistent, permission-constrained local patch repair.
+
+        The repair case (contracts, baseline, draft, append-only log) is
+        program-owned and never model-writable.  On success the promoted
+        draft is returned; on any controlled stop this returns None and the
+        caller falls back to the full regeneration loop.
+        """
+        try:
+            import plan_repair
+        except ImportError:  # pragma: no cover - packaging fallback
+            return None
+        case_dir = None
+        checkpoint_store = getattr(self, "_checkpoint_store", None)
+        if checkpoint_store is not None:
+            case_dir = (
+                Path(checkpoint_store.root).parent
+                / "device_repair_cases"
+                / str(state.exp_id)
+            )
+        auditor = lambda candidate: self._plan_level_findings(state, candidate)
+        result = plan_repair.run_repair_loop(
+            plan_result,
+            auditor,
+            case_dir=case_dir,
+            patch_limit=DEFAULT_STAGE1_PATCH_REPAIR_LIMIT,
+        )
+        if result["status"] == "accepted":
+            state.add_log(
+                "Stage-1 patch-first repair accepted the candidate after "
+                f"{result['case']['budgets']['patches_used']} patch(es); "
+                f"case_id={result['case']['case_id']}"
+            )
+            return result["final_candidate"]
+        state.add_log(
+            "Stage-1 patch-first repair stopped "
+            f"({result['stop_reason']}); falling back to full regeneration; "
+            f"case_id={result['case']['case_id']}"
+        )
+        return None
+
     def _repair_plan_level_findings(
         self,
         state: SingleDeviceAgentState,
@@ -13694,6 +14155,12 @@ class SingleDeviceAgent:
             "success",
         }:
             return current
+
+        initial_findings = self._plan_level_findings(state, current)
+        if initial_findings and self._repair_findings_are_patchable(initial_findings):
+            patched = self._run_patch_first_repair(state, current)
+            if patched is not None:
+                return patched
 
         for candidate_number in range(1, DEFAULT_STAGE1_PLAN_REPAIR_LIMIT + 1):
             current = self._normalize_plan_handoff_steps(state, current)
@@ -13875,145 +14342,11 @@ class SingleDeviceAgent:
         A ratio or a future measured yield cannot be materialized into the
         XLSX required by the multi-channel solid-weighing workstation. Catch
         that under-specification at the plan boundary, where the LLM can still
-        choose and justify an exact batch mass.
+        choose and justify an exact batch mass.  Every finding carries the
+        validator-generated ``details`` (field path, failed rule, expected
+        type, actual value/type) so a repair pass can patch locally instead
+        of regenerating the whole plan.
         """
-        bottle_keys = {
-            "瓶号",
-            "瓶编号",
-            "目标瓶号",
-            "bottle_id",
-            "vial_id",
-        }
-        mass_keys = {
-            "加样量(g)",
-            "加样质量(g)",
-            "质量(g)",
-            "mass_g",
-        }
-        hopper_keys = {
-            "料罐号",
-            "料罐编号",
-            "料斗号",
-            "料斗编号",
-            "hopper_id",
-        }
-        recipe_row_keys = {
-            "配方行",
-            "逐瓶配方",
-            "recipe_rows",
-        }
-
-        def normalized_key(value: Any) -> str:
-            return (
-                str(value)
-                .strip()
-                .lower()
-                .replace("（", "(")
-                .replace("）", ")")
-                .replace(" ", "")
-            )
-
-        def field_value(row: Dict[str, Any], aliases: Set[str]) -> Any:
-            for key, value in row.items():
-                if normalized_key(key) in aliases:
-                    return value
-            return None
-
-        def positive_number(value: Any) -> bool:
-            # Recipe files require JSON numbers.  Strings such as "0.005",
-            # "按实测质量" or "运行时确定" are deliberately not coercible:
-            # accepting them here would only postpone the same ambiguity to
-            # XLSX materialization.
-            return (
-                not isinstance(value, bool)
-                and isinstance(value, (int, float))
-                and math.isfinite(float(value))
-                and float(value) > 0
-            )
-
-        def positive_integer(value: Any) -> bool:
-            return positive_number(value) and float(value).is_integer()
-
-        def structured_rows(value: Any) -> Tuple[bool, List[Any]]:
-            """Return whether a structured recipe was declared and its rows.
-
-            Rows may be nested under file/batch lists.  An explicit 配方行
-            collection is authoritative even when it is empty or contains a
-            non-object, so malformed structured data cannot fall back to a
-            permissive prose match.
-            """
-            declared = False
-            rows: List[Any] = []
-
-            def walk(node: Any) -> None:
-                nonlocal declared
-                if isinstance(node, list):
-                    for item in node:
-                        walk(item)
-                    return
-                if not isinstance(node, dict):
-                    return
-
-                normalized = {normalized_key(key): item for key, item in node.items()}
-                categories = sum(
-                    bool(set(normalized) & aliases)
-                    for aliases in (bottle_keys, mass_keys, hopper_keys)
-                )
-                # Also support a direct row object without a 配方行 wrapper.
-                if categories >= 2:
-                    declared = True
-                    rows.append(node)
-                    return
-
-                for key, item in node.items():
-                    if normalized_key(key) in recipe_row_keys:
-                        declared = True
-                        if isinstance(item, list):
-                            rows.extend(item)
-                        else:
-                            rows.append(item)
-                    else:
-                        walk(item)
-
-            walk(value)
-            return declared, rows
-
-        def valid_structured_row(row: Any) -> bool:
-            if not isinstance(row, dict):
-                return False
-            return (
-                positive_integer(field_value(row, bottle_keys))
-                and positive_number(field_value(row, mass_keys))
-                and positive_integer(field_value(row, hopper_keys))
-            )
-
-        def valid_legacy_text_recipe(value: Any) -> bool:
-            """Conservative compatibility path for old prose-only plans."""
-            if not isinstance(value, str) or not value.strip():
-                return False
-            candidate_lines = [
-                part.strip()
-                for part in re.split(r"[；;\n]+", value)
-                if re.search(r"瓶(?:号)?\s*\d+|料(?:罐|斗)(?:号|编号)?", part)
-            ]
-            if not candidate_lines:
-                return False
-            number = r"(?:\d+(?:\.\d+)?|\.\d+)"
-            for line in candidate_lines:
-                if not re.search(r"瓶(?:号)?\s*[:=]?\s*\d+", line, re.I):
-                    return False
-                if not re.search(
-                    rf"加样(?:量|质量)(?:\s*\(g\))?\s*[:=]\s*{number}\s*g\b",
-                    line,
-                    re.I,
-                ):
-                    return False
-                if not re.search(
-                    r"料(?:罐|斗)(?:号|编号)?\s*[:=]\s*\d+", line, re.I
-                ):
-                    return False
-            return True
-
         findings: List[Dict[str, Any]] = []
         for step in plan_result.get("device_plan") or []:
             if not isinstance(step, dict):
@@ -14026,13 +14359,8 @@ class SingleDeviceAgent:
                 or "文件传参" in intent
             ):
                 continue
-            declared, rows = structured_rows(step.get("key_values", {}))
-            if declared and rows and all(valid_structured_row(row) for row in rows):
-                # Structured rows are the executable source of truth.  Do not
-                # scan unrelated prose for bare words such as “运行时”: a note
-                # like “不使用运行时未知配方” is a guarantee, not a blocker.
-                continue
-            if not declared and valid_legacy_text_recipe(step.get("notes", "")):
+            details = recipe_step_diagnostics(step)
+            if details is None:
                 continue
             findings.append(
                 {
@@ -14043,6 +14371,7 @@ class SingleDeviceAgent:
                         "可物化的逐瓶配方。必须给出每行瓶号、确定加样量(g)和料罐号；"
                         "不能使用按实测质量/按比例/适量等运行时未知值。"
                     ),
+                    "details": details,
                 }
             )
         return findings
@@ -17276,7 +17605,7 @@ class SingleDeviceAgent:
                 if step_name == "feasibility_device_plan" or step_name.startswith("feasibility_device_plan_chunk_"):
                     retry_options = {
                         "retry_upstream_errors": True,
-                        "max_upstream_retries": 1,
+                        "max_upstream_retries": _device_chunk_upstream_retry_budget(),
                         "on_model_attempt": record_attempt,
                     }
                 response = invoke_with_tools(

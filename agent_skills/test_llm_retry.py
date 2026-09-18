@@ -12,6 +12,7 @@ from agent_skills.llm_retry import (
     call_with_gateway_retry,
     configured_gateway_retry_delay_seconds,
     is_retryable_gateway_error,
+    safe_gateway_error_code,
 )
 
 
@@ -80,6 +81,22 @@ def test_status_from_google_style_code_is_retryable():
     response_error.code = 429
 
     assert is_retryable_gateway_error(response_error)
+
+
+def test_relay_wrapped_upstream_error_is_retryable():
+    # Relays may wrap a dead stream as an SDK APIError whose ``code`` carries a
+    # wrapper-specific string (``stream_read_error``) while the transient
+    # class sits in ``type`` (``upstream_error``). The known-code extraction
+    # must look at both fields instead of trusting the first one.
+    error = RuntimeError("stream failed")
+    error.body = {
+        "error": {"code": "stream_read_error", "message": "stream_read_error", "type": "upstream_error"},
+        "event_type": "response.in_progress",
+        "http_status": 200,
+    }
+
+    assert is_retryable_gateway_error(error)
+    assert safe_gateway_error_code(error) in {"upstream_error", "stream_read_error"}
 
 
 def test_delay_cannot_be_overridden_by_gateway_retry_after_or_environment(monkeypatch):

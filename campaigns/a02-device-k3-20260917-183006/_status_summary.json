@@ -1,0 +1,16 @@
+{
+  "status": "manual_required",
+  "verification": {
+    "status": "failed",
+    "rounds_used": 0,
+    "max_rounds": 10,
+    "issues": [],
+    "locked_step_hashes": {}
+  },
+  "blocking_constraints": [
+    "device_plan[25] 文件传参固体称量缺少可物化的逐瓶配方。必须给出每行瓶号、确定加样量(g)和料罐号；不能使用按实测质量/按比例/适量等运行时未知值。"
+  ],
+  "repair": {
+    "message": "Stage-1 Device 同层计划修复候选已耗尽；等待人工修订，不得返回 Research。"
+  }
+}

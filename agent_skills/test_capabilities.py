@@ -203,7 +203,8 @@ class CapabilityProjectionTest(unittest.TestCase):
     def test_generated_references_match_runtime_projection(self):
         for tier, skill in TIER_SKILLS.items():
             path = SKILL_ROOT / skill / "references" / "capabilities.json"
-            self.assertEqual(json.loads(path.read_text()), project_device_context(self.index, tier))
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")),
+                             project_device_context(self.index, tier))
 
     def test_skill_instructions_are_loaded_fresh_without_changing_facts(self):
         with tempfile.TemporaryDirectory() as temporary:

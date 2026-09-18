@@ -248,11 +248,13 @@ LLM 配置读根目录 `.env`。研究层按 `REFINER_LLM_*` → `GEMINI_*` → 
 
 V2 默认按原始 macro step 顺序生成 `device_plan` 片段。每次请求仍读取完整 Research handoff、冻结语义合同、前序计划和完整设备能力目录，输出仅限当前块；Research 的数组位置和来源路径保持不变。一个物理动作可以关联多个 macro step，后续块通过 `reused_plan_steps` 引用它，避免重复执行。
 
-`device_agent/feasibility_fragments.py` 用确定规则合并全局步骤 ID、容器、原液、数量、批次和物料谱系：相同记录只复用，冲突拒绝；跨块 consumer 分配只能通过显式 `prior_record_updates` 追加，不得改动既有数量、样品或来源。样品矩阵绑定 Research。片段合同错误最多重写当前块一次；所有块完成后才运行原有全局审计、可行性签发、workflow 翻译及下发校验。中途失败保存已有计划供诊断，不会把它送入 workflow 翻译。
+`device_agent/feasibility_fragments.py` 用确定规则合并全局步骤 ID、容器、原液、数量、批次和物料谱系：相同记录只复用，冲突拒绝；跨块 consumer 分配只能通过显式 `prior_record_updates` 追加，不得改动既有数量、样品或来源，whole_batch 冲突报错携带 batch_id 与 existing/added consumer 双方身份。每个块的请求上下文携带程序生成的 `material_state_digest`：每条 batch_plan 的现有消费者与 whole_batch 事实句（"记录 B 的唯一总消费者已是 A，来自已接受的宏步骤 …，本轮不可修改"）、允许引用的正式 ID 清单（plan_step / batch / transition / macro），ID 从清单选取而非现场拼接。样品矩阵绑定 Research。片段合同错误按"首次生成 + 至多两次受约束格式修复"处理，相同错误签名提前终止；合同文本与校验器同源，漂移即 `CONTRACT_TEXT_DRIFT`。失败出口两条通道在合同中明示且互不替代：顶层 `blocking_constraints`（语义阻塞，自动升格）与终态 status + `error_package`（终止报告）。所有块完成后才运行原有全局审计、可行性签发、workflow 翻译及下发校验。中途失败保存已有计划供诊断，不会把它送入 workflow 翻译。
+
+`device_agent/fragment_replay.py` 离线复现：读取状态 JSON 的 `fragment_attempts`，在各自记录的干净前缀上重放每次尝试（`merge_fragment` + `diagnose_fragment`），并按块接受 fragment 重算前缀链、与下一块的记录前缀比对 digest——可区分"候选在干净状态上本就冲突"与"运行时前缀被污染"，无需模型与设备。合同修复耗尽抛出的 `FeasibilityFragmentError` 由程序归类为 `device_internal_error`（`failure_scope=device_internal`），error_package 附 `fragment_contract_error`（code/path/details），不会伪装成设备可行性结论。
 
 仅 Device 的 `feasibility_device_plan*` 原生工具会话开启 `upstream_error` 恢复：明确收到 `response.failed/status=failed/error.code=upstream_error` 时，重发当前模型请求，保留此前完成的工具消息。每个原生工具会话最多额外重试一次，不重跑已完成工具或 Research；SDK 和本地 Kimi 网关自身的自动重试均关闭，传输重试只由共享应用层负责，JSON/合同修复仍使用各自独立的业务预算。`incomplete`、协议错误、鉴权失败和额度终止等不会触发传输重试，失败输出不能成为成功候选。
 
-状态 JSON 的 `feasibility_progress` 保存候选轮次、当前宏步骤、已完成块和合并候选；`llm_request_attempts` 保存模型请求起止/失败元数据，`llm_diagnostics` 保留恢复过的错误与最终失败。错误包的 `planning_progress` 给出失败块及已完成块数。这些是运行中状态并随 CLI 最终状态保存，不是跨进程自动恢复接口，也不代表审批通过。
+状态 JSON 的 `feasibility_progress` 保存候选轮次、当前宏步骤、已完成块和合并候选；每个块的每次尝试在 `fragment_attempts` 中保留原始 fragment、机器可读错误（含 whole_batch 冲突双方的 batch_id 与 existing/added consumer 身份）、分层校验证据（`diagnose_fragment`，未执行的检查如实标记 `not_executed` 而非通过）与该块的干净前缀快照，供离线复现；`llm_request_attempts` 保存模型请求起止/失败元数据，`llm_diagnostics` 保留恢复过的错误与最终失败。错误包的 `planning_progress` 给出失败块及已完成块数。这些是运行中状态并随 CLI 最终状态保存，不是跨进程自动恢复接口，也不代表审批通过。
 
 `CHEM_DEVICE_FEASIBILITY_MODE=single` 可显式恢复整计划调用；`fragmented` 可显式开启分块；留空时 V2 分块、V1 保持整计划调用。拆分降低单次输出任务的规模，不保证第三方网关稳定，也不能据此把上游所有失败时长算作网络空闲。
 

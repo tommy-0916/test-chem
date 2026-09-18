@@ -1,0 +1,55 @@
+{
+  "findings": [
+    {
+      "type": "missing_concrete_recipe_evidence",
+      "plan_step": 25,
+      "message": "device_plan[25] 文件传参固体称量缺少可物化的逐瓶配方。必须给出每行瓶号、确定加样量(g)和料罐号；不能使用按实测质量/按比例/适量等运行时未知值。"
+    }
+  ],
+  "step25": {
+    "plan_step": 26,
+    "workstation": "多通道固体称量工作站_V1",
+    "objective": "向进样瓶3定量加入 10 mg（0.010 g）未反应 NiFe LDH 分样粉体",
+    "operation_intent": "固体进样-文件传参-机器人（定量分样）",
+    "key_values": {
+      "上传文件配方行": "瓶号1（对应容器编号3）, 加样量 0.010 g, 料罐号 1",
+      "加样量范围核对": "0.010∈[0,50] g",
+      "料罐来源": "料斗1中的 batch_005 母批粉体",
+      "目标容器状态": "进样瓶3 无盖、无溶液"
+    },
+    "containers": {
+      "容器类型": "进样瓶",
+      "容器编号": [
+        3
+      ]
+    },
+    "source_macro_step": 5,
+    "source_macro_steps": [
+      5
+    ],
+    "source_reagent_identity": "未反应 NiFe LDH 粉体和无水乙醇",
+    "source_material_identity_ids": [
+      "nife_ldh_powder"
+    ],
+    "material_event_kind": "split_same_material",
+    "material_transition_ids": [
+      "mt_005"
+    ],
+    "sample_lineage": {
+      "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+      "source_container": {
+        "container_type": "料斗",
+        "container_id": "1"
+      },
+      "destination_container": {
+        "container_type": "进样瓶",
+        "container_id": "3"
+      },
+      "transfer_reason": "aliquot",
+      "justification_evidence_refs": [
+        "qa_001"
+      ],
+      "trace_complete": true
+    }
+  }
+}

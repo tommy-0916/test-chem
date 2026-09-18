@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from device_agent.single_agent import SingleDeviceAgent, SingleDeviceAgentState
+from device_agent.feasibility_fragments import FeasibilityFragmentError
 from agent_skills.responses_stream import ResponsesTerminalError
 
 
@@ -282,3 +283,160 @@ def test_injected_device_model_emits_metadata_only_timing(tmp_path, monkeypatch)
     assert "PRIVATE_DEVICE_PROMPT" not in raw
     events = [json.loads(line) for line in raw.splitlines()]
     assert [event["status"] for event in events] == ["started", "success"]
+
+
+def test_frozen_matrix_violation_rejects_candidate_without_repair(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    tampered = fragment(11, 2, matrix)
+    tampered["sample_control_matrix"] = [{"sample_id": "A", "condition": "MUTATED"}]
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        fragment(7, 1, matrix), tampered,
+    ])
+    with pytest.raises(FeasibilityFragmentError, match="frozen Research matrix"):
+        agent._invoke_feasibility_plan(state)
+    names = [
+        call.kwargs["step_name"]
+        for call in agent._invoke_feasibility_request.call_args_list
+    ]
+    # No repair attempt: the whole candidate is rejected on frozen-state edit.
+    assert names == [
+        "feasibility_device_plan_chunk_1_of_2",
+        "feasibility_device_plan_chunk_2_of_2",
+    ]
+    progress = state.feasibility_progress[0]
+    assert progress["status"] == "failed"
+    assert [row["plan_step"] for row in progress["candidate"]["device_plan"]] == [1]
+    assert state.feasibility_accepted is False
+
+
+def test_contract_repair_uses_constrained_repair_instruction(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        fragment(7, 1, matrix),
+        fragment(11, 1, matrix),  # plan_step collision -> contract repair
+        fragment(11, 2, matrix),
+    ])
+    result = agent._invoke_feasibility_plan(state)
+    calls = agent._invoke_feasibility_request.call_args_list
+    repair_instruction = calls[2].kwargs["extra_instruction"]
+    assert "修复模式" in repair_instruction
+    assert "第 1/2 次修复" in repair_instruction
+    assert "global sequential integer" in repair_instruction
+    assert "禁止操作" in repair_instruction
+    assert "冻结" in repair_instruction
+    assert "待处理数据" in repair_instruction
+    assert "输出字段合同" in repair_instruction
+    assert len(result["device_plan"]) == 2
+
+
+def test_identical_contract_error_stops_repairs_early(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    bad = fragment(11, 1, matrix)
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        fragment(7, 1, matrix), bad, copy.deepcopy(bad),
+    ])
+    with pytest.raises(FeasibilityFragmentError, match="global sequential integer"):
+        agent._invoke_feasibility_plan(state)
+    # chunk 1 once + chunk 2 initial and first repair; the identical repeat
+    # error ends repairs without spending the remaining budget.
+    assert agent._invoke_feasibility_request.call_count == 3
+    assert state.feasibility_progress[0]["status"] == "failed"
+
+
+def test_format_repair_budget_is_bounded(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    wrong_step = fragment(11, 1, matrix)
+    unknown_field = fragment(11, 2, matrix)
+    unknown_field["parameter_disposition"] = {"note": "invented field"}
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        fragment(7, 1, matrix),
+        wrong_step,
+        unknown_field,
+        copy.deepcopy(unknown_field),
+    ])
+    with pytest.raises(FeasibilityFragmentError, match="unsupported/forbidden"):
+        agent._invoke_feasibility_plan(state)
+    # chunk 1 once + chunk 2 initial plus both bounded repairs, then stop.
+    assert agent._invoke_feasibility_request.call_count == 4
+    assert state.feasibility_progress[0]["status"] == "failed"
+
+
+def test_rejected_chunk_attempts_are_captured_for_offline_replay(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    bad = fragment(11, 1, matrix)
+    bad["device_feasible"] = True  # unknown field -> constrained repair
+    colliding = fragment(11, 1, matrix)  # plan_step 1 already used by chunk 1
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        fragment(7, 1, matrix), bad, colliding, fragment(11, 2, matrix),
+    ])
+    result = agent._invoke_feasibility_plan(state)
+    attempts = state.feasibility_progress[0]["fragment_attempts"]
+    assert [attempt["ok"] for attempt in attempts] == [True, False, False, True]
+    first = attempts[0]
+    assert first["prefix"] == {}  # chunk 1 starts from the empty prefix
+    assert first["step_name"] == "feasibility_device_plan_chunk_1_of_2"
+    rejected = attempts[1]
+    assert rejected["error"]["code"] == "UNKNOWN_FIELDS"
+    assert rejected["error"]["details"]["fields"] == ["device_feasible"]
+    assert rejected["fragment"] == bad  # raw response preserved for replay
+    assert rejected["prefix_sha256"] != first["prefix_sha256"]  # chunk 2 starts from the accepted chunk-1 prefix
+    assert "repair_directive" not in rejected  # initial attempt, nothing to repair yet
+    diagnostics = rejected["diagnostics"]
+    stages = {finding["stage"]: finding["status"] for finding in diagnostics["findings"]}
+    assert stages["fields"] == "failed"
+    assert stages["status"] == "passed"
+    repaired = attempts[2]
+    assert repaired["error"]["code"] == "CONTRACT_VIOLATION"
+    assert "修复模式" in repaired["repair_directive"]
+    # Evidence must survive state serialization (device_state.json round-trip).
+    json.dumps(state.feasibility_progress, ensure_ascii=False)
+    assert len(result["device_plan"]) == 2
+
+
+def test_failed_candidate_leaves_prefix_reusable(monkeypatch):
+    monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
+    agent, state = fixture_agent()
+    matrix = state.research_handoff["sample_control_matrix"]
+    original_handoff = copy.deepcopy(state.research_handoff)
+    root = {
+        "batch_id": "whole_root", "quantity_mode": "whole_batch",
+        "sample_id": "A", "is_root_batch": True,
+        "consumer_ids": ["op_a"], "source_macro_steps": [7], "source_plan_steps": [1],
+    }
+    chunk_one = dict(fragment(7, 1, matrix), batch_plan=[root])
+    conflict = {"table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_b"]}
+    bad_chunk_two = dict(fragment(11, 2, matrix), prior_record_updates=[conflict])
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        chunk_one, bad_chunk_two, copy.deepcopy(bad_chunk_two),
+    ])
+    with pytest.raises(FeasibilityFragmentError, match="at most one total consumer"):
+        agent._invoke_feasibility_plan(state)
+    progress = state.feasibility_progress[-1]
+    assert progress["status"] == "failed"
+    # Rejected chunk-2 attempts must not leak into the accepted prefix.
+    assert [row["plan_step"] for row in progress["candidate"]["device_plan"]] == [1]
+    assert progress["candidate"]["batch_plan"][0]["consumer_ids"] == ["op_a"]
+    rejected = [a for a in progress["fragment_attempts"] if not a["ok"]]
+    assert rejected[0]["error"]["code"] == "CONFLICTING_RECORD"
+    assert rejected[0]["error"]["details"]["existing_consumers"] == ["op_a"]
+    assert rejected[0]["error"]["details"]["added_consumers"] == ["op_b"]
+    # Business inputs untouched; the same state accepts a clean re-plan.
+    assert state.research_handoff == original_handoff
+    agent._invoke_feasibility_request = Mock(side_effect=[
+        dict(fragment(7, 1, matrix), batch_plan=[root]),
+        fragment(11, 2, matrix),
+    ])
+    result = agent._invoke_feasibility_plan(state)
+    assert [row["plan_step"] for row in result["device_plan"]] == [1, 2]
+    assert result["batch_plan"][0]["consumer_ids"] == ["op_a"]
+    assert state.feasibility_progress[-1]["status"] == "assembled_pending_global_audit"

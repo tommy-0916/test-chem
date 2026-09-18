@@ -1,0 +1,35 @@
+{
+  "run_id": "01b2263b4e254001a69d690d7c44030b",
+  "binding": {
+    "research_handoff_sha256": "000de5da3bfac0b778d4c017876cb940233b1c0d5a68b0164e9de869a5628fc7",
+    "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+    "contract_version": "v2",
+    "semantic_analysis_enabled": true,
+    "feasibility_mode": "",
+    "fragment_contract_sha256": "a2209c914406c8fd0002729d28923cd826ff495478ef62422c5c43a814143f7d",
+    "implementation_sha256": "b6347f5bb56fafac644a0a26993fc6d97cb2471fad3970d8c35f544ed0310114",
+    "planning_model": {
+      "adapter": "utils.llm_factory.CodexResponsesModel",
+      "backends": [
+        {
+          "adapter": "utils.llm_factory.CodexResponsesModel",
+          "model_name": "kimi-k3",
+          "reasoning_effort": "high",
+          "max_output_tokens": 32768,
+          "endpoint_host": "api.kimi.com",
+          "endpoint_config_sha256": "19bd69ccec294d9a1ecfb4ea237d3699f5477a2da13ca9ddd283e948593c49b7"
+        }
+      ],
+      "wire_api": "codex_responses",
+      "provider": "openai",
+      "feasibility_reasoning_effort": ""
+    }
+  },
+  "metadata": {
+    "exp_id": "single_device_20260917_183008_210871_4c55b398"
+  },
+  "lifecycle_state": "complete",
+  "terminal_status": "manual_required",
+  "dispatchable": false,
+  "completed_at": "2026-09-18T09:49:13.598606+00:00"
+}

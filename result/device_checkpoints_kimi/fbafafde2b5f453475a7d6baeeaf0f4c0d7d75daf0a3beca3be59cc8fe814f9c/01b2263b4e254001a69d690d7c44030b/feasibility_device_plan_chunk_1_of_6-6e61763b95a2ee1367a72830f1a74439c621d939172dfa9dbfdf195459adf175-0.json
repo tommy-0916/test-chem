@@ -1,0 +1,852 @@
+{
+  "version": 1,
+  "stage": "feasibility_device_plan_chunk_1_of_6",
+  "binding": {
+    "research_handoff_sha256": "000de5da3bfac0b778d4c017876cb940233b1c0d5a68b0164e9de869a5628fc7",
+    "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+    "contract_version": "v2",
+    "semantic_analysis_enabled": true,
+    "feasibility_mode": "",
+    "fragment_contract_sha256": "a2209c914406c8fd0002729d28923cd826ff495478ef62422c5c43a814143f7d",
+    "implementation_sha256": "b6347f5bb56fafac644a0a26993fc6d97cb2471fad3970d8c35f544ed0310114",
+    "planning_model": {
+      "adapter": "utils.llm_factory.CodexResponsesModel",
+      "backends": [
+        {
+          "adapter": "utils.llm_factory.CodexResponsesModel",
+          "model_name": "kimi-k3",
+          "reasoning_effort": "high",
+          "max_output_tokens": 32768,
+          "endpoint_host": "api.kimi.com",
+          "endpoint_config_sha256": "19bd69ccec294d9a1ecfb4ea237d3699f5477a2da13ca9ddd283e948593c49b7"
+        }
+      ],
+      "wire_api": "codex_responses",
+      "provider": "openai",
+      "feasibility_reasoning_effort": ""
+    }
+  },
+  "created_at": "2026-09-18T09:15:40.411313+00:00",
+  "payload_sha256": "7eeede617ce61f8786d795975b319dc363892645fc29e8faae0588d5f3f6cd8e",
+  "payload": {
+    "schema_version": 1,
+    "macro_id": "1",
+    "chunk_index": 1,
+    "chunk_count": 6,
+    "step_name": "feasibility_device_plan_chunk_1_of_6",
+    "fragment_binding": {
+      "schema_version": 1,
+      "research_handoff_sha256": "f1089edc24ccba7c3a83e648aaa163c2484cd0dfda3acd8dccc0715d6b0d7765",
+      "semantic_analysis_sha256": "2a0b779c69ab813ab70d353af09574ad586d790b58c0bb49abf9c066d2a749dc",
+      "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
+      "skill_manifest_sha256": "cb737bf260cc6395c229918fa6f78f58641159c1337087e15acc1c8f8ac0a8d9",
+      "macro_id": "1",
+      "macro_ids": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "chunk_index": 1,
+      "chunk_count": 6,
+      "sample_control_matrix_sha256": "59fd86b180692ee845184f5f6471dda3cfdc0e695f1d5a390df7e5fd5624400a",
+      "accepted_prefix_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "extra_instruction_sha256": "77221e757113cb5fa35baaaad867a6a27aa7874c2833eff9643874ecac4bd37f"
+    },
+    "fragment_binding_sha256": "af743109da15e31b74e0f2fae60e1639f332e74c00a8cb576e953908166b4dd7",
+    "prefix_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "fragment": {
+      "status": "device_plan",
+      "feasibility": {
+        "is_feasible": true,
+        "blocking_constraints": [],
+        "device_layer_adaptations": [
+          "选择进样瓶作为本 stage 统一样品容器：共沉淀熟化为室温（25±2 ℃）条件，低于常规物料站 80 ℃适用范围，后续搅拌、纯化、干燥、固体转移均可沿用同一容器身份。",
+          "在起始阶段按最大活跃库存一次取得 3 个进样瓶：1 号为共沉淀反应与母批瓶，2 号为后续 macro 3 纯化偶数配平瓶，3 号为后续 macro 5 XRD 分样瓶；避免后续无解释增加全局活跃容器数。常规物料站整体流程约束（输出进样瓶后必须紧接移液平台）由 plan_step 2 满足。",
+          "五种外部预配液体固定登记为移液平台_1ml_V1 本地 1–5 号原液瓶（1=Ni(NO3)2、2=Fe(NO3)3、3=去离子水、4=Na2CO3、5=NaOH），一瓶一液、编号顺序全程不变；本块只取用金属盐和去离子水，Na2CO3/NaOH 仅完成槽位绑定与数量保留，留给 macro 2 块按既定顺序与 12 批节拍加入。",
+          "Ni(NO3)2 3.00 mL 等于 1ml 平台单种溶液 3 mL 上限（合法贴上限，在 device_layer_adaptations 说明），由设备按单次≤1 mL 自动分次（3×1.00 mL）；Fe(NO3)3 1.00 mL、去离子水 2.50 mL（2×1.00+1×0.50 mL）均在范围内。",
+          "plan_step 3 的物理加液同时覆盖 macro 2 首段'两种金属盐原液与 2.50 mL 去离子水混合'，source_macro_steps=[1,2]；本块不提前执行预搅拌、Na2CO3 加入、NaOH 分批加入或熟化，后续 macro 2 块不得重复本次三种液体的加入。",
+          "1 号进样瓶开盖保留瓶盖=1：后续 macro 2 仍需在同一容器加 Na2CO3/NaOH，macro 3 离心前才关盖；2、3 号瓶保持有盖备用。",
+          "本块为 liquid_handling、非 core_chemistry（与冻结语义合同一致），不发生状态改变性化学转化，故不建立 root/derived 批次；反应进料 root 批次由 macro 2 块以 whole_batch 建立并回溯引用 plan_step 3。",
+          "针对上轮 finding[missing_concrete_recipe_evidence]：文件传参固体称量属于 macro 5 段，不在本块 device_plan 内；已在 container_plan 容器3 生命周期中预承诺确定配方行（文件瓶号1=实际容器3、加样量 0.010 g、料罐号 1），macro 5 块将以此确定常量物化上传文件，绝不使用按实测/适量/比例等运行时未知值。",
+          "device_validation_note 提及的总体积约束：单反应体系名义总液量 8.00 mL 在进样瓶容量与后续纯化工作站进样瓶输入范围内，无需拆批或等比例缩小。"
+        ]
+      },
+      "macro_plan_summary": "将 macro step 1 映射为：常规物料站一次取得 3 个进样瓶（1 号反应/母批瓶、2 号配平瓶、3 号 XRD 分样瓶）→ 移液平台_1ml_V1 打开 1 号瓶并保留瓶盖 → 按固定原液槽位向 1 号瓶加入 0.15 mol/L Ni(NO3)2 3.00 mL、0.15 mol/L Fe(NO3)3 1.00 mL 和去离子水 2.50 mL，形成 6.50 mL、Ni/Fe=3:1 的金属前驱体混合液；该加液物理步骤同时覆盖 macro 2 首段混合语义（source_macro_steps=[1,2]），但不提前执行搅拌/加碱/熟化；Na2CO3 0.30 mL 与 NaOH 1.20 mL 仅完成 4/5 号槽位绑定与数量保留，留待 macro 2 块按顺序与 12 批节拍执行。",
+      "device_self_check": {
+        "container_continuity": "pass：1、2、3 号均为进样瓶，容器类型全程一致；1 号为唯一反应/母批容器，2、3 号有盖备用。",
+        "transfer_minimality": "pass：本块 0 次换瓶、0 次样品转移；同一容器后续跨站移动不属于换瓶。",
+        "sample_container_lineage": "pass：SAMPLE_GRP_MA_S01_R00_01_01 从有盖空 1 号进样瓶开始，经开盖后形成 6.50 mL 金属盐前驱体混合液；无 source/destination 转移步。",
+        "macro_semantic_coverage": "pass：macro step 1 的五种外部预配液体均已绑定固定槽位；本块实际取用 Ni(NO3)2、Fe(NO3)3 和去离子水（3.00+1.00+2.50=6.50 mL，Ni/Fe=3:1），Na2CO3 与 NaOH 按 macro 2 顺序保留不提前加入；本块 liquid_handling、core_chemistry=false，与冻结语义合同一致。",
+        "material_conservation": "pass：3.00+1.00+2.50=6.50 mL 全部进入同一 1 号进样瓶，无分装、合并或损失；剩余 0.30 mL Na2CO3 与 1.20 mL NaOH 由 macro 2 块补足至名义总量 8.00 mL，不在本块静默改变总量。",
+        "volume_and_capacity": "pass：三种加液量均不超过 1ml 平台单种溶液 3 mL 上限（Ni(NO3)2 3.00 mL 为合法贴上限并分 3×1.00 mL）；6.50 mL 在进样瓶容量内；名义终点 8.00 mL 不超容器/纯化输入上限。",
+        "centrifuge_balancing": "not_applicable：本块无离心；2 号进样瓶已预留用于后续 macro 3 的偶数瓶配平。",
+        "addition_mode_preserved": "pass：macro 1 无滴加节拍；macro 2 的 Na2CO3 顺序加入与 NaOH 12 批节拍未被本块破坏。",
+        "workstation_constraints": "pass：常规物料站输出进样瓶后紧接移液平台（plan_step 2）；开盖输入有盖进样瓶、输出无盖，保留瓶盖=1（后续存在关盖）；加液输入无盖进样瓶、输出纯液态，均满足已读 SKILL 与 audit 约束。"
+      },
+      "device_plan": [
+        {
+          "plan_step": 1,
+          "workstation": "常规物料站",
+          "objective": "取得本 stage 全部所需进样瓶，建立不扩增的容器台账",
+          "operation_intent": "物料拿取",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 3,
+            "容器编号": [
+              1,
+              2,
+              3
+            ],
+            "容器分配": "1号=共沉淀反应/母批瓶；2号=后续纯化配平瓶；3号=后续XRD分样瓶"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2,
+              3
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "常规物料站整体流程约束：输出进样瓶后紧接移液平台（plan_step 2 满足）；三瓶取得时均为有盖空瓶；共沉淀为室温（<80 ℃）反应，使用进样瓶合法。"
+        },
+        {
+          "plan_step": 2,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开 1 号反应瓶，为金属盐前驱体加液及后续 macro 2 分段加料建立无盖输入状态",
+          "operation_intent": "开盖",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 1,
+            "容器编号": [
+              1
+            ],
+            "开盖的瓶号": [
+              {
+                "瓶号": "1"
+              }
+            ],
+            "保留瓶盖": 1
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "后续 macro 2 仍需在同一容器加 Na2CO3/NaOH，macro 3 离心前才关盖，故保留瓶盖=1；2、3 号瓶保持有盖备用。"
+        },
+        {
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "向 1 号反应瓶定量加入两种金属盐原液和去离子水，形成 Ni/Fe=3:1、6.50 mL 的共沉淀金属前驱体混合液",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 1,
+            "容器编号": [
+              1
+            ],
+            "加样方案": [
+              {
+                "加样瓶号": "1",
+                "1号原液瓶": {
+                  "配料名称": "0.15 mol/L Ni(NO3)2 水溶液",
+                  "原液用量": 3.0
+                }
+              },
+              {
+                "加样瓶号": "1",
+                "2号原液瓶": {
+                  "配料名称": "0.15 mol/L Fe(NO3)3 水溶液",
+                  "原液用量": 1.0
+                }
+              },
+              {
+                "加样瓶号": "1",
+                "3号原液瓶": {
+                  "配料名称": "去离子水",
+                  "原液用量": 2.5
+                }
+              }
+            ],
+            "分次移液": "Ni(NO3)2 3×1.00 mL、Fe(NO3)3 1×1.00 mL、去离子水 2×1.00 mL+1×0.50 mL（单次≤1 mL，由设备自动分次）",
+            "当前合计体积": "6.50 mL",
+            "Ni加入量": "0.45 mmol",
+            "Fe加入量": "0.15 mmol",
+            "Ni/Fe摩尔比": "3:1",
+            "输出样品状态": "纯液态金属盐前驱体混合液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1,
+            2
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "该物理加液步骤同时覆盖 macro 2 首段'两种金属盐原液与 2.50 mL 去离子水混合'；不提前执行搅拌、Na2CO3 加入、NaOH 分批加入或熟化，后续块不得重复本次三种液体加入。每种溶液总量≤3 mL，满足 1ml 站上限。"
+        }
+      ],
+      "container_plan": [
+        {
+          "容器编号": 1,
+          "容器类型": "进样瓶",
+          "用途": "共沉淀反应、熟化、洗涤、干燥及未反应 NiFe LDH 母批保存的主容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶 -> 开盖并保留瓶盖 -> 6.50 mL Ni/Fe/水金属前驱体混合液（本块终点） -> macro 2 加 Na2CO3/NaOH 并熟化为 8.00 mL 悬浊液 -> macro 3 关盖离心洗涤 -> macro 4 低温干燥并复封为未反应母批 -> macro 5 开盖分出 10 mg 后立即复封保存"
+        },
+        {
+          "容器编号": 2,
+          "容器类型": "进样瓶",
+          "用途": "后续 macro 3 纯化离心偶数瓶配平容器，不承载样品",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶备用（本块不使用） -> macro 3 开盖并加入配平液 -> 关盖随纯化离心使用 -> 配平任务完成后排空并退出本 stage 活跃库存"
+        },
+        {
+          "容器编号": 3,
+          "容器类型": "进样瓶",
+          "用途": "后续未反应母批 10 mg XRD 分样及乙醇悬浊液制样容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶备用（本块不使用） -> macro 5 开盖 -> 经固体样品转移工作站_V1（进样瓶1→料斗1）+ 多通道固体称量工作站_V1 文件传参定量分样（确定配方行：文件瓶号1=实际容器3、加样量 0.010 g、料罐号 1，即 CSV 行 '1,0.010,1'，不使用按实测/适量/比例等运行时未知值） -> 加入 4.50 mL 无水乙醇并完成超声/搅拌分散 -> 以无盖均匀悬浊液状态进入 XRD 观察输入边界"
+        }
+      ],
+      "reagent_slot_plan": [
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 1,
+          "名称": "Ni(NO3)2 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本块取用 3.00 mL（0.45 mmol Ni）",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 2,
+          "名称": "Fe(NO3)3 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本块取用 1.00 mL（0.15 mmol Fe）",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 3,
+          "名称": "去离子水",
+          "浓度或说明": "外部预配/供给；本块取用 2.50 mL；后续洗涤用水不占用该前驱体配料语义",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 4,
+          "名称": "Na2CO3 原液",
+          "浓度或说明": "0.50 mol/L 水溶液，外部预配并标定后装载；本块不取用，后续 macro 2 取用 0.30 mL",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 5,
+          "名称": "NaOH 原液",
+          "浓度或说明": "1.0 mol/L 水溶液，外部预配并标定后装载；本块不取用，后续 macro 2 按 12×0.10 mL 共取用 1.20 mL",
+          "来源": "macro step 1"
+        }
+      ],
+      "quantity_requirement_dispositions": [
+        {
+          "source_macro_step": 1,
+          "requirement_index": 0,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.1号原液瓶.原液用量",
+          "reason": "3.00 mL（0.45 mmol Ni）是 Research 固定科学输入，也是加液操作必填原液用量；3.00 mL 恰等于单种溶液 3 mL 上限（合法贴上限，已在 device_layer_adaptations 说明），按 3×1.00 mL 分次移液。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 1,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.2号原液瓶.原液用量",
+          "reason": "1.00 mL（0.15 mmol Fe）是 Research 固定科学输入，并与 0.45 mmol Ni 共同保持 Ni/Fe=3:1；在设备范围内，直接绑定。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 2,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.3号原液瓶.原液用量",
+          "reason": "2.50 mL 去离子水是 Research 固定的前驱体混合体积组成部分，也是加液必填参数；按 2×1.00 mL+1×0.50 mL 分次移液，≤3 mL 上限。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 3,
+          "decision": "retain_as_scientific_target",
+          "reason": "1.20 mL 1.0 mol/L NaOH 是固定科学输入，但 macro 2 明确要求分 12 批在预混与 Na2CO3 加入之后节拍加入；本块只完成 5 号原液瓶槽位绑定，实际取用留待 macro 2 块绑定下发，不提前取用。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 4,
+          "decision": "retain_as_scientific_target",
+          "reason": "0.30 mL 0.50 mol/L Na2CO3 是共沉淀顺序中的固定科学输入；本块只绑定 4 号原液瓶槽位，实际加入必须在 macro 2 金属盐预混之后执行。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 5,
+          "decision": "retain_as_scientific_target",
+          "reason": "8.00 mL 是全部反应液加入完成后的名义总体积；本块只形成 6.50 mL 金属前驱体液，剩余 0.30 mL Na2CO3 与 1.20 mL NaOH 由 macro 2 块补足，不在本块静默改变总量，也不拆批（8.00 mL 在进样瓶容量与后续纯化工作站进样瓶输入范围内）。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数",
+            "macro_action_steps[0].device_validation_note"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 6,
+          "decision": "retain_as_scientific_target",
+          "reason": "Ni/Fe=3:1 是固定化学计量约束，已由 0.45 mmol Ni 与 0.15 mmol Fe 的确定取用体积在本块保持，无需设备侧改写。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 7,
+          "decision": "retain_as_scientific_target",
+          "reason": "金属总量 0.60 mmol 是 Research 固定科学目标，由 3.00 mL 与 1.00 mL 两种 0.15 mol/L 金属盐原液的确定取用直接实现，不需要额外称量或运行时估计。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        }
+      ],
+      "device_capability_summary": {
+        "supported_containers": [
+          "进样瓶"
+        ],
+        "supported_workstations": [
+          "常规物料站",
+          "移液平台_1ml_V1"
+        ],
+        "not_supported": []
+      }
+    },
+    "fragment_sha256": "f1425a7adbd23ca8484bb01c1976ca51e71cc01311c59b05c0e77d608a6cf338",
+    "candidate": {
+      "device_plan": [
+        {
+          "plan_step": 1,
+          "workstation": "常规物料站",
+          "objective": "取得本 stage 全部所需进样瓶，建立不扩增的容器台账",
+          "operation_intent": "物料拿取",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 3,
+            "容器编号": [
+              1,
+              2,
+              3
+            ],
+            "容器分配": "1号=共沉淀反应/母批瓶；2号=后续纯化配平瓶；3号=后续XRD分样瓶"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1,
+              2,
+              3
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "常规物料站整体流程约束：输出进样瓶后紧接移液平台（plan_step 2 满足）；三瓶取得时均为有盖空瓶；共沉淀为室温（<80 ℃）反应，使用进样瓶合法。"
+        },
+        {
+          "plan_step": 2,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "打开 1 号反应瓶，为金属盐前驱体加液及后续 macro 2 分段加料建立无盖输入状态",
+          "operation_intent": "开盖",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 1,
+            "容器编号": [
+              1
+            ],
+            "开盖的瓶号": [
+              {
+                "瓶号": "1"
+              }
+            ],
+            "保留瓶盖": 1
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "后续 macro 2 仍需在同一容器加 Na2CO3/NaOH，macro 3 离心前才关盖，故保留瓶盖=1；2、3 号瓶保持有盖备用。"
+        },
+        {
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "objective": "向 1 号反应瓶定量加入两种金属盐原液和去离子水，形成 Ni/Fe=3:1、6.50 mL 的共沉淀金属前驱体混合液",
+          "operation_intent": "加液_物料绑定",
+          "key_values": {
+            "容器类型": "进样瓶",
+            "容器数量": 1,
+            "容器编号": [
+              1
+            ],
+            "加样方案": [
+              {
+                "加样瓶号": "1",
+                "1号原液瓶": {
+                  "配料名称": "0.15 mol/L Ni(NO3)2 水溶液",
+                  "原液用量": 3.0
+                }
+              },
+              {
+                "加样瓶号": "1",
+                "2号原液瓶": {
+                  "配料名称": "0.15 mol/L Fe(NO3)3 水溶液",
+                  "原液用量": 1.0
+                }
+              },
+              {
+                "加样瓶号": "1",
+                "3号原液瓶": {
+                  "配料名称": "去离子水",
+                  "原液用量": 2.5
+                }
+              }
+            ],
+            "分次移液": "Ni(NO3)2 3×1.00 mL、Fe(NO3)3 1×1.00 mL、去离子水 2×1.00 mL+1×0.50 mL（单次≤1 mL，由设备自动分次）",
+            "当前合计体积": "6.50 mL",
+            "Ni加入量": "0.45 mmol",
+            "Fe加入量": "0.15 mmol",
+            "Ni/Fe摩尔比": "3:1",
+            "输出样品状态": "纯液态金属盐前驱体混合液"
+          },
+          "containers": {
+            "容器类型": "进样瓶",
+            "容器编号": [
+              1
+            ]
+          },
+          "source_macro_step": 1,
+          "source_macro_steps": [
+            1,
+            2
+          ],
+          "source_reagent_identity": "外部预配并已装载的 Ni(NO3)2 水溶液、Fe(NO3)3 水溶液、NaOH 水溶液、Na2CO3 水溶液和去离子水",
+          "source_material_identity_ids": [
+            "di_water",
+            "fe_no3_3_stock",
+            "na2co3_stock",
+            "naoh_stock",
+            "ni_no3_2_stock"
+          ],
+          "material_event_kind": "none",
+          "material_transition_ids": [],
+          "notes": "该物理加液步骤同时覆盖 macro 2 首段'两种金属盐原液与 2.50 mL 去离子水混合'；不提前执行搅拌、Na2CO3 加入、NaOH 分批加入或熟化，后续块不得重复本次三种液体加入。每种溶液总量≤3 mL，满足 1ml 站上限。"
+        }
+      ],
+      "sample_control_matrix": [
+        {
+          "group_id": "GRP_MA_S01_R00_01",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "variables": {}
+        },
+        {
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01"
+        }
+      ],
+      "status": "device_plan",
+      "container_plan": [
+        {
+          "容器编号": 1,
+          "容器类型": "进样瓶",
+          "用途": "共沉淀反应、熟化、洗涤、干燥及未反应 NiFe LDH 母批保存的主容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶 -> 开盖并保留瓶盖 -> 6.50 mL Ni/Fe/水金属前驱体混合液（本块终点） -> macro 2 加 Na2CO3/NaOH 并熟化为 8.00 mL 悬浊液 -> macro 3 关盖离心洗涤 -> macro 4 低温干燥并复封为未反应母批 -> macro 5 开盖分出 10 mg 后立即复封保存"
+        },
+        {
+          "容器编号": 2,
+          "容器类型": "进样瓶",
+          "用途": "后续 macro 3 纯化离心偶数瓶配平容器，不承载样品",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶备用（本块不使用） -> macro 3 开盖并加入配平液 -> 关盖随纯化离心使用 -> 配平任务完成后排空并退出本 stage 活跃库存"
+        },
+        {
+          "容器编号": 3,
+          "容器类型": "进样瓶",
+          "用途": "后续未反应母批 10 mg XRD 分样及乙醇悬浊液制样容器",
+          "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+          "lifecycle": "有盖空瓶备用（本块不使用） -> macro 5 开盖 -> 经固体样品转移工作站_V1（进样瓶1→料斗1）+ 多通道固体称量工作站_V1 文件传参定量分样（确定配方行：文件瓶号1=实际容器3、加样量 0.010 g、料罐号 1，即 CSV 行 '1,0.010,1'，不使用按实测/适量/比例等运行时未知值） -> 加入 4.50 mL 无水乙醇并完成超声/搅拌分散 -> 以无盖均匀悬浊液状态进入 XRD 观察输入边界"
+        }
+      ],
+      "reagent_slot_plan": [
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 1,
+          "名称": "Ni(NO3)2 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本块取用 3.00 mL（0.45 mmol Ni）",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 2,
+          "名称": "Fe(NO3)3 原液",
+          "浓度或说明": "0.15 mol/L 水溶液，外部预配并标定后装载；本块取用 1.00 mL（0.15 mmol Fe）",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 3,
+          "名称": "去离子水",
+          "浓度或说明": "外部预配/供给；本块取用 2.50 mL；后续洗涤用水不占用该前驱体配料语义",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 4,
+          "名称": "Na2CO3 原液",
+          "浓度或说明": "0.50 mol/L 水溶液，外部预配并标定后装载；本块不取用，后续 macro 2 取用 0.30 mL",
+          "来源": "macro step 1"
+        },
+        {
+          "工作站": "移液平台_1ml_V1",
+          "原液编号": 5,
+          "名称": "NaOH 原液",
+          "浓度或说明": "1.0 mol/L 水溶液，外部预配并标定后装载；本块不取用，后续 macro 2 按 12×0.10 mL 共取用 1.20 mL",
+          "来源": "macro step 1"
+        }
+      ],
+      "quantity_requirement_dispositions": [
+        {
+          "source_macro_step": 1,
+          "requirement_index": 0,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.1号原液瓶.原液用量",
+          "reason": "3.00 mL（0.45 mmol Ni）是 Research 固定科学输入，也是加液操作必填原液用量；3.00 mL 恰等于单种溶液 3 mL 上限（合法贴上限，已在 device_layer_adaptations 说明），按 3×1.00 mL 分次移液。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 1,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.2号原液瓶.原液用量",
+          "reason": "1.00 mL（0.15 mmol Fe）是 Research 固定科学输入，并与 0.45 mmol Ni 共同保持 Ni/Fe=3:1；在设备范围内，直接绑定。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 2,
+          "decision": "bind_skill_setpoint",
+          "plan_step": 3,
+          "workstation": "移液平台_1ml_V1",
+          "operation": "加液_物料绑定",
+          "parameter": "加样方案.3号原液瓶.原液用量",
+          "reason": "2.50 mL 去离子水是 Research 固定的前驱体混合体积组成部分，也是加液必填参数；按 2×1.00 mL+1×0.50 mL 分次移液，≤3 mL 上限。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数",
+            "Liquid_Handling_Station_1ml_V1.加液_物料绑定.加样方案.N号原液瓶.原液用量"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 3,
+          "decision": "retain_as_scientific_target",
+          "reason": "1.20 mL 1.0 mol/L NaOH 是固定科学输入，但 macro 2 明确要求分 12 批在预混与 Na2CO3 加入之后节拍加入；本块只完成 5 号原液瓶槽位绑定，实际取用留待 macro 2 块绑定下发，不提前取用。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 4,
+          "decision": "retain_as_scientific_target",
+          "reason": "0.30 mL 0.50 mol/L Na2CO3 是共沉淀顺序中的固定科学输入；本块只绑定 4 号原液瓶槽位，实际加入必须在 macro 2 金属盐预混之后执行。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 5,
+          "decision": "retain_as_scientific_target",
+          "reason": "8.00 mL 是全部反应液加入完成后的名义总体积；本块只形成 6.50 mL 金属前驱体液，剩余 0.30 mL Na2CO3 与 1.20 mL NaOH 由 macro 2 块补足，不在本块静默改变总量，也不拆批（8.00 mL 在进样瓶容量与后续纯化工作站进样瓶输入范围内）。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数",
+            "macro_action_steps[0].device_validation_note"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 6,
+          "decision": "retain_as_scientific_target",
+          "reason": "Ni/Fe=3:1 是固定化学计量约束，已由 0.45 mmol Ni 与 0.15 mmol Fe 的确定取用体积在本块保持，无需设备侧改写。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数"
+          ],
+          "requires_scientific_review": false
+        },
+        {
+          "source_macro_step": 1,
+          "requirement_index": 7,
+          "decision": "retain_as_scientific_target",
+          "reason": "金属总量 0.60 mmol 是 Research 固定科学目标，由 3.00 mL 与 1.00 mL 两种 0.15 mol/L 金属盐原液的确定取用直接实现，不需要额外称量或运行时估计。",
+          "evidence_refs": [
+            "macro_action_steps[0].参数",
+            "macro_action_steps[1].参数"
+          ],
+          "requires_scientific_review": false
+        }
+      ],
+      "feasibility": {
+        "is_feasible": true,
+        "blocking_constraints": [],
+        "device_layer_adaptations": [
+          "选择进样瓶作为本 stage 统一样品容器：共沉淀熟化为室温（25±2 ℃）条件，低于常规物料站 80 ℃适用范围，后续搅拌、纯化、干燥、固体转移均可沿用同一容器身份。",
+          "在起始阶段按最大活跃库存一次取得 3 个进样瓶：1 号为共沉淀反应与母批瓶，2 号为后续 macro 3 纯化偶数配平瓶，3 号为后续 macro 5 XRD 分样瓶；避免后续无解释增加全局活跃容器数。常规物料站整体流程约束（输出进样瓶后必须紧接移液平台）由 plan_step 2 满足。",
+          "五种外部预配液体固定登记为移液平台_1ml_V1 本地 1–5 号原液瓶（1=Ni(NO3)2、2=Fe(NO3)3、3=去离子水、4=Na2CO3、5=NaOH），一瓶一液、编号顺序全程不变；本块只取用金属盐和去离子水，Na2CO3/NaOH 仅完成槽位绑定与数量保留，留给 macro 2 块按既定顺序与 12 批节拍加入。",
+          "Ni(NO3)2 3.00 mL 等于 1ml 平台单种溶液 3 mL 上限（合法贴上限，在 device_layer_adaptations 说明），由设备按单次≤1 mL 自动分次（3×1.00 mL）；Fe(NO3)3 1.00 mL、去离子水 2.50 mL（2×1.00+1×0.50 mL）均在范围内。",
+          "plan_step 3 的物理加液同时覆盖 macro 2 首段'两种金属盐原液与 2.50 mL 去离子水混合'，source_macro_steps=[1,2]；本块不提前执行预搅拌、Na2CO3 加入、NaOH 分批加入或熟化，后续 macro 2 块不得重复本次三种液体的加入。",
+          "1 号进样瓶开盖保留瓶盖=1：后续 macro 2 仍需在同一容器加 Na2CO3/NaOH，macro 3 离心前才关盖；2、3 号瓶保持有盖备用。",
+          "本块为 liquid_handling、非 core_chemistry（与冻结语义合同一致），不发生状态改变性化学转化，故不建立 root/derived 批次；反应进料 root 批次由 macro 2 块以 whole_batch 建立并回溯引用 plan_step 3。",
+          "针对上轮 finding[missing_concrete_recipe_evidence]：文件传参固体称量属于 macro 5 段，不在本块 device_plan 内；已在 container_plan 容器3 生命周期中预承诺确定配方行（文件瓶号1=实际容器3、加样量 0.010 g、料罐号 1），macro 5 块将以此确定常量物化上传文件，绝不使用按实测/适量/比例等运行时未知值。",
+          "device_validation_note 提及的总体积约束：单反应体系名义总液量 8.00 mL 在进样瓶容量与后续纯化工作站进样瓶输入范围内，无需拆批或等比例缩小。"
+        ]
+      },
+      "device_self_check": {
+        "container_continuity": "pass：1、2、3 号均为进样瓶，容器类型全程一致；1 号为唯一反应/母批容器，2、3 号有盖备用。",
+        "transfer_minimality": "pass：本块 0 次换瓶、0 次样品转移；同一容器后续跨站移动不属于换瓶。",
+        "sample_container_lineage": "pass：SAMPLE_GRP_MA_S01_R00_01_01 从有盖空 1 号进样瓶开始，经开盖后形成 6.50 mL 金属盐前驱体混合液；无 source/destination 转移步。",
+        "macro_semantic_coverage": "pass：macro step 1 的五种外部预配液体均已绑定固定槽位；本块实际取用 Ni(NO3)2、Fe(NO3)3 和去离子水（3.00+1.00+2.50=6.50 mL，Ni/Fe=3:1），Na2CO3 与 NaOH 按 macro 2 顺序保留不提前加入；本块 liquid_handling、core_chemistry=false，与冻结语义合同一致。",
+        "material_conservation": "pass：3.00+1.00+2.50=6.50 mL 全部进入同一 1 号进样瓶，无分装、合并或损失；剩余 0.30 mL Na2CO3 与 1.20 mL NaOH 由 macro 2 块补足至名义总量 8.00 mL，不在本块静默改变总量。",
+        "volume_and_capacity": "pass：三种加液量均不超过 1ml 平台单种溶液 3 mL 上限（Ni(NO3)2 3.00 mL 为合法贴上限并分 3×1.00 mL）；6.50 mL 在进样瓶容量内；名义终点 8.00 mL 不超容器/纯化输入上限。",
+        "centrifuge_balancing": "not_applicable：本块无离心；2 号进样瓶已预留用于后续 macro 3 的偶数瓶配平。",
+        "addition_mode_preserved": "pass：macro 1 无滴加节拍；macro 2 的 Na2CO3 顺序加入与 NaOH 12 批节拍未被本块破坏。",
+        "workstation_constraints": "pass：常规物料站输出进样瓶后紧接移液平台（plan_step 2）；开盖输入有盖进样瓶、输出无盖，保留瓶盖=1（后续存在关盖）；加液输入无盖进样瓶、输出纯液态，均满足已读 SKILL 与 audit 约束。"
+      },
+      "device_capability_summary": {
+        "supported_containers": [
+          "进样瓶"
+        ],
+        "supported_workstations": [
+          "常规物料站",
+          "移液平台_1ml_V1"
+        ],
+        "not_supported": []
+      },
+      "requires_scientific_review": false,
+      "macro_plan_summary": "将 macro step 1 映射为：常规物料站一次取得 3 个进样瓶（1 号反应/母批瓶、2 号配平瓶、3 号 XRD 分样瓶）→ 移液平台_1ml_V1 打开 1 号瓶并保留瓶盖 → 按固定原液槽位向 1 号瓶加入 0.15 mol/L Ni(NO3)2 3.00 mL、0.15 mol/L Fe(NO3)3 1.00 mL 和去离子水 2.50 mL，形成 6.50 mL、Ni/Fe=3:1 的金属前驱体混合液；该加液物理步骤同时覆盖 macro 2 首段混合语义（source_macro_steps=[1,2]），但不提前执行搅拌/加碱/熟化；Na2CO3 0.30 mL 与 NaOH 1.20 mL 仅完成 4/5 号槽位绑定与数量保留，留待 macro 2 块按顺序与 12 批节拍执行。",
+      "_feasibility_fragments": {
+        "completed_macro_ids": [
+          "1"
+        ]
+      }
+    },
+    "candidate_sha256": "55d9bc2a9cf1a390c7779a0d60cc3a1a679ecd118dea597950e3ad407b45b02f",
+    "completed_chunk": {
+      "macro_id": "1",
+      "step_name": "feasibility_device_plan_chunk_1_of_6",
+      "fragment_digest": "sha256_f1425a7adbd23ca8484bb01c1976ca51e71cc01311c59b05c0e77d608a6cf338",
+      "candidate_digest": "sha256_55d9bc2a9cf1a390c7779a0d60cc3a1a679ecd118dea597950e3ad407b45b02f",
+      "plan_step_count": 3
+    },
+    "loaded_workstation_skills": [
+      {
+        "station_code": "Container_storaging_Station_V1",
+        "source_sha256": "f540e369e70aed1c4b227122588cad3144ae57da6f338230ab30ad035f0e6d9d",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Container_storaging_Station_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Drying_Oven_V1",
+        "source_sha256": "b5c3682ecc31e56b972d8bf37c7cb9a04ff3b777a0bbc7245835012b3f72ec89",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Drying_Oven_V1\\SKILL.md"
+      },
+      {
+        "station_code": "General_Material_Station_V1",
+        "source_sha256": "c8a7876918c08e716088d6cfd7e6f06aed2bf438c0c79c5bcc7a6ae23029879f",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\General_Material_Station_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Liquid_Handling_Station_1ml_V1",
+        "source_sha256": "6c5eb9e7a3577b847759e02e8ebcfe72593d4efb3c9cee5fd2a5a81161a6b58f",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_1ml_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Liquid_Handling_Station_5ml_V1",
+        "source_sha256": "a658015287df5e7ba48a887df8ec9aed38409976c2d9af14bd2a85462dcacba9",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Liquid_Handling_Station_5ml_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+        "source_sha256": "99d99505a124e0a00fb17cb9624a396a39322105ea2f243cc0d2c56c6bffbf97",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Multi_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Purification_Workstation_V1",
+        "source_sha256": "5ff7c913704c2df84318b0e91d1e7bff7d371c6137e8c262c30cfce2aeaae4a9",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Purification_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+        "source_sha256": "606167a133f0597e146e3139e6db57902e1eb6c44f667aab3888237237bf4d21",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Room_Temperture_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+        "source_sha256": "55aadb000999e0fb62b8cfae686dd8b2d1749369ca38d621fc54f14670a50a6c",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Single_Channel_Solid_Weighing_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Solid_Sample_Transfer_Workstation_V1",
+        "source_sha256": "4c91a9475c88a6e7d3389fd7ebdbd19e7fbd605778339f55aa2febd3c075b319",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Solid_Sample_Transfer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+        "source_sha256": "cab9ddc890da0b928d7ee15767c4190f228d8946d3e9d42eb59972f4cb57d68d",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Spectroscopy_Magnetic_Stirrer_Workstation_V1\\SKILL.md"
+      },
+      {
+        "station_code": "Ultrasonic_Disperser_V1",
+        "source_sha256": "812dd03d53d7d4180c38c6b5eb9a41546ea33ed1f4cb7a8dca6885a1642266d7",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Synthesis-Module\\Ultrasonic_Disperser_V1\\SKILL.md"
+      },
+      {
+        "station_code": "XRD_V1",
+        "source_sha256": "4f0d8cc66a4afc3f669965b1c8e4d97f6898ea95ee9c230988dbe0451f8dd842",
+        "source_path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\chem_resources\\lab-design-all\\skills\\chemistry-experiment-workstation\\references-Characterization-Module\\XRD_V1\\SKILL.md"
+      }
+    ],
+    "feasibility_accepted": false,
+    "workflow_json": {},
+    "dispatchable": false
+  }
+}

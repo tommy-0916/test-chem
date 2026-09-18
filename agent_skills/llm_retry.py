@@ -29,8 +29,12 @@ _RETRYABLE_ERROR_CODES = {
     "upstream_error",
     "server_error",
     "internal_error",
+    "internal_server_error",
+    "stream_read_error",
     "overloaded",
     "service_unavailable",
+    "service_temporarily_unavailable",
+    "temporarily_unavailable",
     "gateway_error",
     "rate_limit_exceeded",
     "rate_limit_error",
@@ -215,17 +219,30 @@ def _diagnostic_error_code(exc: BaseException) -> str:
             return ""
         nested = payload.get("error")
         # OpenAI chat exceptions expose either ``body={code,type}`` or
-        # ``body={error:{code,type,message}}``. Inspect only the finite
+        # ``body={error:{code,type,message}}``; relays may also put the
+        # transient class in ``type`` while ``code`` carries a wrapper-specific
+        # string such as ``stream_read_error``. Inspect only the finite
         # code/type allowlist; never copy/log provider-controlled messages.
         candidates = [nested, payload]
+        typed: list[str] = []
+        coded: list[str] = []
         for candidate in candidates:
             if not isinstance(candidate, Mapping):
                 continue
-            for name in ("code", "type"):
+            for name, bucket in (("type", typed), ("code", coded)):
                 value = candidate.get(name)
                 if isinstance(value, str) and value.strip():
-                    return value.strip().lower()
-        return ""
+                    bucket.append(value.strip().lower())
+        known = _RETRYABLE_ERROR_CODES | _TERMINAL_ERROR_CODES | _SAFE_SEMANTIC_ERROR_CODES
+        known_values = [value for value in coded + typed if value in known]
+        # Terminal classes (quota/auth) outrank generic transient families so
+        # a 429 carrying ``code=insufficient_quota, type=rate_limit_error`` is
+        # never replayed; within a class, the explicit code outranks the type.
+        for group in (_TERMINAL_ERROR_CODES, _SAFE_SEMANTIC_ERROR_CODES, _RETRYABLE_ERROR_CODES):
+            for value in known_values:
+                if value in group:
+                    return value
+        return (coded + typed)[0] if (coded or typed) else ""
 
     direct_code = getattr(exc, "_chem_gateway_error_code", None)
     if isinstance(direct_code, str) and direct_code.strip():

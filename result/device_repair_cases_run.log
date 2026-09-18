@@ -1,0 +1,19 @@
+{
+  "device_state": "campaigns/a02-device-k3-20260917-183006/device_state_resume.json",
+  "progress_index": 3,
+  "status": "accepted",
+  "stop_reason": "accepted",
+  "draft_status": "accepted",
+  "patches_used": 1,
+  "rounds": 5,
+  "progress": {
+    "verified": [
+      "device_plan[step=25] 字段 瓶号 的 json_integer 错误已由授权补丁修复并复检通过",
+      "device_plan[step=25] 字段 加样量(g) 的 json_number 错误已由授权补丁修复并复检通过",
+      "device_plan[step=25] 字段 料罐号 的 json_integer 错误已由授权补丁修复并复检通过"
+    ],
+    "open_issues": []
+  },
+  "final_candidate_digest": "b829c040d81e65568222280337ed5358095c3eb10277b791f47ae582b5dd1206",
+  "baseline_digest": "0723b7a7af3943bb4b219d6204ea390f65a42c2f0ccfc006ca80a246aa30bc9c"
+}

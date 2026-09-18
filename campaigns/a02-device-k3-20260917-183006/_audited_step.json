@@ -1,0 +1,9 @@
+{
+  "validation": {
+    "status": "failed",
+    "rounds_used": 0,
+    "max_rounds": 10,
+    "issues": [],
+    "locked_step_hashes": {}
+  }
+}

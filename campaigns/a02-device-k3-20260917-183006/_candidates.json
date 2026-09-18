@@ -1,0 +1,125 @@
+[
+  {
+    "progress": 0,
+    "candidate_number": 1,
+    "status": "assembled_pending_global_audit",
+    "attempts_this_run": 0,
+    "plan_steps": 31,
+    "weighing_step": {
+      "plan_step": 26,
+      "objective": "向进样瓶3定量加入 10 mg（0.010 g）未反应 NiFe LDH 分样粉体",
+      "intent": "固体进样-文件传参-机器人（定量分样）",
+      "recipe_row": "瓶号1（对应容器编号3）, 加样量 0.010 g, 料罐号 1",
+      "amount_check": "0.010∈[0,50] g",
+      "all_key_values": {
+        "上传文件配方行": "瓶号1（对应容器编号3）, 加样量 0.010 g, 料罐号 1",
+        "加样量范围核对": "0.010∈[0,50] g",
+        "料罐来源": "料斗1中的 batch_005 母批粉体",
+        "目标容器状态": "进样瓶3 无盖、无溶液"
+      }
+    }
+  },
+  {
+    "progress": 1,
+    "candidate_number": 2,
+    "status": "assembled_pending_global_audit",
+    "attempts_this_run": 0,
+    "plan_steps": 30,
+    "weighing_step": {
+      "plan_step": 25,
+      "objective": "按确定文件配方向进样瓶 3 定量加入 10 mg 未反应 NiFe LDH 母批分样",
+      "intent": "固体进样-文件传参-机器人",
+      "recipe_row": null,
+      "amount_check": null,
+      "all_key_values": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [
+          3
+        ],
+        "上传文件": "Multi_Channel_Solid_Weighing_Workstation_V1_固体进样文件传参.xlsx",
+        "上传文件配方": [
+          {
+            "文件瓶号": "1",
+            "实际容器编号": "3",
+            "加样量_g": 0.01,
+            "料罐号": 1,
+            "csv_row": "1,0.010,1"
+          }
+        ],
+        "文件总行数": 1,
+        "料罐来源": "料斗/料罐 1 中的 SAMPLE_GRP_MA_S01_R00_01_01 母批粉体",
+        "范围核对": "0.010 g ∈ [0,50] g；料罐号 1 ∈ [1,30]"
+      }
+    }
+  },
+  {
+    "progress": 2,
+    "candidate_number": 3,
+    "status": "assembled_pending_global_audit",
+    "attempts_this_run": 2,
+    "plan_steps": 30,
+    "weighing_step": {
+      "plan_step": 25,
+      "objective": "按确定文件配方向进样瓶 3 定量加入 10 mg（0.010 g）未反应 NiFe LDH 母批分样",
+      "intent": "固体进样-文件传参-机器人",
+      "recipe_row": null,
+      "amount_check": null,
+      "all_key_values": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [
+          3
+        ],
+        "上传文件": "Multi_Channel_Solid_Weighing_Workstation_V1_固体进样文件传参.xlsx",
+        "上传文件逐瓶配方": [
+          {
+            "瓶号": "1",
+            "加样量_g": 0.01,
+            "料罐号": 1,
+            "对应实际容器编号": "3"
+          }
+        ],
+        "上传文件CSV内容": "瓶号,加样量(g),料罐号\n1,0.010,1",
+        "文件总行数": 1,
+        "料罐来源": "料斗/料罐 1 中的 SAMPLE_GRP_MA_S01_R00_01_01 母批粉体",
+        "范围核对": "0.010 g ∈ [0,50] g；料罐号 1 ∈ [1,30]；瓶号自 1 连续编号且总行数=容器数量=1"
+      }
+    }
+  },
+  {
+    "progress": 3,
+    "candidate_number": 4,
+    "status": "assembled_pending_global_audit",
+    "attempts_this_run": 7,
+    "plan_steps": 30,
+    "weighing_step": {
+      "plan_step": 25,
+      "objective": "按确定的文件传参配方向进样瓶 3 定量加入 10 mg，即 0.010 g 未反应 NiFe LDH 母批分样",
+      "intent": "固体进样-文件传参-机器人",
+      "recipe_row": null,
+      "amount_check": null,
+      "all_key_values": {
+        "容器类型": "进样瓶",
+        "容器数量": 1,
+        "容器编号": [
+          3
+        ],
+        "上传文件": "Multi_Channel_Solid_Weighing_Workstation_V1_固体进样文件传参.xlsx",
+        "上传文件逐瓶配方": [
+          {
+            "瓶号": "1",
+            "实际容器编号": "3",
+            "加样量(g)": "0.010",
+            "料罐号": "1"
+          }
+        ],
+        "上传文件CSV内容": "瓶号,加样量(g),料罐号\n1,0.010,1",
+        "文件总行数": 1,
+        "料罐号全局统一": 1,
+        "配方行映射": "文件瓶号 1 固定对应本次唯一目标容器：进样瓶 3",
+        "范围核对": "加样量 0.010 g ∈ [0,50] g；料罐号 1 ∈ [1,30]；文件总行数 1 = 容器数量 1"
+      }
+    }
+  }
+]

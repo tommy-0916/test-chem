@@ -12,10 +12,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from feasibility_fragments import (
     FeasibilityFragmentError,
+    build_fragment_field_contract,
     build_fragment_instruction,
+    build_fragment_repair_instruction,
     build_fragment_request_context,
     build_prefix_symbol_table,
+    diagnose_fragment,
     merge_fragment,
+    _ALLOWED,
+    _FORBIDDEN,
 )
 
 
@@ -514,3 +519,234 @@ def test_instruction_contains_compact_carryover_and_original_macro_ids():
     assert prefix == frozen
     with pytest.raises(FeasibilityFragmentError, match="Research order"):
         build_fragment_instruction(prefix, "30", MACROS, MATRIX)
+
+
+def test_unknown_output_fields_carry_machine_readable_code_and_details():
+    rejected = fragment(
+        10, 1, workstation_skill_reviewed=True, workstation_skill_used=["XPS"],
+    )
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, rejected, 10)
+    exc = caught.value
+    assert exc.code == "UNKNOWN_FIELDS"
+    assert exc.path == "fragment"
+    assert exc.details == {
+        "fields": ["workstation_skill_reviewed", "workstation_skill_used"]
+    }
+    assert "workstation_skill_reviewed" in str(exc)
+
+
+def test_dispatch_fields_report_forbidden_code():
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, fragment(10, 1, workflow_json={}), 10)
+    assert caught.value.code == "FORBIDDEN_FIELDS"
+    assert caught.value.details["fields"] == ["workflow_json"]
+
+
+def test_unknown_field_with_veto_semantics_is_never_stripped_to_pass():
+    # A field name may look like noise while carrying "do not execute" meaning.
+    # Unknown fields are rejected whole; nothing is filtered out to make the
+    # remaining object pass.
+    veto = fragment(10, 1, unverified_parameter_note="dose not confirmed")
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, veto, 10)
+    assert caught.value.code == "UNKNOWN_FIELDS"
+
+
+def test_frozen_matrix_mutation_has_dedicated_code_and_changes_nothing():
+    prefix = merge({}, fragment(10, 1), 10)
+    frozen = copy.deepcopy(prefix)
+    mutated = copy.deepcopy(MATRIX)
+    mutated[0]["variables"]["activation_minutes"] = 999  # nested drift
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge(prefix, fragment(20, 2, sample_control_matrix=mutated), 20)
+    assert caught.value.code == "FROZEN_MATRIX_MISMATCH"
+    assert caught.value.path == "sample_control_matrix"
+    assert prefix == frozen
+
+
+def test_field_contract_covers_exactly_the_enforced_sets():
+    contract = build_fragment_field_contract()
+    for field in sorted(_ALLOWED | _FORBIDDEN):
+        assert field in contract
+    assert "禁止自造字段" in contract
+    prefix = merge({}, fragment(10, 1), 10)
+    instruction = build_fragment_instruction(prefix, "20", MACROS, MATRIX)
+    assert contract in instruction
+    # The machine-readable context remains the trailing JSON payload.
+    context = json.loads(instruction[instruction.index('{"accepted_prefix_symbols"'):])
+    assert context["current_macro_id"] == "20"
+    assert context["first_new_plan_step"] == 2
+
+
+def test_repair_instruction_bounds_scope_and_marks_rejected_fragment_as_data():
+    rejected = fragment(10, 1, parameter_disposition={"note": "self-proof"})
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, rejected, 10)
+    repair = build_fragment_repair_instruction(
+        rejected, caught.value, attempt=1, max_attempts=2,
+    )
+    assert "修复模式" in repair and "第 1/2 次修复" in repair
+    assert "[UNKNOWN_FIELDS]" in repair and "parameter_disposition" in repair
+    assert "禁止操作" in repair and "冻结" in repair
+    assert "待处理数据" in repair
+    assert "self-proof" in repair  # rejected fragment embedded as data
+    assert build_fragment_field_contract() in repair
+
+
+def whole_batch_root(consumers):
+    return {
+        "batch_id": "whole_root", "quantity_mode": "whole_batch",
+        "material_identity_id": "frozen_identity", "sample_id": "NiFe_control",
+        "is_root_batch": True, "consumer_ids": consumers,
+        "source_macro_steps": [10], "source_plan_steps": [1],
+    }
+
+
+def test_whole_batch_conflict_error_carries_consumer_identities():
+    prefix = merge({}, fragment(10, 1, batch_plan=[whole_batch_root(["op_a"])]), 10)
+    update = {"table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_b"]}
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge(prefix, fragment(20, 2, prior_record_updates=[update]), 20)
+    assert caught.value.code == "CONFLICTING_RECORD"
+    assert caught.value.details == {
+        "batch_id": "whole_root",
+        "existing_consumers": ["op_a"],
+        "added_consumers": ["op_b"],
+    }
+
+
+def test_merge_rejection_never_mutates_prefix_for_each_error_class():
+    prefix = merge({}, fragment(10, 1), 10)
+    frozen_prefix = copy.deepcopy(prefix)
+    with pytest.raises(FeasibilityFragmentError, match="unsupported/forbidden"):
+        merge(prefix, fragment(20, 2, workstation_skill_reviewed=True), 20)
+    tampered = fragment(20, 2)
+    tampered["sample_control_matrix"] = [{"sample_id": "MUTATED"}]
+    with pytest.raises(FeasibilityFragmentError, match="frozen Research matrix"):
+        merge(prefix, tampered, 20)
+    with_root = merge(prefix, fragment(20, 2, batch_plan=[whole_batch_root([])]), 20)
+    conflict = {"table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_a", "op_b"]}
+    with pytest.raises(FeasibilityFragmentError, match="at most one total consumer"):
+        merge(with_root, fragment(30, 3, prior_record_updates=[conflict]), 30)
+    # Every rejection above must leave the accepted prefix byte-identical:
+    # failures are diagnostics, never partially applied business state.
+    assert prefix == frozen_prefix
+    assert with_root["batch_plan"][0]["consumer_ids"] == []
+
+
+def test_diagnose_fragment_reports_masked_consumer_conflict():
+    # An early field-contract failure must not hide a later consumer conflict:
+    # the merge raises on unknown fields before ever reaching _apply_updates.
+    prefix = merge({}, fragment(10, 1, batch_plan=[whole_batch_root(["op_a"])]), 10)
+    bad = fragment(20, 2, prior_record_updates=[{
+        "table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_b"],
+    }])
+    bad["workstation_skill_reviewed"] = True
+    report = diagnose_fragment(prefix, bad, "20", MACROS, MATRIX)
+    codes = {(finding["stage"], finding["code"]) for finding in report["findings"]}
+    assert ("fields", "UNKNOWN_FIELDS") in codes
+    conflict = [
+        finding for finding in report["findings"]
+        if finding["stage"] == "prior_record_updates" and finding["code"] == "CONFLICTING_RECORD"
+    ]
+    assert len(conflict) == 1
+    assert conflict[0]["details"] == {
+        "batch_id": "whole_root",
+        "existing_consumers": ["op_a"],
+        "added_consumers": ["op_b"],
+    }
+    stages = {finding["stage"]: finding["status"] for finding in report["findings"]}
+    assert stages["status"] == "passed"
+    assert stages["frozen_matrix"] == "passed"
+    # Checks that need the merged candidate are honestly reported, not "passed".
+    assert stages["references"] == "not_executed"
+
+
+def test_diagnose_fragment_never_marks_unexecuted_stages_as_passed():
+    report = diagnose_fragment({}, ["not", "an", "object"], "10", MACROS, MATRIX)
+    assert report["findings"][0]["stage"] == "fields"
+    assert report["findings"][0]["code"] == "NOT_AN_OBJECT"
+    assert all(finding["status"] == "not_executed" for finding in report["findings"][1:])
+
+
+def test_diagnose_fragment_reports_no_prior_updates_when_absent():
+    prefix = merge({}, fragment(10, 1), 10)
+    report = diagnose_fragment(prefix, fragment(20, 2), "20", MACROS, MATRIX)
+    stages = {finding["stage"]: finding["status"] for finding in report["findings"]}
+    assert stages["fields"] == "passed"
+    assert stages["status"] == "passed"
+    assert stages["frozen_matrix"] == "passed"
+    assert stages["prior_record_updates"] == "not_executed"
+
+
+def test_terminal_failure_exit_variants_merge_and_classify_without_model():
+    prefix = merge({}, fragment(10, 1), 10)
+    # 终止报告通道：终态 status + error_package。
+    exit_report = {
+        "status": "feasibility_error",
+        "feedback_type": "device_feasibility_error", "feedback_route": "device",
+        "failure_scope": "device", "failure_stage": "route_feasibility",
+        "error_package": {
+            "type": "device_feasibility_error",
+            "blocking_constraints": ["no legal route between stations"],
+            "message": "minimal hand-constructed legal failure result",
+        },
+    }
+    result = merge(prefix, exit_report, 20)
+    assert result["status"] == "feasibility_error"
+    assert result["error_package"]["type"] == "device_feasibility_error"
+    assert result["_feasibility_fragments"]["completed_macro_ids"] == ["10"]
+    # 语义阻塞通道：继续态 + 顶层 blocking_constraints，自动升格。
+    exit_blockers = dict(fragment(20, 2), blocking_constraints=["station cannot meet atmosphere"])
+    blocked = merge(prefix, exit_blockers, 20)
+    assert blocked["status"] == "feasibility_error"
+    assert blocked["blocking_constraints"] == ["station cannot meet atmosphere"]
+    assert blocked["_feasibility_fragments"]["completed_macro_ids"] == ["10"]
+    # 硬终止候选不可被后续块续跑。
+    with pytest.raises(FeasibilityFragmentError, match="hard-terminal"):
+        merge(result, fragment(20, 2), 20)
+
+
+def test_material_state_digest_states_whole_batch_facts_and_allowed_ids():
+    from feasibility_fragments import build_material_state_digest
+    root = whole_batch_root(["material_transition:dry"])
+    transition = {
+        "transition_id": "dry", "quantity_basis": "whole_batch",
+        "parent_batch_ids": ["whole_root"], "child_batch_ids": [],
+        "source_macro_steps": [10], "source_plan_steps": [1],
+    }
+    prefix = merge({}, fragment(10, 1, batch_plan=[root], material_transitions=[transition]), 10)
+    digest = build_material_state_digest(prefix, MACROS)
+    assert digest["allowed_reference_ids"] == {
+        "plan_steps": [1],
+        "batch_ids": ["whole_root"],
+        "transition_ids": ["dry"],
+        "macro_ids": MACROS,
+    }
+    entry = digest["batch_plan"][0]
+    assert entry["existing_consumers"] == ["material_transition:dry"]
+    assert "唯一总消费者已是 material_transition:dry" in entry["current_fact"]
+    assert "已接受的宏步骤 [10]" in entry["current_fact"]
+    # A whole_batch record without consumers offers exactly one new binding.
+    empty_digest = build_material_state_digest(
+        merge({}, fragment(10, 1, batch_plan=[whole_batch_root([])]), 10), MACROS
+    )
+    assert "当前没有消费者" in empty_digest["batch_plan"][0]["current_fact"]
+
+
+def test_fragment_request_context_includes_material_state_digest():
+    handoff = {
+        "task": {"query": "NiFe LDH", "current_stage": "synthesis"},
+        "macro_action_steps": [
+            {"步骤序号": identifier, "操作": f"operation-{identifier}", "sample_id": "S"}
+            for identifier in MACROS
+        ],
+        "device_agent_contract": {"contract_version": "v2"},
+    }
+    semantic = {"macro_step_assessments": [], "material_identity_registry": []}
+    context = build_fragment_request_context(handoff, semantic, {}, "10", MACROS, MATRIX)
+    digest = context["material_state_digest"]
+    assert digest["batch_plan"] == []
+    assert digest["allowed_reference_ids"]["plan_steps"] == []
+    assert digest["allowed_reference_ids"]["macro_ids"] == MACROS

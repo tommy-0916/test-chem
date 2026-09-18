@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -12,6 +13,7 @@ from unittest.mock import Mock, patch
 import httpx
 from openai import APIError, APIStatusError, AsyncOpenAI, OpenAI
 
+from agent_skills.llm_retry import RetryableGatewayError
 from agent_skills.responses_stream import (
     ResponsesProtocolError,
     ResponsesTerminalError,
@@ -85,10 +87,45 @@ def stream_headers(request_id="req_mock"):
             "x-private": HEADER_SECRET, "authorization": "Bearer " + BEARER_SECRET}
 
 
+LOOPBACK_HOSTS = frozenset({"localhost", "::1"})
+
+
+def _reject_external_network(address):
+    host = address[0] if isinstance(address, tuple) and address else None
+    if not (isinstance(host, str)
+            and (host in LOOPBACK_HOSTS or host.startswith("127."))):
+        raise AssertionError("Live networking is prohibited in this test")
+
+
 class DiagnosticAssertions:
     def install_guards(self):
-        for target in ("socket.socket.connect", "socket.socket.connect_ex", "socket.create_connection"):
-            guard = patch(target, side_effect=AssertionError("Live networking is prohibited in this test"))
+        # On Windows every new ProactorEventLoop builds its self-pipe through a
+        # real loopback socketpair fallback, so the guard must allow loopback
+        # connects while still rejecting external network access. Plain
+        # functions are used instead of MagicMock so descriptor binding keeps
+        # the socket instance available for the real call.
+        real_connect = socket.socket.connect
+        real_connect_ex = socket.socket.connect_ex
+        real_create_connection = socket.create_connection
+
+        def guarded_connect(connection, address, *args, **kwargs):
+            _reject_external_network(address)
+            return real_connect(connection, address, *args, **kwargs)
+
+        def guarded_connect_ex(connection, address, *args, **kwargs):
+            _reject_external_network(address)
+            return real_connect_ex(connection, address, *args, **kwargs)
+
+        def guarded_create_connection(address, *args, **kwargs):
+            _reject_external_network(address)
+            return real_create_connection(address, *args, **kwargs)
+
+        guards = (
+            patch("socket.socket.connect", new=guarded_connect),
+            patch("socket.socket.connect_ex", new=guarded_connect_ex),
+            patch("socket.create_connection", new=guarded_create_connection),
+        )
+        for guard in guards:
             guard.start()
             self.addCleanup(guard.stop)
         environment = patch.dict(os.environ, {"REFINER_RESPONSES_STREAM": "1"})
@@ -228,7 +265,7 @@ class FailureDiagnosticTransportTests(DiagnosticAssertions, unittest.TestCase):
             self.assertTrue(json.loads(request.content)["stream"])
             return httpx.Response(200, headers=stream_headers(), content=body)
 
-        with self.assertRaises(ResponsesTerminalError) as caught:
+        with self.assertRaises(RetryableGatewayError) as caught:
             self.invoke_mock(handler)
         diagnostic = self.assert_safe(caught.exception)
         self.assertEqual(diagnostic["event_type"], "response.failed")
@@ -341,7 +378,7 @@ class FailureDiagnosticTransportTests(DiagnosticAssertions, unittest.TestCase):
         self.assertEqual(diagnostic["response_status"], "in_progress")
 
     def test_diagnostic_getter_returns_independent_nested_copy(self):
-        with self.assertRaises(ResponsesTerminalError) as caught:
+        with self.assertRaises(RetryableGatewayError) as caught:
             self.invoke_mock(lambda _: httpx.Response(200, headers=stream_headers(),
                                                       content=sse(event("response.failed", provider_response()))))
         first = self.assert_safe(caught.exception)
@@ -370,7 +407,7 @@ class FailureDiagnosticTransportTests(DiagnosticAssertions, unittest.TestCase):
                 with OpenAI(api_key=FAKE_KEY, base_url="https://diagnostics.invalid/v1", max_retries=0,
                             http_client=httpx.Client(transport=httpx.MockTransport(handler))) as client:
                     model.root_client = client
-                    with self.assertRaises(ResponsesTerminalError) as caught:
+                    with self.assertRaises(RetryableGatewayError) as caught:
                         invoke_with_tools(model, [HumanMessage(content=INPUT_SECRET)], [], max_rounds=0)
                 diagnostic = self.assert_safe(caught.exception)
                 self.assertEqual(diagnostic["request_id"], "req_native")
@@ -395,7 +432,7 @@ class AsyncFailureDiagnosticTransportTests(DiagnosticAssertions, unittest.Isolat
             return httpx.Response(200, headers=stream_headers("req_async"),
                                   content=sse(event("response.failed", provider_response())))
 
-        with self.assertRaises(ResponsesTerminalError) as caught:
+        with self.assertRaises(RetryableGatewayError) as caught:
             await self.invoke_mock(handler)
         diagnostic = self.assert_safe(caught.exception)
         self.assertEqual(diagnostic["request_id"], "req_async")

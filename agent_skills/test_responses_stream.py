@@ -20,6 +20,7 @@ from agent_skills.responses_stream import (
     invoke_responses,
     invoke_responses_async,
 )
+from agent_skills.llm_retry import RetryableGatewayError
 
 
 def completed(text='{"ok":true}', **updates):
@@ -256,6 +257,119 @@ class ResponsesStreamTests(unittest.TestCase):
                 invoke_responses(client, {"model": "test", "input": "test"}).status,
                 "completed",
             )
+
+    def test_transient_midstream_error_event_is_retryable(self):
+        from agent_skills.llm_retry import RetryableGatewayError
+        stream = FakeStream([
+            {"type": "response.output_text.delta", "delta": "partial"},
+            {"type": "error", "error": {"code": "internal_server_error", "message": "Service temporarily unavailable"}},
+        ])
+        with self.assertRaises(RetryableGatewayError):
+            self.invoke(stream)
+        self.assertTrue(stream.closed)
+
+    def test_nontransient_midstream_error_event_stays_terminal(self):
+        stream = FakeStream([
+            {"type": "error", "error": {"code": "content_filter"}},
+        ])
+        with self.assertRaises(ResponsesTerminalError):
+            self.invoke(stream)
+        self.assertTrue(stream.closed)
+
+    def _invoke_compat(self, stream, **env):
+        with patch.dict(os.environ, {"REFINER_RESPONSES_ALLOW_RESTART": "1", **env}):
+            return self.invoke(stream)
+
+    @staticmethod
+    def _lifecycle(kind, rid, status="in_progress"):
+        return {"type": kind, "response": {"id": rid, "object": "response", "status": status}}
+
+    def test_compat_restart_at_created_boundary_returns_new_generation_only(self):
+        result = self._invoke_compat(FakeStream([
+            self._lifecycle("response.created", "A"),
+            {"type": "response.output_text.delta", "item_id": "item_a",
+             "response": {"id": "A", "status": "in_progress"}, "delta": "from-retired-A"},
+            self._lifecycle("response.created", "B"),
+            self._lifecycle("response.in_progress", "B"),
+            terminal(completed('{"generation":"B"}', id="B")),
+        ]))
+        payload = json.dumps(result, ensure_ascii=False)
+        self.assertEqual(result["output"][0]["content"][0]["text"], '{"generation":"B"}')
+        self.assertNotIn("from-retired-A", payload)
+
+    def test_compat_restart_at_in_progress_boundary_supports_multiple_generations(self):
+        result = self._invoke_compat(FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.in_progress", "B"),
+            self._lifecycle("response.in_progress", "C"),
+            terminal(completed('{"generation":"C"}', id="C")),
+        ]))
+        self.assertEqual(result["output"][0]["content"][0]["text"], '{"generation":"C"}')
+
+    def test_return_to_retired_id_is_interleaving_failure(self):
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.created", "B"),
+            self._lifecycle("response.in_progress", "A"),
+        ])
+        with patch.dict(os.environ, {"REFINER_RESPONSES_ALLOW_RESTART": "1"}):
+            with self.assertRaises(RetryableGatewayError):
+                self.invoke(stream)
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.created", "B"),
+            self._lifecycle("response.in_progress", "A"),
+        ])
+        with self.assertRaises(ResponsesProtocolError):
+            self.invoke(stream)
+
+    def test_completed_of_retired_id_is_never_accepted(self):
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.in_progress", "B"),
+            terminal(completed(id="A")),
+        ])
+        with patch.dict(os.environ, {"REFINER_RESPONSES_ALLOW_RESTART": "1"}):
+            with self.assertRaises(RetryableGatewayError):
+                self.invoke(stream)
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.in_progress", "B"),
+            terminal(completed(id="A")),
+        ])
+        with self.assertRaises(ResponsesProtocolError):
+            self.invoke(stream)
+
+    def test_restart_budget_is_enforced_per_connection(self):
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            self._lifecycle("response.created", "B"),
+            self._lifecycle("response.created", "C"),
+        ])
+        with patch.dict(os.environ, {"REFINER_RESPONSES_ALLOW_RESTART": "1", "REFINER_RESPONSES_MAX_RESTARTS": "1"}):
+            with self.assertRaises(RetryableGatewayError) as caught:
+                self.invoke(stream)
+        self.assertIn("restart budget", str(caught.exception))
+
+    def test_item_ids_are_not_response_ids(self):
+        result = self._invoke_compat(FakeStream([
+            self._lifecycle("response.created", "A"),
+            {"type": "response.output_text.delta", "item_id": "item-1",
+             "response": {"id": "A", "status": "in_progress"}, "delta": "x"},
+            {"type": "response.output_text.delta", "item_id": "item-2",
+             "response": {"id": "A", "status": "in_progress"}, "delta": "y"},
+            terminal(completed(id="A")),
+        ]))
+        self.assertEqual(result["id"], "A")
+
+    def test_nonboundary_new_id_stays_protocol_failure_even_in_compat_mode(self):
+        stream = FakeStream([
+            self._lifecycle("response.created", "A"),
+            terminal(completed(id="B")),
+        ])
+        with patch.dict(os.environ, {"REFINER_RESPONSES_ALLOW_RESTART": "1"}):
+            with self.assertRaises(ResponsesProtocolError):
+                self.invoke(stream)
 
 
 class AsyncResponsesStreamTests(unittest.IsolatedAsyncioTestCase):

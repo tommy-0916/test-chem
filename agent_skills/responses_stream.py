@@ -28,6 +28,8 @@ from agent_skills.responses_diagnostics import (
 from agent_skills.llm_retry import (
     LogicalCallDeadlineExceeded,
     NonRetryableGatewayError,
+    RetryableGatewayError,
+    _RETRYABLE_ERROR_CODES,
     current_attempt,
     logical_deadline,
     positive_timeout_env,
@@ -35,6 +37,42 @@ from agent_skills.llm_retry import (
 
 
 logger = logging.getLogger(__name__)
+
+
+# Relay gateways may abandon an upstream attempt mid-stream and stitch a fresh
+# one into the same SSE connection. Only explicit lifecycle-boundary events
+# (which always carry the full response object) may open a new generation;
+# arbitrary ``response.*`` events must never switch the response identity.
+RESTART_BOUNDARY_EVENTS = frozenset({"response.created", "response.in_progress"})
+_TRANSIENT_STREAM_ERROR_CODES = frozenset(_RETRYABLE_ERROR_CODES)
+
+
+def _restart_tolerance_enabled() -> bool:
+    """Opt-in compatibility for gateways that restart upstream mid-stream."""
+    return os.getenv("REFINER_RESPONSES_ALLOW_RESTART", "0").strip().lower() in {
+        "1", "true", "on", "yes",
+    }
+
+
+def _configured_max_restarts() -> int:
+    raw = os.getenv("REFINER_RESPONSES_MAX_RESTARTS", "4").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 4
+
+
+def _event_error_code(event: Any) -> str:
+    """Extract the provider error code from an SSE error/failed event.
+
+    Only the finite ``code`` field is read, never free-text messages.
+    """
+    error = _field(event, "error")
+    code = _field(error, "code")
+    if not isinstance(code, str) or not code.strip():
+        response = _field(event, "response")
+        code = _field(_field(response, "error"), "code")
+    return code.strip().lower() if isinstance(code, str) else ""
 
 
 class ResponsesReadIdleTimeout(TimeoutError):
@@ -122,7 +160,10 @@ class ResponsesStreamState:
     def __init__(self, **diagnostic_context: Any) -> None:
         self._response: Any = None
         self._response_fingerprint: str | None = None
-        self._response_id: str | None = None
+        self._active_response_id: str | None = None
+        self._generation = 0
+        self._retired_response_ids: set[str] = set()
+        self._restart_count = 0
         self._failure: ResponsesStreamError | None = None
         self._diagnostic_context = diagnostic_context
         self._observed_diagnostics: dict[str, Any] = {}
@@ -141,6 +182,94 @@ class ResponsesStreamState:
         self._failure = error
         raise error
 
+    def _protocol_failure(self, message: str, event: Any, *, compat_retryable: bool = False) -> None:
+        """Close this stream on an unexplained generation interleaving.
+
+        Strict mode keeps these fail-closed as non-retryable protocol errors.
+        With relay-restart compatibility enabled they are reclassified as
+        retryable gateway failures so the call wrapper may re-issue the
+        request with a fresh consumer inside the existing logical budget.
+        """
+        if compat_retryable and _restart_tolerance_enabled():
+            error = RetryableGatewayError(message)
+            attach_responses_diagnostics(
+                error, self.diagnostics(event=event, phase="stream_event")
+            )
+            raise error
+        self._fail(ResponsesProtocolError(message), event)
+
+    def _retryable_stream_failure(self, event: Any, message: str) -> None:
+        """Classify a transient HTTP/SSE failure; the wrapper may re-request.
+
+        A new HTTP request always builds a fresh consumer, so retired
+        generations and restart budgets never leak across attempts, and the
+        shared logical deadline and retry budget are never reset.
+        """
+        error = RetryableGatewayError(message)
+        attach_responses_diagnostics(
+            error, self.diagnostics(event=event, phase="stream_event")
+        )
+        raise error
+
+    def _reset_generation_state(self) -> None:
+        """Isolate the new generation from anything the retired one produced.
+
+        The consumer never buffers deltas, executes tools, or falls back to
+        old content, so generation state is only the candidate snapshot and
+        its fingerprint; reset both defensively. Audit diagnostics and the
+        shared call budget are retained, never reset.
+        """
+        self._response = None
+        self._response_fingerprint = None
+
+    def _track_response_identity(self, event_type: str, response_id: str, event: Any) -> None:
+        """Adopt, continue, or retire response generations on lifecycle edges.
+
+        ``response.id`` comes only from the response object of lifecycle
+        events; item IDs, call IDs, SSE IDs, and HTTP request IDs are never
+        compared here. A new ID is a new generation only at an explicit
+        boundary (created/in_progress) and only in compatibility mode;
+        returning to a retired ID is always an interleaving failure.
+        """
+        if self._active_response_id is None:
+            self._generation = 1
+            self._active_response_id = response_id
+            return
+        if response_id == self._active_response_id:
+            # Duplicate lifecycle notifications for the same response are not
+            # restarts.
+            return
+        if response_id in self._retired_response_ids:
+            self._protocol_failure(
+                "Responses stream interleaved a retired response id",
+                event,
+                compat_retryable=True,
+            )
+        if event_type in RESTART_BOUNDARY_EVENTS and _restart_tolerance_enabled():
+            max_restarts = _configured_max_restarts()
+            if self._restart_count >= max_restarts:
+                self._protocol_failure(
+                    "Responses stream exceeded the restart budget "
+                    f"({max_restarts} per connection)",
+                    event,
+                    compat_retryable=True,
+                )
+            logger.warning(
+                "RESPONSES_STREAM_RESTART_TOLERATED abandoned=%s restarted=%s generation=%s",
+                self._active_response_id,
+                response_id,
+                self._generation + 1,
+            )
+            self._retired_response_ids.add(self._active_response_id)
+            self._active_response_id = response_id
+            self._generation += 1
+            self._restart_count += 1
+            self._reset_generation_state()
+            return
+        self._protocol_failure(
+            "Responses stream contains conflicting response IDs", event
+        )
+
     @property
     def completed(self) -> bool:
         return self._response is not None and self._failure is None
@@ -158,17 +287,27 @@ class ResponsesStreamState:
             ))
         if not isinstance(event_type, str) or not event_type:
             self._fail(ResponsesProtocolError("Responses stream event has no type"), event)
-        if event_type in {"error", "response.error", "response.failed", "response.incomplete", "response.cancelled"}:
+        if event_type in {"error", "response.error"}:
+            if _event_error_code(event) in _TRANSIENT_STREAM_ERROR_CODES:
+                self._retryable_stream_failure(
+                    event, f"Responses stream emitted transient {event_type}"
+                )
+            self._fail(ResponsesTerminalError(f"Responses stream emitted {event_type}"), event)
+        if event_type == "response.failed":
+            if _event_error_code(event) in _TRANSIENT_STREAM_ERROR_CODES:
+                self._retryable_stream_failure(
+                    event, "Responses stream failed with a transient error"
+                )
+            self._fail(ResponsesTerminalError(f"Responses stream emitted {event_type}"), event)
+        if event_type in {"response.incomplete", "response.cancelled"}:
             self._fail(ResponsesTerminalError(f"Responses stream emitted {event_type}"), event)
 
         response_status = _field(response, "status")
         if response_status in {"failed", "incomplete", "cancelled"}:
             self._fail(ResponsesTerminalError(f"Responses stream contains status={response_status}"), event)
         response_id = _field(response, "id")
-        if response_id:
-            if self._response_id is not None and response_id != self._response_id:
-                self._fail(ResponsesProtocolError("Responses stream contains conflicting response IDs"), event)
-            self._response_id = response_id
+        if isinstance(response_id, str) and response_id:
+            self._track_response_identity(event_type, response_id, event)
         if event_type == "response.completed":
             try:
                 validate_completed_response(response, **self._diagnostic_context)

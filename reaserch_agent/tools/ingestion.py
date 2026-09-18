@@ -23,7 +23,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows: advisory registry locks are Unix-only
+    fcntl = None
 
 try:
     from ..memory import LayeredChemMemory
@@ -395,11 +398,13 @@ class KnowledgeIngestion:
     def _output_lock(self) -> Iterator[None]:
         lock_path = self.output_dir / ".records.lock"
         with lock_path.open("a+", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             try:
                 yield
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _record_from_json(self, path: Path) -> Dict[str, Any] | None:
         try:
