@@ -27,6 +27,8 @@
 
 已按上述边界在 `bf059b2` 增加单独的翻译阶段诊断入口，不调用生产审计的成功路径、证书签发、dispatch formatter 或实验室适配器。使用被拒绝的 19 步原始 Device 候选、原状态 SHA-256 `9a6c152b6cd377ecb7dee22d76230d5caffe85acb3dee0470c603a06ace29c24`，在本机新目录 `result/A02-workflow-translation-diagnostic-20260924-200346/` 完成 4/4 个模型翻译片段，得到 **23 步诊断 workflow 草稿**。检查结果：步骤编号连续、每步有工作站、19 个源计划步骤均有引用、文本版非空；输出文件未检出 Kimi 密钥模式。`diagnostic_workflow.json` 始终为 `diagnostic_unvalidated`，保留 28 条审计问题，`dispatchable=false`、`real_dispatch=false`、证书为空、无 dispatch payload。**这证明 A02 候选可以经过 Device 计划生成与翻译接口形成草稿，不证明正式 V2 合同、设备可行性或可下发 workflow。**
 
+对这份草稿只读运行工作站参数 schema 校验，检查了全部 23 步，结果 `failed`、**5 个错误、0 个警告**：第 8/9 步搅拌速度为非数值占位符，第 16 步清洗次数与加液量为非数值占位符，第 18 步烘干时间为非数值占位符。不能把这些待人工确认值自动替换为数字；它们与上游未决科学量/设备参数一致。未进入 dispatch 格式化或真实下发。
+
 ## 已知未解决字段及责任边界
 
 | 字段/步骤 | 当前值或证据 | 所需修复或输入 |
@@ -46,5 +48,6 @@
 - [x] 诊断运行保留独立输入、代码 HEAD、模型/接口配置（不含密钥）、新 checkpoint 与产物路径；写明 Device 到达阶段、首个失败原因和终端状态。
 - [x] 强制兼容运行的安全摘要标注 `diagnostic_only_unvalidated`，不将原始包转换为正式 `completed`、可行性证书、`dispatchable=true` 或 303 task ID；未调用真实下发。
 - [x] 独立 plan→workflow 翻译诊断完成 4 个片段并形成不可下发草稿；原 28 条审计阻断保持可见，不把该草稿交给正式成功路径。
+- [x] 对诊断草稿运行只读参数 schema 检查；明确记录 5 个占位符类型错误，未将草稿格式化成下发载荷。
 - [ ] 区分并修复双语物料绑定误报与真正缺失的洗涤剂量、干燥条件、XRD 试剂授权/数量；每项记录字段、实际值、约束、来源和责任模块。
 - [ ] 使用补足且可追溯的输入重新运行全新 Fresh V2 Research。仅在正式 Research 合同通过后才运行真正 V2 Device 与 workflow 检查；旧 V1 候选及 checkpoint 不得作为通过证据。
