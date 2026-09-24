@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -219,15 +220,89 @@ class DeviceAdaptationRetryModel:
 
 class ResearchAgentTests(unittest.TestCase):
     def setUp(self) -> None:
+        # A clean source checkout intentionally excludes structured_outputs/
+        # and chem_kb/.  Keep corpus-dependent tests deterministic by making
+        # small synthetic records in a disposable local corpus; these are test
+        # inputs, not claimed literature evidence or production KB entries.
+        corpus = tempfile.TemporaryDirectory()
+        self.addCleanup(corpus.cleanup)
+        self.structured_outputs_dir = Path(corpus.name)
+        records = (
+            {
+                "文献题目": "TEST FIXTURE: NiCo-PBA 普鲁士蓝类似物 水系 K 离子电池 XRD",
+                "1. 解决的问题": (
+                    "设计一种普鲁士蓝类似物合成路线；"
+                    "NiCo-PBA 与亚铁氰化铁的离线测试检索记录。"
+                ),
+                "2. 具体的合成步骤": {
+                    "描述性总结": "测试用 NiCo-PBA 前驱体配制、反应与 XRD 记录。",
+                    "参数列表": [
+                        {
+                            "步骤序号": 1,
+                            "操作": "配制 NiCo-PBA 前驱体溶液",
+                            "试剂/对象": "NiCo 金属盐、K4Fe(CN)6·3H2O、去离子水",
+                            "参数": "0.5 mmol 金属盐溶于 10 mL 水，室温搅拌 10 min",
+                            "evidence": "synthetic test fixture",
+                        },
+                        {
+                            "步骤序号": 2,
+                            "操作": "形成普鲁士蓝类似物沉淀",
+                            "试剂/对象": "NiCo-PBA 前驱体溶液",
+                            "参数": "室温搅拌 20 min，静置 2 h",
+                            "evidence": "synthetic test fixture",
+                        },
+                        {
+                            "步骤序号": 3,
+                            "操作": "离线 XRD 观察",
+                            "试剂/对象": "NiCo-PBA 粉末",
+                            "参数": "取 30 mg 样品进行 XRD 观察",
+                            "evidence": "synthetic test fixture",
+                        },
+                    ],
+                },
+                "3. 性能": [],
+            },
+            {
+                "文献题目": (
+                    "TEST FIXTURE: High-Entropy Prussian Blue Analogues "
+                    "as Sulfur Hosts for Lithium-Sulfur Batteries"
+                ),
+                "1. 解决的问题": "高熵普鲁士蓝类似物结构化实验步骤检索测试。",
+                "2. 具体的合成步骤": {
+                    "描述性总结": "Synthetic high-entropy PBA protocol fixture.",
+                    "参数列表": [
+                        {
+                            "步骤序号": 1,
+                            "操作": "配制高熵 PBA 金属盐溶液",
+                            "试剂/对象": "metal nitrate、去离子水",
+                            "参数": "2 mmol metal nitrate in 20 mL water",
+                            "evidence": "synthetic test fixture",
+                        },
+                        {
+                            "步骤序号": 2,
+                            "操作": "形成高熵 PBA 沉淀",
+                            "试剂/对象": "金属盐溶液、六氰合铁酸盐溶液",
+                            "参数": "室温搅拌 30 min，陈化 12 h",
+                            "evidence": "synthetic test fixture",
+                        },
+                    ],
+                },
+                "3. 性能": [],
+            },
+        )
+        for index, record in enumerate(records, start=1):
+            (self.structured_outputs_dir / f"test_record_{index}.json").write_text(
+                json.dumps(record, ensure_ascii=False), encoding="utf-8"
+            )
         environment = mock.patch.dict("os.environ", {
             "RESEARCH_ONLINE_LITERATURE": "0", "RESEARCH_WEB_SEARCH": "0",
+            "RESEARCH_KNOWLEDGE_BASE_DIR": str(self.structured_outputs_dir),
+            "RESEARCH_MEMORY_DIR": str(self.structured_outputs_dir),
+            "RESEARCH_MEMORY_STORE_DIR": str(self.structured_outputs_dir / "memory_store"),
         })
         environment.start()
         self.addCleanup(environment.stop)
         self.agent = ResearchAgent(model=None, use_llm=False)
-        self.structured_outputs_dir = (
-            Path(__file__).resolve().parents[1] / "structured_outputs"
-        )
 
     def test_macro_quantities_defer_natural_language_semantics_to_device_llm(self) -> None:
         state = ResearchAgentState(
