@@ -276,6 +276,16 @@ quantity_requirements。材料合同只能依据已授权的实验语义填写�
   它不证明上游库存足够，也不表示设备已经称量、产出或消费了该数值；人工批准计划值也不能把它变成实测值。
   all_available 必须使用 semantic=whole_batch_unspecified 且不得带 value/unit；runtime_measured 必须使用
   semantic=runtime_measurement_required 且不得带 value/unit，它只表示未来运行时测量要求，不是实测证据。
+  quantity_requirements 的 value/unit 是每项的顶层字段，不是嵌套的 quantity 对象；
+  每个主动投料还须在 material_inputs[].quantity 中声明计划数量，两处的物料、数值和单位必须一致。
+  论文只给浓度而未直接给剂量时，不得把浓度×体积的计算结果标成文献原文直给数值。
+  若同一文献摘录以 respectively 明确给出有序试剂、有序 mM 浓度及 mL 体积，允许把计算出的
+  mmol 剂量标为 source=literature_calculation，仍用绑定原文的 paper provenance，且必须附加
+  derivation={{"rule":"mM_times_mL_to_mmol_v1","ordered_materials":[原文顺序的完整试剂名称],
+  "material_evidence_name":"本项在原文中的完整名称","concentration_value":原文对应 mM 数值,
+  "concentration_unit":"mM","volume_value":原文 mL 数值,"volume_unit":"mL"}}。
+  结果必须等于浓度×体积/1000；不得把此计算结果写成 source=literature，也不得把任意
+  列表中的其他试剂浓度错配给本试剂。摘录或顺序不完整时保持 unresolved。
 - material_relations：显式关系数组。每项给 relation_id、event_kind
   (none|state_change|process_same_material|split_same_material|replicate_same_material)、
   input_material_instance_ids、output_material_instance_ids、logical_container_ids、quantity_basis、
@@ -289,6 +299,11 @@ quantity_requirements。材料合同只能依据已授权的实验语义填写�
   planning_yield_lower_bound；后者必须给 planning_quantity={{"mode":"exact","semantic":"planning_estimate",
   "value":数值,"unit":"单位"}} 及明确来源。split/replicate/多输入输出若不是 runtime_measurement_required，
   必须给覆盖全部实例的 input_allocations/output_allocations；计划估计不得冒充执行实测。
+  每条 allocation 必须包含 material_instance_id，以及
+  quantity={{"mode":"exact","semantic":"planned_target 或 planning_estimate","value":有证据的数值,
+  "unit":"有证据的单位"}}。input_allocations 必须逐一覆盖所有输入端点，output_allocations 必须
+  逐一覆盖所有输出端点；不能把多输入或多输出关系写成 whole_batch。若产物量在执行前未知，
+  使用 runtime_measurement_required，不得为满足分配字段而编造产率或实际库存。
 - operation_segments：非空数组，把当前 macro 中每个有授权依据的操作段写成
   {{segment_id, material_effect, source_operation_ref, provenance}}。material_effect 只能为
   none|register_existing_input|observe_without_material_change|consume_material|produce_material|
@@ -812,6 +827,11 @@ declared 或确实不适用的 not_applicable。任何 unresolved 都会在 Rese
 quantity_requirements 每项必须用 material_id 绑定本步 material port，并带同样可核验的 user/paper
 provenance；不得从参数中的裸数值、名称子串、设备范围或模型常识回填或升级来源。缺失时保持
 相关合同维度 unresolved 并阻断发布；正常生成不得输出 manual_revision。
+每项 quantity_requirements 必须包含顶层 kind、material_id、material、value、unit、source、
+provenance、owner、required_by、device_policy、scientifically_fixed；不要写成仅有
+material_id/port/quantity 的对象。所有 material port 的 quantity 必须显式给出合法的
+计划目标、计划估计、整批非数值或运行时待测语义；不得写 null。多输入关系若不能给出有证据的
+逐端分配，应保留待测或 unresolved，不得用 whole_batch 掩盖。
 输出前检查：序号连续；每步操作/对象/参数完整；主动投料全部定量；lineage 连续；最后一步到达 observation point。
 """
 

@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Literal, Mapping, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -139,6 +140,123 @@ class ProvenanceV2(StrictModel):
                     "manual_revision provenance requires source_path, excerpt, and source_digest"
                 )
         return self
+
+
+def validate_literature_calculation(
+    requirement: Mapping[str, Any],
+    provenance: ProvenanceV2 | Mapping[str, Any],
+) -> None:
+    """Verify a narrow literature-derived amount without relabeling it as quoted.
+
+    The source must state an ordered reagent/concentration list with
+    ``respectively`` and a batch volume in the same sentence.  The only
+    supported calculation is mM * mL / 1000 = mmol.  This does not establish
+    measured inventory, yield, or any other unreported quantity.
+    """
+
+    if requirement.get("source") != "literature_calculation":
+        raise ValueError("literature_calculation requires its distinct source label")
+    if requirement.get("kind") not in {"scientific_input_setpoint", "target_dose"}:
+        raise ValueError("literature_calculation requires a numeric planned target")
+    source = (
+        provenance
+        if isinstance(provenance, ProvenanceV2)
+        else ProvenanceV2.model_validate(provenance, strict=True)
+    )
+    if source.kind != "paper" or not re.fullmatch(
+        r"evidence_bundle\.items\[\d+\]\.excerpt", source.source_path
+    ) or not source.source_digest.startswith("sha256_"):
+        raise ValueError("literature_calculation requires frozen paper evidence")
+
+    derivation = requirement.get("derivation")
+    required_fields = {
+        "rule", "ordered_materials", "material_evidence_name",
+        "concentration_value", "concentration_unit", "volume_value", "volume_unit",
+    }
+    if not isinstance(derivation, dict) or set(derivation) != required_fields:
+        raise ValueError("literature_calculation requires an exact derivation record")
+    if derivation["rule"] != "mM_times_mL_to_mmol_v1":
+        raise ValueError("unsupported literature calculation rule")
+    if derivation["concentration_unit"] != "mM" or derivation["volume_unit"] != "mL":
+        raise ValueError("literature_calculation operand units must be mM and mL")
+    if requirement.get("unit") != "mmol":
+        raise ValueError("literature_calculation result unit must be mmol")
+
+    def decimal_number(value: Any, field: str) -> Decimal:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"literature_calculation {field} must be numeric")
+        try:
+            number = Decimal(str(value))
+        except InvalidOperation as exc:
+            raise ValueError(f"literature_calculation {field} is invalid") from exc
+        if not number.is_finite() or number <= 0:
+            raise ValueError(f"literature_calculation {field} must be positive and finite")
+        return number
+
+    concentration = decimal_number(derivation["concentration_value"], "concentration")
+    volume = decimal_number(derivation["volume_value"], "volume")
+    result = decimal_number(requirement.get("value"), "result")
+    if result != concentration * volume / Decimal(1000):
+        raise ValueError("literature_calculation result does not equal mM * mL / 1000")
+
+    ordered = derivation["ordered_materials"]
+    subject = derivation["material_evidence_name"]
+    if (
+        not isinstance(ordered, list)
+        or len(ordered) < 2
+        or any(not isinstance(item, str) or not item.strip() for item in ordered)
+        or len(set(ordered)) != len(ordered)
+        or not isinstance(subject, str)
+        or subject not in ordered
+    ):
+        raise ValueError("literature_calculation requires an ordered material binding")
+
+    def normalized_identity(value: Any) -> str:
+        return re.sub(
+            r"\s+", "", str(value).translate(str.maketrans({"·": ".", "∙": ".", "•": "."}))
+        ).casefold()
+
+    bound_name = normalized_identity(subject)
+    if not (
+        bound_name in normalized_identity(requirement.get("material"))
+        or bound_name == normalized_identity(requirement.get("material_id"))
+    ):
+        raise ValueError("literature_calculation subject does not match its material port")
+
+    number = r"(?:\d+(?:\.\d*)?|\.\d+)"
+    value_list = rf"{number}(?:\s*,\s*{number})*,?\s+and\s+{number}"
+    # Match the evidence's exact ordered names rather than a particular verb
+    # such as "dissolved".  This also permits "mixed", "combined", etc., but
+    # still requires one sentence to link those names, the batch volume, the
+    # final concentration list, and "respectively" in that order.
+    name_list = re.escape(ordered[0])
+    for position, name in enumerate(ordered[1:], start=1):
+        separator = r"\s*,\s*" if position < len(ordered) - 1 else r"\s*,?\s+and\s+"
+        name_list += separator + re.escape(name)
+    source_pattern = re.compile(
+        rf"(?<!\w){name_list}(?!\w)(?P<pre_volume>[^.!?;]*?)"
+        rf"(?P<volume>{number})\s*m[lL]\b[^.!?;]*?"
+        rf"\bfinal\s+concentrations?\s+(?:of|were)\s+"
+        rf"(?P<values>{value_list})\s*mM\s*,?\s*respectively\b",
+        re.IGNORECASE,
+    )
+    for match in source_pattern.finditer(source.excerpt):
+        if not re.search(
+            r"\b(?:dissolved|mixed|combined|dispersed|added|prepared)\b",
+            match.group("pre_volume"), re.IGNORECASE,
+        ):
+            continue
+        source_values = [Decimal(item) for item in re.findall(number, match.group("values"))]
+        if (
+            len(source_values) == len(ordered)
+            and Decimal(match.group("volume")) == volume
+            and source_values[ordered.index(subject)] == concentration
+        ):
+            return
+    raise ValueError(
+        "literature_calculation operands or respectively material binding "
+        "are not supported by the paper excerpt"
+    )
 
 
 class QuantityV2(StrictModel):
@@ -755,6 +873,7 @@ class MacroStepV2(StrictModel):
         allowed_quantity_sources = {
             "user_query": "user",
             "literature": "paper",
+            "literature_calculation": "paper",
             "process_semantics": None,
             "manual_revision": "manual_revision",
         }
@@ -833,6 +952,59 @@ class MacroStepV2(StrictModel):
                 raise ValueError(
                     f"quantity_requirements[{requirement_index}] requires a finite "
                     "value and unit"
+                )
+            if source == "literature_calculation":
+                try:
+                    validate_literature_calculation(requirement, quantity_provenance)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"quantity_requirements[{requirement_index}] {exc}"
+                    ) from exc
+        # A validated Research setpoint must describe the same planned dose as
+        # its unique external input port.  A separate truthful provenance on a
+        # requirement cannot authorise a conflicting amount on that port.
+        for port in self.material_inputs:
+            if (
+                port.material_origin != "external_inventory"
+                or port.quantity is None
+                or port.quantity.mode != "exact"
+            ):
+                continue
+            same_external_ports = [
+                item for item in self.material_inputs
+                if item.material_origin == "external_inventory"
+                and item.material_id == port.material_id
+            ]
+            matching = [
+                requirement
+                for requirement in self.quantity_requirements
+                if requirement.get("material_id") == port.material_id
+                and requirement.get("kind") in {
+                    "scientific_input_setpoint", "target_dose"
+                }
+            ]
+            if len(same_external_ports) != 1 or len(matching) != 1:
+                if any(
+                    requirement.get("source") == "literature_calculation"
+                    for requirement in matching
+                ):
+                    raise ValueError(
+                        "literature_calculation requires one unambiguous external "
+                        "input quantity requirement"
+                    )
+                continue
+            requirement = matching[0]
+            requirement_value = requirement.get("value")
+            if (
+                isinstance(requirement_value, bool)
+                or not isinstance(requirement_value, (int, float))
+                or Decimal(str(port.quantity.value)) != Decimal(str(requirement_value))
+                or port.quantity.unit.strip().casefold()
+                != str(requirement.get("unit") or "").strip().casefold()
+            ):
+                raise ValueError(
+                    "external input exact quantity conflicts with its Research "
+                    "quantity requirement"
                 )
         for direction, port in declared_ports:
             if port.provenance.kind not in authoritative_material_kinds:
@@ -1300,12 +1472,20 @@ class ResearchActionPackageV2(StrictModel):
                     requirement.get("provenance"), strict=True
                 )
                 material_name = str(requirement.get("material") or "").strip()
-                if material_name.casefold() not in provenance.excerpt.casefold():
+                is_calculation = (
+                    requirement.get("source") == "literature_calculation"
+                )
+                if not is_calculation and material_name.casefold() not in provenance.excerpt.casefold():
                     raise ValueError(
                         f"{location} evidence excerpt does not identify its bound material"
                     )
                 kind = str(requirement.get("kind") or "").strip()
-                if kind not in {"whole_batch", "runtime_measured_inventory"} and not (
+                if is_calculation:
+                    try:
+                        validate_literature_calculation(requirement, provenance)
+                    except ValueError as exc:
+                        raise ValueError(f"{location} {exc}") from exc
+                elif kind not in {"whole_batch", "runtime_measured_inventory"} and not (
                     evidence_contains_exact_quantity(
                         provenance.excerpt,
                         requirement.get("value"),

@@ -832,9 +832,124 @@ class ResearchV2ContractTest(unittest.TestCase):
         encoded = agent._macro_plan_retry_result_json(previous)
         decoded = json.loads(encoded)
 
-        self.assertLessEqual(len(encoded), 6000)
+        self.assertLessEqual(len(encoded), 40000)
+        self.assertEqual(len(decoded["macro_plan"]), 20)
         self.assertEqual(decoded["macro_plan"][0]["macro_step_id"], "ms-0")
         self.assertNotIn("unrelated_trace", decoded)
+
+    def test_v2_quality_retry_keeps_eight_complete_steps_and_quantities(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        previous = {
+            "current_stage_plan": "Prepare samples before observation",
+            "macro_plan": [
+                {
+                    "macro_step_id": f"ms-{index}",
+                    "步骤序号": index + 1,
+                    "操作": "mix or observe",
+                    "参数": "80 mL at room temperature",
+                    "material_relations": [
+                        {
+                            "relation_id": f"rel-{index}",
+                            "quantity_basis": "planning_yield_lower_bound",
+                            "input_allocations": [
+                                {
+                                    "material_instance_id": f"input-{index}",
+                                    "quantity": {"value": 80, "unit": "mL"},
+                                }
+                            ],
+                            "output_allocations": [],
+                        }
+                    ],
+                    "quantity_requirements": [
+                        {
+                            "material_id": f"water-{index}",
+                            "kind": "scientific_input_setpoint",
+                            "value": 80,
+                            "unit": "mL",
+                            "source": "literature",
+                        }
+                    ],
+                }
+                for index in range(8)
+            ],
+            "unrelated_trace": "not sent to repair prompt",
+        }
+
+        encoded = agent._macro_plan_retry_result_json(previous)
+        decoded = json.loads(encoded)
+
+        self.assertLessEqual(len(encoded), 40000)
+        self.assertEqual(len(decoded["macro_plan"]), 8)
+        self.assertEqual(decoded["macro_plan"][-1]["macro_step_id"], "ms-7")
+        self.assertEqual(
+            decoded["macro_plan"][0]["quantity_requirements"],
+            previous["macro_plan"][0]["quantity_requirements"],
+        )
+        self.assertEqual(
+            decoded["macro_plan"][0]["material_relations"],
+            previous["macro_plan"][0]["material_relations"],
+        )
+        self.assertNotIn("unrelated_trace", decoded)
+
+    def test_v2_quality_retry_oversize_keeps_each_step_skeleton(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        previous = {
+            "current_stage_plan": "stage " + "x" * 20000,
+            "macro_plan": [
+                {
+                    "macro_step_id": f"ms-{index}",
+                    "步骤序号": index + 1,
+                    "操作": "mix",
+                    "参数": "p" * 20000,
+                    "material_relations": [
+                        {"relation_id": f"rel-{index}", "quantity_basis": "whole_batch"}
+                    ],
+                    "quantity_requirements": [
+                        {"material_id": f"material-{index}", "value": 80, "unit": "mL"}
+                    ],
+                }
+                for index in range(8)
+            ],
+        }
+
+        encoded = agent._macro_plan_retry_result_json(previous)
+        decoded = json.loads(encoded)
+
+        self.assertLessEqual(len(encoded), 40000)
+        self.assertEqual(
+            [step["macro_step_id"] for step in decoded["macro_plan"]],
+            [f"ms-{index}" for index in range(8)],
+        )
+        self.assertEqual(
+            decoded["macro_plan"][-1]["quantity_requirements"][0]["material_id"],
+            "material-7",
+        )
+
+    def test_v2_quality_retry_feedback_spans_root_cause_families_and_steps(self):
+        issues = [
+            "第 1 步 material_relations[1] 无效：缺分配",
+            "第 1 步存在未被任何 relation 消费的 input instance",
+            "第 1 步存在未由任何 relation 产出的 output instance",
+            "第 1 步存在未由 relation 覆盖的物料影响 segment",
+            "第 1 步 intermediate 缺少产出 relation",
+            "第 1 步 quantity_requirements[1] kind 无效",
+            "第 1 步 material_inputs[1] 数量无效",
+            "第 1 步 provenance 未绑定当前证据",
+            *[
+                f"第 {index} 步 material_relations[1] 无效：缺分配"
+                for index in range(2, 9)
+            ],
+        ]
+
+        selected = ResearchAgent._select_macro_plan_retry_issues(issues)
+
+        self.assertLessEqual(len(selected), 12)
+        self.assertIn("第 1 步 quantity_requirements[1] kind 无效", selected)
+        self.assertIn("第 1 步 material_inputs[1] 数量无效", selected)
+        self.assertIn("第 8 步 material_relations[1] 无效：缺分配", selected)
+        self.assertNotIn("第 1 步存在未被任何 relation 消费的 input instance", selected)
 
     def test_plain_washing_does_not_pull_ultrasonic_contracts(self):
         agent = ResearchAgent.__new__(ResearchAgent)

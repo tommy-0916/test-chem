@@ -33,6 +33,7 @@ from chem_agent_contracts.v2 import (
     MaterialRelationV2,
     canonical_digest,
     evidence_contains_exact_quantity,
+    validate_literature_calculation,
 )
 
 from .core import BaseAgent
@@ -6316,7 +6317,9 @@ class ResearchAgent(BaseAgent):
                             "current_stage_plan": current_stage_plan,
                             "macro_plan": macro_plan,
                         }
-                    previous_issues = core_issues[:5]
+                    previous_issues = self._select_macro_plan_retry_issues(
+                        core_issues
+                    )
                 # Retries exhausted with unresolved CORE quality issues.
                 raise ValueError(
                     "macro plan quality check failed: "
@@ -7046,89 +7049,302 @@ class ResearchAgent(BaseAgent):
         self,
         previous_result: Dict[str, Any],
         *,
-        max_chars: int = 6000,
+        max_chars: int = 40000,
     ) -> str:
         """Keep a V2 quality-retry request bounded and valid JSON.
 
-        A malformed or overlong first answer must not make the corrective call
-        larger than the original request.  The retry needs the stage summary
-        and candidate Macro Steps, while the complete raw answer remains in
+        Preserve the entire candidate when it fits. In particular, dropping
+        later steps or quantity_requirements hides the information needed to
+        repair a V2 material contract. Oversize answers are projected to a
+        per-step diagnostic skeleton; the raw answer remains in
         ``state.raw_llm_outputs`` for audit.
         """
 
         if self._contract_version != "v2":
             return json.dumps(previous_result, ensure_ascii=False, indent=2)
 
-        projected: Dict[str, Any] = {
-            "current_stage_plan": str(
-                previous_result.get("current_stage_plan", "")
-            )[:1200],
-            "macro_plan": [],
-        }
+        def encode(value: Dict[str, Any]) -> str:
+            return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
         macro_plan = previous_result.get("macro_plan", [])
         if not isinstance(macro_plan, list):
             macro_plan = []
-        for raw_step in macro_plan[:12]:
-            if not isinstance(raw_step, dict):
-                continue
-            step: Dict[str, Any] = {}
-            for key in (
-                "macro_step_id",
-                "步骤序号",
-                "操作",
-                "试剂/对象",
-                "参数",
-                "sample_id",
-                "input_sample_ids",
-                "output_sample_ids",
-                "material_inputs",
-                "material_intermediates",
-                "material_outputs",
-                "material_relations",
-                "operation_segments",
-                "material_applicability",
-                "material_contract_status",
-                "container_requirements",
-                "intermediate_returns",
-                "expected_return",
-            ):
-                if key not in raw_step:
-                    continue
-                value = raw_step[key]
-                if isinstance(value, list):
-                    value = value[:6]
-                step[key] = self._truncate_context_value(value, max_chars=360)
-            candidate = {
-                **projected,
-                "macro_plan": [*projected["macro_plan"], step],
-            }
-            encoded = json.dumps(
-                candidate,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            if len(encoded) > max_chars:
-                break
-            projected = candidate
-
-        encoded = json.dumps(
-            projected,
-            ensure_ascii=False,
-            separators=(",", ":"),
+        step_keys = (
+            "macro_action_id",
+            "observation_point_id",
+            "logical_step_id",
+            "macro_step_id",
+            "步骤序号",
+            "操作",
+            "试剂/对象",
+            "参数",
+            "来源",
+            "provenance",
+            "sample_id",
+            "input_sample_ids",
+            "output_sample_ids",
+            "material_inputs",
+            "material_intermediates",
+            "material_outputs",
+            "material_relations",
+            "operation_segments",
+            "material_applicability",
+            "material_contract_status",
+            "quantity_requirements",
+            "container_requirements",
+            "intermediate_returns",
+            "expected_return",
+            "planned_operation",
         )
+        projected: Dict[str, Any] = {
+            "current_stage_plan": str(previous_result.get("current_stage_plan", "")),
+            "macro_plan": [
+                {key: deepcopy(raw_step[key]) for key in step_keys if key in raw_step}
+                for raw_step in macro_plan
+                if isinstance(raw_step, dict)
+            ],
+        }
+        if "macro_plan_summary" in previous_result:
+            projected["macro_plan_summary"] = str(
+                previous_result["macro_plan_summary"]
+            )
+        encoded = encode(projected)
         if len(encoded) <= max_chars:
             return encoded
 
-        # A very long stage description can be the only remaining source of
-        # overflow. Keep valid JSON and reserve a small structural margin.
-        projected["current_stage_plan"] = str(
-            projected["current_stage_plan"]
-        )[: max(0, max_chars - 100)]
-        return json.dumps(
-            projected,
-            ensure_ascii=False,
-            separators=(",", ":"),
+        projected["current_stage_plan"] = projected["current_stage_plan"][:1200]
+        projected.pop("macro_plan_summary", None)
+        encoded = encode(projected)
+        if len(encoded) <= max_chars:
+            return encoded
+
+        def brief(value: Any, width: int = 160) -> Any:
+            if isinstance(value, str):
+                return value[:width]
+            return value
+
+        compact_steps: List[Dict[str, Any]] = []
+        for raw_step in macro_plan:
+            if not isinstance(raw_step, dict):
+                continue
+            step: Dict[str, Any] = {
+                key: brief(raw_step[key], 240 if key == "参数" else 160)
+                for key in (
+                    "macro_step_id", "步骤序号", "操作", "试剂/对象", "参数"
+                )
+                if key in raw_step
+            }
+            if isinstance(raw_step.get("material_contract_status"), dict):
+                step["material_contract_status"] = raw_step[
+                    "material_contract_status"
+                ]
+            for field in (
+                "material_inputs", "material_intermediates", "material_outputs"
+            ):
+                items = raw_step.get(field)
+                if isinstance(items, list):
+                    step[field] = [
+                        {
+                            key: brief(item[key], 100)
+                            for key in (
+                                "material_id", "material_instance_id", "quantity"
+                            )
+                            if key in item
+                        }
+                        for item in items
+                        if isinstance(item, dict)
+                    ]
+            relations = raw_step.get("material_relations")
+            if isinstance(relations, list):
+                step["material_relations"] = [
+                    {
+                        key: item[key]
+                        for key in (
+                            "relation_id", "event_kind", "quantity_basis",
+                            "input_material_instance_ids",
+                            "output_material_instance_ids", "planning_quantity",
+                            "input_allocations", "output_allocations",
+                        )
+                        if key in item
+                    }
+                    for item in relations
+                    if isinstance(item, dict)
+                ]
+            requirements = raw_step.get("quantity_requirements")
+            if isinstance(requirements, list):
+                step["quantity_requirements"] = [
+                    {
+                        key: brief(item[key], 100)
+                        for key in (
+                            "material_id", "material", "kind", "value", "unit",
+                            "quantity", "source", "owner", "required_by",
+                            "device_policy", "scientifically_fixed",
+                        )
+                        if key in item
+                    }
+                    for item in requirements
+                    if isinstance(item, dict)
+                ]
+            compact_steps.append(step)
+        projected["macro_plan"] = compact_steps
+        encoded = encode(projected)
+        if len(encoded) <= max_chars:
+            return encoded
+
+        # A pathological candidate can still contain enormous arrays. Retain
+        # each step's identity and counts rather than silently omitting later
+        # steps from the repair request.
+        projected["current_stage_plan"] = brief(
+            projected["current_stage_plan"], 400
         )
+        projected["macro_plan"] = [
+            {
+                key: brief(raw_step[key], 80)
+                for key in (
+                    "macro_step_id", "步骤序号", "操作", "试剂/对象"
+                )
+                if key in raw_step
+            }
+            | {
+                "material_relation_count": len(
+                    raw_step.get("material_relations") or []
+                ),
+                "quantity_requirement_count": len(
+                    raw_step.get("quantity_requirements") or []
+                ),
+            }
+            for raw_step in macro_plan
+            if isinstance(raw_step, dict)
+        ]
+        encoded = encode(projected)
+        if len(encoded) <= max_chars:
+            return encoded
+
+        # For extreme model output, preserve the bounded leading skeleton and
+        # declare the omission explicitly. Normal 4-8-step plans never reach
+        # this path.
+        while projected["macro_plan"] and len(encoded) > max_chars:
+            projected["macro_plan"].pop()
+            projected["omitted_step_count"] = len(macro_plan) - len(
+                projected["macro_plan"]
+            )
+            encoded = encode(projected)
+        return encoded
+
+    @staticmethod
+    def _select_macro_plan_retry_issues(
+        issues: Sequence[str], *, max_issues: int = 12
+    ) -> List[str]:
+        """Show independent root-cause families before dependent graph errors."""
+
+        if len(issues) <= max_issues:
+            return list(issues)
+
+        cascade_markers = (
+            "未被任何 relation 消费",
+            "未由任何 relation 产出",
+            "未由 relation 覆盖",
+            "缺少产出 relation",
+            "缺少消费 relation",
+        )
+
+        def family(issue: str) -> str:
+            if any(marker in issue for marker in cascade_markers):
+                return "relation_cascade"
+            if "material_relations[" in issue and "无效" in issue:
+                return "relation_shape"
+            if "quantity_requirements" in issue:
+                return "quantity_requirements"
+            if re.search(r"material_(?:inputs|intermediates|outputs)\[", issue):
+                return (
+                    "material_port_quantity"
+                    if "数量" in issue or "quantity" in issue
+                    else "material_port_other"
+                )
+            if "provenance" in issue or "来源" in issue:
+                return "provenance"
+            if "material_relations" in issue:
+                return "relation_other"
+            if "segment" in issue:
+                return "operation_segment"
+            if "container" in issue or "容器" in issue:
+                return "container"
+            return "other"
+
+        selected: List[str] = []
+        first_by_family: Dict[str, str] = {}
+        for issue in issues:
+            group = family(issue)
+            if group != "relation_cascade":
+                first_by_family.setdefault(group, issue)
+        for group in (
+            "relation_shape",
+            "quantity_requirements",
+            "material_port_quantity",
+            "provenance",
+            "container",
+        ):
+            issue = first_by_family.get(group)
+            if issue is None:
+                continue
+            selected.append(issue)
+            if len(selected) >= max_issues:
+                return selected
+
+        seen_steps = {
+            match.group(1)
+            for issue in selected
+            if (match := re.search(r"第\s*(\d+)\s*步", issue))
+        }
+        priority = {
+            "relation_shape": 0,
+            "quantity_requirements": 1,
+            "material_port": 2,
+            "operation_segment": 3,
+            "provenance": 4,
+            "relation_other": 5,
+            "container": 6,
+            "other": 7,
+        }
+        best_by_step: Dict[str, tuple[int, int, str]] = {}
+        for position, issue in enumerate(issues):
+            match = re.search(r"第\s*(\d+)\s*步", issue)
+            group = family(issue)
+            if not match or group == "relation_cascade":
+                continue
+            step_id = match.group(1)
+            candidate = (priority.get(group, 8), position, issue)
+            if step_id not in best_by_step or candidate < best_by_step[step_id]:
+                best_by_step[step_id] = candidate
+        for issue in issues:
+            match = re.search(r"第\s*(\d+)\s*步", issue)
+            if (
+                not match
+                or match.group(1) in seen_steps
+                or best_by_step.get(match.group(1), (None, None, None))[2] != issue
+            ):
+                continue
+            selected.append(issue)
+            seen_steps.add(match.group(1))
+            if len(selected) >= max_issues:
+                return selected
+
+        for group in (
+            "operation_segment", "material_port_other", "relation_other", "other"
+        ):
+            issue = first_by_family.get(group)
+            if issue is None or issue in selected:
+                continue
+            selected.append(issue)
+            if len(selected) >= max_issues:
+                return selected
+
+        for issue in issues:
+            if family(issue) != "relation_cascade" and issue not in selected:
+                selected.append(issue)
+                if len(selected) >= max_issues:
+                    break
+        return selected or list(issues[:max_issues])
 
     def _compact_initial_macro_plan_state_context(
         self,
@@ -8218,6 +8434,7 @@ class ResearchAgent(BaseAgent):
         source_kinds = {
             "user_query": {"user"},
             "literature": {"paper"},
+            "literature_calculation": {"paper"},
             "process_semantics": {"user", "paper"},
         }
         issues: List[str] = []
@@ -8262,7 +8479,11 @@ class ResearchAgent(BaseAgent):
                 provenance_excerpt = ""
             else:
                 provenance_excerpt = str(provenance.get("excerpt") or "")
-                if material_name and material_name.casefold() not in provenance_excerpt.casefold():
+                if (
+                    source != "literature_calculation"
+                    and material_name
+                    and material_name.casefold() not in provenance_excerpt.casefold()
+                ):
                     issues.append(f"{prefix} 来源摘录未标识绑定物料")
             value = requirement.get("value")
             unit = str(requirement.get("unit") or "").strip()
@@ -8276,14 +8497,43 @@ class ResearchAgent(BaseAgent):
                 or not unit
             ):
                 issues.append(f"{prefix} 数值需求必须给出有限 value 和 unit")
-            elif kind not in {"whole_batch", "runtime_measured_inventory"} and not (
-                evidence_contains_exact_quantity(
+            elif kind not in {"whole_batch", "runtime_measured_inventory"}:
+                if source == "literature_calculation":
+                    try:
+                        validate_literature_calculation(requirement, provenance or {})
+                    except (ValueError, ValidationError) as exc:
+                        issues.append(f"{prefix} 文献计算验证失败：{exc}")
+                    matching_inputs = [
+                        material
+                        for material in step.get("material_inputs", []) or []
+                        if isinstance(material, dict)
+                        and material.get("material_id") == material_id
+                    ]
+                    if len(matching_inputs) == 1:
+                        port_quantity = matching_inputs[0].get("quantity")
+                        if not (
+                            isinstance(port_quantity, dict)
+                            and port_quantity.get("mode") == "exact"
+                            and port_quantity.get("semantic") == "planned_target"
+                            and isinstance(port_quantity.get("value"), (int, float))
+                            and not isinstance(port_quantity.get("value"), bool)
+                            and isinstance(value, (int, float))
+                            and not isinstance(value, bool)
+                            and math.isclose(
+                                float(port_quantity["value"]), float(value),
+                                rel_tol=1e-12, abs_tol=1e-12,
+                            )
+                            and port_quantity.get("unit") == unit
+                        ):
+                            issues.append(
+                                f"{prefix} 文献计算结果必须与唯一主动输入端口的计划数量一致"
+                            )
+                elif not evidence_contains_exact_quantity(
                     provenance_excerpt,
                     value,
                     unit,
-                )
-            ):
-                issues.append(f"{prefix} 来源摘录未包含完全匹配的 value/unit")
+                ):
+                    issues.append(f"{prefix} 来源摘录未包含完全匹配的 value/unit")
         return issues
 
     @staticmethod
