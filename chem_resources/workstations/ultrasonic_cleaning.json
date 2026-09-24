@@ -1,0 +1,207 @@
+{
+  "station_identity": {
+    "id": "1213123578463232",
+    "name": "超声清洗",
+    "code": "ultrasonic_cleaning",
+    "category": "sample_preparation"
+  },
+  "station_function": {
+    "primary_purpose": "用于样品的超声波清洗和预处理",
+    "detail_description": "超声波处理工作站利用超声波的空化效应、机械效应等对样品进行处理。超声波在液体中传播时产生的微小气泡的形成和破裂，能够产生强大的冲击力和剪切力，可用于细胞破碎、样品分散、加速化学反应等。在生物、化学等实验中有着广泛应用。例如在生物样品处理中，可用于提取细胞内的蛋白质、核酸等生物大分子；在化学合成中，能够加速反应速率，提高反应产率。",
+    "workflow_position": "front",
+    "available_operations": {
+      "超声清洗": "进行超声波清洗处理",
+      "强力清洗": "高功率强力清洗"
+    }
+  },
+  "operations": [
+    {
+      "name": "超声清洗",
+      "code": "ultrasonic_cleaning",
+      "description": "该工作站用于对样品进行超声处理，通过高频声波在液体中产生空化效应，实现物质的分散、混合、促进反应或清洗等功能。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要超声清洗的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "超声功率",
+          "code": "ultrasonic_power",
+          "type": "integer",
+          "required": false,
+          "description": "超声波功率，单位：瓦特",
+          "default_value": 100,
+          "constraints": {
+            "min_value": 50,
+            "max_value": 500,
+            "unit": "W"
+          }
+        },
+        {
+          "name": "清洗时间",
+          "code": "cleaning_time",
+          "type": "integer",
+          "required": false,
+          "description": "超声清洗时间，单位：分钟",
+          "default_value": 15,
+          "constraints": {
+            "min_value": 5,
+            "max_value": 120,
+            "unit": "分钟"
+          }
+        },
+        {
+          "name": "清洗温度",
+          "code": "cleaning_temperature",
+          "type": "float",
+          "required": false,
+          "description": "清洗液温度，单位：℃",
+          "default_value": 25.0,
+          "constraints": {
+            "min_value": 15.0,
+            "max_value": 80.0,
+            "unit": "℃"
+          }
+        },
+        {
+          "name": "清洗液类型",
+          "code": "cleaning_solution",
+          "type": "string",
+          "required": false,
+          "description": "使用的清洗液类型",
+          "default_value": "去离子水",
+          "constraints": {
+            "enum_values": [
+              "去离子水",
+              "乙醇溶液",
+              "丙酮溶液",
+              "专用清洗液"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {
+        "max_power": 500.0,
+        "max_temperature": 80.0,
+        "max_time": 120.0
+      },
+      "data_generation": {
+        "handler": "ultrasonic_handler",
+        "validation_rules": [
+          "validate_time_constraints",
+          "validate_power_range",
+          "validate_time_constraints"
+        ]
+      }
+    },
+    {
+      "name": "强力清洗",
+      "code": "intensive_cleaning",
+      "description": "高功率强力清洗",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要超声清洗的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "超声功率",
+          "code": "ultrasonic_power",
+          "type": "integer",
+          "required": false,
+          "description": "超声波功率，单位：瓦特",
+          "default_value": 100,
+          "constraints": {
+            "min_value": 50,
+            "max_value": 500,
+            "unit": "W"
+          }
+        },
+        {
+          "name": "清洗时间",
+          "code": "cleaning_time",
+          "type": "integer",
+          "required": false,
+          "description": "超声清洗时间，单位：分钟",
+          "default_value": 15,
+          "constraints": {
+            "min_value": 5,
+            "max_value": 120,
+            "unit": "分钟"
+          }
+        },
+        {
+          "name": "清洗温度",
+          "code": "cleaning_temperature",
+          "type": "float",
+          "required": false,
+          "description": "清洗液温度，单位：℃",
+          "default_value": 25.0,
+          "constraints": {
+            "min_value": 15.0,
+            "max_value": 80.0,
+            "unit": "℃"
+          }
+        },
+        {
+          "name": "清洗液类型",
+          "code": "cleaning_solution",
+          "type": "string",
+          "required": false,
+          "description": "使用的清洗液类型",
+          "default_value": "去离子水",
+          "constraints": {
+            "enum_values": [
+              "去离子水",
+              "乙醇溶液",
+              "丙酮溶液",
+              "专用清洗液"
+            ]
+          }
+        }
+      ],
+      "safety_limits": {
+        "max_power": 500.0,
+        "max_temperature": 80.0,
+        "max_time": 120.0
+      },
+      "data_generation": {
+        "handler": "ultrasonic_handler",
+        "validation_rules": [
+          "validate_time_constraints",
+          "validate_power_range",
+          "validate_time_constraints"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：容器必须是离心管架；离心管架上的容器可为50ml试管、聚四氟反应瓶、西林瓶；总容器数在1-10之间；容器里必须为液体或悬浊液；不能没有液体；液体量不超过30ml。输出：分散混合均匀的悬浊液或者液体；液体量不发生变化。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ]
+    }
+  },
+  "prompt_template": "**超声清洗**\n - 操作：超声清洗\n - 说明：对样品进行超声处理，通过高频声波在液体中产生空化效应，实现物质的分散、混合、促进反应或清洗等功能\n - 参数：\n  - 清洗时间：指定清洗时间（如`30`，单位为秒，可选范围为1-300秒）\n  - 容器类型：指定需清洗的容器类型（可选`进样瓶`或'50ml耐热瓶'或'西林瓶'）\n  - 容器编号：指定需清洗的容器编号（如`[1,2]`，表示清洗1号和2号容器，最大10个）\n - 限制：\n  - 容器必须是离心管架进样\n  - 总容器数在1-10之间\n  - 容器里必须为液体或悬浊液\n  - 不能没有液体\n  - 液体量不超过30ml\n"
+}

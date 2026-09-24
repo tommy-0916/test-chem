@@ -1,0 +1,199 @@
+{
+  "station_identity": {
+    "id": "1396669754016768",
+    "name": "固体进样工作站",
+    "code": "solid_dispensing",
+    "category": "sample_preparation"
+  },
+  "station_function": {
+    "primary_purpose": "用于向进样瓶中精确加入固体试剂和粉末样品",
+    "detail_description": "固体自动进样工作站用于自动向容器中加入固体样品。它能够准确地称量和加入一定量的固体样品，避免了人工操作可能带来的误差和污染。该工作站通常配备有高精度的称量装置和加样系统，可以按照预设的程序将固体样品准确地加入目标容器，可提高固体样品称量的效率和准确性。",
+    "workflow_position": "front",
+    "available_operations": {
+      "固体加样": "向指定进样瓶加入固体试剂",
+      "精密称量": "高精度固体试剂称量加入"
+    }
+  },
+  "operations": [
+    {
+      "name": "固体加样",
+      "code": "solid_dispensing",
+      "description": "该工作站用于自动化将固体样品（粉末、颗粒、晶体等）精确定量地加入反应体系中。",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要加入固体的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "固体试剂编号",
+          "code": "solid_reagent_ids",
+          "type": "array",
+          "required": true,
+          "description": "使用的固体试剂编号（1-8）",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 8,
+            "item_range": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "name": "固体用量",
+          "code": "solid_amounts",
+          "type": "matrix",
+          "required": true,
+          "description": "矩阵式固体用量配置，外层对应进样瓶，内层对应固体用量(mg)",
+          "constraints": {
+            "precision": 0.1,
+            "max_amount_per_addition": 1000.0,
+            "max_total_amount": 2000.0,
+            "unit": "mg"
+          }
+        },
+        {
+          "name": "分散方式",
+          "code": "dispersion_method",
+          "type": "string",
+          "required": false,
+          "description": "固体分散方式",
+          "default_value": "直接加入",
+          "constraints": {
+            "enum_values": [
+              "直接加入",
+              "预分散",
+              "分批加入"
+            ]
+          }
+        },
+        {
+          "name": "声明",
+          "code": "reagent_declaration",
+          "type": "string",
+          "required": false,
+          "description": "声明使用的固体试剂名称，格式：用到1号固体（试剂名）、2号固体（试剂名）"
+        }
+      ],
+      "safety_limits": {
+        "max_amount": 2000.0,
+        "min_amount": 0.1
+      },
+      "data_generation": {
+        "handler": "solid_injection_handler",
+        "validation_rules": [
+          "validate_amount_constraints",
+          "validate_matrix_dimensions",
+          "validate_reagent_mapping"
+        ]
+      }
+    },
+    {
+      "name": "精密称量",
+      "code": "precision_weighing",
+      "description": "高精度固体试剂称量加入",
+      "operational_parameters": [
+        {
+          "name": "进样瓶编号",
+          "code": "sample_bottle_ids",
+          "type": "array",
+          "required": true,
+          "description": "指定需要加入固体的进样瓶编号",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 10,
+            "item_type": "integer"
+          }
+        },
+        {
+          "name": "固体试剂编号",
+          "code": "solid_reagent_ids",
+          "type": "array",
+          "required": true,
+          "description": "使用的固体试剂编号（1-8）",
+          "constraints": {
+            "min_items": 1,
+            "max_items": 8,
+            "item_range": [
+              1,
+              8
+            ]
+          }
+        },
+        {
+          "name": "固体用量",
+          "code": "solid_amounts",
+          "type": "matrix",
+          "required": true,
+          "description": "矩阵式固体用量配置，外层对应进样瓶，内层对应固体用量(mg)",
+          "constraints": {
+            "precision": 0.1,
+            "max_amount_per_addition": 1000.0,
+            "max_total_amount": 2000.0,
+            "unit": "mg"
+          }
+        },
+        {
+          "name": "分散方式",
+          "code": "dispersion_method",
+          "type": "string",
+          "required": false,
+          "description": "固体分散方式",
+          "default_value": "直接加入",
+          "constraints": {
+            "enum_values": [
+              "直接加入",
+              "预分散",
+              "分批加入"
+            ]
+          }
+        },
+        {
+          "name": "声明",
+          "code": "reagent_declaration",
+          "type": "string",
+          "required": false,
+          "description": "声明使用的固体试剂名称，格式：用到1号固体（试剂名）、2号固体（试剂名）"
+        }
+      ],
+      "safety_limits": {
+        "max_amount": 2000.0,
+        "min_amount": 0.1
+      },
+      "data_generation": {
+        "handler": "solid_injection_handler",
+        "validation_rules": [
+          "validate_amount_constraints",
+          "validate_matrix_dimensions",
+          "validate_reagent_mapping"
+        ]
+      }
+    }
+  ],
+  "exp_constraints": "限制：容器为50ml试管、聚四氟反应瓶、西林瓶；总容器数在1-20之间；容器不能有盖子。输出：容器内为固体或者固液混合物；容器内样品量会增多一些。",
+  "others": {
+    "integration": {
+      "api_endpoints": {
+        "details": "/worker/workstation/definition/detail",
+        "functions": "/worker/workstation/definition/pipeline"
+      },
+      "required_fields": [
+        "actionParams",
+        "container"
+      ],
+      "custom_mappings": {
+        "tube_num": "sample_bottle_ids",
+        "solid_amount": "solid_amounts"
+      }
+    }
+  },
+  "prompt_template": "**固体进样工作站**\n  - 操作：固体进样\n  - 说明：将固体样品（粉末、颗粒、晶体等）精确定量地加入反应体系中\n  - 参数：\n   - 容器类型：指定需进样的容器类型（可选`进样瓶`或'50ml耐热瓶'）\n   - 容器编号：指定需进样的容器编号（如`[1,2]`，表示选择1号和2号容器，最大10个）\n   - 固体样品质量: 指定需添加的固体样品质量（如`[[0.5, 0.6], [1.0, 1.5]]`，单位为克，表示对进样瓶1添加1号样品0.5克，2号样品0.6克，对进样瓶2添加1号样品1克，2号样品1.5克。）\n   - **人工准备**：使用前需通过`声明`字段明确列出所用试剂的编号及具体名称（如`声明：用到1号（氯化钠）、3号（碳酸钙）固体试剂`）\n  - 限制：\n   - 容器必须是离心管架进样\n   - 总容器数在1-10之间\n   - 容器不能有盖子\n"
+}

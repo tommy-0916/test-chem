@@ -1,0 +1,6978 @@
+{
+  "tier": "step",
+  "skill": "macro-step-capabilities",
+  "projection_version": "1.0",
+  "source": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
+  "source_kind": "lab-design-all",
+  "source_digest_sha256": "b55ab0c9003db0056619dcb619f0286a41ff173b0159e3268baf76820ad0e976",
+  "semantic_mapping_digest": "d55d0f704614b453a9909944b24f024e066d32e2cbf03c61611a95e822334870",
+  "source_index": "chem_resources/workstation_capability_index.json",
+  "planning_policy": "Specify substances, quantities, containers and sample lineage using operation contracts. input/output declare physical I/O; container_contract adds count/carrier relations and nonduplicate restrictions. Scientific control role defaults to process_control. Setpoints are not measured results. Unknown feedback cannot support a required automatic decision loop. Machine fields are loaded by Device only after workstation selection.",
+  "workstations": [
+    {
+      "station_code": "Centrifuge_V1",
+      "display_name": "离心机_V1",
+      "capability_description": "对液体或液固混合物样品进行自动化离心分离，适用于液体样品澄清、固液分离、沉淀收集和简单离心处理场景",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Cleaning_and_Dispensing_Workstation_V1",
+      "display_name": "批量加液工作站_V1",
+      "capability_description": "同时向多个容器中加入指定液体，最多支持三种不同液体的加样。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "display_name": "容器置放平台_V1",
+      "capability_description": "用于放置反应容器，适用于实验前静置平衡及实验流程结束后的样品暂存与周转。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Cooling_Workstation_V1",
+      "display_name": "冷却工作站_V1",
+      "capability_description": "利用风扇加快容器降温。冷却温度必须大于40℃。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "display_name": "烘干机_V1",
+      "capability_description": "烘干机用于对固体样品或材料体系进行加热干燥与恒温放置，适用于样品除溶剂、材料合成后的干燥处理及合成过程中的老化等实验场景。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "display_name": "常规物料站",
+      "capability_description": "拿取用于低于80℃反应的反应容器。适用于低于80℃的常规反应场景。若拿取大于等于80℃反应的耐热反应容器使用Heat_Resistant_Material_Station技能。",
+      "planning_constraints": [
+        {
+          "text": "输出容器为进样瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "successor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "输出容器为进样瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "successor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "输出容器为进样瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Heat_Resistant_Material_Station",
+      "display_name": "耐热瓶物料站",
+      "capability_description": "用于存放并供取放50ml耐热瓶反应容器，适用于≥80 ℃条件下反应体系的物料承载与周转。",
+      "planning_constraints": [
+        {
+          "text": "输出容器为耐热瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- **容器拿取**",
+          "sources": {
+            "skill": [
+              18
+            ],
+            "audit": [
+              12
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "successor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "输出容器为耐热瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "successor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "输出容器为耐热瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Heating_Magnetic_Stirring_Workstation_V1",
+      "display_name": "加热磁力搅拌工作站_V1",
+      "capability_description": "用于对液体样品或反应体系在配液混合、材料合成反应及反应前处理等场景下进行搅拌与加热处理，其中加热温度低于 80 ℃ 时可选用进样瓶或 50ml耐热瓶，温度高于 80 ℃ 时仅适用于 50 mL 耐热瓶，最高加热温度可达 200 ℃。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "display_name": "智能光催容器中转平台_V1",
+      "capability_description": "用于其他设备工作站与光照压膜工作站、智能光催化物料站、光催化工作站、超声移液平台、暗箱拍摄工作站、冷却工作站、马弗炉、移液平台四通道光催化平台设备测试前后的样品容器临时放置与中转。光催化压膜转运用于容器从光照压膜工作站转运至中转位置。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "display_name": "移液平台_1ml_V1",
+      "capability_description": "支持容器开盖、加液、移液、关盖操作。加液：最多可添加**8种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。移液：支持溶液由进样瓶或50ml耐热瓶转移至96位塑料孔板中。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "display_name": "移液平台_1ml_V2",
+      "capability_description": "支持容器开盖、加液、关盖操作。最多可添加**16种**不同溶液，移液枪单次最大移液量**1mL**，单种溶液总加注量不超过**3mL**。严格执行一瓶一液原则，单只原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。单种溶液总加注量大于3ml的情况使用移液平台5ml_V1。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_4Channel_V1",
+      "display_name": "移液平台四通道_V1",
+      "capability_description": "按照导入模版文件参数，将1-8种液体加入容器。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "display_name": "移液平台_5ml_V1",
+      "capability_description": "仅支持加液，最多可添加**6种**不同溶液，移液枪单次最大移液量**5mL**，单种溶液总加注量不超过**30mL**。严格执行一瓶一液原则，单个原液瓶仅盛放一种溶液，全程保持原液瓶编号顺序固定不变。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "display_name": "移液平台_5ml_V2",
+      "capability_description": "具备开盖、移液、关盖3大场景功能。移液:将溶液从1个反应容器中转移至另外1个反应容器中，仅支持反应容器为进样瓶，移液枪单次转移最大溶液量为**5mL**，适用于每种溶液加入量不超过**30mL**。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V3",
+      "display_name": "移液平台_5ml_V3",
+      "capability_description": "向目标反应容器（10ml耐压反应管）中加入指定液体，适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用，最多支持加入8种不同类型的溶液，移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL。",
+      "planning_constraints": [
+        {
+          "text": "- 向目标反应容器（10ml耐压反应管）中加入指定液体",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 适用于在合成、洗涤、稀释、重分散及其他较大体积液体处理流程中，向目标容器加入溶剂、洗涤液或其他指定液体时使用",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- 最多支持加入8种不同类型的溶液",
+          "sources": {
+            "audit": [
+              9
+            ]
+          }
+        },
+        {
+          "text": "- 移液枪单次转移最大溶液量为1mL，适用于每种溶液加入量不超过3mL",
+          "sources": {
+            "audit": [
+              10
+            ]
+          }
+        },
+        {
+          "text": "- **反应管加样**",
+          "sources": {
+            "audit": [
+              14
+            ]
+          }
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "display_name": "液体倾倒工作站_V1",
+      "capability_description": "具备开盖、液体倾倒、关盖3大场景功能。液体倾倒：用于对离心后的样品进行自动化上清液倾倒处理；将离心分层后位于上层的液体缓慢倒出，并尽可能保留下层固体沉淀，从而实现液相去除与固体样品保留。该单元适用于需要在离心后去除母液、洗液或分散液，仅保留固体样品用于后续称量、转移、洗涤、干燥或反应处理的操作流程。",
+      "planning_constraints": [
+        {
+          "text": "- 适用于进样瓶的盖子操作和液体倾倒分离",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 液体倾倒操作要求输入为上层上清液和下层固体沉淀，输出仅保留固体",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- **开盖**",
+          "sources": {
+            "audit": [
+              12
+            ]
+          }
+        },
+        {
+          "text": "- 容器状态：有盖",
+          "sources": {
+            "audit": [
+              15
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "input"
+        },
+        {
+          "text": "- 样品状态：不限",
+          "sources": {
+            "audit": [
+              16,
+              26
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "input"
+        },
+        {
+          "text": "- 样品状态：与输入保持一致",
+          "sources": {
+            "audit": [
+              20,
+              30
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "output"
+        },
+        {
+          "text": "- **关盖**",
+          "sources": {
+            "audit": [
+              22
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "output"
+        },
+        {
+          "text": "- 容器状态：有盖",
+          "sources": {
+            "audit": [
+              29
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "output"
+        },
+        {
+          "text": "- **液体倾倒**",
+          "sources": {
+            "audit": [
+              32
+            ]
+          },
+          "operation": "液体倾倒",
+          "side": "output"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Muffle_Furnace_V1",
+      "display_name": "马弗炉_V1",
+      "capability_description": "96位石英孔板送入马弗炉内，并按照导入的配方文件参数执行程序高温煅烧（最高支持温度为1000℃）。适用于材料煅烧处理。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "display_name": "多通道固体称量工作站_V1",
+      "capability_description": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持30种固体样品的添加。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V2",
+      "display_name": "多通道固体称量工作站_V2",
+      "capability_description": "对多个样品通道进行多种固体样品的高精度定量称量与进样。适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景，最多支持10种固体样品的添加，容器类型为10ml耐压反应管。",
+      "planning_constraints": [
+        {
+          "text": "- 输入容器为料斗，输出容器为10ml耐压反应管",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 最多支持10种固体样品的添加",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- 适用于多样品并行固体称量、筛选实验或多通道配方固体加入场景",
+          "sources": {
+            "audit": [
+              9
+            ]
+          }
+        },
+        {
+          "text": "- **固体称量**",
+          "sources": {
+            "audit": [
+              13
+            ]
+          }
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "display_name": "孔板置放平台_V1",
+      "capability_description": "用于放置96位塑料孔板，适用于实验流程结束后的样品暂存与周转。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "display_name": "纯化工作站_V1",
+      "capability_description": "对样品进行自动化离心分离、洗涤和纯化操作，拥有倒上清液和加入清洗液的功能。适用于固液分离、沉淀清洗、目标固体保留和自动化纯化流程。",
+      "planning_constraints": [
+        {
+          "text": "- 容器类型：进样瓶或留样品",
+          "sources": {
+            "audit": [
+              9
+            ]
+          },
+          "operation": "纯化离心",
+          "side": "input"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "display_name": "常温磁力搅拌工作站_V1",
+      "capability_description": "用于对液体样品或反应体系进行常温条件下的磁力搅拌，适用于样品混合、溶液均一化及反应前处理等场景。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "display_name": "单通道固体称量工作站_V1",
+      "capability_description": "对单个样品通道进行单种固体样品的高精度定量称量与进样，适用于单个样品的称量、筛选实验或多通道配方固体加入场景",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "display_name": "固体样品转移工作站_V1",
+      "capability_description": "用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中，作为后续称量单元的进样接口。",
+      "planning_constraints": [
+        {
+          "text": "- 用于将来自不同类型容器中的固体样品转移并集中存放于不同的料斗中",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 作为后续称量单元的进样接口",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- **固体样品转移**",
+          "sources": {
+            "audit": [
+              12
+            ]
+          }
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "display_name": "谱学磁力搅拌工作站_V1",
+      "capability_description": "用于在X射线衍射仪和红外光谱仪滴液制样前，对多个样品容器进行并行磁力搅拌，以实现样品的充分混合与均匀化处理。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "display_name": "超声分散仪_V1",
+      "capability_description": "通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V2",
+      "display_name": "超声分散仪_V2",
+      "capability_description": "通过超声对样品进行分散、混合、清洗或促进反应。适用于样品分散、清洗、促进混合、反应前处理或纯化过程中的超声辅助场景。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "display_name": "超声移液平台_V1",
+      "capability_description": "具备加液后超声、仅超声2大场景功能。加液后超声：通过文件传参加液后，进行超声步骤。仅超声：通过超声对样品进行物理分散、乳化混合、深度清洗或促进反应，适用于样品分散、清洗、促进混合、反应前处理或纯化、提取过程中的超声辅助场景",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "display_name": "双工位电化学工作站_V2",
+      "capability_description": "自动执行双工位电化学测试实验并支持液相物质留样联动，适用于电解池电化学测试、滴液电极处理和测试后液相物质收集场景。可以控制电极电位、电流等参数，进行多种电化学测试，如循环伏安法、计时电流法、交流阻抗法等。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+      "display_name": "高温高压微反应平台_V1",
+      "capability_description": "用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系。可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理，可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场景。",
+      "planning_constraints": [
+        {
+          "text": "- 用于高温高压条件下热催化反应的开展，适用于包含固体催化剂、液体反应物和气体反应环境的气-液-固三相反应体系",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 可在最高200℃、最大5 MPa和单瓶最高6 mL条件下开展热催化反应及催化剂气氛预处理",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- 可用于催化加氢、惰性气氛热反应和高温氢气还原等需要密闭控温、控压及气体置换的实验场景",
+          "sources": {
+            "audit": [
+              9
+            ]
+          }
+        },
+        {
+          "text": "- **反应釜微反应**",
+          "sources": {
+            "audit": [
+              13
+            ]
+          }
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V1",
+      "display_name": "光催化工作站_V1",
+      "capability_description": "内置20个白光LED灯，用于光催化反应的并行控温测试及定时光照控制，适用于催化剂材料和反应条件筛选。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V2",
+      "display_name": "光催化工作站_V2",
+      "capability_description": "执行光照实验，适用于光催化反应测试、通过光沉积法负载助催化剂",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Post_Reaction_Processing_Platform_V1",
+      "display_name": "反应后处理平台_V1",
+      "capability_description": "用于热催化反应结束后样品的自动化后处理。该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合，并自动转移至气相54孔板或96位塑料孔板中，满足后续色谱分析与高通量检测需求。",
+      "planning_constraints": [
+        {
+          "text": "- 用于热催化反应结束后样品的自动化后处理",
+          "sources": {
+            "audit": [
+              7
+            ]
+          }
+        },
+        {
+          "text": "- 该工作站可对反应液进行正压过滤，实现固液分离，去除固体催化剂并保留液相样品",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- 可将反应液按设定比例与稀释液混合，并自动转移至色谱进样瓶或96位塑料孔板中",
+          "sources": {
+            "audit": [
+              9
+            ]
+          }
+        },
+        {
+          "text": "- 满足后续色谱分析与高通量检测需求",
+          "sources": {
+            "audit": [
+              10
+            ]
+          }
+        },
+        {
+          "text": "- **后处理**",
+          "sources": {
+            "audit": [
+              14
+            ]
+          }
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "station_code": "Darkbox_Imaging_Workstation_V1",
+      "display_name": "暗箱拍摄工作站_V1",
+      "capability_description": "用于样品在暗箱环境下的图片采集；可实现样品的彩色图像照片收集；可实现样品的荧光发光图片采集。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Fluorescence_Spectrometer_V1",
+      "display_name": "荧光光谱仪_V1",
+      "capability_description": "用于测试液体样品的荧光发射特性，以分析其发光行为、组分特征及相关光学性质。测试溶液不得少于15ml。",
+      "planning_constraints": [
+        {
+          "text": "前置工作站：进入该工作前，需要有谱学置物工作站",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Gas_Chromatograph_V1",
+      "display_name": "气相色谱仪_V1",
+      "capability_description": "用于对挥发性或半挥发性组分进行分离分析，实现样品中各组分的定性鉴别与定量测定；可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。",
+      "planning_constraints": [
+        {
+          "text": "前置工作站：进入该工作前，需要有谱学容器中转平台",
+          "sources": {
+            "skill": [
+              11
+            ]
+          }
+        },
+        {
+          "text": "- 前置工作站：需要有谱学置物",
+          "sources": {
+            "skill": [
+              20
+            ],
+            "audit": [
+              15
+            ]
+          },
+          "operation": "气相分析",
+          "side": "input"
+        },
+        {
+          "text": "前置工作站：进入该工作前，需要有谱学置物工作站",
+          "sources": {
+            "audit": [
+              8
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 11,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学容器中转平台",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 20,
+            "section": "输入输出约束",
+            "quote": "- 前置工作站：需要有谱学置物",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "audit"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 15,
+            "section": "气相分析输入输出约束",
+            "quote": "- 前置工作站：需要有谱学置物",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+      "display_name": "气液传质_高速摄像_V1",
+      "capability_description": "该工作站用于在电化学测试实际工况下，高帧率记录电极表面的微小变化，例如气泡的成核、生长和脱离过程，并输出指定时间的图片。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Infrared_Spectrometer_V1",
+      "display_name": "红外光谱仪_V1",
+      "capability_description": "可对分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试，以表征其官能团结构、化学键信息及分子组成特征。",
+      "planning_constraints": [
+        {
+          "text": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- 测试溶液不得少于4ml。",
+          "sources": {
+            "skill": [
+              13
+            ],
+            "audit": [
+              9
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1",
+            "Spectroscopy_Magnetic_Stirrer_Workstation_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1",
+            "Spectroscopy_Magnetic_Stirrer_Workstation_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+      "display_name": "接触角_张力仪_V1",
+      "capability_description": "针对负载于基底（碳纸、金属片等）的固体样品，进行液滴接触角、气泡粘附力测试，可对样品的界面润湿性和传质行为进行标准化测试及定量化分析。该工作站适用于水电解、金属空气电池等能量转换技术中与气液固三相界面相关的材料筛选、性能评估，能够为催化剂层设计、电极基底设计、非均相界面微环境调控等研究提供基础数据支撑。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "display_name": "光照压膜工作站_V1",
+      "capability_description": "用于96位塑料孔板反应器与氢气检测膜的压合固定；进行LED光照（420或365 nm）的光催化实验。适用于光催化材料的产氢性能评估。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Liquid_Chromatograph_V1",
+      "display_name": "液相色谱仪_V1",
+      "capability_description": "液相色谱仪用于对液体样品中的化合物进行分离、定性与定量分析，广泛适用于复杂混合物中目标组分的检测与成分表征;可通过算法迭代优化测试方法，自动建立标准曲线并实现自主定量分析。测试溶液不得少于1ml。",
+      "planning_constraints": [
+        {
+          "text": "前置工作站：进入该工作前，需要有谱学置物工作站",
+          "sources": {
+            "skill": [
+              11
+            ],
+            "audit": [
+              8
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 11,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "Microplate_Reader_V1",
+      "display_name": "酶标仪_V1",
+      "capability_description": "对液体样品进行吸光度、荧光或化学发光等高通量检测。液体量不得少于100微升。",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "Spectroscopy_Container_Transfer_Station_V1",
+      "display_name": "谱学容器中转平台_V1",
+      "capability_description": "用于酶标仪、液相色谱仪、气相色谱仪、X射线衍射仪、紫外可见光谱仪、红外光谱仪、荧光光谱仪等谱学平台设备测试前后的样品容器临时放置与中转",
+      "planning_constraints": [],
+      "dependencies": []
+    },
+    {
+      "station_code": "UV_Vis_Spectrometer_V1",
+      "display_name": "紫外可见光谱仪_V1",
+      "capability_description": "紫外可见光谱仪用于对液体样品进行吸收光谱测试，以获取其特征吸收信息并开展浓度测定、组分分析及反应过程监测。测试溶液不得少于15ml。",
+      "planning_constraints": [
+        {
+          "text": "前置工作站：进入该工作前，需要有谱学置物工作站",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "前置工作站：进入该工作前，需要有谱学置物工作站",
+            "document": "audit"
+          }
+        }
+      ]
+    },
+    {
+      "station_code": "XRD_V1",
+      "display_name": "X射线衍射仪_V1",
+      "capability_description": "可对分散于乙醇中的固体样品进行滴加制样并开展XRD测试，以分析样品的晶体结构、物相组成及衍射参数。",
+      "planning_constraints": [
+        {
+          "text": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌。",
+          "sources": {
+            "skill": [
+              12
+            ],
+            "audit": [
+              8
+            ]
+          }
+        },
+        {
+          "text": "- **[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须 ≥ 4.0ml。若设计方案中各组分加和不足4ml，必须在加液步骤（如移液平台）中通过增加溶剂或等比例放大前驱体体积进行补齐。",
+          "sources": {
+            "skill": [
+              13
+            ],
+            "audit": [
+              9
+            ]
+          }
+        },
+        {
+          "text": "- **[自动化执行逻辑] 龙虾在生成步骤时须遵循以下分支**：",
+          "sources": {
+            "skill": [
+              14
+            ],
+            "audit": [
+              10
+            ]
+          }
+        },
+        {
+          "text": "- **分支 A：若前置步骤产物为【液体/悬浊液】且体积 < 4.0 mL**",
+          "sources": {
+            "skill": [
+              15
+            ],
+            "audit": [
+              11
+            ]
+          }
+        },
+        {
+          "text": "- 策略：通过去到移液平台增加“无水乙醇”作为分散溶剂，补足至 4.0 mL。",
+          "sources": {
+            "skill": [
+              16
+            ],
+            "audit": [
+              12
+            ]
+          }
+        },
+        {
+          "text": "- **分支 B：若前置步骤产物为【固体粉末】**",
+          "sources": {
+            "skill": [
+              17
+            ],
+            "audit": [
+              13
+            ]
+          }
+        },
+        {
+          "text": "- 策略：**必须**在进入XRD站之前，增加移液平台的加液步骤，加入 **4.0 mL 无水乙醇**，并配合“磁力搅拌”将其转化为均匀悬浊液。",
+          "sources": {
+            "skill": [
+              18
+            ],
+            "audit": [
+              14
+            ]
+          }
+        },
+        {
+          "text": "- **分支 C：若实验设计要求保持高浓度**",
+          "sources": {
+            "skill": [
+              19
+            ],
+            "audit": [
+              15
+            ]
+          }
+        },
+        {
+          "text": "- 策略：等比例放大所有前驱体投料量，使反应后总体积 ≥ 4.0 mL。",
+          "sources": {
+            "skill": [
+              20
+            ],
+            "audit": [
+              16
+            ]
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1",
+            "Spectroscopy_Magnetic_Stirrer_Workstation_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 12,
+            "section": "整体流程约束",
+            "quote": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌。",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 18,
+            "section": "整体流程约束",
+            "quote": "- 策略：**必须**在进入XRD站之前，增加移液平台的加液步骤，加入 **4.0 mL 无水乙醇**，并配合“磁力搅拌”将其转化为均匀悬浊液。",
+            "document": "skill"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [
+            "Spectroscopy_Container_Transfer_Station_V1",
+            "Spectroscopy_Magnetic_Stirrer_Workstation_V1"
+          ],
+          "resolution": "referenced",
+          "evidence": {
+            "line": 8,
+            "section": "整体流程约束",
+            "quote": "- 前置工作站：进入该工作前，需要有谱学置物和谱学磁力搅拌。",
+            "document": "audit"
+          }
+        },
+        {
+          "relation": "predecessor",
+          "station_codes": [],
+          "resolution": "unresolved",
+          "evidence": {
+            "line": 14,
+            "section": "整体流程约束",
+            "quote": "- 策略：**必须**在进入XRD站之前，增加移液平台的加液步骤，加入 **4.0 mL 无水乙醇**，并配合“磁力搅拌”将其转化为均匀悬浊液。",
+            "document": "audit"
+          }
+        }
+      ]
+    }
+  ],
+  "operation_contracts": [
+    {
+      "station_code": "Centrifuge_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "离心-复位机制",
+      "source": {
+        "document": "skill",
+        "section": "离心-复位机制"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "必须有盖且数量为1-10之间的偶数"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "上层上清液和下层固体沉淀"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:2..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "转速",
+          "required": true,
+          "unit": "r/min",
+          "range": "[1000,8000]",
+          "source_line": 42,
+          "note": "转速 [1000,8000]"
+        },
+        {
+          "name": "离心时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 43
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          25,
+          26,
+          27,
+          29,
+          30,
+          31
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Cleaning_and_Dispensing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "批量加液流程",
+      "source": {
+        "document": "skill",
+        "section": "批量加液流程"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 35
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 36
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 38
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 39
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 41
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 42
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "静置",
+      "source": {
+        "document": "skill",
+        "section": "静置"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶",
+          "西林瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "西林瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "静置时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 29,
+          "note": "静置时间 86400"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          14,
+          15,
+          16,
+          18,
+          19,
+          20
+        ],
+        "audit": [
+          8,
+          9,
+          10,
+          12,
+          13,
+          14
+        ]
+      }
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "物料放置",
+      "source": {
+        "document": "skill",
+        "section": "物料放置"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶",
+          "西林瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "西林瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          36,
+          37,
+          38,
+          40,
+          41,
+          42
+        ],
+        "audit": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ]
+      }
+    },
+    {
+      "station_code": "Cooling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "冷却流程",
+      "source": {
+        "document": "skill",
+        "section": "冷却流程"
+      },
+      "input": {
+        "containers": [
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "冷却温度",
+          "required": true,
+          "unit": "℃",
+          "range": "[40,60]",
+          "source_line": 35,
+          "note": "冷却温度 [40,60] 40"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "烘干主流程",
+      "source": {
+        "document": "skill",
+        "section": "烘干主流程"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "恒温温度",
+          "required": true,
+          "unit": "℃",
+          "range": "[26,210]",
+          "source_line": 35,
+          "note": "恒温温度[26,210]（℃） [26,210] 60"
+        },
+        {
+          "name": "烘干时间",
+          "required": true,
+          "unit": "min",
+          "range": "[1,14400]",
+          "source_line": 36,
+          "note": "烘干时间 [1,14400] 1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "物料拿取",
+      "source": {
+        "document": "skill",
+        "section": "物料拿取"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "西林瓶"
+        ],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "必须无样品状态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "必须无样品状态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..60",
+          "西林瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          21,
+          22,
+          23,
+          25,
+          26,
+          27
+        ],
+        "audit": [
+          13,
+          14,
+          15,
+          17,
+          18,
+          19
+        ]
+      }
+    },
+    {
+      "station_code": "Heat_Resistant_Material_Station",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "容器拿取",
+      "source": {
+        "document": "skill",
+        "section": "容器拿取"
+      },
+      "input": {
+        "containers": [
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "必须无样品状态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "必须无样品状态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "50ml耐热瓶:1..50"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          20,
+          21,
+          22,
+          24,
+          25,
+          26
+        ],
+        "audit": [
+          14,
+          15,
+          16,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "station_code": "Heating_Magnetic_Stirring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加热磁力搅拌全流程",
+      "source": {
+        "document": "skill",
+        "section": "加热磁力搅拌全流程"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "搅拌速度",
+          "required": true,
+          "unit": "rpm",
+          "range": "[100,1500]",
+          "source_line": 35
+        },
+        {
+          "name": "加热温度",
+          "required": true,
+          "unit": "℃",
+          "range": "[0,320]",
+          "source_line": 36,
+          "note": "[0, 320]"
+        },
+        {
+          "name": "搅拌时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 37
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化压膜转运至中转位_96位孔板",
+      "source": {
+        "document": "skill",
+        "section": "光催化压膜转运至中转位_96位孔板"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          17,
+          18,
+          19,
+          21,
+          22,
+          23
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "平台联动孔板拿取_96位孔板",
+      "source": {
+        "document": "skill",
+        "section": "平台联动孔板拿取_96位孔板"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          40,
+          41,
+          42,
+          44,
+          45,
+          46
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "平台联动孔板放置_96位孔板",
+      "source": {
+        "document": "skill",
+        "section": "平台联动孔板放置_96位孔板"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          61,
+          62,
+          63,
+          65,
+          66,
+          67
+        ],
+        "audit": [
+          29,
+          30,
+          31,
+          33,
+          34,
+          35
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "96位塑料孔板:0..1",
+          "西林瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "保留瓶盖",
+          "required": true,
+          "source_line": 45,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "是否保留瓶盖，如果后面流程不涉及关盖环节，需要在开盖时选择\"不保留瓶盖\"  1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          26,
+          27,
+          28,
+          30,
+          31,
+          32
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "移液到96位孔板",
+      "source": {
+        "document": "skill",
+        "section": "移液到96位孔板"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "96位塑料孔板:0..1",
+          "西林瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "加液量(ml)",
+          "required": true,
+          "source_line": 71,
+          "note": "加液量"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          52,
+          53,
+          54,
+          56,
+          57,
+          58
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "96位塑料孔板:0..1",
+          "西林瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          78,
+          79,
+          80,
+          82,
+          83,
+          84
+        ],
+        "audit": [
+          29,
+          30,
+          31,
+          33,
+          34,
+          35
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "西林瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "96位塑料孔板:0..1",
+          "西林瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 119
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 120,
+          "note": "移液枪单次转移最大溶液量为1mL，适用于每种溶液加入总量不超过3mL"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          101,
+          102,
+          103,
+          105,
+          106,
+          107
+        ],
+        "audit": [
+          39,
+          40,
+          41,
+          43,
+          44,
+          45
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "保留瓶盖",
+          "required": true,
+          "source_line": 43,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "是否保留瓶盖，如果后面流程不涉及关盖环节，需要在开盖时选择“不保留瓶盖”  1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          25,
+          26,
+          27,
+          29,
+          30,
+          31
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          50,
+          51,
+          52,
+          54,
+          55,
+          56
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 90
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 91,
+          "note": "移液枪单次最大移液量1mL，单种溶液总加注量不超过3mL"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          72,
+          73,
+          74,
+          76,
+          77,
+          78
+        ],
+        "audit": [
+          29,
+          30,
+          31,
+          33,
+          34,
+          35
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_4Channel_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液体加样",
+      "source": {
+        "document": "skill",
+        "section": "液体加样"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "预设默认值",
+          "required": false,
+          "source_line": 39
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          17,
+          18,
+          19,
+          21,
+          22,
+          23
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 49
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "role": "target_material_quantity",
+          "source_line": 50,
+          "note": "移液枪单次最大移液量5mL，单种溶液总加注量不超过30mL"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "原液用量",
+            "unit": "",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          29,
+          30,
+          31,
+          33,
+          34,
+          35
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "保留瓶盖",
+          "required": true,
+          "source_line": 45,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "是否保留瓶盖，如果后面流程不涉及关盖环节，需要在开盖时选择“不保留瓶盖”  1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          26,
+          27,
+          28,
+          30,
+          31,
+          32
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          52,
+          53,
+          54,
+          56,
+          57,
+          58
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "纯移液",
+      "source": {
+        "document": "skill",
+        "section": "纯移液"
+      },
+      "input": {
+        "container_type_raw": [
+          "进样瓶及50ml耐热瓶"
+        ],
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "移液体积",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 91
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "移液体积",
+            "unit": "mL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          74,
+          75,
+          76,
+          78,
+          79,
+          80
+        ],
+        "audit": [
+          29,
+          30,
+          31,
+          33,
+          34,
+          35
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V3",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "反应管加样",
+      "source": {
+        "document": "skill",
+        "section": "反应管加样"
+      },
+      "input": {
+        "containers": [
+          "10ml耐压反应管"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "10ml耐压反应管:0..4"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 45
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 46
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 48
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 49
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 51
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 52
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 54
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 55
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 57
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 58
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 60
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 61
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 63
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 64
+        },
+        {
+          "name": "配料名称",
+          "required": true,
+          "source_line": 66
+        },
+        {
+          "name": "原液用量",
+          "required": true,
+          "unit": "mL",
+          "role": "target_material_quantity",
+          "source_line": 67
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          },
+          {
+            "name": "原液用量",
+            "unit": "mL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          26,
+          27,
+          28,
+          30,
+          31,
+          32
+        ],
+        "audit": [
+          16,
+          17,
+          18,
+          20,
+          21,
+          22
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "保留瓶盖",
+          "required": true,
+          "source_line": 32,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "是否保留瓶盖"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "有盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          39,
+          40,
+          41,
+          43,
+          44,
+          45
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液体倾倒",
+      "source": {
+        "document": "skill",
+        "section": "液体倾倒"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "上层上清液和下层固体沉淀"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "目标角度偏移",
+          "required": true,
+          "unit": "°",
+          "source_line": 77,
+          "note": "目标角度偏移（相对于180度） (-45,160)"
+        },
+        {
+          "name": "转动速度",
+          "required": true,
+          "source_line": 78,
+          "note": "转动速度相对值 (0,100)"
+        },
+        {
+          "name": "停留时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 79,
+          "note": "到达目标位置后停留时间"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          62,
+          63,
+          64,
+          66,
+          67,
+          68
+        ],
+        "audit": [
+          14,
+          18,
+          19,
+          24,
+          25,
+          28,
+          34,
+          35,
+          36,
+          38,
+          39,
+          40
+        ]
+      }
+    },
+    {
+      "station_code": "Muffle_Furnace_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "马弗炉加热流程_96石英孔板",
+      "source": {
+        "document": "skill",
+        "section": "马弗炉加热流程_96石英孔板"
+      },
+      "input": {
+        "containers": [
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体进样-文件传参-机器人",
+      "source": {
+        "document": "skill",
+        "section": "固体进样-文件传参-机器人"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "西林瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "必须无溶液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "粉末"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..20",
+          "西林瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "上传文件",
+            "unit": "",
+            "range": "",
+            "semantics": "recipe_defined_target_quantities"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          24,
+          25,
+          26,
+          28,
+          29,
+          30
+        ],
+        "audit": [
+          11,
+          12,
+          13,
+          15,
+          16,
+          17
+        ]
+      }
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体称量",
+      "source": {
+        "document": "skill",
+        "section": "固体称量"
+      },
+      "input": {
+        "containers": [
+          "料斗"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "10ml耐压反应管"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "10ml耐压反应管:0..4"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [
+        {
+          "name": "反应管",
+          "required": true,
+          "source_line": 40,
+          "note": "反应管号"
+        },
+        {
+          "name": "加料样",
+          "required": true,
+          "unit": "g",
+          "range": "(0,40]",
+          "role": "target_material_quantity",
+          "source_line": 43,
+          "note": "加料样 (0,40]"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "加料样",
+            "unit": "g",
+            "range": "(0,40]"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          23,
+          24,
+          25,
+          27,
+          28,
+          29
+        ],
+        "audit": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ]
+      }
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "回收96孔板和氢气膜",
+      "source": {
+        "document": "skill",
+        "section": "回收96孔板和氢气膜"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..20",
+          "96位石英孔板:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "回收96孔板",
+      "source": {
+        "document": "skill",
+        "section": "回收96孔板"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..20",
+          "96位石英孔板:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          38,
+          39,
+          40,
+          42,
+          43,
+          44
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "纯化离心",
+      "source": {
+        "document": "skill",
+        "section": "纯化离心"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "留样瓶"
+        ],
+        "container_states": [
+          "必须有盖且数量为1-10之间的偶数"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须有盖"
+        ],
+        "sample_states": [
+          "悬浊液或纯液态或固体"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..20",
+          "留样瓶:0..20"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "方案",
+          "required": true,
+          "source_line": 39,
+          "options": [
+            "留液",
+            "留固",
+            "留固液"
+          ],
+          "note": "方案  3"
+        },
+        {
+          "name": "时间",
+          "required": true,
+          "unit": "分钟",
+          "range": "[1,99]",
+          "source_line": 40,
+          "note": "时间 [1,99] 1"
+        },
+        {
+          "name": "速度",
+          "required": true,
+          "unit": "r/min",
+          "range": "(0,12000]",
+          "source_line": 41,
+          "note": "速度 (0,12000] 5000"
+        },
+        {
+          "name": "清洗次数",
+          "required": true,
+          "range": "[1,10]",
+          "source_line": 42,
+          "note": "清洗次数 [1,10] 3"
+        },
+        {
+          "name": "清洗液",
+          "required": true,
+          "source_line": 44,
+          "options": [
+            "水",
+            "酒精",
+            "双氧水"
+          ]
+        },
+        {
+          "name": "自动设置加液状态",
+          "required": true,
+          "source_line": 45,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "自动设置加液状态  1"
+        },
+        {
+          "name": "手动设置加液量",
+          "required": false,
+          "unit": "mL",
+          "range": "[1,50]",
+          "role": "target_material_quantity",
+          "source_line": 46,
+          "note": "手动设置加液量 [1,50] 15"
+        },
+        {
+          "name": "是否保留清洗液",
+          "required": true,
+          "source_line": 47,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "是否保留清洗液  0"
+        },
+        {
+          "name": "保留清洗液数量",
+          "required": false,
+          "unit": "mL",
+          "range": "[1,50]",
+          "role": "scientific_quantity_requirement",
+          "source_line": 49,
+          "note": "保留清洗液数量 [1,50] 10"
+        },
+        {
+          "name": "清洗液",
+          "required": false,
+          "source_line": 50,
+          "options": [
+            "水",
+            "酒精",
+            "双氧水"
+          ],
+          "note": "清洗液溶剂  1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "手动设置加液量",
+            "unit": "mL",
+            "range": "[1,50]"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          22,
+          23,
+          24,
+          26,
+          27,
+          28
+        ],
+        "audit": [
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开始搅拌",
+      "source": {
+        "document": "skill",
+        "section": "开始搅拌"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "搅拌速度",
+          "required": true,
+          "unit": "r/min",
+          "range": "[500,1500]",
+          "source_line": 35,
+          "note": "搅拌速度 [500,1500]"
+        },
+        {
+          "name": "搅拌时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 36
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体进样",
+      "source": {
+        "document": "skill",
+        "section": "固体进样"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "必须无溶液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "进样质量",
+          "required": true,
+          "unit": "g",
+          "range": "(0,200)",
+          "role": "target_material_quantity",
+          "source_line": 42,
+          "note": "加样质量 (0,200)"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "进样质量",
+            "unit": "g",
+            "range": "(0,200)"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          23,
+          24,
+          25,
+          27,
+          28,
+          29
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体样品转移",
+      "source": {
+        "document": "skill",
+        "section": "固体样品转移"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "50ml耐热瓶",
+          "西林瓶",
+          "进样瓶"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "料斗"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "固体"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "料斗:0..10",
+          "96位塑料孔板:0..1",
+          "50ml耐热瓶:0..10",
+          "西林瓶:0..10",
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          14,
+          15,
+          16,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "样品架放置-夹具识别",
+      "source": {
+        "document": "skill",
+        "section": "样品架放置-夹具识别"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..20",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          17,
+          18,
+          19,
+          21,
+          22,
+          23
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声清洗",
+      "source": {
+        "document": "skill",
+        "section": "超声清洗"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:1..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "清洗时间",
+          "required": true,
+          "unit": "秒",
+          "source_line": 39,
+          "note": "清洗时间 30"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          22,
+          23,
+          24,
+          26,
+          27,
+          28
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声清洗",
+      "source": {
+        "document": "skill",
+        "section": "超声清洗"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶",
+          "西林瓶"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10",
+          "西林瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "清洗时间",
+          "required": true,
+          "unit": "秒",
+          "source_line": 39,
+          "note": "超声清洗时间 30"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          22,
+          23,
+          24,
+          26,
+          27,
+          28
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声加液流程",
+      "source": {
+        "document": "skill",
+        "section": "超声加液流程"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..2",
+          "96位石英孔板:0..2"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开启超声",
+      "source": {
+        "document": "skill",
+        "section": "开启超声"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "分散均匀的悬浊液或纯液态"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..2",
+          "96位石英孔板:0..2"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "超声时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 75
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          57,
+          58,
+          59,
+          61,
+          62,
+          63
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "电化学检测",
+      "source": {
+        "document": "skill",
+        "section": "电化学检测"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "大于4ml的纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "container_type_raw": [
+          "进样瓶（必选），西林瓶或色谱进样瓶（可选，若需要留样则选取）"
+        ],
+        "containers": [
+          "进样瓶",
+          "西林瓶",
+          "色谱进样瓶"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "template_requirements": [
+          "该参数必须已填写"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "operation_declared",
+        "template_requirements": [
+          "该参数必须已填写"
+        ]
+      },
+      "scientific_controls": [
+        {
+          "name": "西林瓶类型",
+          "required": true,
+          "source_line": 36,
+          "options": [
+            "关盖螺口瓶",
+            "无盖螺口瓶",
+            "无盖平口瓶"
+          ],
+          "note": "uncapScrewBottle"
+        },
+        {
+          "name": "选择电解池",
+          "required": true,
+          "source_line": 37,
+          "options": [
+            "单电解池",
+            "H型电解池"
+          ],
+          "note": "1"
+        },
+        {
+          "name": "移液枪滴涂时间间隔",
+          "required": true,
+          "unit": "秒",
+          "range": "(0,600]",
+          "source_line": 38,
+          "note": "(0,600] 30"
+        },
+        {
+          "name": "移液枪滴涂次数",
+          "required": false,
+          "range": "(0,20]",
+          "source_line": 39,
+          "note": "(0,20] 3"
+        },
+        {
+          "name": "碳纸晾干设置",
+          "required": true,
+          "source_line": 40,
+          "options": [
+            "加热",
+            "自然晾干"
+          ],
+          "note": "heat"
+        },
+        {
+          "name": "碳纸晾干温度",
+          "required": true,
+          "unit": "摄氏度",
+          "range": "(0,80]",
+          "source_line": 41,
+          "note": "(0,80] 80"
+        },
+        {
+          "name": "液体填充",
+          "required": true,
+          "source_line": 42,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "no"
+        },
+        {
+          "name": "催化剂滴液量",
+          "required": true,
+          "unit": "μL",
+          "range": "(29,100]",
+          "role": "target_material_quantity",
+          "source_line": 47,
+          "note": "(29,100] 100"
+        },
+        {
+          "name": "电解液加入量",
+          "required": true,
+          "unit": "mL",
+          "range": "(9,50]",
+          "role": "scientific_quantity_requirement",
+          "source_line": 48,
+          "note": "(9,50] 20"
+        },
+        {
+          "name": "碳纸晾干时间",
+          "required": true,
+          "unit": "分钟",
+          "range": "(0,480]",
+          "source_line": 49,
+          "note": "(0,480] 10"
+        },
+        {
+          "name": "反应槽清洗次数",
+          "required": true,
+          "range": "(0,5]",
+          "source_line": 50,
+          "note": "(0,5] 3"
+        },
+        {
+          "name": "碳纸类型",
+          "required": true,
+          "source_line": 51,
+          "options": [
+            "亲水性",
+            "疏水性"
+          ],
+          "note": "hydrophilicity"
+        },
+        {
+          "name": "通气状态",
+          "required": true,
+          "source_line": 52,
+          "options": [
+            "不通气",
+            "通1号气",
+            "通2号气",
+            "通两种气"
+          ],
+          "note": "none"
+        },
+        {
+          "name": "通气时长",
+          "required": false,
+          "unit": "分钟",
+          "range": "(0,100]",
+          "source_line": 53,
+          "note": "(0,100] 1"
+        },
+        {
+          "name": "流速设置",
+          "required": false,
+          "unit": "mL/min",
+          "range": "(0,10]",
+          "source_line": 54,
+          "note": "(0,10] 3"
+        },
+        {
+          "name": "电解池磁力搅拌转速",
+          "required": false,
+          "unit": "rpm",
+          "range": "(0,2500]",
+          "source_line": 55,
+          "note": "(0,2500] 350"
+        },
+        {
+          "name": "废液移液设置",
+          "required": true,
+          "source_line": 56,
+          "options": [
+            "是",
+            "否"
+          ],
+          "note": "yes"
+        },
+        {
+          "name": "吸取废液体积",
+          "required": true,
+          "unit": "μL",
+          "range": "(0,10000]",
+          "role": "target_material_quantity",
+          "source_line": 58,
+          "note": "留样信息列表的子参数，废液移液设置为yes时必填 (0,10000] 1000"
+        },
+        {
+          "name": "搅拌混匀",
+          "required": true,
+          "range": "(-1,100]",
+          "source_line": 60,
+          "note": "留样信息列表的子参数，废液移液设置为yes时必填 (-1,100] 10"
+        },
+        {
+          "name": "移液清洗废液瓶次数",
+          "required": false,
+          "range": "(0,5]",
+          "source_line": 61,
+          "note": "留样信息列表的子参数，废液移液设置为yes时必填 (0,5] 3"
+        },
+        {
+          "name": "吸取原液瓶N号液体体积",
+          "required": true,
+          "unit": "μL",
+          "range": "(-1,10000]",
+          "role": "target_material_quantity",
+          "source_line": 62,
+          "note": "留样信息列表的子参数，废液移液设置为yes时必填, N的取值范围：1~6，根据实验需求选择原液瓶个数，要求从任务一开始依次输出 (-1,10000] 10"
+        },
+        {
+          "name": "留液池类型",
+          "required": true,
+          "source_line": 63,
+          "options": [
+            "阴极池",
+            "阳极池"
+          ],
+          "note": "1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "催化剂滴液量",
+            "unit": "μL",
+            "range": "(29,100]"
+          },
+          {
+            "name": "吸取废液体积",
+            "unit": "μL",
+            "range": "(0,10000]"
+          },
+          {
+            "name": "吸取原液瓶N号液体体积",
+            "unit": "μL",
+            "range": "(-1,10000]"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21,
+          22
+        ],
+        "audit": [
+          11,
+          12,
+          13,
+          15,
+          16,
+          17,
+          18
+        ]
+      }
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "制备并转移碳纸样品",
+      "source": {
+        "document": "skill",
+        "section": "制备并转移碳纸样品"
+      },
+      "input": {
+        "containers": [
+          "进样瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "碳纸架"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "负载于碳纸的固体"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [
+        {
+          "name": "西林瓶类型",
+          "required": true,
+          "source_line": 89,
+          "options": [
+            "关盖螺口瓶",
+            "无盖螺口瓶",
+            "无盖平口瓶"
+          ],
+          "note": "西林瓶类型  uncapScrewBottle"
+        },
+        {
+          "name": "移液枪滴涂时间间隔",
+          "required": true,
+          "unit": "秒",
+          "range": "(0,600]",
+          "source_line": 90,
+          "note": "移液枪滴涂时间间隔 (0,600] 30"
+        },
+        {
+          "name": "移液枪滴涂次数",
+          "required": true,
+          "range": "(0,20]",
+          "source_line": 91,
+          "note": "移液枪滴涂次数 (0,20] 3"
+        },
+        {
+          "name": "碳纸晾干设置",
+          "required": true,
+          "source_line": 92,
+          "options": [
+            "加热",
+            "自然晾干"
+          ],
+          "note": "碳纸晾干设置  heat"
+        },
+        {
+          "name": "碳纸晾干温度",
+          "required": true,
+          "unit": "摄氏度",
+          "range": "(0,80]",
+          "source_line": 93,
+          "note": "碳纸晾干温度 (0,80] 80"
+        },
+        {
+          "name": "催化剂滴液量",
+          "required": true,
+          "unit": "μL",
+          "range": "(29,100]",
+          "role": "target_material_quantity",
+          "source_line": 97,
+          "note": "催化剂滴液量 (29,100] 100"
+        },
+        {
+          "name": "碳纸晾干时间",
+          "required": true,
+          "unit": "分钟",
+          "range": "(0,480]",
+          "source_line": 98,
+          "note": "碳纸晾干时间 (0,480] 10"
+        },
+        {
+          "name": "碳纸类型",
+          "required": true,
+          "source_line": 99,
+          "options": [
+            "亲水性",
+            "疏水性"
+          ],
+          "note": "碳纸类型  hydrophilicity"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "催化剂滴液量",
+            "unit": "μL",
+            "range": "(29,100]"
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          73,
+          74,
+          75,
+          77,
+          78,
+          79
+        ],
+        "audit": [
+          24,
+          25,
+          26,
+          28,
+          29,
+          30
+        ]
+      }
+    },
+    {
+      "station_code": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "反应釜微反应",
+      "source": {
+        "document": "skill",
+        "section": "反应釜微反应"
+      },
+      "input": {
+        "containers": [
+          "10ml耐压反应管"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "10ml耐压反应管:0..4"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "流量计流速",
+          "required": true,
+          "unit": "mL/min",
+          "source_line": 35,
+          "note": "气体置换气体流量速率 200"
+        },
+        {
+          "name": "时间",
+          "required": true,
+          "unit": "min",
+          "source_line": 41,
+          "note": "反应时长"
+        },
+        {
+          "name": "压力值",
+          "required": true,
+          "unit": "MPa",
+          "source_line": 32,
+          "note": "气密性检测压力值 1"
+        },
+        {
+          "name": "气体置换次数",
+          "required": true,
+          "source_line": 33,
+          "note": "气体置换次数 1"
+        },
+        {
+          "name": "压力",
+          "required": true,
+          "unit": "MPa",
+          "source_line": 34,
+          "note": "气体置换压力值 0.5"
+        },
+        {
+          "name": "用于置换的气体",
+          "required": true,
+          "source_line": 36,
+          "note": "用于气体置换的名称 CO2,N2 N2"
+        },
+        {
+          "name": "气体置换最后一次的CO2压力值",
+          "required": true,
+          "unit": "MPa",
+          "source_line": 37,
+          "note": "当气体置换用的是CO2，该参数为必选项 0"
+        },
+        {
+          "name": "温度",
+          "required": true,
+          "unit": "℃",
+          "range": "[25,200]",
+          "source_line": 39,
+          "note": "反应釜反应温度 [25,200]"
+        },
+        {
+          "name": "搅拌速度档位",
+          "required": true,
+          "range": "[1,5]",
+          "source_line": 40,
+          "note": "反应搅拌速率1到5档（0~600rpm） [1,5]"
+        },
+        {
+          "name": "开盖温度",
+          "required": true,
+          "unit": "℃",
+          "source_line": 42,
+          "note": "反应结束后，达到设定温度开盖"
+        },
+        {
+          "name": "反应压力",
+          "required": true,
+          "unit": "MPa",
+          "source_line": 43
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ]
+      }
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化流程",
+      "source": {
+        "document": "skill",
+        "section": "光催化流程"
+      },
+      "input": {
+        "containers": [
+          "西林瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "不限"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "西林瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "西林瓶:1..20"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [
+        {
+          "name": "时间",
+          "required": true,
+          "unit": "min",
+          "range": "[1,2880]",
+          "source_line": 43,
+          "note": "时间 [1,2880] 1"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          21,
+          22,
+          23,
+          25,
+          26,
+          27
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化流程",
+      "source": {
+        "document": "skill",
+        "section": "光催化流程"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          20,
+          21,
+          22,
+          24,
+          25,
+          26
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Post_Reaction_Processing_Platform_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "后处理",
+      "source": {
+        "document": "skill",
+        "section": "后处理"
+      },
+      "input": {
+        "containers": [
+          "10ml耐压反应管"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "液相54孔板",
+          "96位塑料孔板",
+          "气相54孔板"
+        ],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "10ml耐压反应管:0..4"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          16,
+          17,
+          18,
+          20,
+          21,
+          22
+        ]
+      }
+    },
+    {
+      "station_code": "Darkbox_Imaging_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "暗箱光照流程",
+      "source": {
+        "document": "skill",
+        "section": "暗箱光照流程"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "关闭荧光多久拍照",
+          "required": true,
+          "unit": "s",
+          "source_line": 36,
+          "note": "荧光拍照时间设置"
+        },
+        {
+          "name": "关闭荧光多久拍照",
+          "required": true,
+          "unit": "s",
+          "source_line": 39,
+          "note": "关闭多久后使用海康相机拍照"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Fluorescence_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "荧光光谱进样绘图",
+      "source": {
+        "document": "skill",
+        "section": "荧光光谱进样绘图"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:1..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "光谱测定参数",
+          "required": true,
+          "source_line": 38,
+          "note": "光谱测定参数 fashe,jifa,tongbu"
+        },
+        {
+          "name": "激发光波长",
+          "required": true,
+          "unit": "nm",
+          "range": "[200,900]",
+          "source_line": 39,
+          "note": "激发光波长 [200,900]"
+        },
+        {
+          "name": "发射波开始波长",
+          "required": true,
+          "unit": "nm",
+          "range": "[200,900]",
+          "source_line": 40,
+          "note": "发射波开始波长 [200,900]"
+        },
+        {
+          "name": "发射波结束波长",
+          "required": true,
+          "unit": "nm",
+          "range": "[200,900]",
+          "source_line": 41,
+          "note": "发射波结束波长 [200,900]"
+        },
+        {
+          "name": "数据间隔",
+          "required": true,
+          "unit": "nm",
+          "source_line": 42,
+          "note": "数据间隔 0.1,0.2,0.5,1.0,2.0,5.0,10"
+        },
+        {
+          "name": "扫描速度",
+          "required": true,
+          "unit": "nm/min",
+          "source_line": 43,
+          "note": "扫描速度 20,60,200,600,2000,6000,12000,30000,60000"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          21,
+          22,
+          23,
+          25,
+          26,
+          27
+        ],
+        "audit": [
+          13,
+          14,
+          15,
+          17,
+          18,
+          19
+        ]
+      }
+    },
+    {
+      "station_code": "Gas_Chromatograph_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "气相分析",
+      "source": {
+        "document": "skill",
+        "section": "气相分析"
+      },
+      "input": {
+        "containers": [
+          "气相54孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "气相54孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "气相54孔板:0..1"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          17,
+          18,
+          19,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          12,
+          13,
+          14,
+          17,
+          18,
+          19
+        ]
+      }
+    },
+    {
+      "station_code": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "多样品测试-无活化",
+      "source": {
+        "document": "skill",
+        "section": "多样品测试-无活化"
+      },
+      "input": {
+        "containers": [
+          "测试架"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "负载于碳纸的固体"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "与输入保持一致"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "测试架:1..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "曝光时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 35
+        },
+        {
+          "name": "帧率",
+          "required": true,
+          "unit": "FPS",
+          "source_line": 36
+        },
+        {
+          "name": "拍照时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 37
+        },
+        {
+          "name": "相机延迟时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 38
+        },
+        {
+          "name": "前后多少帧",
+          "required": true,
+          "source_line": 40
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "Infrared_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "谱学红外流程-夹具识别",
+      "source": {
+        "document": "skill",
+        "section": "谱学红外流程-夹具识别"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:1..10",
+          "50ml耐热瓶:1..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "滴液体积",
+          "required": true,
+          "unit": "μL",
+          "role": "target_material_quantity",
+          "source_line": 38
+        },
+        {
+          "name": "静置晾干时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 39,
+          "note": "静置晾干时间 1200"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "滴液体积",
+            "unit": "μL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          21,
+          22,
+          23,
+          25,
+          26,
+          27
+        ],
+        "audit": [
+          14,
+          15,
+          16,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "station_code": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "接触角-张力仪实验-迭代",
+      "source": {
+        "document": "skill",
+        "section": "接触角-张力仪实验-迭代"
+      },
+      "input": {
+        "containers": [
+          "测试架"
+        ],
+        "container_states": [
+          "不限"
+        ],
+        "sample_states": [
+          "负载于碳纸的固体"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "测试架:1..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [
+        {
+          "name": "液体体积",
+          "required": true,
+          "unit": "mL",
+          "role": "scientific_quantity_requirement",
+          "source_line": 37,
+          "note": "液体体积 4"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          18,
+          19,
+          20,
+          22,
+          23,
+          24
+        ],
+        "audit": [
+          10,
+          11,
+          12,
+          14,
+          15,
+          16
+        ]
+      }
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "氢气检测膜压膜后光照流程",
+      "source": {
+        "document": "skill",
+        "section": "氢气检测膜压膜后光照流程"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "96位塑料孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          14,
+          15,
+          16,
+          18,
+          19,
+          20
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "不压膜仅光照",
+      "source": {
+        "document": "skill",
+        "section": "不压膜仅光照"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "96位塑料孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          39,
+          40,
+          41,
+          43,
+          44,
+          45
+        ],
+        "audit": [
+          19,
+          20,
+          21,
+          23,
+          24,
+          25
+        ]
+      }
+    },
+    {
+      "station_code": "Liquid_Chromatograph_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液相分析",
+      "source": {
+        "document": "skill",
+        "section": "液相分析"
+      },
+      "input": {
+        "containers": [
+          "液相54孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [
+          "液相54孔板"
+        ],
+        "container_states": [
+          "无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": false
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "液相54孔板:1..100"
+        ],
+        "output_count_relation": "operation_declared"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "quantity_effect_not_declared",
+        "material_output_quantity_mode": "undeclared",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          17,
+          18,
+          19,
+          21,
+          22,
+          23
+        ],
+        "audit": [
+          12,
+          13,
+          14,
+          16,
+          17,
+          18
+        ]
+      }
+    },
+    {
+      "station_code": "Microplate_Reader_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "酶标仪303谱学流程",
+      "source": {
+        "document": "skill",
+        "section": "酶标仪303谱学流程"
+      },
+      "input": {
+        "containers": [
+          "96位塑料孔板",
+          "96位石英孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "96位塑料孔板:0..1",
+          "96位石英孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "Spectroscopy_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "容器中转",
+      "source": {
+        "document": "skill",
+        "section": "容器中转"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "液相54孔板",
+          "50ml耐热瓶",
+          "西林瓶",
+          "96位石英孔板",
+          "96位塑料孔板",
+          "气相54孔板"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "液相54孔板:0..1",
+          "50ml耐热瓶:0..10",
+          "西林瓶:0..10",
+          "96位石英孔板:0..1",
+          "96位塑料孔板:0..1"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          15,
+          16,
+          17,
+          19,
+          20,
+          21
+        ],
+        "audit": [
+          9,
+          10,
+          11,
+          13,
+          14,
+          15
+        ]
+      }
+    },
+    {
+      "station_code": "UV_Vis_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "紫外光谱进样绘图",
+      "source": {
+        "document": "skill",
+        "section": "紫外光谱进样绘图"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:0..10",
+          "50ml耐热瓶:0..10"
+        ],
+        "output_count_relation": "same_as_input_count"
+      },
+      "scientific_controls": [],
+      "quantity_semantics": {
+        "target_setpoints": [],
+        "material_output_effect": "whole_batch_processed_without_numeric_inventory_requirement",
+        "material_output_quantity_mode": "whole_batch",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          20,
+          21,
+          22,
+          24,
+          25,
+          26
+        ],
+        "audit": [
+          12,
+          13,
+          14,
+          16,
+          17,
+          18
+        ]
+      }
+    },
+    {
+      "station_code": "XRD_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "XRD滴液检测全流程",
+      "source": {
+        "document": "skill",
+        "section": "XRD滴液检测全流程"
+      },
+      "input": {
+        "containers": [
+          "进样瓶",
+          "50ml耐热瓶"
+        ],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "纯液态或悬浊液"
+        ],
+        "same_as_input": false
+      },
+      "output": {
+        "containers": [],
+        "container_states": [
+          "必须无盖"
+        ],
+        "sample_states": [
+          "与输入保持一致"
+        ],
+        "same_as_input": true
+      },
+      "container_contract": {
+        "input_count_constraints": [
+          "进样瓶:1..40",
+          "50ml耐热瓶:1..10",
+          "XRD基底片:1..40"
+        ],
+        "output_count_relation": "same_as_input_count",
+        "sample_carriers": [
+          "XRD基底片"
+        ]
+      },
+      "scientific_controls": [
+        {
+          "name": "步长",
+          "required": true,
+          "unit": "°",
+          "range": "(0,0.2]",
+          "source_line": 50
+        },
+        {
+          "name": "扫描速度",
+          "required": true,
+          "unit": "°/min",
+          "range": "(0,20]",
+          "source_line": 51
+        },
+        {
+          "name": "滴液体积",
+          "required": true,
+          "unit": "μL",
+          "role": "target_material_quantity",
+          "source_line": 52
+        },
+        {
+          "name": "静置晾干时间",
+          "required": true,
+          "unit": "s",
+          "source_line": 53,
+          "note": "1200"
+        }
+      ],
+      "quantity_semantics": {
+        "target_setpoints": [
+          {
+            "name": "滴液体积",
+            "unit": "μL",
+            "range": ""
+          }
+        ],
+        "material_output_effect": "target_setpoint_applied_to_material_output",
+        "material_output_quantity_mode": "target_setpoint",
+        "reported_measurements": []
+      },
+      "feedback_contract": {
+        "returned_data": {
+          "status": "unknown",
+          "fields": []
+        },
+        "intermediate_feedback": {
+          "status": "unknown",
+          "fields": []
+        }
+      },
+      "io_evidence": {
+        "skill": [
+          30,
+          31,
+          32,
+          34,
+          35,
+          36
+        ],
+        "audit": [
+          20,
+          21,
+          22,
+          24,
+          25,
+          26
+        ]
+      }
+    }
+  ],
+  "global_constraints": [
+    {
+      "text": "- **工作站约束**：模型开展实验设计，必须严格限定使用指定工作站资源。工作站仅可从`[workstation-name]/SKILL.md`路径内选取。若目标工作站不存在，立即终止后续全部流程，同时明确打印输出缺失的工作站名称。",
+      "sources": {
+        "skill": [
+          61
+        ]
+      }
+    },
+    {
+      "text": "- **工作站操作名称约束**：所有操作名称须严格规范沿用，禁止自行修改，示例：超声清洗、物料放置。",
+      "sources": {
+        "skill": [
+          62
+        ]
+      }
+    },
+    {
+      "text": "- **实验开始**：每个实验必须以物料配置开始。测试场景除外。",
+      "sources": {
+        "skill": [
+          63
+        ]
+      }
+    },
+    {
+      "text": "- **实验结束**：每个实验必须以\"容器置放平台_V1-物料放置\"结束。测试场景除外。若当前",
+      "sources": {
+        "skill": [
+          64
+        ]
+      }
+    },
+    {
+      "text": "macro action 的终点是表征测试、离线 observation 或数据回传接口，则以该测试工作站的",
+      "sources": {
+        "skill": [
+          65
+        ]
+      }
+    },
+    {
+      "text": "合法前置中转/进样步骤或明确的 offline_handoff 结束，也属于“测试场景除外”；不得为了",
+      "sources": {
+        "skill": [
+          66
+        ]
+      }
+    },
+    {
+      "text": "形式上补置放步骤而把样品从测试链路倒回或增加无意义容器移动。",
+      "sources": {
+        "skill": [
+          67
+        ]
+      }
+    },
+    {
+      "text": "- **原液**：所有原液均已提前配制完成，无需进行前驱体配制操作，统一通过移液平台工作站完成取用。",
+      "sources": {
+        "skill": [
+          68
+        ]
+      }
+    },
+    {
+      "text": "- **容器类型**：默认沿用同一容器类型和同一样品身份。若后续 operation 的输入容器、容量、",
+      "sources": {
+        "skill": [
+          69
+        ]
+      }
+    },
+    {
+      "text": "相态或实验目的明确不兼容，允许通过平台默认联通的容器/物料/样品处理链进行一次最短必要",
+      "sources": {
+        "skill": [
+          70
+        ]
+      }
+    },
+    {
+      "text": "的 A→B 转移或换瓶；也允许 offline_handoff 明确返回已装入 B 容器的样品。此时必须在",
+      "sources": {
+        "skill": [
+          71
+        ]
+      }
+    },
+    {
+      "text": "workflow/container_plan/offline_handoff 中记录 A、B 的容器类型与编号、转移后的样品状态和",
+      "sources": {
+        "skill": [
+          72
+        ]
+      }
+    },
+    {
+      "text": "sample lineage。不同容器类型各自独立编号，不能因编号相同就把 A、B 当成同一容器。",
+      "sources": {
+        "skill": [
+          73
+        ]
+      }
+    },
+    {
+      "text": "禁止无约束地改变容器类型、跳过样品状态建立、无意义溶剂位置转换或 A→B→A 往返。",
+      "sources": {
+        "skill": [
+          74
+        ]
+      }
+    },
+    {
+      "text": "- **容器数量**：整个实验流程中，随着实验步骤的增加，“容器数量”不能出现个数变多的情况，个数可以保持一致或者减少。",
+      "sources": {
+        "skill": [
+          75
+        ]
+      }
+    },
+    {
+      "text": "- **容器开盖与关盖规则**:",
+      "sources": {
+        "skill": [
+          76
+        ]
+      }
+    },
+    {
+      "text": "- 仅移液平台具备容器开盖、关盖功能，其余所有工作站无开关盖操作功能。",
+      "sources": {
+        "skill": [
+          77
+        ]
+      }
+    },
+    {
+      "text": "- 96位塑料孔板或96位石英孔板默认都不带盖子。",
+      "sources": {
+        "skill": [
+          78
+        ]
+      }
+    },
+    {
+      "text": "- 模型需实时追踪并维护每个容器的 lid_status（open/closed）。任何进入非移液平台的操作前，必须检索该工作站对盖子状态的要求：若上一工作站输出的容器盖状态，与下一工作站要求的输入盖状态不一致，必须在两个工作站之间插入移液平台，完成对应的开盖或关盖过渡操作。",
+      "sources": {
+        "skill": [
+          79
+        ]
+      }
+    }
+  ],
+  "container_list": [
+    "进样瓶",
+    "50ml耐热瓶",
+    "西林瓶",
+    "96位石英孔板",
+    "96位塑料孔板",
+    "10ml耐压反应管",
+    "料斗",
+    "留样瓶",
+    "色谱进样瓶",
+    "碳纸架",
+    "液相54孔板",
+    "气相54孔板",
+    "测试架"
+  ],
+  "sample_carrier_list": [
+    "XRD基底片"
+  ]
+}

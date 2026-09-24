@@ -1,0 +1,866 @@
+{
+  "tier": "operation",
+  "skill": "operation-capabilities",
+  "projection_version": "1.0",
+  "source": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
+  "source_kind": "lab-design-all",
+  "source_digest_sha256": "b55ab0c9003db0056619dcb619f0286a41ff173b0159e3268baf76820ad0e976",
+  "semantic_mapping_digest": "d55d0f704614b453a9909944b24f024e066d32e2cbf03c61611a95e822334870",
+  "source_index": "chem_resources/workstation_capability_index.json",
+  "planning_policy": "Compose macro actions from the listed operations. This layer deliberately does not expose operation inputs, outputs or machine parameters. Respect unavailable stations.",
+  "workstations": [
+    {
+      "station_code": "Centrifuge_V1",
+      "display_name": "离心机_V1"
+    },
+    {
+      "station_code": "Cleaning_and_Dispensing_Workstation_V1",
+      "display_name": "批量加液工作站_V1"
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "display_name": "容器置放平台_V1"
+    },
+    {
+      "station_code": "Cooling_Workstation_V1",
+      "display_name": "冷却工作站_V1"
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "display_name": "烘干机_V1"
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "display_name": "常规物料站"
+    },
+    {
+      "station_code": "Heat_Resistant_Material_Station",
+      "display_name": "耐热瓶物料站"
+    },
+    {
+      "station_code": "Heating_Magnetic_Stirring_Workstation_V1",
+      "display_name": "加热磁力搅拌工作站_V1"
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "display_name": "智能光催容器中转平台_V1"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "display_name": "移液平台_1ml_V1"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "display_name": "移液平台_1ml_V2"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_4Channel_V1",
+      "display_name": "移液平台四通道_V1"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "display_name": "移液平台_5ml_V1"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "display_name": "移液平台_5ml_V2"
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V3",
+      "display_name": "移液平台_5ml_V3"
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "display_name": "液体倾倒工作站_V1"
+    },
+    {
+      "station_code": "Muffle_Furnace_V1",
+      "display_name": "马弗炉_V1"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "display_name": "多通道固体称量工作站_V1"
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V2",
+      "display_name": "多通道固体称量工作站_V2"
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "display_name": "孔板置放平台_V1"
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "display_name": "纯化工作站_V1"
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "display_name": "常温磁力搅拌工作站_V1"
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "display_name": "单通道固体称量工作站_V1"
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "display_name": "固体样品转移工作站_V1"
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "display_name": "谱学磁力搅拌工作站_V1"
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "display_name": "超声分散仪_V1"
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V2",
+      "display_name": "超声分散仪_V2"
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "display_name": "超声移液平台_V1"
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "display_name": "双工位电化学工作站_V2"
+    },
+    {
+      "station_code": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+      "display_name": "高温高压微反应平台_V1"
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V1",
+      "display_name": "光催化工作站_V1"
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V2",
+      "display_name": "光催化工作站_V2"
+    },
+    {
+      "station_code": "Post_Reaction_Processing_Platform_V1",
+      "display_name": "反应后处理平台_V1"
+    },
+    {
+      "station_code": "Darkbox_Imaging_Workstation_V1",
+      "display_name": "暗箱拍摄工作站_V1"
+    },
+    {
+      "station_code": "Fluorescence_Spectrometer_V1",
+      "display_name": "荧光光谱仪_V1"
+    },
+    {
+      "station_code": "Gas_Chromatograph_V1",
+      "display_name": "气相色谱仪_V1"
+    },
+    {
+      "station_code": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+      "display_name": "气液传质_高速摄像_V1"
+    },
+    {
+      "station_code": "Infrared_Spectrometer_V1",
+      "display_name": "红外光谱仪_V1"
+    },
+    {
+      "station_code": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+      "display_name": "接触角_张力仪_V1"
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "display_name": "光照压膜工作站_V1"
+    },
+    {
+      "station_code": "Liquid_Chromatograph_V1",
+      "display_name": "液相色谱仪_V1"
+    },
+    {
+      "station_code": "Microplate_Reader_V1",
+      "display_name": "酶标仪_V1"
+    },
+    {
+      "station_code": "Spectroscopy_Container_Transfer_Station_V1",
+      "display_name": "谱学容器中转平台_V1"
+    },
+    {
+      "station_code": "UV_Vis_Spectrometer_V1",
+      "display_name": "紫外可见光谱仪_V1"
+    },
+    {
+      "station_code": "XRD_V1",
+      "display_name": "X射线衍射仪_V1"
+    }
+  ],
+  "operations": [
+    {
+      "station_code": "Centrifuge_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "离心-复位机制",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "离心-复位机制"
+      }
+    },
+    {
+      "station_code": "Cleaning_and_Dispensing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "批量加液流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "批量加液流程"
+      }
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "静置",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "静置"
+      }
+    },
+    {
+      "station_code": "Container_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "物料放置",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "物料放置"
+      }
+    },
+    {
+      "station_code": "Cooling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "冷却流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "冷却流程"
+      }
+    },
+    {
+      "station_code": "Drying_Oven_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "烘干主流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "烘干主流程"
+      }
+    },
+    {
+      "station_code": "General_Material_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "物料拿取",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "物料拿取"
+      }
+    },
+    {
+      "station_code": "Heat_Resistant_Material_Station",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "容器拿取",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "容器拿取"
+      }
+    },
+    {
+      "station_code": "Heating_Magnetic_Stirring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加热磁力搅拌全流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "加热磁力搅拌全流程"
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化压膜转运至中转位_96位孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "光催化压膜转运至中转位_96位孔板"
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "平台联动孔板拿取_96位孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "平台联动孔板拿取_96位孔板"
+      }
+    },
+    {
+      "station_code": "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "平台联动孔板放置_96位孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "平台联动孔板放置_96位孔板"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "移液到96位孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "移液到96位孔板"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_1ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_4Channel_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液体加样",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "液体加样"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "加液_物料绑定",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "加液_物料绑定"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "纯移液",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "纯移液"
+      }
+    },
+    {
+      "station_code": "Liquid_Handling_Station_5ml_V3",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "反应管加样",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "反应管加样"
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "关盖",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "关盖"
+      }
+    },
+    {
+      "station_code": "Liquid_Pouring_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液体倾倒",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "液体倾倒"
+      }
+    },
+    {
+      "station_code": "Muffle_Furnace_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "马弗炉加热流程_96石英孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "马弗炉加热流程_96石英孔板"
+      }
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体进样-文件传参-机器人",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "固体进样-文件传参-机器人"
+      }
+    },
+    {
+      "station_code": "Multi_Channel_Solid_Weighing_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体称量",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "固体称量"
+      }
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "回收96孔板和氢气膜",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "回收96孔板和氢气膜"
+      }
+    },
+    {
+      "station_code": "Plate_storaging_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "回收96孔板",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "回收96孔板"
+      }
+    },
+    {
+      "station_code": "Purification_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "纯化离心",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "纯化离心"
+      }
+    },
+    {
+      "station_code": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开始搅拌",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开始搅拌"
+      }
+    },
+    {
+      "station_code": "Single_Channel_Solid_Weighing_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体进样",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "固体进样"
+      }
+    },
+    {
+      "station_code": "Solid_Sample_Transfer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "固体样品转移",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "固体样品转移"
+      }
+    },
+    {
+      "station_code": "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "样品架放置-夹具识别",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "样品架放置-夹具识别"
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声清洗",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "超声清洗"
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Disperser_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声清洗",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "超声清洗"
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "超声加液流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "超声加液流程"
+      }
+    },
+    {
+      "station_code": "Ultrasonic_Liquid_Handling_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "开启超声",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "开启超声"
+      }
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "电化学检测",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "电化学检测"
+      }
+    },
+    {
+      "station_code": "Dual_Station_Electrochemical_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "制备并转移碳纸样品",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "制备并转移碳纸样品"
+      }
+    },
+    {
+      "station_code": "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "反应釜微反应",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "反应釜微反应"
+      }
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "光催化流程"
+      }
+    },
+    {
+      "station_code": "Photocatalysis_Workstation_V2",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "光催化流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "光催化流程"
+      }
+    },
+    {
+      "station_code": "Post_Reaction_Processing_Platform_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "后处理",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "后处理"
+      }
+    },
+    {
+      "station_code": "Darkbox_Imaging_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "暗箱光照流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "暗箱光照流程"
+      }
+    },
+    {
+      "station_code": "Fluorescence_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "荧光光谱进样绘图",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "荧光光谱进样绘图"
+      }
+    },
+    {
+      "station_code": "Gas_Chromatograph_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "气相分析",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "气相分析"
+      }
+    },
+    {
+      "station_code": "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "多样品测试-无活化",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "多样品测试-无活化"
+      }
+    },
+    {
+      "station_code": "Infrared_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "谱学红外流程-夹具识别",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "谱学红外流程-夹具识别"
+      }
+    },
+    {
+      "station_code": "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "接触角-张力仪实验-迭代",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "接触角-张力仪实验-迭代"
+      }
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "氢气检测膜压膜后光照流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "氢气检测膜压膜后光照流程"
+      }
+    },
+    {
+      "station_code": "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "不压膜仅光照",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "不压膜仅光照"
+      }
+    },
+    {
+      "station_code": "Liquid_Chromatograph_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "液相分析",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "液相分析"
+      }
+    },
+    {
+      "station_code": "Microplate_Reader_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "酶标仪303谱学流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "酶标仪303谱学流程"
+      }
+    },
+    {
+      "station_code": "Spectroscopy_Container_Transfer_Station_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "容器中转",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "容器中转"
+      }
+    },
+    {
+      "station_code": "UV_Vis_Spectrometer_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "紫外光谱进样绘图",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "紫外光谱进样绘图"
+      }
+    },
+    {
+      "station_code": "XRD_V1",
+      "availability": "unknown",
+      "currently_usable": "unknown",
+      "name": "XRD滴液检测全流程",
+      "support_status": "declared",
+      "source": {
+        "document": "skill",
+        "section": "XRD滴液检测全流程"
+      }
+    }
+  ]
+}

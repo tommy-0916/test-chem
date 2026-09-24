@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chem Agent Black-Box Evaluation"
+  short_description: "Audit all eight Chem Agent cases end to end"
+  default_prompt: "Use $chem-agent-eval-sop to run and strictly validate the complete eight-case Chem Agent evaluation."

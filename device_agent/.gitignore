@@ -1,0 +1,29 @@
+# Python虚拟环境
+.venv/
+.venv-macos/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 日志文件
+logs/
+*.log
+
+# 环境变量文件
+.env
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 测试文件
+!test_*.py
+
+# 临时文件
+*.tmp
+*.bak
