@@ -1,6 +1,12 @@
 # TuringBrain / chemagent — 自主化学实验规划系统
 
-> 仓库版本：`0.1.0-alpha.2`。这是审查后源码的独立版本历史，不包含旧实验结果、checkpoint、本地知识库或凭据。A02 已联网补证，但 Fresh V2 仍停在 Research `manual_required`，没有可下发 workflow；详见 [CHANGELOG.md](CHANGELOG.md)。
+> `main` 版本：`0.1.0-alpha.2`；`fix/fresh-v2-a02-contract` 是未发布修复分支。这是审查后源码的独立版本历史，不包含旧实验结果、checkpoint、运行时知识库或凭据；只纳入 5 条带来源说明的 [A02 审查证据](reaserch_agent/fixtures/a02_verified_kb/NOTICE.md)。Fresh V2 A02 仍停在 Research `manual_required`，没有可下发 workflow；详见 [CHANGELOG.md](CHANGELOG.md)。
+
+Windows 下本仓库有较深的工作站资料路径。干净克隆请使用较短的目标目录并在克隆时启用 Git 的长路径支持，例如：
+
+```powershell
+git clone -c core.longpaths=true --branch fix/fresh-v2-a02-contract https://github.com/tommy-0916/test-chem.git C:\test-chem
+```
 
 > **Observation-Gated Macro-Action Planning and Workflow Evolution for Autonomous Chemical Experimentation**
 >
