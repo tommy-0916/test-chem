@@ -168,6 +168,74 @@ class ResearchV2ContractTest(unittest.TestCase):
         self.assertEqual(result["macro_plan"][0]["provenance"]["source_digest"], expected)
         self.assertNotIn("source_digest", raw_step["provenance"])
 
+    def test_failed_v2_macro_retry_preserves_all_issues_without_handoff(self):
+        query = "Prepare a catalyst with 4.0 mL ethanol"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query=query)
+        )
+        state.current_stage = "sample preparation"
+        state.current_evidence_bundle = {"query": query, "results": []}
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        agent._use_llm = True
+        agent._step_macro_action_design = lambda _state, _mode: None
+        agent._device_context_macro_step_markers = lambda _state, _plan: []
+        raw_step = {
+            "步骤序号": 1,
+            "操作": "加入乙醇",
+            "试剂/对象": "ethanol",
+            "参数": "4.0 mL ethanol",
+        }
+        agent._invoke_state_json = lambda *_args, **_kwargs: {
+            "current_stage_plan": "Prepare the sample for observation",
+            "macro_plan": [raw_step],
+        }
+        all_issues = [f"independent issue {index}" for index in range(16)]
+        agent._macro_plan_quality_issues = lambda *_args, **_kwargs: list(all_issues)
+
+        with self.assertRaisesRegex(RuntimeError, "macro plan quality check failed"):
+            agent._step_macro_plan_design(state)
+
+        self.assertEqual(state.rejected_macro_plan_issues, all_issues)
+        self.assertEqual(state.rejected_macro_plan[0]["操作"], "加入乙醇")
+        self.assertEqual(state.macro_plan, [])
+        self.assertEqual(state.research_action_package_v2, {})
+        self.assertEqual(len(state.raw_llm_outputs), 2)
+        restored = agent._state_from_dict(
+            json.loads(json.dumps(state.to_dict(), ensure_ascii=False))
+        )
+        self.assertEqual(restored.rejected_macro_plan_issues, all_issues)
+
+    def test_successful_v2_retry_clears_rejected_candidate(self):
+        query = "Prepare a catalyst with 4.0 mL ethanol"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query=query)
+        )
+        state.current_stage = "sample preparation"
+        state.current_evidence_bundle = {"query": query, "results": []}
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        agent._use_llm = True
+        agent._step_macro_action_design = lambda _state, _mode: None
+        agent._device_context_macro_step_markers = lambda _state, _plan: []
+        agent._invoke_state_json = lambda *_args, **_kwargs: {
+            "current_stage_plan": "Prepare the sample for observation",
+            "macro_plan": [{
+                "步骤序号": 1,
+                "操作": "加入乙醇",
+                "试剂/对象": "ethanol",
+                "参数": "4.0 mL ethanol",
+            }],
+        }
+        calls = iter((["first candidate invalid"], []))
+        agent._macro_plan_quality_issues = lambda *_args, **_kwargs: next(calls)
+
+        result = agent._step_macro_plan_design(state)
+
+        self.assertEqual(result["macro_plan"][0]["操作"], "加入乙醇")
+        self.assertEqual(state.rejected_macro_plan, [])
+        self.assertEqual(state.rejected_macro_plan_issues, [])
+
     def test_v2_query_stamp_never_repairs_wrong_excerpt_or_forged_digest(self):
         query = "Prepare a catalyst with 4.0 mL ethanol"
         state = ResearchAgentState(

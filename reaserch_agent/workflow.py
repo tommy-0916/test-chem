@@ -3920,6 +3920,8 @@ class ResearchAgent(BaseAgent):
                     macro_plan = self._normalize_macro_plan(result.get("macro_plan", []))
                     if not macro_plan:
                         previous_issues = ["LLM returned empty macro_plan"]
+                        state.rejected_macro_plan = []
+                        state.rejected_macro_plan_issues = list(previous_issues)
                         continue
                     current_stage_plan = str(result.get("current_stage_plan", "")).strip()
                     quality_issues = self._macro_plan_quality_issues(
@@ -6321,6 +6323,8 @@ class ResearchAgent(BaseAgent):
                         state, macro_plan
                     )
                     if not core_issues:
+                        state.rejected_macro_plan = []
+                        state.rejected_macro_plan_issues = []
                         # Issue 5: core chemistry quality is fine. Any remaining
                         # device-boundary doubts become per-step markers and the
                         # authoritative device layer judges them — never clear a
@@ -6337,6 +6341,8 @@ class ResearchAgent(BaseAgent):
                             "current_stage_plan": current_stage_plan,
                             "macro_plan": macro_plan,
                         }
+                    state.rejected_macro_plan = deepcopy(macro_plan)
+                    state.rejected_macro_plan_issues = list(core_issues)
                     previous_issues = self._select_macro_plan_retry_issues(
                         core_issues
                     )

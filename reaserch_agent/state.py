@@ -85,6 +85,10 @@ class ResearchAgentState:
     # device_feasibility_error / network_or_retrieval_error / configuration_error / bootstrap_error.
     failure_category: str = ""
     rejected_macro_plan: List[Dict[str, Any]] = field(default_factory=list)
+    # Full local gate verdict for the last rejected candidate. The short
+    # exception summary is for readability; diagnostics must not hide later
+    # independent blockers or turn the candidate into a Device handoff.
+    rejected_macro_plan_issues: List[str] = field(default_factory=list)
     # Issue 4: campaign-level device-feasibility memory across re-planning
     # rounds. cumulative_device_constraints accumulates every distinct
     # blocking constraint the device layer has ever returned; failed_plan_
