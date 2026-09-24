@@ -13,9 +13,10 @@
 
 为单独测试接口连通性，将上述 **被拒绝的原始候选**复制进隔离的诊断 state，以 `--contract-version v1` 调用 Device，并使用全新的结果及 checkpoint 目录、`--no-resume-checkpoints`、`real_dispatch=false`。这是刻意越过 Research 正式接收条件的诊断输入：不得改写原正式 state，不得将诊断输出称为 V2 通过、可行性证书或可下发 workflow。记录 Device 到达的最深阶段、具体失败字段与产物路径；即使能导出文件，也必须显著标记为 `diagnostic_unvalidated`，不得进入真实实验室下发。
 
-本次隔离输入在本机 `result/A02-forced-v1-compat-handoff-20260924-201554/`；原 Research JSON 的 SHA-256 为 `27d1da6f6d6db8a9593757c3d9496f324b8d267fd5d1d531e18befcb8cf35648`，原文件未修改。使用仓库 `.venv`、`kimi-k3`/`codex_responses`/`high`、独立 checkpoint、`--no-resume-checkpoints` 运行，结果在本机 `result/A02-forced-v1-compat-device-20260924-191621/`。
+本次隔离输入在本机 `result/A02-forced-v1-compat-handoff-20260924-201554/`；原 Research JSON 的 SHA-256 为 `27d1da6f6d6db8a9593757c3d9496f324b8d267fd5d1d531e18befcb8cf35648`，原文件未修改。Device 运行时的已提交源码 HEAD 为 `d548f54`，诊断工具和安全摘要随后以 `a68ef91` 纳入版本管理。使用仓库 `.venv`、`kimi-k3`/`codex_responses`/`high`、独立 checkpoint、`--no-resume-checkpoints` 运行，结果在本机 `result/A02-forced-v1-compat-device-20260924-191621/`。
 
 - 第一次误用全局 Python，缺少 `langchain_core`，尚未进入 Device；改用仓库 `.venv` 后启动成功。
+- 离线适配器探针确认本轮原始 8 步进入 Device 输入后仍为 8 步，源状态保持 `manual_required`，运行合同为 V1 兼容。这只证明输入装载，不证明设备计划或 workflow。
 - Device 完成 `semantic_analysis`，覆盖 8 个宏步骤，并开始 `feasibility_device_plan`。随后 Kimi 返回 HTTP 403 `access_terminated_error`：5 小时使用额度已达上限。因此模型接口和第一阶段可联通，但规划、编译、workflow 导出**尚未验证完成**。
 - CLI 退出码为 0，实际 `device_package.json.status=failed`、`failure_stage=device_internal_error`、`feasibility_accepted=false`。没有设备计划、workflow、证书、dispatch payload 或 303 实验室 task ID；不能把退出码当成功。
 - `diagnostic_summary.json` 强制标为 `diagnostic_only_unvalidated`、`formal_success=false`、`dispatchable=false`、`real_dispatch=false`，只记录状态和计数，不复制可下发内容。原始 Device 包保留在忽略的本地目录用于排错，未交给下发适配器。
