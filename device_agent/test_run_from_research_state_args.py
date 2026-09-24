@@ -7,12 +7,82 @@ import types
 
 import pytest
 
+from chem_agent_contracts.v2 import canonical_digest
 import device_agent.run_from_research_state as run_module
 from device_agent.run_from_research_state import (
     build_parser,
     device_input_package_to_text,
     validate_repair_contract_boundary,
 )
+
+
+def approval_wiring_research_state() -> dict:
+    """A material-free native V2 handoff for the approval transport test."""
+
+    query = "仅核对审批传递元数据，不接触物料。"
+    provenance = {
+        "kind": "user",
+        "reference": "current_query",
+        "source_path": "evidence_bundle.query",
+        "excerpt": "不接触物料",
+        "source_digest": canonical_digest(query),
+    }
+    segment_id = "SEG_APPROVAL_WIRING"
+    material_fields = (
+        "material_inputs", "material_intermediates", "material_outputs",
+        "logical_containers", "material_relations",
+    )
+    return {
+        "contract_version": "v2",
+        "status": "completed",
+        "event": {"event_type": "bootstrap", "query": query},
+        "current_evidence_bundle": {
+            "query": query, "retrieval_status": "empty", "results": [],
+        },
+        "macro_action": {
+            "macro_action_id": "MA_APPROVAL_WIRING",
+            "observation_point_id": "OP_APPROVAL_WIRING",
+            "objective": "核对审批传递元数据",
+            "planned_operations": ["核对审批传递元数据"],
+            "expected_observation": "审批传递记录",
+            "completion_condition": "审批传递记录已核对",
+        },
+        "macro_plan": [{
+            "步骤序号": 1,
+            "macro_step_id": "MS_APPROVAL_WIRING_001",
+            "macro_action_id": "MA_APPROVAL_WIRING",
+            "observation_point_id": "OP_APPROVAL_WIRING",
+            "操作": "核对审批传递元数据",
+            "试剂/对象": "审批传递元数据",
+            "参数": "核对 1 min",
+            "provenance": provenance,
+            "material_contract_status": {
+                field: "not_applicable" for field in material_fields
+            },
+            "material_inputs": [],
+            "material_intermediates": [],
+            "material_outputs": [],
+            "material_relations": [],
+            "container_requirements": [],
+            "operation_segments": [{
+                "segment_id": segment_id,
+                "material_effect": "none",
+                "source_operation_ref": segment_id,
+                "provenance": provenance,
+            }],
+            "material_applicability": [
+                {
+                    "contract_field": field,
+                    "assertion": f"no_{field}",
+                    "operation_segment_ids": [segment_id],
+                    "provenance": provenance,
+                }
+                for field in material_fields
+            ],
+            "quantity_requirements": [],
+            "intermediate_returns": [],
+        }],
+    }
 
 
 def test_exp_id_argument_is_accepted() -> None:
@@ -88,20 +158,7 @@ def test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg(
     request_path = tmp_path / "request.json"
     override_path = tmp_path / "override.json"
     research_path.write_text(
-        json.dumps(
-            {
-                "status": "completed",
-                "macro_plan": [
-                    {
-                        "步骤序号": 1,
-                        "操作": "干燥",
-                        "试剂/对象": "前驱体A",
-                        "参数": "0.18 mmol",
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        ),
+        json.dumps(approval_wiring_research_state(), ensure_ascii=False),
         encoding="utf-8",
     )
     request_path.write_text(
@@ -205,10 +262,10 @@ def test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg(
     assert captured["handoff"]["contract_version"] == "v2"
     assert captured["handoff"]["contract_resolution"] == {
         "requested": "v2",
-        "source_input": "v1",
+        "source_input": "v2",
         "effective": "v2",
         "requested_matches_effective": True,
-        "source_matches_effective": False,
+        "source_matches_effective": True,
     }
     assert captured["kwargs"]["human_quantity_approval_bundle"] is typed_bundle
     assert "human_quantity_approvals" not in captured["kwargs"][

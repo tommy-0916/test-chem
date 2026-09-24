@@ -1,7 +1,8 @@
 """Offline regression for Research logical-container validation and repair.
 
-The fixture reproduces the failing eighth-step XRD carrier shape without
-depending on ignored experiment results or calling a model/provider.
+The fixture tests empty-container metadata, not a chemistry plan.  Its explicit
+no-material applicability records keep the carrier-lid test independent of
+the production material-contract gate and of any model/provider.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from chem_agent_contracts.v2 import canonical_digest
 from reaserch_agent.prompts.task_prompts import MACRO_STEP_CONTRACT_PROMPT
 from reaserch_agent.state import ResearchAgentState, ResearchEvent
 from reaserch_agent.workflow import ResearchAgent
@@ -20,24 +22,73 @@ from reaserch_agent.workflow import ResearchAgent
 ERROR_POINTER = "/macro_plan/7/container_requirements/2/lid_state"
 MACRO_STEP_ID = "MS_MA_S01_R00_008"
 CONTAINER_ID = "A02-XRD-CARRIER"
+QUERY = (
+    "检查空容器拓扑：八个步骤均不接触物料；最后核对 XRD 样品容器、"
+    "溶剂容器和无盖基底片的盖状态。"
+)
+
+
+def no_material_provenance():
+    return {
+        "kind": "user",
+        "reference": "current_query",
+        "source_path": "evidence_bundle.query",
+        "excerpt": "八个步骤均不接触物料",
+        "source_digest": canonical_digest(QUERY),
+    }
 
 
 def synthetic_plan(lid_state="none"):
-    """A minimal V2-valid plan except for the explicitly varied carrier lid."""
+    """A material-free V2 container-topology plan except for the varied lid."""
     plan = []
     for number in range(1, 9):
+        segment_id = f"SEG_CONTAINER_CHECK_{number:03d}"
+        not_applicable_fields = [
+            "material_inputs", "material_intermediates", "material_outputs",
+            "material_relations",
+        ]
+        if number < 8:
+            not_applicable_fields.append("logical_containers")
         plan.append({
             "步骤序号": number,
             "macro_step_id": f"MS_MA_S01_R00_{number:03d}",
-            "操作": "搅拌" if number < 8 else "XRD滴液检测全流程",
-            "试剂/对象": "NiFe LDH 乙醇悬浊液",
-            "参数": "室温搅拌 10 min" if number < 8 else "扫描 10 min，步长 0.02°",
+            "macro_action_id": "MA_CONTAINER_LID_SMOKE",
+            "observation_point_id": "OP_XRD_CONTAINER",
+            "操作": "记录空容器状态" if number < 8 else "核对 XRD 空载容器盖状态",
+            "试剂/对象": "空容器元数据",
+            "参数": "记录 10 min" if number < 8 else "核对 10 min，步长 0.02°",
             "provenance": {
                 "kind": "agent_inferred",
                 "rationale": "仅用于离线接口回归测试的固定参数，不是实验执行方案。",
             },
             "material_inputs": [],
+            "material_intermediates": [],
             "material_outputs": [],
+            "material_relations": [],
+            "material_contract_status": {
+                "material_inputs": "not_applicable",
+                "material_intermediates": "not_applicable",
+                "material_outputs": "not_applicable",
+                "logical_containers": (
+                    "not_applicable" if number < 8 else "declared"
+                ),
+                "material_relations": "not_applicable",
+            },
+            "operation_segments": [{
+                "segment_id": segment_id,
+                "material_effect": "none",
+                "source_operation_ref": segment_id,
+                "provenance": no_material_provenance(),
+            }],
+            "material_applicability": [
+                {
+                    "contract_field": field,
+                    "assertion": f"no_{field}",
+                    "operation_segment_ids": [segment_id],
+                    "provenance": no_material_provenance(),
+                }
+                for field in not_applicable_fields
+            ],
             "container_requirements": [],
             "intermediate_returns": [],
         })
@@ -84,12 +135,26 @@ class LogicalContainerContractTests(unittest.TestCase):
         )
         self.state = ResearchAgentState(
             event=ResearchEvent(
-                "bootstrap", "分析 NiFe LDH 的未反应基线 XRD", {"device_context": {}},
+                "bootstrap", QUERY, {"device_context": {}},
             ),
             contract_version="v2", stage_route=["XRD表征"],
             current_stage="XRD表征", current_stage_plan="采集基线 XRD",
             branch_history=["B1"],
         )
+        self.state.current_evidence_bundle = {"query": QUERY, "results": []}
+        self.state.macro_action = {
+            "macro_action_id": "MA_CONTAINER_LID_SMOKE",
+            "observation_point_id": "OP_XRD_CONTAINER",
+            "objective": "核对空载容器盖状态",
+            "planned_operations": ["记录容器状态", "核对 XRD 基底片盖状态"],
+            "expected_observation": "容器盖状态",
+            "completion_condition": "所有逻辑容器盖状态已核对",
+            "experiment_group": {
+                "group_id": "G_CONTAINER_LID_SMOKE",
+                "sample_id": "S_CONTAINER_LID_SMOKE",
+                "role": "experimental",
+            },
+        }
 
     def _result(self, lid_state="none"):
         return {"current_stage_plan": "采集基线 XRD", "macro_plan": synthetic_plan(lid_state)}
@@ -116,6 +181,23 @@ class LogicalContainerContractTests(unittest.TestCase):
         else:
             responses = [invalid, deepcopy(invalid)]
         originals = deepcopy(responses)
+        if name == "_step_device_adaptation_macro_plan_design":
+            # V2 no longer lets Device feedback rewrite the Research route.
+            # Refusal must happen before consuming either a valid or invalid
+            # model proposal; lid repair remains tested at the other two
+            # authorized Research producer entrypoints.
+            before_state = deepcopy(self.state.to_dict())
+            with patch.object(self.agent, "_invoke_state_json", side_effect=responses) as invoke, \
+                    patch.object(self.agent, "_publish_v2_contract") as publish:
+                with self.assertRaisesRegex(
+                    ValueError, "evidence-bound Research revision or explicit user authority"
+                ):
+                    self._call_entrypoint(name)
+                invoke.assert_not_called()
+                publish.assert_not_called()
+            self.assertEqual(self.state.to_dict(), before_state)
+            self.assertEqual(responses, originals)
+            return
         with patch.object(self.agent, "_step_macro_action_design") as action_design, \
                 patch.object(self.agent, "_device_context_macro_step_markers", return_value=[]), \
                 patch.object(self.agent, "_device_adaptation_macro_plan_issues", return_value=[]), \
@@ -174,13 +256,13 @@ class LogicalContainerContractTests(unittest.TestCase):
     def test_post_observation_exhaustion_does_not_publish(self):
         self._exercise_entrypoint("_step_post_observation_macro_plan_design", "exhausted")
 
-    def test_device_adaptation_accepts_first_valid_candidate_without_retry(self):
+    def test_device_adaptation_refuses_valid_candidate_without_authority(self):
         self._exercise_entrypoint("_step_device_adaptation_macro_plan_design", "valid")
 
-    def test_device_adaptation_repairs_invalid_lid_once(self):
+    def test_device_adaptation_refuses_invalid_lid_without_authority(self):
         self._exercise_entrypoint("_step_device_adaptation_macro_plan_design", "repaired")
 
-    def test_device_adaptation_exhaustion_does_not_publish(self):
+    def test_device_adaptation_refusal_does_not_publish(self):
         self._exercise_entrypoint("_step_device_adaptation_macro_plan_design", "exhausted")
 
     def test_quality_gate_locates_original_step_and_container_without_mutation(self):
