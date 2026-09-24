@@ -759,6 +759,74 @@ class ResearchV2ContractTest(unittest.TestCase):
         )
         self.assertTrue(dependency_station["capability_description"])
 
+    def test_generic_observation_label_projects_explicit_xrd(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="observe a prepared sample by XRD",
+                constraints={"device_context": load_current_capability_index()},
+            )
+        )
+        state.pending_macro_action = {
+            "planned_operations": ["目标表征：XRD 晶相观察"]
+        }
+
+        projected = agent._projected_constraints(state, "step")["device_context"]
+        compact = agent._compact_macro_step_device_context_for_prompt(projected)
+
+        self.assertNotIn("selection_miss", projected)
+        self.assertTrue(any(
+            item["station_code"] == "XRD_V1"
+            for item in compact["workstations"]
+        ))
+        self.assertTrue(any(
+            item["station_code"] == "XRD_V1"
+            and item["name"] == "XRD滴液检测全流程"
+            for item in compact["operation_contracts"]
+        ))
+        xrd_station = next(
+            item for item in compact["workstations"]
+            if item["station_code"] == "XRD_V1"
+        )
+        self.assertIn(
+            "4.0 mL 无水乙醇",
+            json.dumps(xrd_station["planning_constraints"], ensure_ascii=False),
+        )
+        self.assertTrue(any(
+            "Spectroscopy_Magnetic_Stirrer_Workstation_V1"
+            in dependency.get("station_codes", [])
+            for dependency in xrd_station["dependencies"]
+        ))
+
+    def test_generic_observation_label_does_not_invent_a_station(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap",
+                query="observe a prepared sample",
+                constraints={"device_context": load_current_capability_index()},
+            )
+        )
+        state.pending_macro_action = {
+            "planned_operations": ["室温搅拌", "目标表征：未知谱仪测量"]
+        }
+
+        projected = agent._projected_constraints(state, "step")["device_context"]
+
+        self.assertEqual(
+            agent._selected_macro_step_operations(state.pending_macro_action),
+            ["搅拌", "目标表征"],
+        )
+        self.assertTrue(projected.get("selection_miss"))
+        self.assertEqual(projected.get("selected_operations"), ["搅拌", "目标表征"])
+        self.assertFalse(any(
+            item["station_code"] == "XRD_V1"
+            for item in projected["operation_contracts"]
+        ))
+
     def test_macro_step_prompt_keeps_raw_container_and_template_requirements(self):
         agent = ResearchAgent.__new__(ResearchAgent)
         full = load_capability_tier_skill(

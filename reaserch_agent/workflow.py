@@ -6596,6 +6596,16 @@ class ResearchAgent(BaseAgent):
             for name in available_operation_names
             if str(name).strip()
         }
+        generic_observation_labels = {
+            normalized_name(name)
+            for name in ("目标表征", "表征", "结构表征", "目标观察", "观察")
+        }
+        explicit_observation_technique = re.compile(
+            r"^(?:(?:进行|开展|采用|使用|采集|测量)\s*)?"
+            r"(XRD|X\s*射线衍射|TEM|SEM|Raman|拉曼|FTIR|红外|UV(?:-Vis)?|紫外)"
+            r"(?![A-Za-z0-9_-])",
+            flags=re.IGNORECASE,
+        )
         selected: List[str] = []
         for phrase in phrases:
             # V2 Macro Actions normally prefix each description with the exact
@@ -6607,6 +6617,27 @@ class ResearchAgent(BaseAgent):
             if normalized_name(operation_label) in exact_names:
                 selected.append(operation_label)
                 continue
+            if (
+                len(parts) == 2
+                and normalized_name(operation_label) in generic_observation_labels
+            ):
+                # A generic label is not a workstation. Only an affirmative,
+                # leading technique in its description may refine selection;
+                # scanning all explanatory text would mistake "avoid XRD" for
+                # an operation. The capability loader still decides whether
+                # the named technique actually exists and is usable.
+                match = explicit_observation_technique.match(parts[1].strip())
+                if match:
+                    technique = match.group(1)
+                    technique_terms = [
+                        term
+                        for pattern, terms in rules
+                        if re.search(pattern, technique, flags=re.IGNORECASE)
+                        for term in terms
+                    ]
+                    if technique_terms:
+                        selected.extend(technique_terms)
+                        continue
             semantic_terms: List[str] = []
             for pattern, terms in rules:
                 if re.search(pattern, operation_label, flags=re.IGNORECASE):
