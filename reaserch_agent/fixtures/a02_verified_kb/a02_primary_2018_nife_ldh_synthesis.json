@@ -1,0 +1,47 @@
+{
+  "文献题目": "Low-temperature synthesis and investigation into the formation mechanism of high quality Ni-Fe layered double hydroxides hexagonal platelets",
+  "1. 解决的问题": "Primary NiFe LDH (Ni-Fe LDH) synthesis evidence for the A02 alkaline OER surface-reconstruction study. This source establishes a reproducible precursor and reflux protocol; it does not specify electrode loading or OER activation.",
+  "2. 具体的合成步骤": {
+    "描述性总结": "Ni(NO3)2∙6H2O, Fe(NO3)3∙9H2O and urea were dissolved in 80 ml of deionized water to a final concentration of 7.5, 2.5 and 17.5 mM, respectively. Then, 0.8 mmol of TEA were added and the solution was stirred at room temperature for 24 hours, which led to the formation of gel-like brown precipitate. After that, the reaction mixture was transferred to 100 ml round-bottom flask and immersed in an oil bath previously heated to 100 °C under reflux conditions and heated for 48 hours. The flask was naturally cooled down to room temperature and the obtained precipitate was collected by centrifugation (3000 rpm/ 10 min) and washed with water several times.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "Dissolve precursors in deionized water",
+        "试剂/对象": "Ni(NO3)2·6H2O; Fe(NO3)3·9H2O; urea; deionized water",
+        "参数": "80 mL water; final concentrations 7.5 mM Ni salt, 2.5 mM Fe salt, 17.5 mM urea",
+        "evidence": "Ni(NO3)2∙6H2O, Fe(NO3)3∙9H2O and urea were dissolved in 80 ml of deionized water to a final concentration of 7.5, 2.5 and 17.5 mM, respectively."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "Add TEA and stir at room temperature",
+        "试剂/对象": "TEA; precursor solution",
+        "参数": "0.8 mmol TEA; room temperature; 24 h",
+        "evidence": "Then, 0.8 mmol of TEA were added and the solution was stirred at room temperature for 24 hours, which led to the formation of gel-like brown precipitate."
+      },
+      {
+        "步骤序号": 3,
+        "操作": "Reflux and cool",
+        "试剂/对象": "Reaction mixture; 100 mL round-bottom flask; oil bath",
+        "参数": "100 °C under reflux for 48 h; cool naturally to room temperature",
+        "evidence": "After that, the reaction mixture was transferred to 100 ml round-bottom flask and immersed in an oil bath previously heated to 100 °C under reflux conditions and heated for 48 hours."
+      },
+      {
+        "步骤序号": 4,
+        "操作": "Centrifuge and wash",
+        "试剂/对象": "Ni-Fe LDH precipitate; water",
+        "参数": "3000 rpm for 10 min; wash with water several times; final dry yield not reported",
+        "evidence": "The flask was naturally cooled down to room temperature and the obtained precipitate was collected by centrifugation (3000 rpm/ 10 min) and washed with water several times."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5843585/fullTextXML",
+    "source_type": "audited_open_access_primary_full_text",
+    "doi": "10.1038/s41598-018-22630-0",
+    "pmcid": "PMC5843585",
+    "source_section": "Methods > Synthesis of Ni-Fe LDH hexagonal platelets",
+    "license": "CC BY 4.0",
+    "curation_note": "Copied from the source Methods section and checked against Europe PMC full text on 2026-09-24. Numerical reagent amounts calculated from concentration and volume are not source quotations."
+  }
+}

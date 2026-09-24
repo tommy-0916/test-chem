@@ -12,6 +12,7 @@ from agent_skills.capabilities import (
 )
 from chem_agent_contracts.v2 import canonical_digest
 from reaserch_agent.state import ResearchAgentState, ResearchEvent, SearchHit
+from reaserch_agent.tools.corpus_search import LocalExperimentCorpus
 from reaserch_agent.tools.device_context import apply_device_status
 from reaserch_agent.workflow import ResearchAgent
 
@@ -30,6 +31,96 @@ class _OnlineService:
 
 
 class ResearchV2ContractTest(unittest.TestCase):
+    def test_a02_curated_local_corpus_is_present_in_clean_checkout(self):
+        corpus_dir = Path(__file__).parent / "fixtures" / "a02_verified_kb"
+        records = sorted(corpus_dir.glob("*.json"))
+        self.assertEqual(len(records), 5)
+        self.assertEqual(len(LocalExperimentCorpus(corpus_dir)._records), 5)
+        for path in records:
+            with self.subTest(path=path.name):
+                record = json.loads(path.read_text(encoding="utf-8"))
+                metadata = record["_ingestion_metadata"]
+                self.assertTrue(metadata["source_path"].startswith("https://"))
+                self.assertIn(metadata["license"], {"CC BY 3.0", "CC BY 4.0"})
+                self.assertTrue(metadata["doi"].startswith("10."))
+
+    def test_relocated_local_json_has_stable_paper_and_bundle_ids(self):
+        source = {
+            "文献题目": "Local protocol",
+            "1. 解决的问题": "NiFe catalyst preparation",
+            "2. 具体的合成步骤": {
+                "描述性总结": (
+                    "Ni salt and water are mixed as 1 mmol in 10 mL and "
+                    "stirred for 10 min to prepare a precursor solution."
+                ),
+                "参数列表": [
+                    {
+                        "步骤序号": 1,
+                        "操作": "Mix Ni salt and water",
+                        "参数": "1 mmol in 10 mL; 10 min",
+                    }
+                ],
+            },
+            "_ingestion_metadata": {"imported_at": "first copy"},
+        }
+        bundles = []
+        with tempfile.TemporaryDirectory() as directory:
+            for index in (1, 2):
+                kb_dir = Path(directory) / f"clone_{index}"
+                kb_dir.mkdir()
+                payload = dict(source)
+                payload["_ingestion_metadata"] = {"imported_at": f"copy {index}"}
+                (kb_dir / "protocol.json").write_text(
+                    json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+                )
+                agent = ResearchAgent.__new__(ResearchAgent)
+                agent._contract_version = "v2"
+                agent._online_literature = False
+                agent._web_search_enabled = False
+                agent._knowledge_base_dir = str(kb_dir)
+                agent._knowledge_query = LocalExperimentCorpus(kb_dir)
+                state = ResearchAgentState(
+                    event=ResearchEvent(event_type="bootstrap", query="NiFe catalyst")
+                )
+                state.current_stage = "synthesis"
+                agent._refresh_action_evidence(
+                    state, planning_mode="bootstrap", observation_point="XRD"
+                )
+                bundles.append(state.current_evidence_bundle)
+
+        self.assertEqual(len(bundles[0]["results"]), 1)
+        self.assertEqual(
+            bundles[0]["results"][0]["paper_id"],
+            bundles[1]["results"][0]["paper_id"],
+        )
+        self.assertEqual(bundles[0]["bundle_id"], bundles[1]["bundle_id"])
+        self.assertNotEqual(
+            bundles[0]["results"][0]["corpus_files"],
+            bundles[1]["results"][0]["corpus_files"],
+        )
+        self.assertEqual(
+            bundles[0]["results"][0]["verification_status"], "local_file"
+        )
+        self.assertTrue(bundles[0]["results"][0]["evidence_excerpt"])
+
+    def test_legacy_search_hit_state_without_digest_still_loads(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        legacy = {
+            "event": {"event_type": "bootstrap", "query": "legacy query"},
+            "knowledge_hits": [
+                {
+                    "title": "Legacy local hit",
+                    "file_path": "/old/location/protocol.json",
+                    "score": 1.0,
+                    "problem": "",
+                    "synthesis_summary": "legacy summary",
+                }
+            ],
+        }
+        restored = agent._state_from_dict(legacy)
+        self.assertEqual(restored.knowledge_hits[0].scientific_payload_digest, "")
+        self.assertEqual(restored.knowledge_hits[0].file_path, "/old/location/protocol.json")
+
     def test_v2_generated_user_provenance_is_stamped_before_quality_gate(self):
         query = "Prepare a catalyst with 4.0 mL ethanol"
         state = ResearchAgentState(

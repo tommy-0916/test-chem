@@ -1,0 +1,33 @@
+{
+  "文献题目": "Demonstrating the source of inherent instability in NiFe LDH-based OER electrocatalysts",
+  "1. 解决的问题": "Primary A02 NiFe LDH alkaline OER stability and structural-comparison evidence. The study reports 12 h chronopotentiometry at 10 mA/cm2 and STEM before/after 50 OER cycles; the exact sample transfer and catalyst amount remain unspecified in this figure caption.",
+  "2. 具体的合成步骤": {
+    "描述性总结": "Fig. 3(a) Chronopotentiometry curve of the catalyst at 10 mA cm−2 for 12 hours (inset, close-up view of the first hour). (b) and (c) Representative areas of the NiFe LDH samples before and after 50 OER cycles (ESI Fig. S4†), respectively, imaged with STEM.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "Chronopotentiometry stability test",
+        "试剂/对象": "NiFe LDH OER electrode",
+        "参数": "10 mA/cm2 for 12 h",
+        "evidence": "Fig. 3(a) Chronopotentiometry curve of the catalyst at 10 mA cm−2 for 12 hours (inset, close-up view of the first hour)."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "STEM comparison before and after OER cycling",
+        "试剂/对象": "NiFe LDH samples",
+        "参数": "Before and after 50 OER cycles; STEM imaging",
+        "evidence": "(b) and (c) Representative areas of the NiFe LDH samples before and after 50 OER cycles (ESI Fig. S4†), respectively, imaged with STEM."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9942694/fullTextXML",
+    "source_type": "audited_open_access_primary_full_text",
+    "doi": "10.1039/D2TA07261K",
+    "pmcid": "PMC9942694",
+    "source_section": "Fig. 3 caption",
+    "license": "CC BY 3.0",
+    "curation_note": "Figure caption copied from the source and checked against Europe PMC full text on 2026-09-24."
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "文献题目": "Demonstrating the source of inherent instability in NiFe LDH-based OER electrocatalysts",
+  "1. 解决的问题": "Primary alkaline OER electrochemical testing setup for NiFe LDH. This record does not support a target catalyst loading or a specific duration of stability testing. Combining it with the separate 2018 synthesis is a cross-paper adaptation.",
+  "2. 具体的合成步骤": {
+    "描述性总结": "All CV, LSV, CA and CP testing was performed in a conventional three-electrode setup with a Pt counter electrode, Ag/AgCl reference electrode (3.5 M KCl filling solution) and 1 M aqueous KOH solution (J. T. Baker) as the electrolyte, using a BioLogic VMP 300 potentiostat. Voltammograms were performed in the range 0–1 V (vs. Ag/AgCl) at 5 mV s−1 scan rate.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "Set up three-electrode alkaline OER test",
+        "试剂/对象": "NiFe LDH working electrode; Pt counter; Ag/AgCl reference; aqueous KOH",
+        "参数": "1 M KOH electrolyte; Ag/AgCl reference with 3.5 M KCl filling; BioLogic VMP 300 in source study",
+        "evidence": "All CV, LSV, CA and CP testing was performed in a conventional three-electrode setup with a Pt counter electrode, Ag/AgCl reference electrode (3.5 M KCl filling solution) and 1 M aqueous KOH solution (J. T. Baker) as the electrolyte, using a BioLogic VMP 300 potentiostat."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "Acquire voltammograms",
+        "试剂/对象": "NiFe LDH working electrode; three-electrode setup",
+        "参数": "0–1 V vs Ag/AgCl; 5 mV/s",
+        "evidence": "Voltammograms were performed in the range 0–1 V (vs. Ag/AgCl) at 5 mV s−1 scan rate."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9942694/fullTextXML",
+    "source_type": "audited_open_access_primary_full_text",
+    "doi": "10.1039/D2TA07261K",
+    "pmcid": "PMC9942694",
+    "source_section": "Experimental > Electrochemical testing",
+    "license": "CC BY 3.0",
+    "curation_note": "The source Methods passage is contiguous and verbatim. The paper's contradictory synthesis concentration mapping is not imported. Checked against Europe PMC full text on 2026-09-24."
+  }
+}

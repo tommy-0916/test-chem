@@ -565,6 +565,7 @@ class ResearchAgent(BaseAgent):
             "steps",
             "performance",
             "matched_terms",
+            "scientific_payload_digest",
         }
         for key, value in payload.items():
             if key == "event" or not hasattr(state, key):
@@ -2269,13 +2270,20 @@ class ResearchAgent(BaseAgent):
                 "objective": objective,
                 "results": [
                     {
+                        # Old states and synthetic/PDF hits have no content
+                        # digest; retain their historical path-based fallback.
                         "paper_id": "local_"
-                        + hashlib.sha256(hit.file_path.encode("utf-8")).hexdigest()[:16],
+                        + (
+                            hit.scientific_payload_digest[:16]
+                            if hit.scientific_payload_digest
+                            else hashlib.sha256(hit.file_path.encode("utf-8")).hexdigest()[:16]
+                        ),
                         "title": hit.title,
                         "source": "local_knowledge_base",
                         "verification_status": "local_file",
                         "full_text_status": "local_parsed",
                         "corpus_files": [hit.file_path],
+                        "scientific_payload_digest": hit.scientific_payload_digest,
                         "score": hit.score,
                         "problem": hit.problem,
                         "synthesis_summary": hit.synthesis_summary,
@@ -2365,8 +2373,20 @@ class ResearchAgent(BaseAgent):
             "errors": [str(item) for item in summary.get("errors", []) or []],
             "current_invocation_only": True,
         }
+        # A relocated clean clone must retain the same evidence identity. Keep
+        # real paths in the saved result so excerpt verification can still open
+        # the source file; only canonicalize them in the bundle fingerprint.
+        fingerprint = deepcopy(isolated)
+        for result in fingerprint["results"]:
+            if (
+                result.get("verification_status") == "local_file"
+                and result.get("scientific_payload_digest")
+            ):
+                result["corpus_files"] = [
+                    "sha256:" + result["scientific_payload_digest"]
+                ]
         isolated["bundle_id"] = "evidence_" + hashlib.sha256(
-            json.dumps(isolated, ensure_ascii=False, sort_keys=True, default=str).encode(
+            json.dumps(fingerprint, ensure_ascii=False, sort_keys=True, default=str).encode(
                 "utf-8"
             )
         ).hexdigest()

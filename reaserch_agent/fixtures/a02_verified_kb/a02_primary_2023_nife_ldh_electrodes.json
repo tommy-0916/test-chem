@@ -1,0 +1,33 @@
+{
+  "文献题目": "Demonstrating the source of inherent instability in NiFe LDH-based OER electrocatalysts",
+  "1. 解决的问题": "Primary A02 NiFe LDH OER electrode-preparation and substrate-selection evidence. It supports comparing ex situ Raman, in situ Raman, STEM, FT-IR, XRD and XPS samples, but no target catalyst loading is reported. The paper's synthesis concentrations are internally inconsistent and are not imported here.",
+  "2. 具体的合成步骤": {
+    "描述性总结": "Electrodes for OER testing were prepared by spraying NiFe LDH component onto a choice of substrate, depending on the characterization, using a USI Prism Ultracoat 300 spray tool with the substrate kept at 100 °C. A flow rate of 0.5 ml min−1 was used and mass loading was monitored using a Sartorius SE2 ultra-microbalance. The choice of substrates were Ni foam for ex situ Raman, indium tin oxide for in situ Raman, glassy carbon for STEM-EDX/EELS, FT-IR and XRD, and finally Au/Ti/SiO2/Si for XPS analyses.",
+    "参数列表": [
+      {
+        "步骤序号": 1,
+        "操作": "Spray NiFe LDH onto characterization-specific substrates",
+        "试剂/对象": "NiFe LDH; Ni foam; indium tin oxide; glassy carbon; Au/Ti/SiO2/Si",
+        "参数": "Substrate 100 °C; spray flow 0.5 mL/min; loading monitored but target value not reported",
+        "evidence": "Electrodes for OER testing were prepared by spraying NiFe LDH component onto a choice of substrate, depending on the characterization, using a USI Prism Ultracoat 300 spray tool with the substrate kept at 100 °C. A flow rate of 0.5 ml min−1 was used and mass loading was monitored using a Sartorius SE2 ultra-microbalance."
+      },
+      {
+        "步骤序号": 2,
+        "操作": "Choose characterization substrate",
+        "试剂/对象": "Ni foam; indium tin oxide; glassy carbon; Au/Ti/SiO2/Si",
+        "参数": "Ni foam: ex situ Raman; ITO: in situ Raman; glassy carbon: STEM-EDX/EELS, FT-IR, XRD; Au/Ti/SiO2/Si: XPS",
+        "evidence": "The choice of substrates were Ni foam for ex situ Raman, indium tin oxide for in situ Raman, glassy carbon for STEM-EDX/EELS, FT-IR and XRD, and finally Au/Ti/SiO2/Si for XPS analyses."
+      }
+    ]
+  },
+  "3. 性能": [],
+  "_ingestion_metadata": {
+    "source_path": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9942694/fullTextXML",
+    "source_type": "audited_open_access_primary_full_text",
+    "doi": "10.1039/D2TA07261K",
+    "pmcid": "PMC9942694",
+    "source_section": "Experimental > Electrode preparation",
+    "license": "CC BY 3.0",
+    "curation_note": "Copied from the source Methods section and checked against Europe PMC full text on 2026-09-24. The target catalyst loading is unknown, and listed equipment is not asserted to exist in laboratory 303."
+  }
+}

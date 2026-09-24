@@ -30,6 +30,9 @@ class SearchHit:
     steps: List[Dict[str, Any]] = field(default_factory=list)
     performance: List[Dict[str, Any]] = field(default_factory=list)
     matched_terms: List[str] = field(default_factory=list)
+    # Empty for legacy states and PDF hits. Structured local JSON records use
+    # their scientific content, not an installation-specific path, for IDs.
+    scientific_payload_digest: str = ""
 
 
 @dataclass

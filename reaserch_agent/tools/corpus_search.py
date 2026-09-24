@@ -503,6 +503,9 @@ class LocalExperimentCorpus:
                         steps=list(record["steps"]),
                         performance=list(record["performance"]),
                         matched_terms=matched_terms,
+                        scientific_payload_digest=(
+                            record.get("scientific_payload_digest") or ""
+                        ),
                     ),
                     record.get("scientific_payload_digest"),
                 )
