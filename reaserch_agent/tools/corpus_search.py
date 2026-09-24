@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -121,6 +122,17 @@ class LocalExperimentCorpus:
         return {
             "title": data.get("文献题目", json_path.stem),
             "file_path": str(json_path),
+            # Ingestion timestamps/source bookkeeping can differ for copies of
+            # the same paper. Retain every other field, including full steps,
+            # so same-title experimental variants are not merged.
+            "scientific_payload_digest": hashlib.sha256(
+                json.dumps(
+                    {key: value for key, value in data.items() if key != "_ingestion_metadata"},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
             "problem": data.get("1. 解决的问题", ""),
             "synthesis_summary": synthesis.get("描述性总结", ""),
             "experiment_details": experiment_details,
@@ -471,7 +483,7 @@ class LocalExperimentCorpus:
             normalized_queries = ["普鲁士蓝 类似物 合成"]
 
         bm25_boosts = self._bm25_boosts(normalized_queries)
-        scored: List[Tuple[float, SearchHit]] = []
+        scored: List[Tuple[float, SearchHit, str | None]] = []
         for index, record in enumerate(self._records):
             score, matched_terms = self._score_record(record, normalized_queries)
             if bm25_boosts is not None:
@@ -492,11 +504,20 @@ class LocalExperimentCorpus:
                         performance=list(record["performance"]),
                         matched_terms=matched_terms,
                     ),
+                    record.get("scientific_payload_digest"),
                 )
             )
 
         scored.sort(key=lambda item: (-item[0], item[1].title))
-        return [item[1] for item in scored[:top_k]]
+        ranked_hits: List[SearchHit] = []
+        seen_json_content: set[str] = set()
+        for _, hit, content_digest in scored:
+            if content_digest is not None:
+                if content_digest in seen_json_content:
+                    continue
+                seen_json_content.add(content_digest)
+            ranked_hits.append(hit)
+        return ranked_hits[:top_k]
 
     def _bm25_boosts(self, queries: Sequence[str]) -> List[float] | None:
         """Optional BM25 boost on top of the deterministic keyword scorer.

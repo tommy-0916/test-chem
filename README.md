@@ -1,6 +1,6 @@
 # TuringBrain / chemagent — 自主化学实验规划系统
 
-> 仓库版本：`0.1.0-alpha.1`。这是审查后源码的干净初始导入，不包含旧实验结果、checkpoint、本地知识库或凭据。A02 Fresh V2 仍停在 Research `manual_required`，没有可下发 workflow；详见 [CHANGELOG.md](CHANGELOG.md)。
+> 仓库版本：`0.1.0-alpha.2`。这是审查后源码的独立版本历史，不包含旧实验结果、checkpoint、本地知识库或凭据。A02 已联网补证，但 Fresh V2 仍停在 Research `manual_required`，没有可下发 workflow；详见 [CHANGELOG.md](CHANGELOG.md)。
 
 > **Observation-Gated Macro-Action Planning and Workflow Evolution for Autonomous Chemical Experimentation**
 >

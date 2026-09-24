@@ -2,6 +2,12 @@
 
 本仓库从审查后的源码快照建立独立历史；不继承旧 `chem-agent` 仓库的提交、实验输出和凭据。版本号描述代码快照，不表示实验可下发。
 
+## 0.1.0-alpha.2 — 2026-09-24
+
+- 本地知识库检索在排序后、截取 top-k 前合并科学内容完全相同的 JSON 副本；摄入时间、镜像来源等 `_ingestion_metadata` 不参与指纹，同标题但实验参数不同的记录仍保留。新增定向回归测试。
+- 定向离线测试：`python -X utf8 -B -m unittest reaserch_agent.test_v2_contract reaserch_agent.test_skill_stages chem_agent_contracts.test_v2 reaserch_agent.test_corpus_search -q`，67 项通过。扩展证据测试另有 5 项 Windows SQLite 临时文件句柄清理错误，未宣称全套通过。
+- A02 的 2018/2023 原始论文片段已联网核对并保存在本地忽略知识库；两轮全新 V2 Research 均在 `macro_plan_design` 模型调用发生 `LogicalCallDeadlineExceeded`，终态 `manual_required` / `macro_generation_error`。没有形成 V2 交接合同、Device 计划、workflow 或真实实验室任务；补证产物未纳入公开仓库。
+
 ## 0.1.0-alpha.1 — 2026-09-24
 
 - 初始导入 Research、Device、编排、共享合同、测试、必要配置和工作站能力文件。
