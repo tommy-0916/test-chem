@@ -22,6 +22,7 @@ class V2MacroPromptContractTest(unittest.TestCase):
         self.assertIn("不能把多输入或多输出关系写成 whole_batch", prompt)
         self.assertIn("value/unit 是每项的顶层字段", prompt)
         self.assertIn("不得把浓度×体积的计算结果标成文献原文直给数值", prompt)
+        self.assertIn("洗涤水等新加入的外部物料同样属于主动投料", prompt)
 
     def test_v2_design_prompt_requires_complete_port_and_requirement_quantities(self):
         prompt = V2_MACRO_PLAN_DESIGN_PROMPT.format(
@@ -37,6 +38,9 @@ class V2MacroPromptContractTest(unittest.TestCase):
         self.assertIn("顶层 kind、material_id、material、value、unit、source", prompt)
         self.assertIn("material port 的 quantity 必须显式给出", prompt)
         self.assertIn("不得写 null", prompt)
+        self.assertIn("planned_target、planning_estimate", prompt)
+        self.assertIn("绝不能填入 kind", prompt)
+        self.assertIn("derivation 若需要，必须放在该需求对象顶层", prompt)
 
 
 if __name__ == "__main__":

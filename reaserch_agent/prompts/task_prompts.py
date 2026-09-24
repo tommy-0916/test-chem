@@ -280,7 +280,8 @@ quantity_requirements。材料合同只能依据已授权的实验语义填写�
   每个主动投料还须在 material_inputs[].quantity 中声明计划数量，两处的物料、数值和单位必须一致。
   论文只给浓度而未直接给剂量时，不得把浓度×体积的计算结果标成文献原文直给数值。
   若同一文献摘录以 respectively 明确给出有序试剂、有序 mM 浓度及 mL 体积，允许把计算出的
-  mmol 剂量标为 source=literature_calculation，仍用绑定原文的 paper provenance，且必须附加
+  mmol 剂量标为 source=literature_calculation，仍用绑定原文的 paper provenance，且必须在
+  quantity_requirements 项的顶层、与 provenance 并列地附加
   derivation={{"rule":"mM_times_mL_to_mmol_v1","ordered_materials":[原文顺序的完整试剂名称],
   "material_evidence_name":"本项在原文中的完整名称","concentration_value":原文对应 mM 数值,
   "concentration_unit":"mM","volume_value":原文 mL 数值,"volume_unit":"mL"}}。
@@ -348,6 +349,8 @@ V2 具体实验设计要求：
 - 当前输出只允许服务于 macro action 中的一个 experiment_group/sample_id。
 - 所有主动投加的材料必须在 material_inputs 与 quantity_requirements 中给出计划目标数值和单位；
   禁止“适量”“若干”“按需”等模糊投料。
+  洗涤水等新加入的外部物料同样属于主动投料：文献只说“洗涤数次”而没有单次或总量时，
+  不得用 runtime_measured 冒充已存在库存或计划剂量；对应输入数量保持 unresolved 并停止发布。
 - 用户任务与当前证据都没有给出关键物料、数量、路线或终点时，不得用 agent_inferred 补成具体事实；
   对应 material contract 维度必须保持 unresolved，并在 Research -> Device 发布门停止。agent_inferred
   只可用于步骤总体说明或非权威推理记录，不能作为 material ports、relations、operation_segments 或
@@ -832,6 +835,14 @@ provenance、owner、required_by、device_policy、scientifically_fixed；不要
 material_id/port/quantity 的对象。所有 material port 的 quantity 必须显式给出合法的
 计划目标、计划估计、整批非数值或运行时待测语义；不得写 null。多输入关系若不能给出有证据的
 逐端分配，应保留待测或 unresolved，不得用 whole_batch 掩盖。
+quantity_requirements.kind 只能是 scientific_input_setpoint、target_dose、whole_batch、
+runtime_measured_inventory 或 semantic_classification_required；planned_target、planning_estimate、
+whole_batch_unspecified 和 runtime_measurement_required 只能作为 material port 的 quantity.semantic，
+绝不能填入 kind。主动外部投料的计划剂量通常为 scientific_input_setpoint；整批上游输出继续处理
+才用 whole_batch。source 只能是 user_query、literature、literature_calculation 或 process_semantics；
+不能写 user。owner 必须是 research_scientific，required_by 必须是 research_plan，
+device_policy 必须是 scientific_review_before_change。derivation 若需要，必须放在该需求对象顶层，
+不得放入 provenance 内；provenance 只负责绑定原始来源，不承载推算字段。
 输出前检查：序号连续；每步操作/对象/参数完整；主动投料全部定量；lineage 连续；最后一步到达 observation point。
 """
 

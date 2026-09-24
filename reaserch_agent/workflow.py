@@ -8565,6 +8565,10 @@ class ResearchAgent(BaseAgent):
             segment.material_effect == "register_existing_input"
             for segment in parsed_segments
         )
+        observes_without_material_change = any(
+            segment.material_effect == "observe_without_material_change"
+            for segment in parsed_segments
+        )
         relation_status = step.get("material_contract_status")
         relation_status = (
             relation_status.get("material_relations")
@@ -8609,9 +8613,18 @@ class ResearchAgent(BaseAgent):
                     return (
                         material.get("material_origin") == "upstream_output"
                         and bool(material.get("parent_output_refs"))
-                        and any(
-                            relation.get("quantity_basis") == "whole_batch"
-                            for relation in relation_by_input.get(instance_id, [])
+                        and (
+                            any(
+                                relation.get("quantity_basis") in {
+                                    "whole_batch", "runtime_measurement_required"
+                                }
+                                for relation in relation_by_input.get(instance_id, [])
+                            )
+                            or (
+                                relation_status == "not_applicable"
+                                and observes_without_material_change
+                                and not consumes_material
+                            )
                         )
                     )
                 if mode == "runtime_measured":
@@ -9584,6 +9597,24 @@ class ResearchAgent(BaseAgent):
                     if isinstance(quantity_requirements, list)
                     else []
                 )
+                if self._contract_version == "v2":
+                    for requirement in entry["quantity_requirements"]:
+                        if (
+                            not isinstance(requirement, dict)
+                            or requirement.get("source") != "literature_calculation"
+                            or "derivation" in requirement
+                        ):
+                            continue
+                        provenance = requirement.get("provenance")
+                        if isinstance(provenance, dict) and isinstance(
+                            provenance.get("derivation"), dict
+                        ):
+                            # A model may nest this explicitly supplied
+                            # calculation under provenance. Move only the
+                            # unchanged record to its schema location; the
+                            # original raw response remains auditable and
+                            # the calculation gate still verifies every fact.
+                            requirement["derivation"] = provenance.pop("derivation")
                 for key in (
                     "material_inputs", "material_intermediates", "material_outputs",
                     "material_relations", "operation_segments", "material_applicability",
