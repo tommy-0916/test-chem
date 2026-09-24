@@ -21,7 +21,9 @@
 - CLI 退出码为 0，实际 `device_package.json.status=failed`、`failure_stage=device_internal_error`、`feasibility_accepted=false`。没有设备计划、workflow、证书、dispatch payload 或 303 实验室 task ID；不能把退出码当成功。
 - `diagnostic_summary.json` 强制标为 `diagnostic_only_unvalidated`、`formal_success=false`、`dispatchable=false`、`real_dispatch=false`，只记录状态和计数，不复制可下发内容。原始 Device 包保留在忽略的本地目录用于排错，未交给下发适配器。
 
-待 Kimi 额度恢复后，应从同一被拒绝的 Fresh V2 原始候选生成**新的隔离结果与 checkpoint**，再次使用 `--no-resume-checkpoints`，继续测到 Device 可行性、编译和 workflow 终态；即使届时 V1 兼容路径成功，也不代表 V2 合同通过。
+用户提供另一把 Kimi 密钥后，仅通过隐藏输入放入一次性进程环境，在**新的** `result/A02-forced-v1-compat-device-new-key-20260924-192841/` 与 checkpoint 中重跑同一隔离候选；未把密钥写入命令、仓库或结果。此次 `semantic_analysis` 与 `feasibility_device_plan` 两个模型阶段均完成，得到 **19 步 Device 候选计划**。模型声称可行，但本地计划审计报 **28 项阻断**，终态 `manual_required / device_plan_audit_blocked`，没有进入 workflow 翻译；无正式证书、workflow、dispatch payload 或实验室 task ID。`diagnostic_summary.json` 继续强制记录 `diagnostic_only_unvalidated / dispatchable=false / real_dispatch=false`。
+
+当前首要诊断线索是候选计划引用数值 `source_macro_step=1..8`，而 Research 的冻结 ID 为 `MS-S1-01-DISSOLVE-MIX` 等；此外 `device_plan[10]` 的来源镜像冲突、样品/对照矩阵缺少 `NIFE-LDH-ASPREP-XRD-S1-G1`、一个 offline handoff 的语义绑定不足，以及多个状态变化步骤未按所需能力和 `relation.event_kind` 获得工作站操作覆盖。28 项含因来源 ID 错误造成的级联，尚不能直接断言每项都是独立设备能力缺失。下一步应分别定位映射错误与真实能力缺口；若继续测试翻译器，应使用单独的**不可下发诊断输出**，不能修改正式审计结果。
 
 ## 已知未解决字段及责任边界
 
