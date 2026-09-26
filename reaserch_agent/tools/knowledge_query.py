@@ -53,6 +53,10 @@ class KnowledgeQuery:
         corpus_hits = self._corpus.search(queries, top_k=resolved_top_k)
         return self._merge_hits(memory_hits, corpus_hits, top_k=resolved_top_k)
 
+    def lookup_local_files(self, paths: Sequence[str | Path]) -> List[SearchHit]:
+        """Look up already loaded local corpus files by exact resolved path."""
+        return self._corpus.lookup_local_files(paths)
+
     def format_context(self, hits: Iterable[SearchHit]) -> str:
         materialized_hits = list(hits)
         memory_only = [

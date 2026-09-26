@@ -1727,6 +1727,7 @@ class ResearchAgent(BaseAgent):
             "planning_mode": planning_mode,
         })
         state.pending_macro_action = descriptor
+        self._select_action_evidence_for_route(state)
         state.add_log(f"macro action designed before macro steps ({planning_mode})")
         return descriptor
 
@@ -2295,26 +2296,7 @@ class ResearchAgent(BaseAgent):
                 "retrieval_status": "success" if hits else "empty",
                 "query": state.event.query,
                 "objective": objective,
-                "results": [
-                    {
-                        "paper_id": "local_"
-                        + hashlib.sha256(hit.file_path.encode("utf-8")).hexdigest()[:16],
-                        "title": hit.title,
-                        "source": "local_knowledge_base",
-                        "verification_status": "local_file",
-                        "full_text_status": "local_parsed",
-                        "corpus_files": [hit.file_path],
-                        "score": hit.score,
-                        "problem": hit.problem,
-                        "synthesis_summary": hit.synthesis_summary,
-                        "experiment_details": hit.experiment_details,
-                        "steps": deepcopy(hit.steps),
-                        "performance": deepcopy(hit.performance),
-                        "matched_terms": list(hit.matched_terms),
-                        **self._verified_local_evidence_fields(hit),
-                    }
-                    for hit in hits
-                ],
+                "results": [self._local_hit_evidence_record(hit) for hit in hits],
                 "errors": [],
             }
             self._record_tool_invocation(
@@ -2345,6 +2327,11 @@ class ResearchAgent(BaseAgent):
                     mode="bootstrap",
                     stage=state.current_stage,
                 )
+                if any(
+                    isinstance(item, dict) and item.get("corpus_files")
+                    for item in summary.get("results", []) or []
+                ):
+                    self._knowledge_query.refresh()
                 self._record_tool_invocation(
                     state,
                     "macro_action_evidence",
@@ -2393,6 +2380,10 @@ class ResearchAgent(BaseAgent):
             "errors": [str(item) for item in summary.get("errors", []) or []],
             "current_invocation_only": True,
         }
+        if self._contract_version == "v2":
+            isolated["reference_candidates"] = [
+                audit for audit, _record in self._explicit_reference_candidates(state)
+            ]
         isolated["bundle_id"] = "evidence_" + hashlib.sha256(
             json.dumps(isolated, ensure_ascii=False, sort_keys=True, default=str).encode(
                 "utf-8"
@@ -2404,6 +2395,39 @@ class ResearchAgent(BaseAgent):
             f"{'local knowledge' if local_only else 'online'} invocation: "
             f"results={len(isolated['results'])}, status={isolated['retrieval_status']}"
         )
+
+    def _local_hit_evidence_record(self, hit: SearchHit) -> Dict[str, Any]:
+        """Give local search and exact-reference hits the same paper identity."""
+
+        record: Dict[str, Any] = {
+            "title": hit.title,
+            "source": "local_knowledge_base",
+            "verification_status": "local_file",
+            "full_text_status": "local_parsed",
+            "corpus_files": [hit.file_path],
+            "score": hit.score,
+            "problem": hit.problem,
+            "synthesis_summary": hit.synthesis_summary,
+            "experiment_details": hit.experiment_details,
+            "steps": deepcopy(hit.steps),
+            "performance": deepcopy(hit.performance),
+            "matched_terms": list(hit.matched_terms),
+            **self._verified_local_evidence_fields(hit),
+        }
+        source_file = Path(hit.file_path)
+        if source_file.suffix.lower() == ".json":
+            try:
+                payload = json.loads(source_file.read_text(encoding="utf-8"))
+                metadata = payload.get("_ingestion_metadata") or {}
+                doi = str(metadata.get("doi") or "").strip().lower()
+                if doi:
+                    record["doi"] = doi
+            except (OSError, UnicodeError, ValueError, TypeError, AttributeError):
+                pass
+        record["paper_id"] = "local_" + hashlib.sha256(
+            self._evidence_identity(record).encode("utf-8")
+        ).hexdigest()[:16]
+        return record
 
     def _verified_local_evidence_fields(self, hit: SearchHit) -> Dict[str, str]:
         """Expose only an excerpt that is present in the local source record.
@@ -2468,6 +2492,391 @@ class ResearchAgent(BaseAgent):
             for item in bundle.get("results", []) or []
             if isinstance(item, dict)
         ]
+
+    @staticmethod
+    def _evidence_identity(record: Dict[str, Any]) -> str:
+        """Deduplicate local copies without treating a file path as a paper ID."""
+
+        doi = str(record.get("doi") or "").strip().lower()
+        if doi:
+            return f"doi:{doi}"
+        arxiv_id = str(record.get("arxiv_id") or "").strip().lower()
+        if arxiv_id:
+            return f"arxiv:{arxiv_id}"
+        files = record.get("corpus_files") or []
+        if files:
+            return "file:" + str(Path(files[0]).resolve()).casefold()
+        title = re.sub(
+            r"[^0-9a-z一-鿿]+", "", str(record.get("title") or "").lower()
+        )
+        if title:
+            return f"title:{title}"
+        return "unknown:"
+
+    @staticmethod
+    def _same_evidence_record(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+        """Match old path-only results with newly DOI-identified local copies."""
+
+        left_files = {str(Path(path).resolve()).casefold() for path in left.get("corpus_files", []) or []}
+        right_files = {str(Path(path).resolve()).casefold() for path in right.get("corpus_files", []) or []}
+        if left_files and right_files and left_files & right_files:
+            return True
+        left_doi = str(left.get("doi") or "").strip().casefold()
+        right_doi = str(right.get("doi") or "").strip().casefold()
+        if left_doi and right_doi:
+            return left_doi == right_doi
+        left_arxiv = str(left.get("arxiv_id") or "").strip().casefold()
+        right_arxiv = str(right.get("arxiv_id") or "").strip().casefold()
+        if left_arxiv and right_arxiv:
+            return left_arxiv == right_arxiv
+        if left_files or right_files:
+            return False
+        left_title = re.sub(r"[^0-9a-z一-鿿]+", "", str(left.get("title") or "").casefold())
+        right_title = re.sub(r"[^0-9a-z一-鿿]+", "", str(right.get("title") or "").casefold())
+        return bool(left_title and left_title == right_title)
+
+    @staticmethod
+    def _route_profile(text: str) -> tuple[str, str]:
+        """Recognise only explicit route labels; unknown routes never gain authority.
+
+        This is an evidence filter, not a chemistry-convention expansion. It
+        cannot add materials, states, quantities or relations to a plan.
+        """
+
+        lowered = text.casefold()
+        pba = bool(re.search(r"prussian[ -]?blue|\bpba\b|hexacyanoferrate|普鲁士蓝|铁氰化|fe\s*\(\s*cn\s*\)\s*6", lowered))
+        ldh = bool(re.search(r"\bldh\b|layered double hydroxid|层状双氢氧化|水滑石", lowered))
+        family = "mixed" if pba and ldh else "pba" if pba else "ldh" if ldh else "unknown"
+        urea = bool(re.search(r"\burea\b|尿素", lowered))
+        reflux = bool(re.search(r"\breflux\b|回流", lowered))
+        carbonate = bool(re.search(r"carbonate|碳酸盐|na2co3|k2co3|naoh|koh|sodium hydroxide|potassium hydroxide|碱/|碱性沉淀", lowered))
+        coprecipitation = bool(re.search(r"co[ -]?precipitat|共沉淀", lowered))
+        cyanide = bool(re.search(r"hexacyanoferrate|铁氰化|fe\s*\(\s*cn\s*\)\s*6", lowered))
+        routes = [
+            name for name, present in (
+                ("urea_reflux", urea and reflux),
+                ("alkali_coprecipitation", carbonate and coprecipitation),
+                ("hexacyanoferrate", cyanide),
+            ) if present
+        ]
+        route = routes[0] if len(routes) == 1 else "unknown"
+        return family, route
+
+    @classmethod
+    def _action_route_profile(cls, action: Dict[str, Any]) -> tuple[str, str]:
+        group = action.get("experiment_group") or {}
+        variables = group.get("variables") if isinstance(group, dict) else {}
+        family_text = str((variables or {}).get("target_material_family") or "")
+        if not family_text:
+            family_text = str(action.get("objective") or "")
+        family, _ = cls._route_profile(family_text)
+        route_text = " ".join(
+            [str(action.get("objective") or "")]
+            + [str(item) for item in action.get("planned_operations", []) or []]
+        )
+        _, route = cls._route_profile(route_text)
+        return family, route
+
+    @classmethod
+    def _evidence_route_verdict(
+        cls, record: Dict[str, Any], action: Dict[str, Any]
+    ) -> str:
+        action_family, action_route = cls._action_route_profile(action)
+        source_family, source_route = cls._source_route_profile(record)
+        if action_family in {"ldh", "pba"} and source_family in {"ldh", "pba"}:
+            if action_family != source_family:
+                return "route_mismatch"
+        elif action_family == "mixed" or source_family == "mixed":
+            return "route_unknown"
+        else:
+            return "route_unknown"
+        if action_route == "unknown" or source_route == "unknown":
+            return "route_unknown"
+        return "route_match" if action_route == source_route else "route_mismatch"
+
+    @classmethod
+    def _source_route_profile(cls, record: Dict[str, Any]) -> tuple[str, str]:
+        title = str(record.get("title") or "")
+        summary = str(record.get("synthesis_summary") or "")
+        steps = [
+            step for step in record.get("steps", []) or []
+            if isinstance(step, dict)
+        ]
+        family_text = " ".join(
+            [title, summary]
+            + [str(step.get("操作") or step.get("operation") or "") for step in steps]
+        )
+        family, _ = cls._route_profile(family_text)
+
+        # A paper may describe synthesis and later test the product in KOH.
+        # A KOH test must not turn a urea synthesis into an alkali recipe.
+        test_marker = re.compile(
+            r"\boer\b|electrochem|electrode|voltam|characteriz|"
+            r"activity test|电化学|电极|表征|活性测试",
+            re.IGNORECASE,
+        )
+        summary_units = [
+            re.split(test_marker, part, maxsplit=1)[0]
+            for part in re.split(r"[。；;.!?]\s*", summary)
+        ]
+        units = list(summary_units)
+        step_units: List[str] = []
+        for step in steps:
+            operation = str(step.get("操作") or step.get("operation") or "")
+            if test_marker.search(operation):
+                continue
+            step_units.append(" ".join(
+                str(step.get(key) or "")
+                for key in ("操作", "试剂/对象", "参数", "operation", "object", "parameters")
+            ))
+        units.extend(step_units)
+        units = [unit.casefold() for unit in units if unit.strip()]
+        source_text = " ".join(units)
+        urea = bool(re.search(r"\burea\b|尿素", source_text))
+        clean_summary = " ".join(summary_units).casefold()
+        urea_reflux = (
+            bool(re.search(r"\burea\b|尿素", clean_summary))
+            and bool(re.search(r"\breflux\b|回流", clean_summary))
+        ) or any(
+            re.search(r"\burea\b|尿素", unit, re.IGNORECASE)
+            and re.search(r"\breflux\b|回流", unit, re.IGNORECASE)
+            for unit in step_units
+        )
+        alkali = re.compile(
+            r"carbonate|碳酸盐|na2co3|k2co3|naoh|koh|"
+            r"sodium hydroxide|potassium hydroxide|氢氧化钠|氢氧化钾",
+            re.IGNORECASE,
+        )
+        coprecipitation = re.compile(r"co[ -]?precipitat|共沉淀", re.IGNORECASE)
+        alkali_coprecipitation = any(
+            alkali.search(unit) and coprecipitation.search(unit)
+            for unit in units
+        )
+        cyanide = bool(re.search(
+            r"hexacyanoferrate|铁氰化|fe\s*\(\s*cn\s*\)\s*6",
+            source_text,
+        ))
+        if urea and alkali_coprecipitation:
+            return family, "unknown"
+        routes = [
+            name for name, present in (
+                ("urea_reflux", urea_reflux),
+                ("alkali_coprecipitation", alkali_coprecipitation),
+                ("hexacyanoferrate", cyanide),
+            ) if present
+        ]
+        return family, routes[0] if len(routes) == 1 else "unknown"
+
+    @staticmethod
+    def _synthesis_route_view(record: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep later characterization and OER values out of synthesis planning."""
+
+        view = deepcopy(record)
+        test_marker = re.compile(
+            r"\boer\b|electrochem|electrode|voltam|characteriz|"
+            r"activity test|电化学|电极|表征|活性测试",
+            re.IGNORECASE,
+        )
+        view["steps"] = [
+            step for step in view.get("steps", []) or []
+            if isinstance(step, dict)
+            and not test_marker.search(
+                str(step.get("操作") or step.get("operation") or "")
+            )
+        ]
+        view["performance"] = []
+        view["experiment_details"] = ""
+        for key in ("synthesis_summary", "evidence_excerpt"):
+            value = str(view.get(key) or "")
+            if value:
+                view[key] = re.split(test_marker, value, maxsplit=1)[0].strip()
+        if len(str(view.get("evidence_excerpt") or "")) < 40:
+            view.pop("evidence_excerpt", None)
+            view.pop("evidence_source_field", None)
+        return view
+
+    def _route_source_for_record(
+        self, record: Dict[str, Any]
+    ) -> Dict[str, Any] | None:
+        """Inspect structured KB synthesis, never an online full-JSON excerpt."""
+
+        if record.get("source") == "local_knowledge_base" and (
+            record.get("synthesis_summary") or record.get("steps")
+        ):
+            return self._synthesis_route_view(record)
+        paths = record.get("corpus_files") or []
+        lookup = getattr(self._knowledge_query, "lookup_local_files", None)
+        if not paths or not callable(lookup):
+            return None
+        requested_doi = str(record.get("doi") or "").strip().casefold()
+        requested_title = re.sub(
+            r"[^0-9a-z一-鿿]+", "", str(record.get("title") or "").casefold()
+        )
+        for hit in lookup(paths):
+            local_record = self._local_hit_evidence_record(hit)
+            local_doi = str(local_record.get("doi") or "").strip().casefold()
+            local_title = re.sub(
+                r"[^0-9a-z一-鿿]+", "", str(hit.title or "").casefold()
+            )
+            if requested_doi and local_doi and requested_doi != local_doi:
+                continue
+            if not (requested_doi and local_doi) and (
+                not requested_title or requested_title != local_title
+            ):
+                continue
+            return self._synthesis_route_view(local_record)
+        return None
+
+    def _explicit_reference_candidates(
+        self, state: ResearchAgentState
+    ) -> List[tuple[Dict[str, Any], Dict[str, Any] | None]]:
+        """Look up ingested references by exact KB file, outside search top-k."""
+
+        references = [
+            item for item in state.reference_inputs
+            if isinstance(item, dict) and item.get("status") == "ingested"
+        ]
+        paths = [
+            str(path)
+            for item in references
+            for path in item.get("written_records", []) or []
+            if str(path).strip()
+        ]
+        if not paths:
+            return []
+        lookup = getattr(self._knowledge_query, "lookup_local_files", None)
+        hits = lookup(paths) if callable(lookup) else []
+        by_path = {str(Path(hit.file_path).resolve()).casefold(): hit for hit in hits}
+        candidates: List[tuple[Dict[str, Any], Dict[str, Any] | None]] = []
+        seen_records: List[Dict[str, Any]] = []
+        for path in paths:
+            hit = by_path.get(str(Path(path).resolve()).casefold())
+            audit: Dict[str, Any] = {
+                "paper_id": "", "title": "", "source_file": path,
+                "status": "candidate", "reason_code": "awaiting_route",
+                "route_outline": [],
+            }
+            if hit is None:
+                audit.update(status="excluded", reason_code="missing_source")
+                candidates.append((audit, None))
+                continue
+            record = self._synthesis_route_view(self._local_hit_evidence_record(hit))
+            source_family, source_route = self._source_route_profile(record)
+            audit.update(
+                paper_id=record["paper_id"], title=hit.title,
+                source_file=hit.file_path,
+                route_family=source_family,
+                route=source_route,
+                route_outline=[
+                    label for label in (source_family, source_route)
+                    if label != "unknown"
+                ],
+            )
+            if any(self._same_evidence_record(record, prior) for prior in seen_records):
+                audit.update(status="excluded", reason_code="duplicate")
+                candidates.append((audit, None))
+                continue
+            seen_records.append(record)
+            if not record.get("evidence_excerpt"):
+                audit.update(status="excluded", reason_code="missing_excerpt")
+                candidates.append((audit, None))
+                continue
+            candidates.append((audit, record))
+        return candidates
+
+    def _select_action_evidence_for_route(self, state: ResearchAgentState) -> None:
+        """Promote only same-route sources after the action is fully described."""
+
+        bundle = state.current_evidence_bundle
+        if self._contract_version != "v2" or not isinstance(bundle, dict):
+            return
+        explicit = self._explicit_reference_candidates(state)
+        action = state.pending_macro_action or {}
+        action_family, action_route = self._action_route_profile(action)
+        strict_route = action_family in {"ldh", "pba"} and action_route != "unknown"
+        route_screen_required = bool(explicit) or action_family in {"ldh", "pba"}
+        selected: List[Dict[str, Any]] = []
+        selection_log: List[Dict[str, Any]] = []
+        audits: List[Dict[str, Any]] = []
+        for raw_audit, record in explicit:
+            audit = deepcopy(raw_audit)
+            if record is not None:
+                verdict = self._evidence_route_verdict(record, action)
+                if verdict == "route_match" and strict_route:
+                    if not any(self._same_evidence_record(record, prior) for prior in selected):
+                        selected.append({**record, "selection_reason": "explicit_reference_route_match"})
+                        audit.update(status="selected", reason_code="route_match")
+                    else:
+                        audit.update(status="excluded", reason_code="duplicate")
+                else:
+                    audit.update(status="excluded", reason_code=verdict)
+            audits.append(audit)
+            selection_log.append({**audit, "origin": "explicit_reference"})
+        for record in bundle.get("results", []) or []:
+            if not isinstance(record, dict):
+                continue
+            source_record = (
+                self._route_source_for_record(record) if route_screen_required else None
+            )
+            verdict = (
+                self._evidence_route_verdict(source_record, action)
+                if source_record is not None else
+                "route_unknown" if route_screen_required else "legacy_unclassified"
+            )
+            planner_record = (
+                {**record, **{
+                    key: deepcopy(source_record[key])
+                    for key in (
+                        "synthesis_summary", "experiment_details", "steps",
+                        "performance", "evidence_excerpt", "evidence_source_field",
+                    )
+                    if key in source_record
+                }}
+                if source_record is not None else record
+            )
+            if source_record is not None and not source_record.get("evidence_excerpt"):
+                planner_record.pop("evidence_excerpt", None)
+                planner_record.pop("evidence_source_field", None)
+            has_excerpt = bool(planner_record.get("evidence_excerpt"))
+            verified = (
+                str(record.get("verification_status") or "") in self._evidence_identity_statuses()
+                and str(record.get("full_text_status") or "") in {"parsed", "local_parsed"}
+            )
+            usable = (
+                verdict == "route_match" and has_excerpt and verified
+                if route_screen_required else True
+            )
+            duplicate = any(self._same_evidence_record(record, prior) for prior in selected)
+            if usable and not duplicate:
+                selected.append(planner_record)
+                status, reason = "selected", verdict
+            else:
+                status = "excluded"
+                reason = (
+                    "duplicate" if duplicate else
+                    "missing_excerpt" if verdict == "route_match" and not has_excerpt else
+                    "unverified_source" if verdict == "route_match" and not verified else verdict
+                )
+            selection_log.append({
+                "paper_id": str(record.get("paper_id") or ""),
+                "title": str(record.get("title") or ""),
+                "source_file": str((record.get("corpus_files") or [""])[0]),
+                "status": status, "reason_code": reason,
+                "origin": "retrieval",
+            })
+        bundle["reference_candidates"] = audits
+        bundle["selection_log"] = selection_log
+        bundle["results"] = selected
+        bundle["route_profile"] = {
+            "family": action_family, "route": action_route,
+            "status": "classified" if strict_route else "unknown",
+        }
+        bundle["bundle_id"] = "evidence_" + hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in bundle.items() if key != "bundle_id"},
+                ensure_ascii=False, sort_keys=True, default=str,
+            ).encode("utf-8")
+        ).hexdigest()
 
     @staticmethod
     def _conventions_resource_path() -> str:
@@ -4597,7 +5006,10 @@ class ResearchAgent(BaseAgent):
         self._step_macro_action_design(state, "post_observation")
         current_evidence = self._current_action_evidence_records(state)
         reference_context = (
-            json.dumps(current_evidence, ensure_ascii=False, indent=2)
+            json.dumps(
+                self._compact_action_evidence_for_planning(current_evidence),
+                ensure_ascii=False, separators=(",", ":"),
+            )
             if self._contract_version == "v2"
             else self._format_macro_reference_context(state.knowledge_hits[:2])
         )
@@ -4622,12 +5034,18 @@ class ResearchAgent(BaseAgent):
             reference_context=reference_context or "当前没有可用参考案例",
         )
         if self._contract_version == "v2":
+            bundle = state.current_evidence_bundle or {}
             base_prompt += (
-                "\n\n## 当前 Macro Action 独立联网证据包\n"
+                "\n\n## 当前 Macro Action 独立证据包\n"
                 + json.dumps(
-                    state.current_evidence_bundle, ensure_ascii=False, indent=2
+                    {
+                        "bundle_id": bundle.get("bundle_id", ""),
+                        "retrieval_status": bundle.get("retrieval_status", ""),
+                        "selected_result_count": len(current_evidence),
+                    },
+                    ensure_ascii=False, separators=(",", ":"),
                 )
-                + "\n只允许本证据包支撑论文来源声明；不得引用历史 Action 的检索结果。"
+                + "\n只允许上方有界参考文献支撑论文来源声明；不得引用历史 Action 的检索结果。"
             )
         if self._use_llm:
             previous_result: Dict[str, Any] | None = None
@@ -7226,7 +7644,7 @@ class ResearchAgent(BaseAgent):
             chosen = sorted(candidates, key=lambda item: (-item[0], item[1]))[:3]
             return [item[2] for item in sorted(chosen, key=lambda item: item[1])]
 
-        def record_rank(record: Dict[str, Any]) -> tuple[float, float]:
+        def record_rank(record: Dict[str, Any]) -> tuple[int, float, float]:
             selected = useful_steps(record)
             scientific_steps = sum(
                 bool(
@@ -7240,7 +7658,14 @@ class ResearchAgent(BaseAgent):
                 source_score = float(record.get("score", 0) or 0)
             except (TypeError, ValueError):
                 source_score = 0.0
-            return scientific_steps * 5.0 + len(selected) * 2.0 + source_score, source_score
+            explicit_priority = int(
+                record.get("selection_reason") == "explicit_reference_route_match"
+            )
+            return (
+                explicit_priority,
+                scientific_steps * 5.0 + len(selected) * 2.0 + source_score,
+                source_score,
+            )
 
         unique_records.sort(key=lambda entry: record_rank(entry[1]), reverse=True)
         step_fields = (
@@ -7781,10 +8206,50 @@ class ResearchAgent(BaseAgent):
             payload["knowledge_hits"] = []
             payload["extracted_protocols"] = []
             payload["literature_capability_assessments"] = []
-            payload["current_evidence_bundle"] = self._truncate_context_value(
-                state.current_evidence_bundle,
-                max_chars=9000,
-            )
+            bundle = state.current_evidence_bundle or {}
+            if task_name.startswith("post_observation_macro_plan_design"):
+                # The task prompt already carries the selected two-record
+                # projection. Keep only its identity in the state context.
+                payload["current_evidence_bundle_reference"] = {
+                    "bundle_id": bundle.get("bundle_id", ""),
+                    "retrieval_status": bundle.get("retrieval_status", ""),
+                    "selected_result_count": len(bundle.get("results", []) or []),
+                }
+            elif task_name.startswith("macro_action_design") and bundle.get("reference_candidates"):
+                # At action selection time the route is undecided. Show all
+                # specified sources as route candidates before the ordinary
+                # top-k results; do not expose their recipe numbers yet.
+                payload["explicit_reference_candidates"] = [
+                    {
+                        key: item.get(key)
+                        for key in (
+                            "paper_id", "title", "source_file", "status",
+                            "reason_code", "route_family", "route", "route_outline",
+                        )
+                    }
+                    for item in bundle.get("reference_candidates", [])[:12]
+                    if isinstance(item, dict)
+                ]
+                payload["current_evidence_bundle"] = {
+                    "bundle_id": bundle.get("bundle_id", ""),
+                    "retrieval_status": bundle.get("retrieval_status", ""),
+                    "candidate_count": len(bundle.get("reference_candidates", [])),
+                    "retrieved_route_candidates": [
+                        {
+                            "paper_id": record.get("paper_id", ""),
+                            "title": record.get("title", ""),
+                            "route_family": self._source_route_profile(record)[0],
+                            "route": self._source_route_profile(record)[1],
+                        }
+                        for record in bundle.get("results", [])[:5]
+                        if isinstance(record, dict)
+                    ],
+                }
+            else:
+                payload["current_evidence_bundle"] = self._truncate_context_value(
+                    state.current_evidence_bundle,
+                    max_chars=9000,
+                )
         campaign_memory_context = self._campaign_memory_context(state)
         if campaign_memory_context and not (
             self._contract_version == "v2"

@@ -74,7 +74,7 @@ class LocalExperimentCorpus:
 
     def __init__(self, corpus_dir: str | Path | None = None) -> None:
         default_dir = Path(__file__).resolve().parents[1] / "chem_kb"
-        self._corpus_dir = Path(corpus_dir or default_dir)
+        self._corpus_dir = Path(corpus_dir or default_dir).resolve()
         self._records = self._load_records()
 
     def refresh(self) -> None:
@@ -90,8 +90,12 @@ class LocalExperimentCorpus:
         if not self._corpus_dir.exists():
             return records
 
+        corpus_root = self._corpus_dir
         for path in sorted(self._corpus_dir.iterdir()):
             if not path.is_file() or path.name.startswith("."):
+                continue
+            # Do not load a file symlink that escapes the configured corpus.
+            if path.resolve().parent != corpus_root:
                 continue
 
             if path.suffix.lower() == ".json":
@@ -481,22 +485,58 @@ class LocalExperimentCorpus:
             scored.append(
                 (
                     score,
-                    SearchHit(
-                        title=record["title"],
-                        file_path=record["file_path"],
-                        score=score,
-                        problem=record["problem"],
-                        synthesis_summary=record["synthesis_summary"],
-                        experiment_details=record.get("experiment_details", ""),
-                        steps=list(record["steps"]),
-                        performance=list(record["performance"]),
-                        matched_terms=matched_terms,
-                    ),
+                    self._record_to_hit(record, score=score, matched_terms=matched_terms),
                 )
             )
 
         scored.sort(key=lambda item: (-item[0], item[1].title))
         return [item[1] for item in scored[:top_k]]
+
+    def lookup_local_files(self, paths: Sequence[str | Path]) -> List[SearchHit]:
+        """Return loaded corpus records whose resolved paths match exactly.
+
+        This lookup uses the in-memory corpus snapshot. It neither reads a path
+        supplied by the caller nor applies search scoring or a top-k limit.
+        Relative paths are resolved from the process working directory.
+        """
+        corpus_root = self._corpus_dir
+        loaded = {
+            Path(record["file_path"]).resolve(): record
+            for record in self._records
+        }
+        hits: List[SearchHit] = []
+        seen: set[Path] = set()
+        for raw_path in paths:
+            if not isinstance(raw_path, (str, Path)) or not str(raw_path).strip():
+                continue
+            try:
+                resolved_path = Path(raw_path).resolve()
+            except (OSError, RuntimeError):
+                continue
+            if resolved_path.parent != corpus_root or resolved_path in seen:
+                continue
+            record = loaded.get(resolved_path)
+            if record is None:
+                continue
+            seen.add(resolved_path)
+            hits.append(self._record_to_hit(record, score=0.0, matched_terms=[]))
+        return hits
+
+    @staticmethod
+    def _record_to_hit(
+        record: Dict[str, Any], *, score: float, matched_terms: List[str]
+    ) -> SearchHit:
+        return SearchHit(
+            title=record["title"],
+            file_path=record["file_path"],
+            score=score,
+            problem=record["problem"],
+            synthesis_summary=record["synthesis_summary"],
+            experiment_details=record.get("experiment_details", ""),
+            steps=list(record["steps"]),
+            performance=list(record["performance"]),
+            matched_terms=matched_terms,
+        )
 
     def _bm25_boosts(self, queries: Sequence[str]) -> List[float] | None:
         """Optional BM25 boost on top of the deterministic keyword scorer.
