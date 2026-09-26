@@ -16,6 +16,25 @@ from .identity import (
     json_scalar_identity_key,
     normalize_json_scalar_identity,
 )
+from .route_candidate import (
+    ExperimentalGroupScopeV1,
+    RouteCandidateV1,
+    RouteFieldEvidenceV1,
+    RouteGoalV1,
+    RouteSignatureV1,
+    RouteTargetV1,
+)
+from .route_decision import (
+    DevicePreflightV1,
+    RouteCandidateDecisionV1,
+    RouteDecisionV1,
+    RouteSearchBudgetV1,
+    RouteSearchRoundV1,
+    RouteValidationReceiptV1,
+    decide_routes,
+    route_signature_mismatches,
+    targeted_search_status,
+)
 from .v2 import (
     CONTRACT_VERSION_V2,
     RAW_OBSERVATIONS_DIGEST_SCOPE_V1,
@@ -45,6 +64,18 @@ from .v2 import (
 )
 
 __all__ = [
+    "DevicePreflightV1",
+    "ExperimentalGroupScopeV1",
+    "RouteCandidateDecisionV1",
+    "RouteCandidateV1",
+    "RouteDecisionV1",
+    "RouteFieldEvidenceV1",
+    "RouteGoalV1",
+    "RouteSearchBudgetV1",
+    "RouteSearchRoundV1",
+    "RouteSignatureV1",
+    "RouteTargetV1",
+    "RouteValidationReceiptV1",
     "CONTRACT_VERSION_V2",
     "RAW_OBSERVATIONS_DIGEST_SCOPE_V1",
     "RAW_STEP_DIGEST_SCOPE_V1",
@@ -77,9 +108,12 @@ __all__ = [
     "decode_json_scalar_identity",
     "decode_package_identity",
     "device_result_to_v2",
+    "decide_routes",
     "encode_json_scalar_identity",
     "IdentityContractError",
     "json_scalar_identity_key",
     "normalize_json_scalar_identity",
     "research_state_to_v2",
+    "route_signature_mismatches",
+    "targeted_search_status",
 ]
