@@ -27,8 +27,22 @@ constraints that cite it keep their hard classification.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from .macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+    )
+except ImportError:
+    from macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+    )
 
 # ----------------------------------------------------------------------
 # Solid-chain capability table (from SKILL.md truth source; see module doc)
@@ -129,6 +143,52 @@ _TRANSFER_REASON_CODES = frozenset(
 _STRUCTURED_SPLIT_REASON_CODES = frozenset(
     {"capacity_split", "aliquot", "pooling"}
 )
+_SPLIT_REASON_ADJUSTMENT_KINDS = {
+    "capacity_split": frozenset(
+        {"capacity_split", "split_batch", "split_transfer"}
+    ),
+    "aliquot": frozenset({"aliquot", "split_transfer"}),
+    "pooling": frozenset({"pooling", "pool", "merge"}),
+}
+
+# These identifiers and ranges are copied from the loaded workstation contracts,
+# not inferred from operation prose.  A hopper relay is exempt from the generic
+# round-trip rule only when both endpoints use this exact supported station pair
+# and the dosing side carries a typed recipe bound to the same hopper/container.
+_SOLID_TRANSFER_STATION_IDS = frozenset(
+    {
+        "Solid_Sample_Transfer_Workstation_V1",
+        "固体样品转移工作站_V1",
+    }
+)
+_SOLID_FILE_DOSING_STATION_IDS = frozenset(
+    {
+        "Multi_Channel_Solid_Weighing_Workstation_V1",
+        "多通道固体称量工作站_V1",
+    }
+)
+_SOLID_FILE_DOSING_HOPPER_RANGE = (1, 30)
+_SOLID_FILE_DOSING_MASS_RANGE_G = (0.0, 50.0)
+_RECIPE_WRAPPER_KEYS = frozenset(
+    {"上传文件逐瓶配方", "配方行", "逐瓶配方", "recipe_rows"}
+)
+_RECIPE_BOTTLE_KEYS = frozenset(
+    {"瓶号", "瓶编号", "目标瓶号", "bottle_id", "vial_id"}
+)
+_RECIPE_TARGET_CONTAINER_KEYS = frozenset(
+    {
+        "实际容器编号",
+        "对应实际容器编号",
+        "目标容器编号",
+        "target_container_id",
+    }
+)
+_RECIPE_MASS_KEYS = frozenset(
+    {"加样量(g)", "加样质量(g)", "质量(g)", "mass_g"}
+)
+_RECIPE_HOPPER_KEYS = frozenset(
+    {"料罐号", "料罐编号", "料斗号", "料斗编号", "hopper_id"}
+)
 
 
 def _container_type_and_id(value: Any) -> Optional[Tuple[str, str]]:
@@ -194,6 +254,355 @@ def _canonical_ordinary_container_type(value: Any) -> str:
     return text
 
 
+def _canonical_contract_container_type(value: Any) -> str:
+    """Normalize only container aliases declared by the solid-chain contract."""
+
+    text = re.sub(r"\s+", "", str(value or "")).lower()
+    if text in {"料斗", "料罐", "hopper"} or "料斗" in text or "料罐" in text:
+        return "hopper"
+    if "96位塑料孔板" in text:
+        return "96位塑料孔板"
+    return _canonical_ordinary_container_type(text)
+
+
+def _positive_integer(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value > 0 and value.is_integer() else None
+    text = re.sub(r"\s+", "", str(value or ""))
+    match = re.fullmatch(
+        r"(?:(?:料罐|料斗|hopper|进样瓶|西林瓶|耐热瓶|容器|vial|v|h)"
+        r"(?:编号)?[#:_-]?)?0*(\d+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    number = int(match.group(1))
+    return number if number > 0 else None
+
+
+def _positive_number(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _normalized_recipe_key(value: Any) -> str:
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace("（", "(")
+        .replace("）", ")")
+        .replace(" ", "")
+    )
+
+
+def _row_value(row: Dict[str, Any], aliases: frozenset[str]) -> Any:
+    normalized_aliases = {_normalized_recipe_key(alias) for alias in aliases}
+    for key, value in row.items():
+        if _normalized_recipe_key(key) in normalized_aliases:
+            return value
+    return None
+
+
+def _structured_recipe_rows(key_values: Any) -> List[Dict[str, Any]]:
+    """Return only rows under an explicit recipe wrapper.
+
+    Prose and loosely shaped dictionaries do not prove a hopper relay.  This
+    deliberately mirrors the typed recipe contract while remaining local to
+    this dependency-light audit module.
+    """
+
+    if not isinstance(key_values, dict):
+        return []
+    wrapper_keys = {_normalized_recipe_key(key) for key in _RECIPE_WRAPPER_KEYS}
+    rows: List[Dict[str, Any]] = []
+
+    def collect(value: Any) -> None:
+        if isinstance(value, list):
+            rows.extend(item for item in value if isinstance(item, dict))
+        elif isinstance(value, dict):
+            rows.append(value)
+
+    def walk(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+            return
+        if not isinstance(value, dict):
+            return
+        for key, item in value.items():
+            if _normalized_recipe_key(key) in wrapper_keys:
+                collect(item)
+            else:
+                walk(item)
+
+    walk(key_values)
+    return rows
+
+
+def _step_declares_container(
+    step: Dict[str, Any], expected_type: str, expected_number: int
+) -> bool:
+    containers = step.get("containers")
+    if not isinstance(containers, dict):
+        return False
+    container_type = containers.get("容器类型", containers.get("container_type"))
+    if _canonical_contract_container_type(container_type) != expected_type:
+        return False
+    raw_numbers = containers.get("容器编号", containers.get("container_ids"))
+    if not isinstance(raw_numbers, list):
+        raw_numbers = [raw_numbers] if raw_numbers not in (None, "") else []
+    numbers = [_positive_integer(value) for value in raw_numbers]
+    return expected_number in numbers and all(number is not None for number in numbers)
+
+
+def _recipe_row_binds_relay(
+    row: Dict[str, Any], *, hopper_number: int, destination_number: int
+) -> bool:
+    bottle = _positive_integer(_row_value(row, _RECIPE_BOTTLE_KEYS))
+    hopper = _positive_integer(_row_value(row, _RECIPE_HOPPER_KEYS))
+    mass = _positive_number(_row_value(row, _RECIPE_MASS_KEYS))
+    explicit_target = _positive_integer(
+        _row_value(row, _RECIPE_TARGET_CONTAINER_KEYS)
+    )
+    hopper_low, hopper_high = _SOLID_FILE_DOSING_HOPPER_RANGE
+    mass_low, mass_high = _SOLID_FILE_DOSING_MASS_RANGE_G
+    return bool(
+        bottle is not None
+        and hopper == hopper_number
+        and hopper_low <= hopper <= hopper_high
+        and mass is not None
+        and mass_low < mass <= mass_high
+        and (explicit_target is None or explicit_target == destination_number)
+    )
+
+
+def _solid_hopper_relay_is_contract_bound(
+    first: Dict[str, Any], second: Dict[str, Any]
+) -> bool:
+    """Prove one source-vessel -> hopper -> target-vessel relay.
+
+    ``quantity_adjustments`` are intentionally irrelevant here: this is the
+    canonical input/output relation of the two workstation contracts, not a
+    scientific quantity change.  The recipe itself binds the hopper, dose and
+    destination container.
+    """
+
+    if first.get("reason") != "solid_hopper" or second.get("reason") != "solid_hopper":
+        return False
+    try:
+        first_macro_steps = {
+            macro_id_key(item, "first.source_macro_steps")
+            for item in first.get("source_macro_steps", []) or []
+        }
+        second_macro_steps = {
+            macro_id_key(item, "second.source_macro_steps")
+            for item in second.get("source_macro_steps", []) or []
+        }
+    except MacroIdentityError:
+        return False
+    # A shared hopper number is only an equipment address, not an episode
+    # identity.  A relay may therefore be certified only when both edges carry
+    # the same explicit Research macro provenance.  Missing or different macro
+    # sources remain unverified instead of being paired by array proximity.
+    if not first_macro_steps or first_macro_steps != second_macro_steps:
+        return False
+    first_chain = first.get("transfer_chain_id")
+    second_chain = second.get("transfer_chain_id")
+    if first_chain not in (None, "") or second_chain not in (None, ""):
+        # Once either edge declares an explicit episode identity, both sides
+        # must carry the same typed scalar.  A partial declaration cannot fall
+        # back to inferred pairing.
+        try:
+            if (
+                first_chain in (None, "")
+                or second_chain in (None, "")
+                or macro_id_key(first_chain, "first.transfer_chain_id")
+                != macro_id_key(second_chain, "second.transfer_chain_id")
+            ):
+                return False
+        except MacroIdentityError:
+            return False
+    first_step = first.get("_step")
+    second_step = second.get("_step")
+    if not isinstance(first_step, dict) or not isinstance(second_step, dict):
+        return False
+    first_station_ids = {
+        str(first_step.get(key) or "").strip()
+        for key in ("station_code", "workstation")
+        if str(first_step.get(key) or "").strip()
+    }
+    second_station_ids = {
+        str(second_step.get(key) or "").strip()
+        for key in ("station_code", "workstation")
+        if str(second_step.get(key) or "").strip()
+    }
+    if not first_station_ids & _SOLID_TRANSFER_STATION_IDS:
+        return False
+    if not second_station_ids & _SOLID_FILE_DOSING_STATION_IDS:
+        return False
+
+    first_source_type = _canonical_contract_container_type(first["source"][0])
+    first_destination_type = _canonical_contract_container_type(
+        first["destination"][0]
+    )
+    second_source_type = _canonical_contract_container_type(second["source"][0])
+    second_destination_type = _canonical_contract_container_type(
+        second["destination"][0]
+    )
+    allowed_sources = {
+        _canonical_contract_container_type(value) for value in SOLID_TRANSFER_INPUTS
+    }
+    # V1 accepts ordinary vials/bottles, not the V2-only pressure tube target.
+    allowed_targets = {
+        _canonical_contract_container_type(value)
+        for value in ("进样瓶", "西林瓶", "50ml耐热瓶")
+    }
+    if (
+        first_source_type not in allowed_sources
+        or first_destination_type != "hopper"
+        or second_source_type != "hopper"
+        or second_destination_type not in allowed_targets
+    ):
+        return False
+
+    first_hopper = _positive_integer(first["destination"][1])
+    second_hopper = _positive_integer(second["source"][1])
+    first_source = _positive_integer(first["source"][1])
+    second_destination = _positive_integer(second["destination"][1])
+    if (
+        first_hopper is None
+        or first_hopper != second_hopper
+        or first_source is None
+        or second_destination is None
+    ):
+        return False
+    hopper_low, hopper_high = _SOLID_FILE_DOSING_HOPPER_RANGE
+    if not hopper_low <= first_hopper <= hopper_high:
+        return False
+    if not _step_declares_container(first_step, first_source_type, first_source):
+        return False
+    if not _step_declares_container(
+        second_step, second_destination_type, second_destination
+    ):
+        return False
+
+    rows = _structured_recipe_rows(second_step.get("key_values"))
+    matching_rows = [
+        row
+        for row in rows
+        if _recipe_row_binds_relay(
+            row,
+            hopper_number=first_hopper,
+            destination_number=second_destination,
+        )
+    ]
+    if len(matching_rows) != 1:
+        return False
+    explicit_target = _positive_integer(
+        _row_value(matching_rows[0], _RECIPE_TARGET_CONTAINER_KEYS)
+    )
+    # For multi-row files the local bottle number is not a physical-container
+    # identity.  An explicit per-row target binding is therefore mandatory.
+    return explicit_target == second_destination or len(rows) == 1
+
+
+def _container_endpoint_key(endpoint: Tuple[str, str]) -> Tuple[str, str]:
+    container_type = _canonical_contract_container_type(endpoint[0])
+    number = _positive_integer(endpoint[1])
+    identity = (
+        f"number:{number}"
+        if number is not None
+        else "text:" + re.sub(r"\s+", "", str(endpoint[1])).lower()
+    )
+    return container_type, identity
+
+
+def _transfer_pair_finding_id(
+    finding_type: str,
+    sample_id: str,
+    first: Dict[str, Any],
+    second: Dict[str, Any],
+) -> str:
+    """Build a stable identity that cannot collapse distinct step pairs."""
+
+    return (
+        f"{finding_type}:{sample_id}:"
+        f"edge[{first.get('_ordinal', '?')}:{first.get('step_number', '?')}]>"
+        f"edge[{second.get('_ordinal', '?')}:{second.get('step_number', '?')}]"
+    )
+
+
+def _transfer_edge_finding_id(
+    finding_type: str, sample_id: str, edge: Dict[str, Any]
+) -> str:
+    """Build a stable identity for one transfer edge without a valid partner."""
+
+    return (
+        f"{finding_type}:{sample_id}:"
+        f"edge[{edge.get('_ordinal', '?')}:{edge.get('step_number', '?')}]"
+    )
+
+
+def _edges_connect(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+    return _container_endpoint_key(first["destination"]) == (
+        _container_endpoint_key(second["source"])
+    )
+
+
+def _verified_solid_hopper_relay_membership(
+    edges: List[Dict[str, Any]],
+) -> Tuple[set[int], set[int], set[Tuple[int, int]]]:
+    """Index edges that belong to a complete canonical hopper relay.
+
+    A sample may undergo multiple hopper-mediated dosing episodes.  The tail
+    of one verified relay can therefore feed the head of a later verified
+    relay after intervening processing.  Role membership lets the audit
+    distinguish that episode bridge from an attempted two-edge relay, without
+    granting any exemption to a head or tail whose own relay is incomplete.
+    """
+
+    heads: set[int] = set()
+    tails: set[int] = set()
+    pairs: set[Tuple[int, int]] = set()
+    tails_by_head: Dict[int, List[int]] = {}
+    heads_by_tail: Dict[int, List[int]] = {}
+    for first_index, first in enumerate(edges):
+        for second in edges[first_index + 1 :]:
+            if not _edges_connect(first, second):
+                continue
+            if not _solid_hopper_relay_is_contract_bound(first, second):
+                continue
+            first_ordinal = int(first["_ordinal"])
+            second_ordinal = int(second["_ordinal"])
+            tails_by_head.setdefault(first_ordinal, []).append(second_ordinal)
+            heads_by_tail.setdefault(second_ordinal, []).append(first_ordinal)
+
+    # Hopper ids may be reused in later episodes.  Without an explicit
+    # transfer-chain/episode id, proximity cannot prove which head belongs to
+    # which tail.  Certify only a unique one-to-one candidate relation; any
+    # ambiguity stays visible as edge-level findings.  Interleaved relays using
+    # different hoppers still remain independently verifiable.
+    for first_ordinal, candidate_tails in tails_by_head.items():
+        if len(candidate_tails) != 1:
+            continue
+        second_ordinal = candidate_tails[0]
+        candidate_heads = heads_by_tail.get(second_ordinal, [])
+        if candidate_heads != [first_ordinal]:
+            continue
+        heads.add(first_ordinal)
+        tails.add(second_ordinal)
+        pairs.add((first_ordinal, second_ordinal))
+    return heads, tails, pairs
+
+
 def _lineage_transfer(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Extract one fully declared transfer edge; never infer missing lineage."""
     lineage = step.get("sample_lineage")
@@ -213,7 +622,7 @@ def _lineage_transfer(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         metadata.get("transfer_reason")
         or step.get("transfer_reason")
         or ""
-    )
+    ).strip()
     raw_refs = (
         metadata.get("justification_evidence_refs")
         or metadata.get("evidence_refs")
@@ -227,13 +636,27 @@ def _lineage_transfer(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         for item in raw_refs
         if str(item).strip()
     ] if isinstance(raw_refs, list) else []
+    try:
+        macro_steps = extract_source_macro_ids(
+            step,
+            path=f"device_plan[{step.get('plan_step', step.get('step_number', '?'))}]",
+            required=False,
+        )
+    except MacroIdentityError:
+        macro_steps = []
+    transfer_chain_id = metadata.get("transfer_chain_id")
+    if transfer_chain_id in (None, ""):
+        transfer_chain_id = step.get("transfer_chain_id")
     return {
         "sample_id": sample_id.strip(),
         "source": source,
         "destination": destination,
         "reason": reason,
         "justification_evidence_refs": evidence_refs,
+        "source_macro_steps": macro_steps,
+        "transfer_chain_id": transfer_chain_id,
         "step_number": step.get("plan_step", step.get("step_number", "?")),
+        "_step": step,
     }
 
 
@@ -245,33 +668,41 @@ def _structured_necessary_transfer_evidence(
 
     Free text such as ``capacity_split`` or ``XRD prep`` must not suppress a
     round-trip finding.  Capacity/split/aliquot/merge claims are accepted only
-    when the lineage edge references a matching quantity adjustment id; other
-    necessity classes remain unverified until an equally deterministic truth
-    reference is available.
+    when the lineage edge references a matching quantity adjustment id *and*
+    that adjustment cites the same Research macro source.  Missing adjustment
+    ids, unrelated records and non-split kinds are never evidence.  The
+    canonical solid-hopper route is validated separately against workstation
+    and recipe contracts; it does not require a scientific quantity change.
     """
     reason = str(edge.get("reason", "") or "").strip()
     refs = set(edge.get("justification_evidence_refs", []) or [])
-    if reason not in _TRANSFER_REASON_CODES or not refs:
+    if reason not in _STRUCTURED_SPLIT_REASON_CODES or not refs:
         return False
-    if reason not in _STRUCTURED_SPLIT_REASON_CODES:
-        # The LLM supplies the semantic class; deterministic code checks only
-        # that it is an exact enum and cites evidence.  It never reclassifies
-        # free prose with keyword regular expressions.
-        return True
-    allowed_kinds = {
-        "split_transfer",
-        "split_batch",
-        "capacity_split",
-        "aliquot",
-        "merge",
-        "pool",
+    macro_refs = {
+        f"macro_step:{macro_step}"
+        for macro_step in edge.get("source_macro_steps", []) or []
     }
+    if not macro_refs:
+        return False
+    allowed_kinds = _SPLIT_REASON_ADJUSTMENT_KINDS.get(reason, frozenset())
     for adjustment in payload.get("quantity_adjustments", []) or []:
         if not isinstance(adjustment, dict):
             continue
         adjustment_id = str(adjustment.get("adjustment_id", "") or "").strip()
         kind = str(adjustment.get("kind", "") or "").strip().lower()
-        if adjustment_id in refs and kind in allowed_kinds:
+        raw_source_refs = adjustment.get("source_refs")
+        adjustment_source_refs = {
+            str(item).strip()
+            for item in raw_source_refs
+            if str(item).strip()
+        } if isinstance(raw_source_refs, list) else set()
+        if (
+            adjustment_id in refs
+            and kind in allowed_kinds
+            and bool(macro_refs & adjustment_source_refs)
+            and adjustment.get("route_changed") in (None, False)
+            and adjustment.get("requires_scientific_review") is not True
+        ):
             return True
     return False
 
@@ -379,35 +810,216 @@ def audit_connected_sample_container_chain(payload: Any) -> List[Dict[str, Any]]
     raw_steps = payload.get("steps")
     if not isinstance(raw_steps, list):
         raw_steps = payload.get("device_plan")
-    for step in raw_steps or []:
+    for ordinal, step in enumerate(raw_steps or [], start=1):
         if not isinstance(step, dict):
             continue
+        raw_lineage = step.get("sample_lineage")
+        raw_metadata = raw_lineage if isinstance(raw_lineage, dict) else step
+        declared_reason = str(
+            raw_metadata.get("transfer_reason")
+            or step.get("transfer_reason")
+            or ""
+        ).strip()
         edge = _lineage_transfer(step)
         if edge is not None:
+            edge["_ordinal"] = ordinal
             edges_by_sample.setdefault(edge["sample_id"], []).append(edge)
+        elif declared_reason == "solid_hopper":
+            # An explicit canonical-route claim creates a verification duty.
+            # Missing/invalid lineage must not disappear merely because it
+            # cannot be promoted into the normal connected-edge graph.
+            sample_id = str(
+                raw_metadata.get("sample_id") or step.get("sample_id") or "<missing>"
+            ).strip() or "<missing>"
+            step_number = step.get("plan_step", step.get("step_number", "?"))
+            incomplete_edge = {
+                "_ordinal": ordinal,
+                "step_number": step_number,
+            }
+            finding_type = "unverified_transfer_justification"
+            findings.append(
+                {
+                    "type": finding_type,
+                    "finding_id": _transfer_edge_finding_id(
+                        finding_type, sample_id, incomplete_edge
+                    ),
+                    "sample_id": sample_id,
+                    "step_numbers": [step_number],
+                    "feedback_route": "device",
+                    "failure_scope": "device_workflow",
+                    "requires_research_replan": False,
+                    "evidence": "solid_hopper declaration lacks a complete, distinct, parseable lineage edge",
+                    "message": (
+                        f"样品 {sample_id} 的步骤 {step_number} 声称 solid_hopper，"
+                        "但 trace_complete/lineage_complete、sample_id、源/目标容器"
+                        "或端点唯一性不足，无法验证 canonical relay。请在 Device 内"
+                        "补齐结构化 lineage；不得按位置猜测或返回 Research。"
+                    ),
+                }
+            )
 
     for sample_id, edges in edges_by_sample.items():
-        for first, second in zip(edges, edges[1:]):
-            if first["destination"] != second["source"]:
-                continue  # incomplete/non-contiguous trace: no inference
-            claimed_necessary = [
-                edge
-                for edge in (first, second)
-                if edge["reason"] in _TRANSFER_REASON_CODES
-                and edge["reason"] not in {
-                    "minimal_required_transfer",
-                    "unnecessary_transfer",
+        # Match explicit endpoints rather than adjacent array positions.  A
+        # valid plan may stage several source-vessel -> hopper transfers before
+        # emitting their corresponding hopper -> target recipe operations.
+        relay_heads, relay_tails, verified_relay_pairs = (
+            _verified_solid_hopper_relay_membership(edges)
+        )
+        relay_members = relay_heads | relay_tails
+        unverified_solid_edges = {
+            int(edge["_ordinal"])
+            for edge in edges
+            if edge.get("reason") == "solid_hopper"
+            and int(edge["_ordinal"]) not in relay_members
+        }
+        for edge in edges:
+            edge_ordinal = int(edge["_ordinal"])
+            if edge_ordinal not in unverified_solid_edges:
+                continue
+            finding_type = "unverified_transfer_justification"
+            findings.append(
+                {
+                    "type": finding_type,
+                    "finding_id": _transfer_edge_finding_id(
+                        finding_type, sample_id, edge
+                    ),
+                    "sample_id": sample_id,
+                    "step_numbers": [edge["step_number"]],
+                    "feedback_route": "device",
+                    "failure_scope": "device_workflow",
+                    "requires_research_replan": False,
+                    "evidence": (
+                        f"{edge['source'][0]}#{edge['source'][1]} -> "
+                        f"{edge['destination'][0]}#{edge['destination'][1]}"
+                    ),
+                    "message": (
+                        f"样品 {sample_id} 的步骤 {edge['step_number']} 声称 "
+                        "solid_hopper，但该边未归属唯一、完整且合同验证通过的 "
+                        "source vessel→hopper→target vessel relay。请补齐精确工作站、"
+                        "端点、同一料斗、结构化逐瓶配方和唯一 partner 证据；不得按"
+                        "数组位置猜测或返回 Research。"
+                    ),
                 }
-            ]
-            if claimed_necessary:
-                if any(
-                    _structured_necessary_transfer_evidence(payload, edge)
-                    for edge in claimed_necessary
-                ):
+            )
+        for first_index, first in enumerate(edges):
+            for second in edges[first_index + 1 :]:
+                if not _edges_connect(first, second):
+                    continue  # no explicit connected trace: no inference
+                pair_ordinals = (int(first["_ordinal"]), int(second["_ordinal"]))
+                if pair_ordinals in verified_relay_pairs:
                     continue
+                if (
+                    pair_ordinals[0] in relay_tails
+                    and pair_ordinals[1] in relay_heads
+                ):
+                    # This is the material-flow bridge between two independently
+                    # complete canonical relays, not the head/tail pair of one
+                    # relay.  If either surrounding relay loses its station,
+                    # hopper, container or recipe proof, its edge membership
+                    # disappears and this connection falls through fail-closed.
+                    continue
+                claimed_necessary = [
+                    edge
+                    for edge in (first, second)
+                    if edge["reason"] in _TRANSFER_REASON_CODES
+                    and edge["reason"] not in {
+                        "minimal_required_transfer",
+                        "unnecessary_transfer",
+                    }
+                ]
+                if claimed_necessary:
+                    verified = all(
+                        (
+                            int(edge["_ordinal"]) in relay_members
+                            if edge["reason"] == "solid_hopper"
+                            else _structured_necessary_transfer_evidence(
+                                payload, edge
+                            )
+                        )
+                        for edge in claimed_necessary
+                    )
+                    if verified:
+                        continue
+                    # An unverified solid-hopper edge already has one stable
+                    # edge-level finding above.  Do not multiply that error by
+                    # every endpoint-connected neighbour.
+                    failing_non_solid = [
+                        edge
+                        for edge in claimed_necessary
+                        if edge["reason"] != "solid_hopper"
+                        and not _structured_necessary_transfer_evidence(
+                            payload, edge
+                        )
+                    ]
+                    if not failing_non_solid:
+                        continue
+                    missing_evidence = (
+                        "sample_lineage.justification_evidence_refs 未逐边"
+                        "指向同一 Research 来源且 kind 匹配的结构化 "
+                        "quantity_adjustments 记录。"
+                    )
+                    finding_type = "unverified_transfer_justification"
+                    findings.append(
+                        {
+                            "type": finding_type,
+                            "finding_id": _transfer_pair_finding_id(
+                                finding_type, sample_id, first, second
+                            ),
+                            "sample_id": sample_id,
+                            "step_numbers": [
+                                first["step_number"],
+                                second["step_number"],
+                            ],
+                            "feedback_route": "device",
+                            "failure_scope": "device_workflow",
+                            "requires_research_replan": False,
+                            "evidence": (
+                                first["reason"] + " | " + second["reason"]
+                            )[:240],
+                            "message": (
+                                f"样品 {sample_id} 的步骤 {first['step_number']}→"
+                                f"{second['step_number']} 声称属于必要转移，但"
+                                f"{missing_evidence}请在 Device 内补齐证据或删除"
+                                "无意义换瓶；不得返回 Research。"
+                            ),
+                        }
+                    )
+                    continue
+                first_source_type = _canonical_contract_container_type(
+                    first["source"][0]
+                )
+                first_destination_type = _canonical_contract_container_type(
+                    first["destination"][0]
+                )
+                second_destination_type = _canonical_contract_container_type(
+                    second["destination"][0]
+                )
+                is_round_trip = _container_endpoint_key(
+                    second["destination"]
+                ) == _container_endpoint_key(first["source"])
+                is_repeated_same_type = (
+                    first_source_type
+                    == first_destination_type
+                    == second_destination_type
+                )
+                if not is_round_trip and not is_repeated_same_type:
+                    continue
+                chain = (
+                    f"{first['source'][0]}#{first['source'][1]} → "
+                    f"{first['destination'][0]}#{first['destination'][1]} → "
+                    f"{second['destination'][0]}#{second['destination'][1]}"
+                )
+                finding_type = (
+                    "redundant_container_round_trip"
+                    if is_round_trip
+                    else "redundant_same_type_container_changes"
+                )
                 findings.append(
                     {
-                        "type": "unverified_transfer_justification",
+                        "type": finding_type,
+                        "finding_id": _transfer_pair_finding_id(
+                            finding_type, sample_id, first, second
+                        ),
                         "sample_id": sample_id,
                         "step_numbers": [
                             first["step_number"],
@@ -416,52 +1028,15 @@ def audit_connected_sample_container_chain(payload: Any) -> List[Dict[str, Any]]
                         "feedback_route": "device",
                         "failure_scope": "device_workflow",
                         "requires_research_replan": False,
-                        "evidence": (
-                            first["reason"] + " | " + second["reason"]
-                        )[:240],
+                        "evidence": chain,
                         "message": (
-                            f"样品 {sample_id} 的容器循环声称属于必要转移，"
-                            "但 sample_lineage.justification_evidence_refs 未"
-                            "指向匹配的结构化 quantity_adjustments 记录。请在 Device"
-                            " 内补齐证据或删除无意义换瓶；不得返回 Research。"
+                            f"样品 {sample_id} 在完整谱系记录中出现无必要的容器链 "
+                            f"{chain}（步骤 {first['step_number']}, "
+                            f"{second['step_number']}）。请在 Device 内沿用原容器"
+                            "或压缩为一次必要转移；不得返回 Research。"
                         ),
                     }
                 )
-                continue
-            is_round_trip = second["destination"] == first["source"]
-            is_repeated_same_type = (
-                first["source"][0]
-                == first["destination"][0]
-                == second["destination"][0]
-            )
-            if not is_round_trip and not is_repeated_same_type:
-                continue
-            chain = (
-                f"{first['source'][0]}#{first['source'][1]} → "
-                f"{first['destination'][0]}#{first['destination'][1]} → "
-                f"{second['destination'][0]}#{second['destination'][1]}"
-            )
-            findings.append(
-                {
-                    "type": (
-                        "redundant_container_round_trip"
-                        if is_round_trip
-                        else "redundant_same_type_container_changes"
-                    ),
-                    "sample_id": sample_id,
-                    "step_numbers": [first["step_number"], second["step_number"]],
-                    "feedback_route": "device",
-                    "failure_scope": "device_workflow",
-                    "requires_research_replan": False,
-                    "evidence": chain,
-                    "message": (
-                        f"样品 {sample_id} 在完整谱系记录中出现无必要的容器链 "
-                        f"{chain}（步骤 {first['step_number']}, "
-                        f"{second['step_number']}）。请在 Device 内沿用原容器"
-                        "或压缩为一次必要转移；不得返回 Research。"
-                    ),
-                }
-            )
     return findings
 
 

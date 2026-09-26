@@ -24,6 +24,8 @@ from typing import Any
 
 
 REPO = Path(__file__).resolve().parents[1]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 EVAL_SCRIPTS = (
     REPO / "chem-agent-eval-package/skill/chem-agent-eval-sop/scripts"
 )
@@ -35,6 +37,15 @@ from extract_cases import extract_cases  # noqa: E402
 from llm_review_workflows import review_run, write_reviews  # noqa: E402
 from preflight import probe_api  # noqa: E402
 from run_suite import run_case  # noqa: E402
+from device_agent.feasibility_certificate import (  # noqa: E402
+    FEASIBILITY_CERTIFICATE_VERSION,
+    FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+    device_plan_contract_digest,
+    feasibility_certificate_id,
+    feasibility_certificate_protected_payload,
+    stable_digest as _stable_digest,
+    strict_feasibility_certificate_version,
+)
 
 
 MODEL = "gpt-5.6-sol"
@@ -69,40 +80,61 @@ def _load_cases(docx: Path) -> dict[str, dict[str, str]]:
     return {case["case_id"]: case for case in extract_cases(docx)}
 
 
-def _stable_digest(value: Any, *, prefix: str = "sha256") -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return f"{prefix}_{hashlib.sha256(encoded).hexdigest()}"
-
-
 def _certificate_integrity_errors(
     certificate: dict[str, Any],
-    device_plan: Any,
+    device_plan_package: Any,
     plan_level_repair: Any,
+    *,
+    expected_contract_version: str = "",
 ) -> list[str]:
     errors: list[str] = []
-    protected_keys = (
-        "research_plan_signature",
-        "target_materials",
-        "reaction_route",
-        "reagent_identity_and_order",
-        "observation_points",
-        "sample_control_matrix",
-        "accepted_device_sample_control_matrix",
-        "device_sample_ids",
+    package = (
+        device_plan_package
+        if isinstance(device_plan_package, dict)
+        else {}
     )
-    protected = {
-        key: certificate.get(
-            key,
-            "" if key == "research_plan_signature" else [],
-        )
-        for key in protected_keys
-    }
+    raw_package_contract = package.get("contract_version")
+    package_contract = (
+        raw_package_contract if isinstance(raw_package_contract, str) else ""
+    )
+    raw_certificate_contract = certificate.get("contract_version")
+    certificate_contract = (
+        raw_certificate_contract
+        if isinstance(raw_certificate_contract, str)
+        else ""
+    )
+    certificate_version = strict_feasibility_certificate_version(certificate)
+    v2_required = (
+        expected_contract_version == "v2"
+        or package_contract == "v2"
+        or certificate_contract == "v2"
+    )
+    if v2_required:
+        if package_contract != "v2":
+            errors.append("package_contract_version_mismatch")
+        if (
+            certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            errors.append("obsolete_full_plan_certificate_requires_reaudit")
+        elif certificate_version != FEASIBILITY_CERTIFICATE_VERSION:
+            errors.append("unsupported_certificate_version")
+        if certificate_contract != "v2":
+            errors.append("certificate_contract_version_mismatch")
+        if certificate.get("acceptance_scope") not in {
+            "accepted_device_plan",
+            "accepted_device_plan_revision",
+        }:
+            errors.append("certificate_acceptance_scope_invalid_for_success")
+        resolution = package.get("contract_resolution")
+        resolution = resolution if isinstance(resolution, dict) else {}
+        if (
+            resolution.get("requested") != "v2"
+            or resolution.get("effective") != "v2"
+            or resolution.get("requested_matches_effective") is not True
+        ):
+            errors.append("package_contract_resolution_invalid")
+    protected = feasibility_certificate_protected_payload(certificate)
     if certificate.get("protected_digest") != _stable_digest(protected):
         errors.append("protected_digest_mismatch")
     if certificate.get("route_signature") != certificate.get(
@@ -119,22 +151,24 @@ def _certificate_integrity_errors(
     ):
         errors.append("device_snapshot_signature_mismatch")
     repair = plan_level_repair if isinstance(plan_level_repair, dict) else {}
-    if repair.get("status") != "accepted":
-        if certificate.get("accepted_device_plan_signature") != _stable_digest(
-            device_plan if isinstance(device_plan, list) else [],
-            prefix="device_plan",
-        ):
-            errors.append("accepted_device_plan_signature_mismatch")
-    elif repair.get("errors"):
+    if certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS:
+        if certificate.get(
+            "accepted_device_plan_contract_sha256"
+        ) != device_plan_contract_digest(device_plan_package):
+            errors.append("accepted_device_plan_contract_mismatch")
+    if certificate.get("accepted_device_plan_signature") != _stable_digest(
+        package.get("device_plan", []),
+        prefix="device_plan",
+    ):
+        errors.append("accepted_device_plan_signature_mismatch")
+    if repair and repair.get("status") != "accepted":
+        errors.append("plan_level_repair_not_accepted")
+    if repair and repair.get("errors"):
         errors.append("accepted_plan_level_repair_contains_errors")
-    certificate_id_payload = {
-        "protected_digest": certificate.get("protected_digest"),
-        "device_snapshot_id": certificate.get("device_snapshot_id"),
-        "device_truth_sha256": certificate.get("device_truth_sha256"),
-    }
-    if certificate.get("certificate_id") != _stable_digest(
-        certificate_id_payload,
-        prefix="feasibility",
+    if certificate.get("certificate_id") != feasibility_certificate_id(
+        protected_digest=str(certificate.get("protected_digest") or ""),
+        device_snapshot_id=str(certificate.get("device_snapshot_id") or ""),
+        device_truth_sha256=str(certificate.get("device_truth_sha256") or ""),
     ):
         errors.append("certificate_id_mismatch")
     for required in (
@@ -148,10 +182,34 @@ def _certificate_integrity_errors(
     return list(dict.fromkeys(errors))
 
 
+def _terminal_status_is_ready(payload: dict[str, Any]) -> bool:
+    """Accept the two equivalent pre-dispatch terminal envelopes.
+
+    Raw V1/legacy output uses ``success``/``none``.  Attaching the canonical V2
+    wire contract deliberately rewrites that pair to
+    ``ready_for_dispatch``/``success``.  Neither representation means that a
+    laboratory dispatch occurred.
+    """
+
+    status = str(payload.get("status") or "").strip().lower()
+    route = str(payload.get("feedback_route") or "").strip().lower()
+    feedback_type = str(payload.get("feedback_type") or "").strip().lower()
+    failure_scope = str(payload.get("failure_scope") or "").strip().lower()
+    canonical_pair = (status == "ready_for_dispatch" and route == "success") or (
+        status == "success" and route in {"", "none"}
+    )
+    return (
+        canonical_pair
+        and feedback_type in {"", "none"}
+        and failure_scope in {"", "none"}
+    )
+
+
 def _device_acceptance(
     run_root: Path,
     *,
     expected_query_sha256: str = "",
+    expected_contract_version: str = "",
 ) -> dict[str, Any]:
     """Read raw black-box packages and prove that Device accepted a workflow."""
 
@@ -272,18 +330,20 @@ def _device_acceptance(
         # the certificate contract existed.
         certificate_errors = _certificate_integrity_errors(
             certificate,
-            payload.get("device_plan"),
+            payload,
             payload.get("plan_level_repair"),
+            expected_contract_version=expected_contract_version,
         )
         certificate_ok = (
             payload.get("feasibility_accepted") is True
             and certificate.get("accepted") is True
             and not certificate_errors
         )
-        route_clear = str(payload.get("feedback_route") or "").strip().lower() in {
-            "",
-            "none",
-        }
+        # ``attach_device_v2_contract`` canonicalizes an otherwise successful
+        # V2 package to ready_for_dispatch/success.  Keep accepting the legacy
+        # success/none pair for historical artifacts, but judge both views as
+        # the same non-dispatched terminal state.
+        terminal_ready = _terminal_status_is_ready(payload)
         scope_clear = str(payload.get("failure_scope") or "").strip().lower() in {
             "",
             "none",
@@ -310,8 +370,7 @@ def _device_acceptance(
             and not quantity.get("errors")
         )
         accepted = (
-            payload.get("status") == "success"
-            and route_clear
+            terminal_ready
             and scope_clear
             and dispatch.get("status") == "passed"
             and not dispatch.get("errors")
@@ -618,6 +677,7 @@ def main() -> int:
             case["case_id"]: _device_acceptance(
                 campaign_result[0],
                 expected_query_sha256=case["query_sha256"],
+                expected_contract_version="v2",
             )
             for (_, case), campaign_result in zip(indexed_cases, campaign_results)
         },

@@ -31,9 +31,18 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
-from utils.paths import format_reference_path, workstation_dir
+try:
+    from .contract_value_normalizer import canonicalize_contract_unit
+    from .macro_identity import MacroIdentityError, normalize_macro_id, unique_macro_ids
+    from .utils.paths import format_reference_path, workstation_dir
+    from .utils.workstation_loader import resolve_explicit_alias
+except ImportError:  # Direct script compatibility.
+    from contract_value_normalizer import canonicalize_contract_unit
+    from macro_identity import MacroIdentityError, normalize_macro_id, unique_macro_ids
+    from utils.paths import format_reference_path, workstation_dir
+    from utils.workstation_loader import resolve_explicit_alias
 
 UNIT_SUFFIX_RE = re.compile(r"[（(]([^（）()]*)[)）]\s*$")
 RANGE_RE = re.compile(r"\[\s*(-?\d+(?:\.\d+)?)\s*[,，]\s*(-?\d+(?:\.\d+)?)\s*\]")
@@ -43,18 +52,6 @@ CONTAINER_TOKEN_RE = re.compile(r"[一-鿿A-Za-z0-9]+")
 LABEL_VALUE_RE = re.compile(r'"label"\s*:\s*"([^"]*)"\s*,\s*"value"\s*:\s*"?([^",}]*)"?')
 # simple inline enum such as 示例值列 "加热/自然" or "CO2,N2"
 SIMPLE_ENUM_RE = re.compile(r"^[\wA-Za-z0-9一-鿿]+(?:\s*[/，,、]\s*[\wA-Za-z0-9一-鿿]+)+$")
-
-UNIT_SYNONYMS = {
-    "分钟": "min", "min": "min", "minute": "min", "minutes": "min",
-    "小时": "h", "h": "h", "hour": "h",
-    "秒": "s", "s": "s", "sec": "s",
-    "℃": "c", "c": "c", "°c": "c", "摄氏度": "c",
-    "ml": "ml", "毫升": "ml", "ml/次": "ml",
-    "ul": "ul", "微升": "ul", "μl": "ul",
-    "rpm": "rpm", "r/min": "rpm", "转/分": "rpm",
-    "w": "w", "瓦": "w",
-    "mm": "mm", "cm": "cm", "g": "g", "mg": "mg",
-}
 
 KNOWN_CONTAINER_TYPES = (
     "进样瓶", "西林瓶", "50ml耐热瓶", "留样瓶", "耐压反应管",
@@ -83,8 +80,8 @@ CORE_REQUIRED_BY_OPERATION: Dict[str, List[Tuple[str, ...]]] = {
 
 META_STEP_KEYS = {
     "step_number", "workstation", "operation", "parameters",
-    "id", "source_plan_step", "source_macro_step", "source_macro_steps",
-    "macro_action_id", "observation_point_id", "notes",
+    "id", "source_plan_step", "source_macro_step_id", "source_macro_step", "source_macro_steps",
+    "macro_action_id", "observation_point_id", "notes", "container_transition_map",
 }
 
 
@@ -99,7 +96,8 @@ def param_unit(name: Any) -> str:
     match = UNIT_SUFFIX_RE.search(str(name or "").strip())
     if not match:
         return ""
-    return UNIT_SYNONYMS.get(match.group(1).strip().lower(), match.group(1).strip().lower())
+    raw = match.group(1).strip()
+    return canonicalize_contract_unit(raw, lowercase_unknown=True) or raw.lower()
 
 
 def _normalize_station_form(name: str) -> str:
@@ -181,7 +179,10 @@ class StationSchema:
             return
         self.allowed_names.add(name)
         self.allowed_bases.add(base_form(name))
-        declared_unit = UNIT_SYNONYMS.get(unit.strip().lower(), unit.strip().lower()) if unit else param_unit(raw_name)
+        declared_unit = (
+            canonicalize_contract_unit(unit, lowercase_unknown=True)
+            or unit.strip().lower()
+        ) if unit else param_unit(raw_name)
         if declared_unit:
             self.units.setdefault(name, set()).add(declared_unit)
         if range_pair:
@@ -236,7 +237,7 @@ class WorkflowValidator:
         if workstation_loader is not None:
             self._loader = workstation_loader
         self._schemas: Dict[str, StationSchema] = {}
-        self._alias_to_key: Dict[str, str] = {}
+        self._alias_to_keys: Dict[str, Set[str]] = {}
         try:
             self._build_from_old_json(self._old_workstation_dir)
         except Exception:
@@ -269,7 +270,7 @@ class WorkflowValidator:
     def _register_alias(self, alias: str, key: str) -> None:
         alias = (alias or "").strip()
         if alias:
-            self._alias_to_key.setdefault(alias, key)
+            self._alias_to_keys.setdefault(alias, set()).add(key)
 
     def _build_from_old_json(self, directory: str) -> None:
         if not directory or not os.path.isdir(directory):
@@ -480,24 +481,36 @@ class WorkflowValidator:
         name = (station_name or "").strip()
         if not name:
             return None
-        if name in self._schemas:
-            return name
-        if name in self._alias_to_key:
-            return self._alias_to_key[name]
-        if self._loader is not None and hasattr(self._loader, "_map_station_name_to_code"):
+        resolved = resolve_explicit_alias(name, self._schemas, self._alias_to_keys)
+        if name in self._schemas or name in self._alias_to_keys:
+            return resolved
+        if self._loader is not None and hasattr(self._loader, "resolve_station_code"):
             try:
-                code = self._loader._map_station_name_to_code(name)
+                code = self._loader.resolve_station_code(name)
             except Exception:
                 code = None
             if code:
                 if code in self._schemas:
                     return code
-                if code in self._alias_to_key:
-                    return self._alias_to_key[code]
-        for alias, key in self._alias_to_key.items():
-            if alias and (alias in name or name in alias):
-                return key
+                return resolve_explicit_alias(code, self._schemas, self._alias_to_keys)
         return None
+
+    def _operation_aliases(self) -> Dict[str, Any]:
+        aliases = getattr(self._loader, "OPERATION_ALIAS_MAP", {})
+        return aliases if isinstance(aliases, dict) else {}
+
+    def _resolve_operation(
+        self,
+        schema: StationSchema,
+        operation: str,
+        *,
+        candidates: Optional[Set[str]] = None,
+    ) -> Optional[str]:
+        return resolve_explicit_alias(
+            operation,
+            candidates if candidates is not None else schema.operations,
+            self._operation_aliases(),
+        )
 
     def allowed_params_for(self, station_name: str) -> List[str]:
         """Dispatchable parameter names for one station (for repair prompts)."""
@@ -527,13 +540,12 @@ class WorkflowValidator:
             return {}
         schema = self._schemas[key]
         table = getattr(schema, "defaults_by_operation", {})
-        if operation in table:
-            return dict(table[operation])
-        normalized = _normalize_station_form(operation)
-        for op, values in table.items():
-            if _normalize_station_form(op) == normalized:
-                return dict(values)
-        return {}
+        resolved = self._resolve_operation(
+            schema,
+            operation,
+            candidates=set(table),
+        )
+        return dict(table[resolved]) if resolved is not None else {}
 
     def validate(self, workflow_json: Any) -> Dict[str, Any]:
         errors: List[str] = []
@@ -578,6 +590,14 @@ class WorkflowValidator:
                 continue
             schema = self._schemas[station_key]
 
+            resolved_operation = self._resolve_operation(schema, operation)
+            if operation and schema.operations and resolved_operation is None:
+                errors.append(
+                    f"第 {step_no} 步（{station_name}）的操作 `{operation}` 不在该工作站"
+                    "显式操作或 alias 中（unknown_operation）。"
+                )
+            effective_operation = resolved_operation or operation
+
             parameters = step.get("parameters")
             if parameters is None:
                 warnings.append(f"第 {step_no} 步（{station_name}/{operation}）没有 parameters。")
@@ -592,13 +612,13 @@ class WorkflowValidator:
                 continue
 
             self._validate_parameters(
-                schema, station_name, operation, step_no, parameters, errors, warnings
+                schema, station_name, effective_operation, step_no, parameters, errors, warnings
             )
             self._validate_required(
-                schema, station_name, operation, step_no, parameters, errors
+                schema, station_name, effective_operation, step_no, parameters, errors
             )
             self._validate_container_count(
-                station_name, operation, step_no, parameters, errors
+                station_name, effective_operation, step_no, parameters, errors
             )
 
         self._validate_lid_continuity(steps, errors, warnings)
@@ -644,16 +664,16 @@ class WorkflowValidator:
             if station_key is not None:
                 schema = self._schemas[station_key]
                 table = getattr(schema, "lid_requirement_by_operation", {})
-                requirement = table.get(operation, "")
-                if not requirement:
-                    normalized_op = _normalize_station_form(operation)
-                    for skill_op, state in table.items():
-                        if _normalize_station_form(skill_op) == normalized_op:
-                            requirement = state
-                            break
+                resolved_operation = self._resolve_operation(schema, operation)
+                if resolved_operation is not None:
+                    requirement = table.get(resolved_operation, "")
+            else:
+                resolved_operation = None
 
-            is_open = operation.startswith("开盖")
-            is_close = operation.startswith("关盖")
+            # Prefixes classify an already resolved canonical operation; they
+            # never turn an unknown near-match into a known operation.
+            is_open = bool(resolved_operation) and resolved_operation.startswith("开盖")
+            is_close = bool(resolved_operation) and resolved_operation.startswith("关盖")
             for key in keys:
                 known = lid_state.get(key)
                 if requirement and known and known != requirement:
@@ -716,8 +736,8 @@ class WorkflowValidator:
             if station_key is not None:
                 candidates.add(station_key)
                 candidates.add(self._schemas[station_key].label)
-                for alias, key in self._alias_to_key.items():
-                    if key == station_key:
+                for alias, keys in self._alias_to_keys.items():
+                    if keys == {station_key}:
                         candidates.add(alias)
             if not any(candidate and candidate in block for candidate in candidates):
                 errors.append(
@@ -858,13 +878,16 @@ class WorkflowValidator:
             return None
         if _normalize_station_form(station_name) not in schema.skill_form_names:
             return None
-        if operation in schema.required_by_operation:
-            return schema.required_by_operation[operation]
-        normalized_op = _normalize_station_form(operation)
-        for skill_op, required in schema.required_by_operation.items():
-            if _normalize_station_form(skill_op) == normalized_op:
-                return required
-        return None
+        resolved = self._resolve_operation(
+            schema,
+            operation,
+            candidates=set(schema.required_by_operation),
+        )
+        return (
+            schema.required_by_operation[resolved]
+            if resolved is not None
+            else None
+        )
 
     def _validate_container_count(
         self,
@@ -950,7 +973,7 @@ _PLAN_INVARIANT_ERROR_PATTERNS = (
     ),
 )
 _SOURCE_MACRO_ERROR_RE = re.compile(
-    r"source_macro_step(?:s)?=(\[[^\]]+\]|[-+]?\d+)"
+    r"source_macro_step(?:s)?=(\[[^\]]*\]|'[^']*'|\"[^\"]*\"|[^\s，。；]+)"
 )
 
 
@@ -958,7 +981,14 @@ def structure_validation_errors(
     errors: Any,
     workflow_json: Any,
 ) -> List[Dict[str, Any]]:
-    """Parse our own validator error strings into structured records
+    """Normalize validator errors into structured records.
+
+    Legacy validators emit strings, while cross-step capability audits already
+    carry structured endpoint evidence.  Multi-endpoint observations are kept
+    as ``observed_*`` fields and deliberately do not synthesize a singular
+    ``step_number``: observing A and B is not authority to modify either one.
+
+    Parse our own validator error strings into structured records
     (issue #4's required feedback fields). The message wording is generated
     by this module, so the patterns are stable; anything unmatched degrades
     to {"error_code": "unparsed", "message": ...} — information is never lost.
@@ -975,6 +1005,74 @@ def structure_validation_errors(
 
     structured: List[Dict[str, Any]] = []
     for raw in errors or []:
+        if isinstance(raw, Mapping):
+            record = dict(raw)
+            code = str(
+                record.get("error_code")
+                or record.get("code")
+                or record.get("type")
+                or "unparsed"
+            ).strip() or "unparsed"
+            text = str(record.get("message") or code).strip()
+            record["message"] = text
+            record["error_code"] = code
+
+            explicit_step = record.get("step_number")
+            if not (
+                isinstance(explicit_step, int)
+                and not isinstance(explicit_step, bool)
+                and explicit_step > 0
+            ):
+                record.pop("step_number", None)
+                explicit_step = None
+
+            raw_observed = record.pop("step_numbers", None)
+            if isinstance(raw_observed, list):
+                observed_numbers: List[int] = []
+                for value in raw_observed:
+                    if (
+                        isinstance(value, int)
+                        and not isinstance(value, bool)
+                        and value > 0
+                        and value not in observed_numbers
+                    ):
+                        observed_numbers.append(value)
+                if observed_numbers:
+                    record["observed_step_numbers"] = observed_numbers
+                    observed_ids: List[str] = []
+                    for number in observed_numbers:
+                        observed_step = steps_by_number.get(number)
+                        observed_id = (
+                            observed_step.get("device_step_id")
+                            if isinstance(observed_step, dict)
+                            else None
+                        )
+                        if (
+                            isinstance(observed_id, str)
+                            and observed_id.strip()
+                            and observed_id not in observed_ids
+                        ):
+                            observed_ids.append(observed_id)
+                    if observed_ids:
+                        record["observed_device_step_ids"] = observed_ids
+
+            if explicit_step is not None:
+                step = steps_by_number.get(explicit_step)
+                if isinstance(step, dict):
+                    record.setdefault("workstation", str(step.get("workstation", "")))
+                    record.setdefault("operation", str(step.get("operation", "")))
+                    for key in (
+                        "source_macro_step",
+                        "source_macro_step_id",
+                        "device_step_id",
+                        "macro_action_id",
+                        "observation_point_id",
+                    ):
+                        if step.get(key) is not None:
+                            record[key] = step[key]
+            structured.append(record)
+            continue
+
         text = str(raw)
         record: Dict[str, Any] = {"message": text, "error_code": "unparsed"}
         code_match = _ERROR_CODE_RE.search(text)
@@ -988,9 +1086,7 @@ def structure_validation_errors(
         source_macro_match = _SOURCE_MACRO_ERROR_RE.search(text)
         if source_macro_match:
             source_value = source_macro_match.group(1)
-            if re.fullmatch(r"[-+]?\d+", source_value):
-                record["source_macro_step"] = int(source_value)
-            else:
+            if source_value.startswith("["):
                 try:
                     parsed_sources = json.loads(source_value)
                 except (TypeError, ValueError, json.JSONDecodeError):
@@ -999,7 +1095,30 @@ def structure_validation_errors(
                     except (SyntaxError, ValueError):
                         parsed_sources = None
                 if isinstance(parsed_sources, list):
-                    record["source_macro_steps"] = parsed_sources
+                    try:
+                        record["source_macro_steps"] = unique_macro_ids(
+                            parsed_sources, "validation_error.source_macro_steps"
+                        )
+                    except MacroIdentityError:
+                        pass
+            else:
+                parsed_source: Any = source_value
+                if source_value[:1] in {"'", '"'}:
+                    try:
+                        parsed_source = ast.literal_eval(source_value)
+                    except (SyntaxError, ValueError):
+                        parsed_source = source_value
+                try:
+                    # Error text is lossy: an unquoted ``1`` cannot prove that
+                    # the original JSON scalar was numeric.  Keep it opaque as
+                    # text; a matched workflow step below supplies the typed
+                    # structured value when one exists.
+                    record["source_macro_step"] = normalize_macro_id(
+                        parsed_source,
+                        "validation_error.source_macro_step",
+                    )
+                except MacroIdentityError:
+                    pass
         step_match = _STEP_PREFIX_RE.match(text)
         if step_match:
             number_text = step_match.group(1)

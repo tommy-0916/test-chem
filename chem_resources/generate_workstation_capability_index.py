@@ -35,11 +35,14 @@ from skill_contract_audit import (  # noqa: E402
 )
 from agent_skills.capabilities import (  # noqa: E402
     PROJECTION_VERSION,
+    REVIEWED_CAPABILITY_OPERATION_BINDINGS,
+    REVIEWED_CAPABILITY_OPERATION_GAPS,
     SKILL_ROOT,
     TIER_SKILLS,
     extract_experiment_capabilities,
     project_device_context,
     semantic_mapping_digest,
+    validated_capability_operation_bindings,
 )
 
 
@@ -886,8 +889,43 @@ def build_index(source: Path = DEFAULT_SOURCE) -> dict[str, Any]:
                 },
             }
             station["experiment_capabilities"] = extract_experiment_capabilities(station)
+            station["capability_operation_bindings"] = (
+                validated_capability_operation_bindings(station)
+            )
             station["research_summary"] = _research_summary(station)
             workstations.append(station)
+
+    generated_binding_keys = {
+        (str(station.get("station_code") or "").strip(), capability_id)
+        for station in workstations
+        for capability_id in (
+            station.get("capability_operation_bindings") or {}
+        )
+    }
+    configured_binding_keys = set(REVIEWED_CAPABILITY_OPERATION_BINDINGS)
+    if generated_binding_keys != configured_binding_keys:
+        raise ValueError(
+            "reviewed capability-operation catalog does not match generated "
+            "workstation truth "
+            f"(missing={sorted(configured_binding_keys - generated_binding_keys)}, "
+            f"unexpected={sorted(generated_binding_keys - configured_binding_keys)})"
+        )
+
+    generated_gap_keys = {
+        (str(station.get("station_code") or "").strip(), str(capability.get("id") or "").strip())
+        for station in workstations
+        for capability in (station.get("experiment_capabilities") or [])
+        if isinstance(capability, dict)
+        and capability.get("operation_mapping_status") == "truth_gap"
+    }
+    configured_gap_keys = set(REVIEWED_CAPABILITY_OPERATION_GAPS)
+    if generated_gap_keys != configured_gap_keys:
+        raise ValueError(
+            "reviewed capability-operation truth-gap catalog does not match "
+            "generated workstation truth "
+            f"(missing={sorted(configured_gap_keys - generated_gap_keys)}, "
+            f"unexpected={sorted(generated_gap_keys - configured_gap_keys)})"
+        )
 
     for station in workstations:
         station["dependencies"] = _dependencies(station["planning_constraints"], workstations)
@@ -920,7 +958,10 @@ def build_index(source: Path = DEFAULT_SOURCE) -> dict[str, Any]:
             "Generated from all per-workstation SKILL.md files. Explicit operation "
             "input/output constraints take precedence over broader container parameter examples. "
             "Skill parameter structures are immutable; this index is a read-only planning projection. "
-            "Setpoints, material output effects, and reported numeric measurements are separate axes."
+            "Setpoints, material output effects, and reported numeric measurements are separate axes. "
+            "Capability-to-operation authorization comes only from the reviewed exact station/capability map; "
+            "missing or stale map entries stop generation. Reviewed description/operation truth gaps remain "
+            "explicitly unsupported and never authorize Device operations."
         ),
         "workstation_count": len(workstations),
         "operation_count": operation_count,

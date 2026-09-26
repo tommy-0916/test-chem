@@ -102,6 +102,22 @@ def normalize_openai_base_url(base_url: str) -> str:
     path = f"{path}/v1" if path else "/v1"
     return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)).rstrip("/")
 
+
+def _is_official_kimi_k3_chat(base_url: Optional[str], model: str) -> bool:
+    """Identify K3 on an official Kimi Chat Completions API root."""
+
+    parsed = urlsplit(normalize_openai_base_url(base_url or ""))
+    if parsed.scheme != "https":
+        return False
+    return (parsed.hostname, parsed.path.rstrip("/"), model.lower()) in {
+        ("api.moonshot.ai", "/v1", "kimi-k3"),
+        ("api.kimi.ai", "/coding/v1", "k3"),
+        ("api.kimi.ai", "/coding/v1", "k3-256k"),
+        ("api.kimi.com", "/coding/v1", "k3"),
+        ("api.kimi.com", "/coding/v1", "k3-256k"),
+    }
+
+
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - optional local dependency
@@ -578,7 +594,6 @@ class LLMFactory:
         model_kwargs: Dict[str, Any] = {
             "model": provider_model,
             "api_key": provider_key,
-            "temperature": temperature,
             "default_headers": LLMFactory._openai_compatible_headers(),
             "timeout": LLMFactory._openai_compatible_timeout(),
             # The shared llm_retry middleware is the sole retry owner.
@@ -588,6 +603,13 @@ class LLMFactory:
         if provider_url:
             model_kwargs["base_url"] = normalize_openai_base_url(provider_url)
         model_kwargs.update(kwargs)
+        if _is_official_kimi_k3_chat(
+            str(model_kwargs.get("base_url") or ""), str(model_kwargs.get("model") or "")
+        ):
+            # K3 fixes sampling temperature and rejects this project's default 0.
+            model_kwargs.pop("temperature", None)
+        else:
+            model_kwargs.setdefault("temperature", temperature)
         # Do not allow a generic caller override to re-enable hidden SDK
         # retries and multiply BaseAgent's observable shared retry budget.
         model_kwargs["max_retries"] = 0

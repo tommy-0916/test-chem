@@ -5,7 +5,7 @@
   "source": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
   "source_kind": "lab-design-all",
   "source_digest_sha256": "b55ab0c9003db0056619dcb619f0286a41ff173b0159e3268baf76820ad0e976",
-  "semantic_mapping_digest": "d55d0f704614b453a9909944b24f024e066d32e2cbf03c61611a95e822334870",
+  "semantic_mapping_digest": "3e1db3ba76dfb16e1c990a14dc5851c3d8a8603da7d38829d88b4eaaedc97900",
   "source_index": "chem_resources/workstation_capability_index.json",
   "planning_policy": "Use declared experiment types to search and design stages. A capability is not proof that every route or parameterization is executable. Unlisted techniques are unknown, not invented support. Respect unavailable stations.",
   "workstations": [
@@ -198,6 +198,7 @@
       "id": "solid-liquid-separation",
       "name": "离心固液分离",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -212,6 +213,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -226,6 +228,7 @@
       "id": "sample-storage",
       "name": "样品暂存与周转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 5,
         "section": "description",
@@ -240,6 +243,7 @@
       "id": "cooling",
       "name": "风扇辅助冷却",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -254,6 +258,7 @@
       "id": "drying-aging",
       "name": "加热干燥与老化",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -268,6 +273,7 @@
       "id": "container-supply",
       "name": "实验物料承载与周转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -282,6 +288,7 @@
       "id": "container-supply",
       "name": "实验物料承载与周转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -296,6 +303,7 @@
       "id": "heated-stirring",
       "name": "加热搅拌反应与混合",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -310,6 +318,7 @@
       "id": "sample-routing",
       "name": "测试前后样品中转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 5,
         "section": "description",
@@ -324,6 +333,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -338,6 +348,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -352,6 +363,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -366,6 +378,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -380,6 +393,7 @@
       "id": "liquid-transfer",
       "name": "反应样品移液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -394,6 +408,7 @@
       "id": "liquid-dosing",
       "name": "液体加样与配液",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -408,6 +423,7 @@
       "id": "supernatant-removal",
       "name": "离心后去上清并保留沉淀",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -422,6 +438,7 @@
       "id": "calcination",
       "name": "程序高温煅烧",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -436,6 +453,7 @@
       "id": "solid-dosing",
       "name": "定量固体称量与进样",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -450,6 +468,7 @@
       "id": "solid-dosing",
       "name": "定量固体称量与进样",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -464,6 +483,7 @@
       "id": "sample-storage",
       "name": "样品暂存与周转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -478,6 +498,7 @@
       "id": "solid-liquid-separation",
       "name": "离心固液分离",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -492,6 +513,7 @@
       "id": "washing-purification",
       "name": "沉淀清洗与纯化",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -506,6 +528,7 @@
       "id": "ambient-mixing",
       "name": "常温混合与均一化",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -520,6 +543,7 @@
       "id": "solid-dosing",
       "name": "定量固体称量与进样",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -534,6 +558,7 @@
       "id": "solid-transfer",
       "name": "固体样品转移",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -547,7 +572,13 @@
       "currently_usable": "unknown",
       "id": "spectroscopy-preparation",
       "name": "谱学测试前搅拌均一化",
-      "support_status": "supported",
+      "support_status": "unsupported",
+      "declared_support_status": "supported",
+      "operation_mapping_status": "truth_gap",
+      "operation_mapping_gap": {
+        "code": "no_executable_operation_contract",
+        "reason": "the station description declares parallel magnetic stirring, but the only executable operation, 样品架放置-夹具识别, contains no stirring operation or stirring-control contract"
+      },
       "evidence": {
         "line": 6,
         "section": "description",
@@ -562,6 +593,7 @@
       "id": "ultrasonic-treatment",
       "name": "超声分散、混合与清洗",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -576,6 +608,7 @@
       "id": "ultrasonic-treatment",
       "name": "超声分散、混合与清洗",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -590,6 +623,7 @@
       "id": "ultrasonic-treatment",
       "name": "超声分散、混合与清洗",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -604,6 +638,7 @@
       "id": "electrochemistry",
       "name": "电化学测试",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -618,6 +653,7 @@
       "id": "thermal-catalysis",
       "name": "密闭高温高压气液固热催化",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -632,6 +668,7 @@
       "id": "photocatalysis",
       "name": "光催化反应与材料筛选",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -646,6 +683,7 @@
       "id": "photocatalysis",
       "name": "光催化反应与材料筛选",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -660,6 +698,7 @@
       "id": "photodeposition",
       "name": "光沉积负载助催化剂",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -674,6 +713,7 @@
       "id": "reaction-workup",
       "name": "反应后过滤、稀释及分析前处理",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -688,6 +728,7 @@
       "id": "darkbox-imaging",
       "name": "暗箱彩色及荧光成像",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -702,6 +743,7 @@
       "id": "fluorescence",
       "name": "荧光发射表征",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -716,6 +758,7 @@
       "id": "gas-chromatography",
       "name": "气相色谱分析",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 5,
         "section": "description",
@@ -730,6 +773,7 @@
       "id": "high-speed-imaging",
       "name": "电化学工况气泡高速成像",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -744,6 +788,7 @@
       "id": "infrared",
       "name": "乙醇分散样品滴加制样的红外吸收光谱表征",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -758,6 +803,7 @@
       "id": "wettability",
       "name": "接触角及气泡粘附力表征",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -772,6 +818,7 @@
       "id": "photocatalytic-hydrogen",
       "name": "光催化产氢性能评估",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 5,
         "section": "description",
@@ -786,6 +833,7 @@
       "id": "liquid-chromatography",
       "name": "液相色谱分析",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 5,
         "section": "description",
@@ -800,6 +848,7 @@
       "id": "microplate-assay",
       "name": "高通量吸光度、荧光或化学发光检测",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -814,6 +863,7 @@
       "id": "sample-routing",
       "name": "测试前后样品中转",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -828,6 +878,7 @@
       "id": "uv-vis",
       "name": "紫外可见吸收光谱表征",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",
@@ -842,6 +893,7 @@
       "id": "xrd",
       "name": "乙醇分散固体样品滴加制样的 XRD 结构与物相表征",
       "support_status": "supported",
+      "operation_mapping_status": "mapped",
       "evidence": {
         "line": 6,
         "section": "description",

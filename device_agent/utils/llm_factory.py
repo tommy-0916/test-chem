@@ -138,6 +138,21 @@ def normalize_openai_base_url(base_url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)).rstrip("/")
 
 
+def _is_official_kimi_k3_chat(base_url: str, model: str) -> bool:
+    """Identify K3 on an official Kimi Chat Completions API root."""
+
+    parsed = urlsplit(normalize_openai_base_url(base_url))
+    if parsed.scheme != "https":
+        return False
+    return (parsed.hostname, parsed.path.rstrip("/"), model.lower()) in {
+        ("api.moonshot.ai", "/v1", "kimi-k3"),
+        ("api.kimi.ai", "/coding/v1", "k3"),
+        ("api.kimi.ai", "/coding/v1", "k3-256k"),
+        ("api.kimi.com", "/coding/v1", "k3"),
+        ("api.kimi.com", "/coding/v1", "k3-256k"),
+    }
+
+
 _DEVICE_JSON_ENVELOPE_FIELD = "payload_json"
 _DEVICE_JSON_ENVELOPE_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -905,7 +920,11 @@ class OpenAICompatChatModel:
                 max_retries=self._transport_max_retries,
                 use_responses_api=responses,
                 reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
-                temperature=self.temperature,
+                temperature=(
+                    None
+                    if _is_official_kimi_k3_chat(self.base_url, self._preferred_model)
+                    else self.temperature
+                ),
             )
             self._native_tool_model_key = cache_key
         return self._native_tool_model.bind_tools(tools, **kwargs)
@@ -967,12 +986,14 @@ class OpenAICompatChatModel:
         payload: Dict[str, Any] = {
             "messages": self._normalize_messages(messages),
             "timeout": remaining_timeout(self.timeout),
-            "temperature": self.temperature,
         }
+        is_kimi_k3 = _is_official_kimi_k3_chat(self.base_url, self._preferred_model)
+        if not is_kimi_k3:
+            payload["temperature"] = self.temperature
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
 
-        if include_extra_body:
+        if include_extra_body and not is_kimi_k3:
             extra_body: Dict[str, Any] = {}
             if self.disable_thinking:
                 extra_body["thinking"] = {"type": "disabled"}

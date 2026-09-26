@@ -61,16 +61,20 @@ def test_fragment_scope_keeps_full_handoff_and_stable_original_ids(monkeypatch):
     def request(current_state, **kwargs):
         assert current_state.research_handoff == original
         calls.append(kwargs)
-        source = [7, 11][len(calls) - 1]
+        source = ["MS_A", "MS_B"][len(calls) - 1]
         return fragment(source, len(calls), original["sample_control_matrix"])
 
     agent._invoke_feasibility_request = request
     result = agent._invoke_feasibility_plan(state)
-    assert [row["source_macro_step"] for row in result["device_plan"]] == [7, 11]
+    assert [row["source_macro_step"] for row in result["device_plan"]] == [
+        "MS_A", "MS_B"
+    ]
     assert [call["step_name"] for call in calls] == [
         "feasibility_device_plan_chunk_1_of_2", "feasibility_device_plan_chunk_2_of_2",
     ]
-    assert [call["fragment_context"]["current_macro_id"] for call in calls] == ["7", "11"]
+    assert [call["fragment_context"]["current_macro_id"] for call in calls] == [
+        "MS_A", "MS_B"
+    ]
     assert "UNRELATED_RESEARCH_BULK" not in json.dumps(
         [call["fragment_context"] for call in calls], ensure_ascii=False,
     )
@@ -79,7 +83,7 @@ def test_fragment_scope_keeps_full_handoff_and_stable_original_ids(monkeypatch):
     ][0]
     assert prefix_step["plan_step"] == 1
     assert prefix_step["workstation"] == "Alpha"
-    assert prefix_step["source_macro_steps"] == [7]
+    assert prefix_step["source_macro_steps"] == ["MS_A"]
     assert prefix_step["objective"] == "read-only fake operation"
     assert prefix_step["record_sha256"]
     assert calls[0]["fragment_context"]["observation_evidence_catalog"]
@@ -137,9 +141,9 @@ def test_fragment_contract_retry_only_repeats_current_chunk(monkeypatch):
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix),
-        fragment(11, 1, matrix),  # collision; immutable prefix must survive
-        fragment(11, 2, matrix),
+        fragment("MS_A", 1, matrix),
+        fragment("MS_B", 1, matrix),  # collision; immutable prefix must survive
+        fragment("MS_B", 2, matrix),
     ])
     result = agent._invoke_feasibility_plan(state)
     names = [call.kwargs["step_name"] for call in agent._invoke_feasibility_request.call_args_list]
@@ -156,13 +160,13 @@ def test_later_failure_preserves_diagnostic_prefix_without_acceptance(monkeypatc
         "error": {"code": "upstream_error"},
     })
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, state.research_handoff["sample_control_matrix"]), error,
+        fragment("MS_A", 1, state.research_handoff["sample_control_matrix"]), error,
     ])
     with pytest.raises(ResponsesTerminalError):
         agent._invoke_feasibility_plan(state)
     progress = state.feasibility_progress[0]
     assert progress["status"] == "failed"
-    assert progress["active_macro_id"] == "11"
+    assert progress["active_macro_id"] == "MS_B"
     assert [row["plan_step"] for row in progress["candidate"]["device_plan"]] == [1]
     assert state.feasibility_accepted is False
     assert state.feasibility_certificate == {}
@@ -185,7 +189,7 @@ def test_runtime_later_failure_never_calls_approval_or_translation(monkeypatch):
     agent._accept_feasibility_plan = Mock()
     agent._run_accepted_device_plan = Mock()
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, initial.research_handoff["sample_control_matrix"]), RuntimeError("bounded failure"),
+        fragment("MS_A", 1, initial.research_handoff["sample_control_matrix"]), RuntimeError("bounded failure"),
     ])
     state = agent.run_state(initial.research_handoff, exp_id="offline")
     assert state.status == "failed"
@@ -218,11 +222,11 @@ def test_hard_terminal_fragment_stops_before_next_macro(monkeypatch, status):
 def test_manual_fragment_keeps_review_while_remaining_macros_are_planned(monkeypatch):
     monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
     agent, state = fixture_agent()
-    first = fragment(7, 1, state.research_handoff["sample_control_matrix"])
+    first = fragment("MS_A", 1, state.research_handoff["sample_control_matrix"])
     first.update(status="manual_required", feedback_type="human_review_required",
                  quantity_audit={"status": "human_review_required", "issues": [{"code": "unknown_yield"}]})
     agent._invoke_feasibility_request = Mock(side_effect=[
-        first, fragment(11, 2, state.research_handoff["sample_control_matrix"]),
+        first, fragment("MS_B", 2, state.research_handoff["sample_control_matrix"]),
     ])
     result = agent._invoke_feasibility_plan(state)
     assert result["status"] == "manual_required"
@@ -289,10 +293,10 @@ def test_frozen_matrix_violation_rejects_candidate_without_repair(monkeypatch):
     monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
-    tampered = fragment(11, 2, matrix)
+    tampered = fragment("MS_B", 2, matrix)
     tampered["sample_control_matrix"] = [{"sample_id": "A", "condition": "MUTATED"}]
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix), tampered,
+        fragment("MS_A", 1, matrix), tampered,
     ])
     with pytest.raises(FeasibilityFragmentError, match="frozen Research matrix"):
         agent._invoke_feasibility_plan(state)
@@ -316,9 +320,9 @@ def test_contract_repair_uses_constrained_repair_instruction(monkeypatch):
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix),
-        fragment(11, 1, matrix),  # plan_step collision -> contract repair
-        fragment(11, 2, matrix),
+        fragment("MS_A", 1, matrix),
+        fragment("MS_B", 1, matrix),  # plan_step collision -> contract repair
+        fragment("MS_B", 2, matrix),
     ])
     result = agent._invoke_feasibility_plan(state)
     calls = agent._invoke_feasibility_request.call_args_list
@@ -337,9 +341,9 @@ def test_identical_contract_error_stops_repairs_early(monkeypatch):
     monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
-    bad = fragment(11, 1, matrix)
+    bad = fragment("MS_B", 1, matrix)
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix), bad, copy.deepcopy(bad),
+        fragment("MS_A", 1, matrix), bad, copy.deepcopy(bad),
     ])
     with pytest.raises(FeasibilityFragmentError, match="global sequential integer"):
         agent._invoke_feasibility_plan(state)
@@ -353,11 +357,11 @@ def test_format_repair_budget_is_bounded(monkeypatch):
     monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
-    wrong_step = fragment(11, 1, matrix)
-    unknown_field = fragment(11, 2, matrix)
+    wrong_step = fragment("MS_B", 1, matrix)
+    unknown_field = fragment("MS_B", 2, matrix)
     unknown_field["parameter_disposition"] = {"note": "invented field"}
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix),
+        fragment("MS_A", 1, matrix),
         wrong_step,
         unknown_field,
         copy.deepcopy(unknown_field),
@@ -373,11 +377,11 @@ def test_rejected_chunk_attempts_are_captured_for_offline_replay(monkeypatch):
     monkeypatch.delenv("CHEM_DEVICE_FEASIBILITY_MODE", raising=False)
     agent, state = fixture_agent()
     matrix = state.research_handoff["sample_control_matrix"]
-    bad = fragment(11, 1, matrix)
+    bad = fragment("MS_B", 1, matrix)
     bad["device_feasible"] = True  # unknown field -> constrained repair
-    colliding = fragment(11, 1, matrix)  # plan_step 1 already used by chunk 1
+    colliding = fragment("MS_B", 1, matrix)  # plan_step 1 already used by chunk 1
     agent._invoke_feasibility_request = Mock(side_effect=[
-        fragment(7, 1, matrix), bad, colliding, fragment(11, 2, matrix),
+        fragment("MS_A", 1, matrix), bad, colliding, fragment("MS_B", 2, matrix),
     ])
     result = agent._invoke_feasibility_plan(state)
     attempts = state.feasibility_progress[0]["fragment_attempts"]
@@ -411,11 +415,11 @@ def test_failed_candidate_leaves_prefix_reusable(monkeypatch):
     root = {
         "batch_id": "whole_root", "quantity_mode": "whole_batch",
         "sample_id": "A", "is_root_batch": True,
-        "consumer_ids": ["op_a"], "source_macro_steps": [7], "source_plan_steps": [1],
+        "consumer_ids": ["op_a"], "source_macro_steps": ["MS_A"], "source_plan_steps": [1],
     }
-    chunk_one = dict(fragment(7, 1, matrix), batch_plan=[root])
+    chunk_one = dict(fragment("MS_A", 1, matrix), batch_plan=[root])
     conflict = {"table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_b"]}
-    bad_chunk_two = dict(fragment(11, 2, matrix), prior_record_updates=[conflict])
+    bad_chunk_two = dict(fragment("MS_B", 2, matrix), prior_record_updates=[conflict])
     agent._invoke_feasibility_request = Mock(side_effect=[
         chunk_one, bad_chunk_two, copy.deepcopy(bad_chunk_two),
     ])
@@ -433,8 +437,8 @@ def test_failed_candidate_leaves_prefix_reusable(monkeypatch):
     # Business inputs untouched; the same state accepts a clean re-plan.
     assert state.research_handoff == original_handoff
     agent._invoke_feasibility_request = Mock(side_effect=[
-        dict(fragment(7, 1, matrix), batch_plan=[root]),
-        fragment(11, 2, matrix),
+        dict(fragment("MS_A", 1, matrix), batch_plan=[root]),
+        fragment("MS_B", 2, matrix),
     ])
     result = agent._invoke_feasibility_plan(state)
     assert [row["plan_step"] for row in result["device_plan"]] == [1, 2]

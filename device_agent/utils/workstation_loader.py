@@ -8,7 +8,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:
     from ..skill_contract_audit import parse_operation_schemas
@@ -16,9 +16,40 @@ except ImportError:
     from skill_contract_audit import parse_operation_schemas
 
 try:
-    from .paths import workstation_dir
+    from .paths import chem_resources_root, workstation_dir
 except ImportError:  # script-style imports with device_agent on sys.path
-    from utils.paths import workstation_dir
+    from utils.paths import chem_resources_root, workstation_dir
+
+
+def resolve_explicit_alias(
+    name: Any,
+    canonical_names: Iterable[str],
+    aliases: Mapping[str, Any],
+) -> Optional[str]:
+    """Resolve only an exact canonical name or an explicit, unique alias.
+
+    Alias values may be one target or a collection of targets.  A canonical
+    name always resolves to itself; an alias resolves only when exactly one of
+    its declared targets exists in ``canonical_names``.  This deliberately
+    provides no substring, prefix, normalized-name, or single-candidate
+    fallback.
+    """
+
+    text = str(name or "").strip()
+    canonical = {str(item) for item in canonical_names if str(item)}
+    if not text:
+        return None
+    if text in canonical:
+        return text
+    raw_targets = aliases.get(text)
+    if isinstance(raw_targets, str):
+        targets = {raw_targets}
+    elif isinstance(raw_targets, (list, tuple, set, frozenset)):
+        targets = {str(item) for item in raw_targets if str(item)}
+    else:
+        targets = set()
+    matches = targets & canonical
+    return next(iter(matches)) if len(matches) == 1 else None
 
 
 class WorkstationLoader:
@@ -165,6 +196,93 @@ class WorkstationLoader:
         self._status_overlay = self._load_status_overlay()
 
         self.refresh_truth_snapshot()
+        # R3 P6: operation aliases come from the versioned resource
+        # (chem_resources/operation_aliases/operation_aliases.json), merged
+        # over the built-in table for backward compatibility.  Instance
+        # attribute shadows the class table for existing callers.
+        self.OPERATION_ALIAS_MAP = self._load_operation_alias_resource()
+
+    OPERATION_ALIAS_RESOURCE = "operation_aliases/operation_aliases.json"
+
+    def _load_operation_alias_resource(self) -> Dict[str, List[str]]:
+        """Merge station-scoped aliases from the versioned resource.
+
+        Unknown stations are skipped (no global equivalence is created), and
+        any read/parse problem falls back to the built-in table unchanged.
+        """
+        merged: Dict[str, List[str]] = {
+            key: list(value) for key, value in self.__class__.OPERATION_ALIAS_MAP.items()
+        }
+        try:
+            resource_path = (
+                Path(chem_resources_root()) / self.OPERATION_ALIAS_RESOURCE
+            )
+            payload = json.loads(resource_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return merged
+        if (
+            not isinstance(payload, dict)
+            or str(payload.get("schema") or "").strip() != "operation-aliases/v1"
+        ):
+            return merged
+        station_aliases = payload.get("station_aliases")
+        if not isinstance(station_aliases, dict):
+            return merged
+
+        def _known_station(ref: str) -> bool:
+            text = str(ref or "").strip()
+            if not text:
+                return False
+            if text in self._new_workstations or text in self._workstations:
+                return True
+            for schema in self._new_workstations.values():
+                if getattr(schema, "display_name", None) == text:
+                    return True
+            return bool(self._station_alias_map.get(text))
+
+        def _merge(name: str, targets: List[str]) -> None:
+            existing = merged.get(name)
+            if isinstance(existing, list):
+                for target in targets:
+                    if target not in existing:
+                        existing.append(target)
+            else:
+                merged[name] = list(targets)
+
+        for station_ref, record in station_aliases.items():
+            if not _known_station(str(station_ref)):
+                continue
+            if not isinstance(record, dict):
+                continue
+            canonical = str(record.get("canonical") or "").strip()
+            if not canonical:
+                continue
+            aliases = [
+                str(value).strip()
+                for value in (record.get("aliases") or [])
+                if str(value).strip()
+            ]
+            _merge(canonical, [canonical, *aliases])
+            for alias in aliases:
+                _merge(alias, [canonical])
+        return merged
+
+    def _register_station_alias(self, alias: str, station_code: str) -> None:
+        """Register an explicit alias without hiding collisions by insertion order."""
+
+        alias = str(alias or "").strip()
+        station_code = str(station_code or "").strip()
+        if not alias or not station_code:
+            return
+        current = self._station_alias_map.get(alias)
+        if isinstance(current, str):
+            targets = {current}
+        elif isinstance(current, (list, tuple, set, frozenset)):
+            targets = {str(item) for item in current if str(item)}
+        else:
+            targets = set()
+        targets.add(station_code)
+        self._station_alias_map[alias] = targets
 
     def truth_source_root(self) -> Path:
         return Path(
@@ -339,6 +457,8 @@ class WorkstationLoader:
                     print(f"Warning: Failed to load {filename} in {station_dir}: {exc}")
 
             self._new_workstations[station_dir] = station_data
+            self._register_station_alias(station_dir, station_dir)
+            self._register_station_alias(station_data["display_name"], station_dir)
 
     def _normalize_new_workstation_root(self, root: str) -> str:
         """Accept workstations_new, lab-design-all, or a nested workstation skill root."""
@@ -392,8 +512,8 @@ class WorkstationLoader:
                     "skill_content": skill_content,
                 }
                 self._new_workstations[station_dir] = station_data
-                self._station_alias_map[station_dir] = station_dir
-                self._station_alias_map[display_name] = station_dir
+                self._register_station_alias(station_dir, station_dir)
+                self._register_station_alias(display_name, station_dir)
 
     def _load_lab_design_name_map(self, root: str) -> Dict[str, str]:
         mapping_path = os.path.join(root, "工作站名称中英文对照.md")
@@ -495,10 +615,7 @@ class WorkstationLoader:
     def resolve_station_code(self, name: str) -> Optional[str]:
         """Resolve declared exact aliases, never paths or fuzzy substrings."""
         entries = {item["station_code"] for item in self.capability_catalog()}
-        if name in entries:
-            return name
-        alias = self._station_alias_map.get(name)
-        return alias if alias in entries else None
+        return resolve_explicit_alias(name, entries, self._station_alias_map)
 
     def load_workstation_skill(self, station_code: str) -> Dict:
         """Read one known station, preserving the entire immutable source."""
@@ -726,17 +843,11 @@ class WorkstationLoader:
         return normalized[:max_chars].rstrip() + "\n...[truncated]"
 
     def _map_station_name_to_code(self, station_name: str) -> Optional[str]:
-        stripped = (station_name or "").strip()
-        if not stripped:
-            return None
-        if stripped in self._new_workstations:
-            return stripped
-        if stripped in self._station_alias_map:
-            return self._station_alias_map[stripped]
-        for alias, code in self._station_alias_map.items():
-            if alias in stripped or stripped in alias:
-                return code
-        return None
+        return resolve_explicit_alias(
+            station_name,
+            self._new_workstations,
+            self._station_alias_map,
+        )
 
     def _expand_operation_keywords(self, operation_name: str) -> List[str]:
         stripped = (operation_name or "").strip()

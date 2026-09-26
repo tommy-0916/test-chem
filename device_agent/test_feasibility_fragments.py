@@ -24,7 +24,7 @@ from feasibility_fragments import (
 )
 
 
-MACROS = ["10", "20", "30"]
+MACROS = [10, 20, 30]
 MATRIX = [
     {"sample_id": "NiFe_control", "role": "control", "variables": {"activation_minutes": 0}},
     {"sample_id": "NiFe_activated", "role": "experimental", "variables": {"activation_minutes": 30}},
@@ -54,7 +54,7 @@ def fragment(source, number, **extra):
 
 
 def merge(previous, new, source):
-    return merge_fragment(previous, new, str(source), MACROS, MATRIX)
+    return merge_fragment(previous, new, source, MACROS, MATRIX)
 
 
 def test_sequential_fragments_keep_original_sources_frozen_matrix_and_inputs():
@@ -72,7 +72,7 @@ def test_sequential_fragments_keep_original_sources_frozen_matrix_and_inputs():
     assert [item["plan_step"] for item in result["device_plan"]] == [1, 2]
     assert result["sample_control_matrix"] == MATRIX
     assert result["quantity_requirement_dispositions"][0]["evidence_refs"] == ["macro_action_steps[1].参数"]
-    assert result["_feasibility_fragments"]["completed_macro_ids"] == ["10", "20"]
+    assert result["_feasibility_fragments"]["completed_macro_ids"] == [10, 20]
     assert prefix == frozen_prefix and first == frozen_first
     assert "feasibility_certificate" not in result and "workflow_json" not in result
 
@@ -88,7 +88,7 @@ def test_fragment_prompt_uses_digest_backed_prefix_symbols_not_full_candidate():
     }])
     prefix = merge({}, first, 10)
 
-    instruction = build_fragment_instruction(prefix, "20", MACROS, MATRIX)
+    instruction = build_fragment_instruction(prefix, 20, MACROS, MATRIX)
     symbols = build_prefix_symbol_table(prefix)
 
     assert "accepted_prefix_read_only" not in instruction
@@ -124,7 +124,7 @@ def test_fragment_request_context_excludes_unrelated_research_bulk():
                     "type": "temperature_atmosphere",
                     "temperature": "900 C",
                     "atmosphere": "Ar",
-                }] if identifier == "20" else []),
+                }] if identifier == 20 else []),
             }
             for identifier in MACROS
         ],
@@ -137,14 +137,14 @@ def test_fragment_request_context_excludes_unrelated_research_bulk():
     })
 
     context = build_fragment_request_context(
-        handoff, semantic, {}, "10", MACROS, MATRIX,
+        handoff, semantic, {}, 10, MACROS, MATRIX,
     )
     serialized = json.dumps(context, ensure_ascii=False)
 
     assert "UNRELATED_SURVEY_BULK" not in serialized
-    assert context["current_macro"]["macro_step_id"] == "10"
+    assert context["current_macro"]["macro_step_id"] == 10
     assert context["semantic_assessment"] == [{
-        "source_macro_step": "10",
+        "source_macro_step": 10,
         "reason": "semantic-10",
         "required_capabilities": [{"category": "capability-10"}],
         "joint_requirements": [],
@@ -234,6 +234,40 @@ def test_empty_observation_fragment_requires_a_sourced_handoff():
     assert result["device_plan"] == prefix["device_plan"]
     with pytest.raises(FeasibilityFragmentError, match="coverage"):
         merge(prefix, {"status": "device_plan", "device_plan": []}, 20)
+
+
+@pytest.mark.parametrize(
+    "current,declared",
+    [
+        (1, 1.0),
+        (1.0, 1),
+        (1, "1"),
+        ("1", 1),
+    ],
+)
+def test_offline_handoff_coverage_requires_exact_typed_macro_identity(
+    current, declared
+):
+    handoff = {
+        "name": "offline observation",
+        "source_macro_step": declared,
+        "source_macro_steps": [declared],
+        "semantic_classification": "observation_data_return",
+        "required_return_data": ["result"],
+    }
+
+    with pytest.raises(FeasibilityFragmentError, match="coverage"):
+        merge_fragment(
+            {},
+            {
+                "status": "device_plan",
+                "device_plan": [],
+                "offline_handoffs": [handoff],
+            },
+            current,
+            [current, declared],
+            MATRIX,
+        )
 
 
 def test_prefix_exposes_cross_macro_handoffs_and_temporal_adaptations():
@@ -338,12 +372,132 @@ def test_container_identity_rejects_conflicting_same_type_and_number():
 
 
 def test_slot_identity_includes_workstation_and_prevents_same_station_rebinding():
-    stock = {"工作站": "Station_A", "原液编号": 1, "名称": "Ni stock"}
+    stock = {
+        "工作站": "Station_A",
+        "原液编号": 1,
+        "material_identity_id": "SOL_NI",
+        "canonical_name": "Ni stock",
+    }
     prefix = merge({}, fragment(10, 1, reagent_slot_plan=[stock]), 10)
     result = merge(prefix, fragment(20, 2, reagent_slot_plan=[dict(stock, 工作站="Station_B")]), 20)
     assert len(result["reagent_slot_plan"]) == 2
     with pytest.raises(FeasibilityFragmentError, match="conflicting"):
-        merge(prefix, fragment(20, 2, reagent_slot_plan=[dict(stock, 名称="Fe stock")]), 20)
+        merge(
+            prefix,
+            fragment(
+                20,
+                2,
+                reagent_slot_plan=[
+                    dict(
+                        stock,
+                        material_identity_id="SOL_FE",
+                        canonical_name="Fe stock",
+                    )
+                ],
+            ),
+            20,
+        )
+
+
+def test_slot_identity_requires_stable_id_and_canonical_name():
+    base = {"工作站": "Station_A", "原液编号": 1}
+    with pytest.raises(FeasibilityFragmentError) as missing_id:
+        merge(
+            {},
+            fragment(10, 1, reagent_slot_plan=[dict(base, canonical_name="stock")]),
+            10,
+        )
+    assert missing_id.value.code == "MISSING_MATERIAL_IDENTITY_ID"
+
+    with pytest.raises(FeasibilityFragmentError) as missing_name:
+        merge(
+            {},
+            fragment(
+                10,
+                1,
+                reagent_slot_plan=[dict(base, material_identity_id="SOL_A")],
+            ),
+            10,
+        )
+    assert missing_name.value.code == "MISSING_CANONICAL_NAME"
+
+
+def _legacy_reagent_slot_prefix():
+    """Build an accepted prefix, then represent a pre-identity checkpoint."""
+    slot = {
+        "工作站": "Station_A",
+        "原液编号": 1,
+        "material_identity_id": "SOL_LEGACY",
+        "canonical_name": "Legacy stock",
+        "配料名称": "historical presentation only",
+    }
+    prefix = merge({}, fragment(10, 1, reagent_slot_plan=[slot]), 10)
+    prefix["reagent_slot_plan"][0].pop("material_identity_id")
+    prefix["reagent_slot_plan"][0].pop("canonical_name")
+    return prefix
+
+
+def test_untouched_legacy_slot_checkpoint_remains_resumable_without_fabrication():
+    prefix = _legacy_reagent_slot_prefix()
+    frozen_prefix = copy.deepcopy(prefix)
+
+    result = merge(prefix, fragment(20, 2), 20)
+
+    assert result["reagent_slot_plan"] == frozen_prefix["reagent_slot_plan"]
+    assert "material_identity_id" not in result["reagent_slot_plan"][0]
+    assert "canonical_name" not in result["reagent_slot_plan"][0]
+    assert prefix == frozen_prefix
+
+
+@pytest.mark.parametrize(
+    ("incoming", "expected_code"),
+    [
+        (
+            {"工作站": "Station_B", "原液编号": 2, "canonical_name": "New stock"},
+            "MISSING_MATERIAL_IDENTITY_ID",
+        ),
+        (
+            {"工作站": "Station_B", "原液编号": 2, "material_identity_id": "SOL_NEW"},
+            "MISSING_CANONICAL_NAME",
+        ),
+        (
+            {"工作站": "Station_A", "原液编号": 1, "canonical_name": "Attempted repair"},
+            "MISSING_MATERIAL_IDENTITY_ID",
+        ),
+    ],
+)
+def test_new_or_modified_slot_in_legacy_resume_must_satisfy_identity_contract(incoming, expected_code):
+    prefix = _legacy_reagent_slot_prefix()
+    frozen_prefix = copy.deepcopy(prefix)
+
+    with pytest.raises(FeasibilityFragmentError) as error:
+        merge(prefix, fragment(20, 2, reagent_slot_plan=[incoming]), 20)
+
+    assert error.value.code == expected_code
+    assert prefix == frozen_prefix
+
+
+def test_legacy_resume_accepts_complete_new_slot_but_never_rebinds_existing_slot():
+    prefix = _legacy_reagent_slot_prefix()
+    new_slot = {
+        "工作站": "Station_B",
+        "原液编号": 2,
+        "material_identity_id": "SOL_NEW",
+        "canonical_name": "New stock",
+    }
+
+    result = merge(prefix, fragment(20, 2, reagent_slot_plan=[new_slot]), 20)
+    assert result["reagent_slot_plan"] == prefix["reagent_slot_plan"] + [new_slot]
+
+    replacement = {
+        "工作站": "Station_A",
+        "原液编号": 1,
+        "material_identity_id": "SOL_REBOUND",
+        "canonical_name": "Rebound stock",
+    }
+    with pytest.raises(FeasibilityFragmentError) as conflict:
+        merge(prefix, fragment(20, 2, reagent_slot_plan=[replacement]), 20)
+    assert conflict.value.code == "CONFLICTING_RECORD"
 
 
 def test_cross_fragment_material_graph_references_are_preserved():
@@ -382,6 +536,98 @@ def test_cross_fragment_material_graph_references_are_preserved():
 def test_dangling_references_are_rejected_before_global_validation(field, records):
     with pytest.raises(FeasibilityFragmentError, match="dangling reference"):
         merge({}, fragment(10, 1, **{field: records}), 10)
+
+
+@pytest.mark.parametrize("macro_id", [1, "1"])
+def test_macro_source_ref_resolves_one_numeric_or_string_typed_id(macro_id):
+    payload = fragment(
+        macro_id,
+        1,
+        material_ledger={
+            "entries": [
+                {"entry_id": "research-source", "source_refs": ["macro_step:1"]}
+            ]
+        },
+    )
+
+    result = merge_fragment({}, payload, macro_id, [macro_id], MATRIX)
+
+    assert result["material_ledger"]["entries"][0]["source_refs"] == [
+        "macro_step:1"
+    ]
+
+
+def test_macro_source_ref_rejects_unknown_numeric_id():
+    payload = fragment(
+        1,
+        1,
+        material_ledger={
+            "entries": [
+                {"entry_id": "unknown-source", "source_refs": ["macro_step:2"]}
+            ]
+        },
+    )
+
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge_fragment({}, payload, 1, [1], MATRIX)
+
+    assert caught.value.code == "DANGLING_REFERENCE"
+    assert caught.value.path.endswith("source_refs")
+
+
+def test_macro_source_ref_rejects_ambiguous_numeric_and_string_alias():
+    payload = fragment(
+        1,
+        1,
+        material_ledger={
+            "entries": [
+                {"entry_id": "ambiguous-source", "source_refs": ["macro_step:1"]}
+            ]
+        },
+    )
+
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge_fragment({}, payload, 1, [1, "1"], MATRIX)
+
+    assert caught.value.code == "AMBIGUOUS_REFERENCE"
+    assert caught.value.path.endswith("source_refs")
+    assert caught.value.details["typed_candidates"] == [
+        ("integer", 1),
+        ("string", "1"),
+    ]
+
+
+@pytest.mark.parametrize("reference", ["1", 0])
+def test_source_plan_step_references_are_typed_and_preserve_zero(reference):
+    payload = fragment(
+        10,
+        1,
+        offline_handoffs=[
+            {
+                "handoff_id": "typed-plan-ref",
+                "source_macro_step": 10,
+                "source_macro_steps": [10],
+                "source_plan_step": reference,
+            }
+        ],
+    )
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, payload, 10)
+    assert caught.value.code == "DANGLING_REFERENCE"
+    assert caught.value.path.endswith("source_plan_step")
+    assert repr(reference) in str(caught.value)
+
+
+def test_source_plan_steps_string_does_not_alias_integer_plan_step():
+    payload = fragment(
+        10,
+        1,
+        batch_plan=[{"batch_id": "typed-ref", "source_plan_steps": ["1"]}],
+    )
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge({}, payload, 10)
+    assert caught.value.code == "DANGLING_REFERENCE"
+    assert caught.value.path.endswith("source_plan_steps")
 
 
 def test_batch_consumer_update_is_additive_and_cannot_change_inventory():
@@ -460,7 +706,7 @@ def test_manual_review_survives_later_success_and_accumulates_issues():
     assert result["quantity_audit"] == expected_audit
     assert result["pending_quantity_human_review"] == expected_audit
     assert result["feedback_route"] == "human"
-    assert result["_feasibility_fragments"]["completed_macro_ids"] == ["10", "20"]
+    assert result["_feasibility_fragments"]["completed_macro_ids"] == [10, 20]
     from single_agent import SingleDeviceAgent
     promoted = SingleDeviceAgent._promote_feasible_quantity_human_plan(result)
     assert promoted["pending_quantity_human_review"] == expected_audit
@@ -481,7 +727,7 @@ def test_hard_failure_preserves_nonaccepted_prefix_and_all_blockers():
     assert result["status"] == "feasibility_error"
     assert result["device_plan"] == prefix["device_plan"]
     assert result["feasibility"]["blocking_constraints"] == blocked["feasibility"]["blocking_constraints"]
-    assert result["_feasibility_fragments"]["completed_macro_ids"] == ["10"]
+    assert result["_feasibility_fragments"]["completed_macro_ids"] == [10]
     with pytest.raises(FeasibilityFragmentError, match="hard-terminal"):
         merge(result, fragment(20, 2), 20)
 
@@ -506,19 +752,19 @@ def test_matrix_drift_and_nonfinite_quantities_fail_atomically():
 def test_instruction_contains_compact_carryover_and_original_macro_ids():
     prefix = merge({}, fragment(10, 1), 10)
     frozen = copy.deepcopy(prefix)
-    instruction = build_fragment_instruction(prefix, "20", MACROS, MATRIX)
+    instruction = build_fragment_instruction(prefix, 20, MACROS, MATRIX)
     context = json.loads(instruction[instruction.index('{"accepted_prefix_symbols"'):])
     assert context["accepted_prefix_symbols"]["candidate_sha256"]
     assert context["accepted_prefix_symbols"]["device_plan"][0]["plan_step"] == 1
     assert context["accepted_prefix_symbols"] != prefix
     assert context["first_new_plan_step"] == 2
-    assert context["current_macro_id"] == "20"
+    assert context["current_macro_id"] == 20
     assert context["all_macro_ids"] == MACROS
     assert context["frozen_sample_control_matrix"] == MATRIX
     assert "prior_record_updates" in instruction and "reused_plan_steps" in instruction
     assert prefix == frozen
     with pytest.raises(FeasibilityFragmentError, match="Research order"):
-        build_fragment_instruction(prefix, "30", MACROS, MATRIX)
+        build_fragment_instruction(prefix, 30, MACROS, MATRIX)
 
 
 def test_unknown_output_fields_carry_machine_readable_code_and_details():
@@ -571,11 +817,11 @@ def test_field_contract_covers_exactly_the_enforced_sets():
         assert field in contract
     assert "禁止自造字段" in contract
     prefix = merge({}, fragment(10, 1), 10)
-    instruction = build_fragment_instruction(prefix, "20", MACROS, MATRIX)
+    instruction = build_fragment_instruction(prefix, 20, MACROS, MATRIX)
     assert contract in instruction
     # The machine-readable context remains the trailing JSON payload.
     context = json.loads(instruction[instruction.index('{"accepted_prefix_symbols"'):])
-    assert context["current_macro_id"] == "20"
+    assert context["current_macro_id"] == 20
     assert context["first_new_plan_step"] == 2
 
 
@@ -643,7 +889,7 @@ def test_diagnose_fragment_reports_masked_consumer_conflict():
         "table": "batch_plan", "id": "whole_root", "consumer_ids": ["op_b"],
     }])
     bad["workstation_skill_reviewed"] = True
-    report = diagnose_fragment(prefix, bad, "20", MACROS, MATRIX)
+    report = diagnose_fragment(prefix, bad, 20, MACROS, MATRIX)
     codes = {(finding["stage"], finding["code"]) for finding in report["findings"]}
     assert ("fields", "UNKNOWN_FIELDS") in codes
     conflict = [
@@ -664,7 +910,7 @@ def test_diagnose_fragment_reports_masked_consumer_conflict():
 
 
 def test_diagnose_fragment_never_marks_unexecuted_stages_as_passed():
-    report = diagnose_fragment({}, ["not", "an", "object"], "10", MACROS, MATRIX)
+    report = diagnose_fragment({}, ["not", "an", "object"], 10, MACROS, MATRIX)
     assert report["findings"][0]["stage"] == "fields"
     assert report["findings"][0]["code"] == "NOT_AN_OBJECT"
     assert all(finding["status"] == "not_executed" for finding in report["findings"][1:])
@@ -672,7 +918,7 @@ def test_diagnose_fragment_never_marks_unexecuted_stages_as_passed():
 
 def test_diagnose_fragment_reports_no_prior_updates_when_absent():
     prefix = merge({}, fragment(10, 1), 10)
-    report = diagnose_fragment(prefix, fragment(20, 2), "20", MACROS, MATRIX)
+    report = diagnose_fragment(prefix, fragment(20, 2), 20, MACROS, MATRIX)
     stages = {finding["stage"]: finding["status"] for finding in report["findings"]}
     assert stages["fields"] == "passed"
     assert stages["status"] == "passed"
@@ -696,13 +942,13 @@ def test_terminal_failure_exit_variants_merge_and_classify_without_model():
     result = merge(prefix, exit_report, 20)
     assert result["status"] == "feasibility_error"
     assert result["error_package"]["type"] == "device_feasibility_error"
-    assert result["_feasibility_fragments"]["completed_macro_ids"] == ["10"]
+    assert result["_feasibility_fragments"]["completed_macro_ids"] == [10]
     # 语义阻塞通道：继续态 + 顶层 blocking_constraints，自动升格。
     exit_blockers = dict(fragment(20, 2), blocking_constraints=["station cannot meet atmosphere"])
     blocked = merge(prefix, exit_blockers, 20)
     assert blocked["status"] == "feasibility_error"
     assert blocked["blocking_constraints"] == ["station cannot meet atmosphere"]
-    assert blocked["_feasibility_fragments"]["completed_macro_ids"] == ["10"]
+    assert blocked["_feasibility_fragments"]["completed_macro_ids"] == [10]
     # 硬终止候选不可被后续块续跑。
     with pytest.raises(FeasibilityFragmentError, match="hard-terminal"):
         merge(result, fragment(20, 2), 20)
@@ -745,8 +991,88 @@ def test_fragment_request_context_includes_material_state_digest():
         "device_agent_contract": {"contract_version": "v2"},
     }
     semantic = {"macro_step_assessments": [], "material_identity_registry": []}
-    context = build_fragment_request_context(handoff, semantic, {}, "10", MACROS, MATRIX)
+    context = build_fragment_request_context(handoff, semantic, {}, 10, MACROS, MATRIX)
     digest = context["material_state_digest"]
     assert digest["batch_plan"] == []
     assert digest["allowed_reference_ids"]["plan_steps"] == []
     assert digest["allowed_reference_ids"]["macro_ids"] == MACROS
+
+
+@pytest.mark.parametrize("macro_id", ["001", "1,2", "phase-alpha"])
+def test_opaque_string_macro_ids_survive_fragment_merge_end_to_end(macro_id):
+    candidate = merge_fragment(
+        {}, fragment(macro_id, 1), macro_id, [macro_id], MATRIX
+    )
+
+    assert candidate["device_plan"][0]["source_macro_step"] == macro_id
+    assert candidate["device_plan"][0]["source_macro_steps"] == [macro_id]
+    assert candidate["_feasibility_fragments"]["completed_macro_ids"] == [macro_id]
+
+
+def test_typed_macro_mismatch_is_rejected_instead_of_coerced():
+    with pytest.raises(FeasibilityFragmentError, match="unknown Research macro ID"):
+        merge_fragment({}, fragment("1", 1), 1, [1], MATRIX)
+
+
+def test_fragment_source_id_mirror_is_preserved_and_conflicts_fail_closed():
+    source_id_only = fragment(10, 1)
+    source_id_only["device_plan"][0].pop("source_macro_step")
+    source_id_only["device_plan"][0].pop("source_macro_steps")
+    source_id_only["device_plan"][0]["source_macro_step_id"] = 10
+    source_id_only["quantity_requirement_dispositions"] = [
+        {
+            "source_macro_step_id": 10,
+            "requirement_index": 0,
+            "decision": "preserve typed source identity",
+        }
+    ]
+
+    merged = merge_fragment({}, source_id_only, 10, MACROS, MATRIX)
+    assert merged["device_plan"][0]["source_macro_step_id"] == 10
+    assert build_prefix_symbol_table(merged)["device_plan"][0][
+        "source_macro_step_id"
+    ] == 10
+    assert build_prefix_symbol_table(merged)[
+        "quantity_requirement_dispositions"
+    ][0]["source_macro_step_id"] == 10
+
+    conflicting = fragment(10, 1)
+    conflicting["device_plan"][0]["source_macro_step_id"] = "10"
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        merge_fragment({}, conflicting, 10, MACROS, MATRIX)
+    assert caught.value.code == "CONFLICTING_MACRO_SOURCE"
+    assert caught.value.path == "device_plan[0]"
+
+
+def test_fragment_context_missing_semantic_macro_id_fails_closed():
+    handoff = {
+        "task": {"query": "missing ID must not use array position"},
+        "macro_action_steps": [{"操作": "first"}],
+    }
+
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        build_fragment_request_context(handoff, {}, {}, "001", ["001"], MATRIX)
+
+    assert caught.value.code == "MISSING_MACRO_ID"
+    assert caught.value.path == "research_handoff.macro_action_steps[0]"
+
+
+def test_fragment_context_conflicting_step_identity_mirrors_fail_closed():
+    handoff = {
+        "task": {"query": "typed alias conflict must block planning"},
+        "macro_action_steps": [
+            {
+                "macro_step_id": 1,
+                "logical_step_id": "1",
+                "macro_action_id": "MA_SHARED",
+                "步骤序号": 1,
+                "操作": "first",
+            }
+        ],
+    }
+
+    with pytest.raises(FeasibilityFragmentError) as caught:
+        build_fragment_request_context(handoff, {}, {}, 1, [1], MATRIX)
+
+    assert caught.value.code == "CONFLICTING_MACRO_ID_MIRRORS"
+    assert caught.value.path == "research_handoff.macro_action_steps[0]"

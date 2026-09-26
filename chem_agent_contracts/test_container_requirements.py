@@ -9,6 +9,7 @@ from chem_agent_contracts.adapters import research_state_to_v2
 from chem_agent_contracts.container_requirements import (
     LogicalContainerContractError, parse_logical_container_requirements,
 )
+from chem_agent_contracts.identity import encode_json_scalar_identity
 from chem_agent_contracts.v2 import LogicalContainerV2, LOGICAL_LID_STATE_PROMPT
 from reaserch_agent.prompts.task_prompts import MACRO_STEP_CONTRACT_PROMPT
 
@@ -53,6 +54,18 @@ class LogicalContainerRequirementsTests(unittest.TestCase):
             self.assertEqual(issue.expected, ["open", "closed", "none", "unknown"])
             self.assertIn("A02-XRD-CARRIER", issue.rule)
             self.assertEqual(issue.repair_scope, "macro_step")
+
+    def test_container_issue_preserves_zero_and_typed_macro_identity_on_wire(self):
+        for identity in (0, 1, "1", "001"):
+            with self.subTest(identity=identity):
+                step = container_step("not_applicable")
+                step["macro_step_id"] = identity
+                with self.assertRaises(LogicalContainerContractError) as caught:
+                    parse_logical_container_requirements(step, sequence=8)
+                self.assertEqual(
+                    caught.exception.issues[0].macro_step_id,
+                    encode_json_scalar_identity(identity),
+                )
 
     def test_adapter_rejects_exact_same_invalid_field_with_context(self):
         state = {"macro_plan": [container_step("not_applicable")]}

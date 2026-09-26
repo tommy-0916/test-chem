@@ -22,7 +22,7 @@ from dispatch_formatter import (  # noqa: E402
     complete_required_fields,
     format_dispatch_payload,
 )
-from workflow_validator import WorkflowValidator  # noqa: E402
+from workflow_validator import StationSchema, WorkflowValidator  # noqa: E402
 from utils.workstation_loader import WorkstationLoader  # noqa: E402
 
 
@@ -71,6 +71,44 @@ class DispatchCatalogTest(unittest.TestCase):
         self.assertEqual(
             catalog.resolve_operation("移液平台1ml_V2", "加液"), "加液_物料绑定"
         )
+
+    def test_near_match_station_and_operation_are_rejected(self) -> None:
+        catalog = _catalog()
+
+        self.assertIsNone(catalog.resolve_station("移液平台1ml_V2_扩展"))
+        self.assertIsNone(
+            catalog.resolve_operation("十通道磁力搅拌_V1", "开始搅拌扩展")
+        )
+
+    def test_single_operation_station_does_not_guess_unknown_operation(self) -> None:
+        catalog = DispatchCatalog()
+        catalog.stations = {"唯一站": {"唯一操作": {}}}
+
+        self.assertIsNone(catalog.resolve_operation("唯一站", "完全无关的操作"))
+
+    def test_explicit_operation_alias_must_have_one_available_target(self) -> None:
+        catalog = DispatchCatalog()
+        catalog.stations = {
+            "搅拌站": {
+                "开始搅拌": {},
+                "加热磁力搅拌全流程": {},
+            }
+        }
+
+        self.assertIsNone(catalog.resolve_operation("搅拌站", "磁力搅拌"))
+        del catalog.stations["搅拌站"]["加热磁力搅拌全流程"]
+        self.assertEqual(
+            catalog.resolve_operation("搅拌站", "磁力搅拌"),
+            "开始搅拌",
+        )
+
+    def test_ambiguous_station_alias_is_rejected(self) -> None:
+        catalog = DispatchCatalog()
+        catalog.stations = {"站A": {}, "站B": {}}
+        catalog._register_station_alias("共享别名", "站A")
+        catalog._register_station_alias("共享别名", "站B")
+
+        self.assertIsNone(catalog.resolve_station("共享别名"))
 
     def test_station_ids_attached_from_skill_codes(self) -> None:
         catalog = _catalog()
@@ -228,6 +266,31 @@ class DispatchFormattingTest(unittest.TestCase):
         self.assertIn("搅拌时间", by_no[4]["parameters"])
         self.assertNotIn("搅拌时间（分钟）", by_no[4]["parameters"])
 
+    def test_unit_bearing_numeric_values_use_the_shared_contract_rule(self) -> None:
+        workflow = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation": "开始搅拌",
+                "parameters": {
+                    "容器类型": "进样瓶",
+                    "容器数量": 1,
+                    "容器编号": [1],
+                    "搅拌速度": "600 rpm",
+                    "搅拌时间": "2 min",
+                },
+            }]
+        }
+        original = copy.deepcopy(workflow)
+
+        result = format_dispatch_payload(workflow, self.catalog)
+
+        self.assertEqual(workflow, original)
+        self.assertEqual(result["warnings"], [])
+        params = result["payload"]["experiment_steps"]["steps"][0]["parameters"]
+        self.assertEqual(params["搅拌速度"], 600)
+        self.assertEqual(params["搅拌时间"], 2)
+
     def test_heating_skill_names_map_to_exact_wire_names_without_loss(self) -> None:
         workflow = {
             "steps": [{
@@ -308,6 +371,26 @@ class DispatchFormattingTest(unittest.TestCase):
             result["payload"]["experiment_steps"]["steps"][0]["workstation"],
             "量子传送站",
         )
+
+    def test_near_match_operation_is_preserved_as_unmapped(self) -> None:
+        workflow = {
+            "steps": [
+                {
+                    "step_number": 1,
+                    "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                    "operation": "开始搅拌扩展",
+                    "parameters": {"容器编号": [1]},
+                }
+            ]
+        }
+
+        result = format_dispatch_payload(workflow, self.catalog)
+
+        self.assertEqual(result["mapped_steps"], 0)
+        self.assertEqual(result["unmapped_steps"], 1)
+        step = result["payload"]["experiment_steps"]["steps"][0]
+        self.assertEqual(step["operation"], "开始搅拌扩展")
+        self.assertTrue(any("保留原样" in item for item in result["warnings"]))
 
     def test_platform_unknown_parameter_is_omitted_from_payload(self) -> None:
         workflow = {
@@ -439,6 +522,70 @@ class ValidatorDefaultsTest(unittest.TestCase):
         v = WorkflowValidator(WorkstationLoader(use_new_format=True))
         defaults = v.defaults_for("Liquid_Handling_Station_1ml_V2", "开盖")
         self.assertEqual(defaults.get("保留瓶盖"), "1")
+
+
+class ExplicitNameResolutionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.loader = WorkstationLoader(use_new_format=True)
+        self.validator = WorkflowValidator(self.loader)
+
+    def test_loader_accepts_exact_alias_and_rejects_substring(self) -> None:
+        self.assertEqual(
+            self.loader.resolve_station_code("移液平台"),
+            "Liquid_Handling_Station_1ml_V2",
+        )
+        self.assertIsNone(self.loader.resolve_station_code("移液平台扩展"))
+        self.assertIsNone(self.loader._map_station_name_to_code("移液平台扩展"))
+
+    def test_loader_alias_collision_is_fail_closed(self) -> None:
+        self.loader._register_station_alias("共享别名", "Liquid_Handling_Station_1ml_V1")
+        self.loader._register_station_alias("共享别名", "Liquid_Handling_Station_1ml_V2")
+
+        self.assertIsNone(self.loader.resolve_station_code("共享别名"))
+
+    def test_validator_rejects_near_match_station_and_operation(self) -> None:
+        near_station = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Liquid_Handling_Station_1ml_V2_extra",
+                "operation": "开盖",
+                "parameters": {},
+            }]
+        }
+        near_operation = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation": "开始搅拌扩展",
+                "parameters": {"容器编号": [1]},
+            }]
+        }
+
+        station_report = self.validator.validate(near_station)
+        operation_report = self.validator.validate(near_operation)
+
+        self.assertTrue(any("unknown_workstation" in item for item in station_report["errors"]))
+        self.assertTrue(any("unknown_operation" in item for item in operation_report["errors"]))
+
+    def test_validator_ambiguous_aliases_are_fail_closed(self) -> None:
+        validator = WorkflowValidator.__new__(WorkflowValidator)
+        validator._loader = self.loader
+        validator._schemas = {
+            "站A": StationSchema("站A"),
+            "站B": StationSchema("站B"),
+        }
+        validator._alias_to_keys = {"共享别名": {"站A", "站B"}}
+
+        self.assertIsNone(validator._resolve_station("共享别名"))
+
+        validator._loader = type(
+            "AmbiguousOperationAliases",
+            (),
+            {"OPERATION_ALIAS_MAP": {"共享操作": ["操作A", "操作B"]}},
+        )()
+        schema = StationSchema("操作站")
+        schema.operations = {"操作A", "操作B"}
+        self.assertIsNone(validator._resolve_operation(schema, "共享操作"))
 
 
 if __name__ == "__main__":

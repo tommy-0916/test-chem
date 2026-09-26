@@ -15,6 +15,11 @@ from unittest.mock import patch
 from device_agent.dispatch_checker import check_dispatch
 from device_agent.dispatch_wire_checker import check_wire_payload
 from device_agent.check_workflow import main as check_workflow_main
+from device_agent.feasibility_certificate import (
+    feasibility_certificate_id,
+    feasibility_certificate_protected_payload,
+    stable_digest,
+)
 from orchestrator.runner import (
     REPO_ROOT,
     STOP_DEVICE_ERROR,
@@ -26,6 +31,7 @@ from orchestrator.test_runner import (
     SUCCESS_PACKAGE,
     CountingMockAdapter,
     FakeSteps,
+    _valid_v2_feasibility_certificate,
     make_runner,
 )
 
@@ -70,6 +76,14 @@ class DispatchGateTest(unittest.TestCase):
         wire = check_wire_payload(workflow, None, workstation_root=contract_root)
         self.assertEqual(wire["findings"], [], wire["findings"])
         return {
+            "contract_version": "v1",
+            "contract_resolution": {
+                "requested": "v1",
+                "source_input": "v1",
+                "effective": "v1",
+                "requested_matches_effective": True,
+                "source_matches_effective": True,
+            },
             "status": "success",
             "workflow_json": workflow,
             "dispatch_payload": wire["expected_payload"],
@@ -78,6 +92,7 @@ class DispatchGateTest(unittest.TestCase):
     def test_real_cross_source_same_name_over_limit_blocks_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runner, steps, adapter = self.make_context(tmp)
+            runner.config.requested_contract_version = "v1"
             runner.config.device_args = [
                 "--workstations-dir",
                 str(REPO_ROOT / "chem_resources/lab-design-all/skills/chemistry-experiment-workstation"),
@@ -120,6 +135,7 @@ class DispatchGateTest(unittest.TestCase):
     def test_real_cross_source_at_three_ml_boundary_passes_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runner, steps, adapter = self.make_context(tmp)
+            runner.config.requested_contract_version = "v1"
             runner.config.device_args = [
                 "--workstations-dir",
                 str(REPO_ROOT / "chem_resources/lab-design-all/skills/chemistry-experiment-workstation"),
@@ -154,9 +170,27 @@ class DispatchGateTest(unittest.TestCase):
             directory.mkdir()
             state = copy.deepcopy(PLAN_STATE)
             state_path = Path(tmp) / "frozen.json"
+            resumed_package = copy.deepcopy(SUCCESS_PACKAGE)
+            resumed_certificate = resumed_package["feasibility_certificate"]
+            resumed_certificate["acceptance_scope"] = (
+                "accepted_device_plan_revision"
+            )
+            protected = feasibility_certificate_protected_payload(
+                resumed_certificate
+            )
+            resumed_certificate["protected_digest"] = stable_digest(protected)
+            resumed_certificate["certificate_id"] = feasibility_certificate_id(
+                protected_digest=resumed_certificate["protected_digest"],
+                device_snapshot_id=str(
+                    resumed_certificate.get("device_snapshot_id") or ""
+                ),
+                device_truth_sha256=str(
+                    resumed_certificate.get("device_truth_sha256") or ""
+                ),
+            )
             with patch("orchestrator.runner.check_dispatch", return_value=self.rejected) as check:
                 result = runner._execute_resumed_package(
-                    copy.deepcopy(SUCCESS_PACKAGE), state, state_path, directory, 1
+                    resumed_package, state, state_path, directory, 1
                 )
             self.assertEqual(result, (STOP_DEVICE_ERROR, False, state, state_path))
             self.assertEqual(adapter.calls, 0)
@@ -208,6 +242,9 @@ class DispatchGateTest(unittest.TestCase):
             report = dict(self.rejected, status="passed", dispatchable=True, findings=[])
             package = copy.deepcopy(SUCCESS_PACKAGE)
             package["quantity_adjustments"] = [{"amount": 1}]
+            package["feasibility_certificate"] = (
+                _valid_v2_feasibility_certificate(package)
+            )
             original = copy.deepcopy(package)
             with patch("orchestrator.runner.check_dispatch", return_value=report) as check:
                 observation = runner._execute_checked_package(package, Path(tmp))

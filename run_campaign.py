@@ -188,6 +188,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use every workstation Skill and audit rule. Enabled by default.",
     )
+    device.add_argument(
+        "--diagnostic-workflow-on-material-block",
+        action="store_true",
+        help=(
+            "On a V2 material Plan blocker, automatically run a separate "
+            "non-dispatching workflow preview and scoped repair handoff. "
+            "The production Device result remains blocked."
+        ),
+    )
     parser.add_argument(
         "--device-status-json",
         help=(
@@ -290,6 +299,8 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         device_args += ["--workstations-dir", args.workstations_dir]
     if args.full_workstations:
         device_args.append("--full-workstations")
+    if args.diagnostic_workflow_on_material_block:
+        device_args.append("--diagnostic-workflow-on-material-block")
     if args.device_status_json:
         research_args += ["--device-status-json", args.device_status_json]
         device_args += ["--device-status-json", args.device_status_json]
@@ -353,6 +364,7 @@ def main() -> int:
         campaign_id=str(
             args.campaign_id or resume_metadata.get("campaign_id") or ""
         ).strip(),
+        requested_contract_version=args.contract_version,
         references=list(args.reference),
         max_iterations=args.max_iterations,
         feasibility_deadlock_limit=args.feasibility_deadlock_limit,

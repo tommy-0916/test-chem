@@ -36,6 +36,30 @@ class RunCampaignArgsTest(unittest.TestCase):
         self.assertIn("--online-literature", research_args)
         self.assertIn("--web-search", research_args)
         self.assertIn("--full-workstations", device_args)
+        self.assertEqual(
+            research_args[research_args.index("--contract-version") + 1],
+            "v2",
+        )
+        self.assertEqual(
+            device_args[device_args.index("--contract-version") + 1],
+            "v2",
+        )
+
+    def test_explicit_v1_is_forwarded_to_both_agents(self) -> None:
+        args = run_campaign.build_parser().parse_args(
+            ["--query", "test query", "--contract-version", "v1"]
+        )
+
+        research_args, device_args = run_campaign.build_step_args(args)
+
+        self.assertEqual(
+            research_args[research_args.index("--contract-version") + 1],
+            "v1",
+        )
+        self.assertEqual(
+            device_args[device_args.index("--contract-version") + 1],
+            "v1",
+        )
 
     def test_new_campaign_rejects_explicit_network_opt_out(self) -> None:
         args = run_campaign.build_parser().parse_args(

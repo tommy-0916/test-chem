@@ -22,6 +22,10 @@ os.environ.setdefault("CHEM_DEVICE_LLM_SEMANTIC_ANALYSIS", "off")
 os.environ.setdefault("CHEM_DEVICE_ALLOW_LEGACY_SEMANTICS_FOR_TESTS", "1")
 
 from feasibility_rules import classify_constraint_text
+from feasibility_certificate import (
+    device_plan_contract_digest,
+    feasibility_certificate_id,
+)
 from single_agent import (
     FEASIBILITY_PLAN_TASK_PROMPT,
     SingleDeviceAgent,
@@ -119,7 +123,7 @@ def _semantic_contract(*, capabilities: list[str] | None = None, core: bool = Fa
         "status": "semantic_analysis",
         "macro_step_assessments": [
             {
-                "source_macro_step": "1",
+                "source_macro_step": 1,
                 "reason": "结合目标、前序状态与本步用途判断",
                 "evidence_refs": [
                     "macro_action_steps[0].操作",
@@ -228,7 +232,7 @@ def test_material_identity_name_variants_are_audited_not_string_rejected() -> No
     first = contract["macro_step_assessments"][0]
     first["material_identities"][0]["canonical_name"] = "样品 A 湿固体"
     second = copy.deepcopy(first)
-    second["source_macro_step"] = "2"
+    second["source_macro_step"] = 2
     second["evidence_refs"] = ["macro_action_steps[1].操作"]
     second["quantity_semantics"] = []
     second["material_identities"][0]["canonical_name"] = "样品 A 干燥粉末"
@@ -1444,7 +1448,7 @@ def test_workflow_plan_trace_allows_one_plan_step_to_expand_one_to_many():
         {
             "plan_step": 1,
             "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
-            "operation_intent": "反应搅拌 60 min",
+            "operation_intent": "磁力搅拌",
             "source_macro_step": 1,
             "source_macro_steps": [1],
         }
@@ -1469,6 +1473,283 @@ def test_workflow_plan_trace_allows_one_plan_step_to_expand_one_to_many():
             "workflow_json": {"steps": workflow_steps},
         }
     ) == []
+
+
+def test_workflow_plan_trace_distinguishes_numeric_and_string_plan_ids():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+    device_plan = [
+        {
+            "plan_step": 1,
+            "workstation": "General_Material_Station_V1",
+            "operation_intent": "物料拿取",
+            "source_macro_step": 1,
+        },
+        {
+            "plan_step": "1",
+            "workstation": "General_Material_Station_V1",
+            "operation_intent": "物料拿取",
+            "source_macro_step": "1",
+        },
+    ]
+    workflow_steps = []
+    for index, (plan_id, macro_id) in enumerate(((1, 1), ("1", "1")), start=1):
+        step = _good_material_step()
+        step.update(
+            {
+                "step_number": index,
+                "source_plan_step": plan_id,
+                "source_macro_step": macro_id,
+                "source_macro_steps": [macro_id],
+            }
+        )
+        workflow_steps.append(step)
+
+    assert agent._workflow_plan_step_trace_errors(
+        {"device_plan": device_plan, "workflow_json": {"steps": workflow_steps}}
+    ) == []
+
+    missing_string = agent._workflow_plan_step_trace_errors(
+        {"device_plan": device_plan, "workflow_json": {"steps": workflow_steps[:1]}}
+    )
+    assert any(
+        "missing_device_plan_workflow_coverage" in error
+        for error in missing_string
+    )
+
+
+def test_workflow_plan_trace_blocks_obligation_that_cannot_be_determined():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+    device_plan = [
+        {
+            "plan_step": 1,
+            "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "operation_intent": "反应搅拌 60 min",
+            "source_macro_step": 1,
+            "source_macro_steps": [1],
+        }
+    ]
+    workflow_steps = [
+        {
+            "step_number": index,
+            "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "operation": operation,
+            "parameters": {},
+            "source_plan_step": 1,
+            "source_macro_step": 1,
+            "source_macro_steps": [1],
+        }
+        for index, operation in enumerate(("开盖", "开始搅拌", "关盖"), start=1)
+    ]
+    errors = agent._workflow_plan_step_trace_errors(
+        {"device_plan": device_plan, "workflow_json": {"steps": workflow_steps}}
+    )
+    assert any(
+        "workflow_plan_step_operation_obligation_unresolved" in error
+        for error in errors
+    )
+
+
+def test_workflow_plan_trace_rejects_different_legitimate_operation():
+    # Bindings, station and macro trace are all correct, but the node
+    # performs a different legitimate operation.  Coverage must fail:
+    # trace validity never substitutes for operation matching.
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+    device_plan = [
+        {
+            "plan_step": 1,
+            "workstation": "Liquid_Handling_Station_1ml_V1",
+            "operation_intent": "加液（全部）",
+            "source_macro_step": 1,
+            "source_macro_steps": [1],
+        }
+    ]
+    workflow_steps = [
+        {
+            "step_number": 1,
+            "workstation": "Liquid_Handling_Station_1ml_V1",
+            "operation": "移液到96位孔板",
+            "parameters": {},
+            "source_plan_step": 1,
+            "source_macro_step": 1,
+            "source_macro_steps": [1],
+        }
+    ]
+    errors = agent._workflow_plan_step_trace_errors(
+        {"device_plan": device_plan, "workflow_json": {"steps": workflow_steps}}
+    )
+    assert any(
+        "workflow_plan_step_operation_missing" in error for error in errors
+    )
+    assert not any(
+        "workflow_plan_step_operation_obligation_unresolved" in error
+        for error in errors
+    )
+
+
+def test_workflow_plan_trace_annotation_style_does_not_change_identity():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+    workflow_steps = [
+        {
+            "step_number": index,
+            "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+            "operation": operation,
+            "parameters": {},
+            "source_plan_step": 1,
+            "source_macro_step": 1,
+            "source_macro_steps": [1],
+        }
+        for index, operation in enumerate(("开盖", "开始搅拌", "关盖"), start=1)
+    ]
+    for intent in ("磁力搅拌（全部）", "磁力搅拌(全部)"):
+        device_plan = [
+            {
+                "plan_step": 1,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation_intent": intent,
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+        ]
+        assert agent._workflow_plan_step_trace_errors(
+            {
+                "device_plan": device_plan,
+                "workflow_json": {"steps": workflow_steps},
+            }
+        ) == []
+
+
+def test_workflow_plan_trace_enforces_repeat_obligation_count():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+
+    def plan(intent):
+        return [
+            {
+                "plan_step": 1,
+                "workstation": "Liquid_Handling_Station_1ml_V1",
+                "operation_intent": intent,
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+        ]
+
+    def dispense_nodes(count):
+        return [
+            {
+                "step_number": index,
+                "workstation": "Liquid_Handling_Station_1ml_V1",
+                "operation": "加液_物料绑定",
+                "parameters": {},
+                "source_plan_step": 1,
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+            for index in range(1, count + 1)
+        ]
+
+    def payload(intent, count):
+        return {
+            "device_plan": plan(intent),
+            "workflow_json": {"steps": dispense_nodes(count)},
+        }
+
+    assert agent._workflow_plan_step_trace_errors(
+        payload("分批加液（重复3次）", 3)
+    ) == []
+    short = agent._workflow_plan_step_trace_errors(
+        payload("分批加液（重复3次）", 2)
+    )
+    assert any(
+        "workflow_plan_step_operation_missing" in error for error in short
+    )
+    ambiguous = agent._workflow_plan_step_trace_errors(
+        payload("分批加液（重复若干次）", 3)
+    )
+    assert any(
+        "workflow_plan_step_operation_missing" in error
+        for error in ambiguous
+    )
+
+
+def test_workflow_plan_trace_prefers_structured_capability_identity():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+    )
+
+    def stirrer_nodes(operations):
+        return [
+            {
+                "step_number": index,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation": operation,
+                "parameters": {},
+                "source_plan_step": 1,
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+            for index, operation in enumerate(operations, start=1)
+        ]
+
+    def device_plan(skill_operation_name):
+        return [
+            {
+                "plan_step": 1,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation_intent": "反应搅拌 60 min",
+                "operation_capabilities": [
+                    {
+                        "source_operation_ref": "research-op-1",
+                        "role_id": "role-1",
+                        "capability_id": "cap-1",
+                        "skill_operation_name": skill_operation_name,
+                    }
+                ],
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+        ]
+
+    # The structured identity resolves even though the intent text does not.
+    assert agent._workflow_plan_step_trace_errors(
+        {
+            "device_plan": device_plan("开始搅拌"),
+            "workflow_json": {"steps": stirrer_nodes(("开盖", "开始搅拌"))},
+        }
+    ) == []
+    missing = agent._workflow_plan_step_trace_errors(
+        {
+            "device_plan": device_plan("开始搅拌"),
+            "workflow_json": {"steps": stirrer_nodes(("开盖",))},
+        }
+    )
+    assert any(
+        "workflow_plan_step_operation_missing" in error for error in missing
+    )
+    unknown = agent._workflow_plan_step_trace_errors(
+        {
+            "device_plan": device_plan("不存在的操作"),
+            "workflow_json": {"steps": stirrer_nodes(("开盖", "开始搅拌"))},
+        }
+    )
+    assert any(
+        "workflow_plan_step_operation_obligation_unresolved" in error
+        for error in unknown
+    )
 
 
 def test_device_runtime_error_still_returns_end_to_end_terminal_package():
@@ -2423,6 +2704,9 @@ def test_a01_quantity_only_error_gets_route_only_certificate_and_stays_device():
     assert package["feasibility_certificate"]["acceptance_scope"] == (
         "route_only_pending_device_plan_repair"
     )
+    assert device_plan_contract_digest(package) == package[
+        "feasibility_certificate"
+    ]["accepted_device_plan_contract_sha256"]
     assert package["feasibility"]["is_feasible"] is True
     assert package["feasibility"]["route_feasibility_accepted"] is True
     assert package["feasibility"]["blocking_constraints"] == []
@@ -2514,7 +2798,10 @@ def test_single_device_agent_success_package():
     state = agent.run_state(RESEARCH_HANDOFF, exp_id="test_exp")
 
     assert state.status == "completed"
+    assert state.contract_version == "v1"
     assert state.terminal_package["status"] == "success"
+    assert state.terminal_package["contract_version"] == "v1"
+    assert state.terminal_package["contract_resolution"]["effective"] == "v1"
     assert state.terminal_package["agent_mode"] == "single_device_agent"
     assert state.workflow_json["steps"]
     assert len(agent._model.calls) == 2  # plan + translation
@@ -2741,11 +3028,15 @@ def _good_material_step():
     }
 
 
-def test_weighing_handoff_triggers_audit_repair_and_route_note():
+def test_weighing_handoff_triggers_audit_repair_and_route_note(monkeypatch):
     """Issue #9 (two-stage): a manual-weighing offline_handoff in the PLAN
     stage must trigger one plan-level repair whose prompt carries the audit
     finding + the canonical solid-weighing route; the clean plan then flows
-    through translation to success with capability_audit=clean."""
+    through translation to success with capability_audit=clean.
+
+    Full-candidate regeneration is an explicitly authorized escalation after
+    the incremental-repair change; this legacy-path test opts in via env."""
+    monkeypatch.setenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "1")
     loader = WorkstationLoader(use_new_format=True)
     validator = WorkflowValidator(loader)
 
@@ -3314,6 +3605,115 @@ def test_structure_validation_errors_parses_fields():
     assert by_code["unparsed"][0]["message"] == "一条没有已知模式的新错误。"
 
 
+def test_structure_validation_errors_preserves_cross_step_observations_without_authority():
+    workflow_json = {
+        "steps": [
+            {
+                "step_number": 1,
+                "device_step_id": "DS_A",
+                "workstation": "station_a",
+                "operation": "close_lid",
+            },
+            {
+                "step_number": 2,
+                "device_step_id": "DS_B",
+                "workstation": "station_b",
+                "operation": "add_liquid",
+            },
+        ]
+    }
+
+    records = structure_validation_errors(
+        [
+            {
+                "type": "container_state_mismatch",
+                "message": "A 输出带盖容器，而 B 要求无盖输入。",
+                "step_numbers": [1, 2, 2, True, "1"],
+            }
+        ],
+        workflow_json,
+    )
+
+    assert records == [
+        {
+            "type": "container_state_mismatch",
+            "message": "A 输出带盖容器，而 B 要求无盖输入。",
+            "error_code": "container_state_mismatch",
+            "observed_step_numbers": [1, 2],
+            "observed_device_step_ids": ["DS_A", "DS_B"],
+        }
+    ]
+    assert "step_number" not in records[0]
+    assert "device_step_id" not in records[0]
+
+
+def test_full_checks_keeps_cross_step_audit_endpoints_separate_from_repair_scope(
+    monkeypatch,
+):
+    import single_agent as single_agent_module
+
+    class PassingValidator:
+        @staticmethod
+        def validate(workflow_json):
+            return {"status": "passed", "errors": [], "warnings": [], "checked_steps": 2}
+
+        @staticmethod
+        def validate_consistency(workflow_txt, workflow_json):
+            return {"status": "passed", "errors": [], "warnings": []}
+
+    agent = SingleDeviceAgent.__new__(SingleDeviceAgent)
+    agent._workflow_validator = PassingValidator()
+    agent._contract_engine = None
+    agent._dispatch_catalog = object()
+    monkeypatch.setattr(agent, "_workflow_plan_step_trace_errors", lambda result: [])
+    monkeypatch.setattr(single_agent_module, "audit_offline_handoffs", lambda payload: [])
+    monkeypatch.setattr(
+        single_agent_module,
+        "audit_connected_sample_container_chain",
+        lambda payload: [
+            {
+                "type": "container_state_mismatch",
+                "message": "A/B state continuity mismatch",
+                "step_numbers": [1, 2],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        single_agent_module, "scan_manual_material_operations", lambda *args: []
+    )
+    monkeypatch.setattr(
+        single_agent_module,
+        "format_dispatch_payload",
+        lambda *args, **kwargs: {
+            "payload": {"experiment_steps": {"steps": [{}, {}]}},
+            "unmapped_steps": 0,
+            "warnings": [],
+        },
+    )
+    result = {
+        "workflow_txt": "probe",
+        "workflow_json": {
+            "steps": [
+                {"step_number": 1, "device_step_id": "DS_A"},
+                {"step_number": 2, "device_step_id": "DS_B"},
+            ]
+        },
+    }
+
+    report = agent._run_full_checks(result)
+
+    assert report["status"] == "failed"
+    cross_step = next(
+        item
+        for item in report["structured_errors"]
+        if item["error_code"] == "container_state_mismatch"
+    )
+    assert cross_step["observed_step_numbers"] == [1, 2]
+    assert cross_step["observed_device_step_ids"] == ["DS_A", "DS_B"]
+    assert "step_number" not in cross_step
+    assert "device_step_id" not in cross_step
+
+
 def test_structure_validation_errors_classifies_frozen_reagent_identity_failures():
     errors = [
         (
@@ -3337,8 +3737,8 @@ def test_structure_validation_errors_classifies_frozen_reagent_identity_failures
         "frozen_reagent_identity_drift",
         "frozen_reagent_identity_unauthorized",
     ]
-    assert records[0]["source_macro_step"] == 1
-    assert records[1]["source_macro_step"] == 2
+    assert records[0]["source_macro_step"] == "1"
+    assert records[1]["source_macro_step"] == "2"
     assert records[2]["source_macro_steps"] == ["1", "2"]
 
 
@@ -3375,7 +3775,34 @@ def test_structure_validation_errors_classifies_stable_macro_binding_failures():
         "frozen_source_macro_union_drift",
         "missing_plan_recomposition_evidence",
     ]
-    assert records[0]["source_macro_step"] == 99
+    assert records[0]["source_macro_step"] == "99"
+
+
+def test_structure_validation_errors_keeps_opaque_macro_text_and_prefers_typed_step():
+    opaque = structure_validation_errors(
+        [
+            "device_plan 引用了 Research 不存在的 source_macro_step=001。",
+            "device_plan 引用了 Research 不存在的 source_macro_step=1,2。",
+        ],
+        {},
+    )
+    assert [record["source_macro_step"] for record in opaque] == ["001", "1,2"]
+
+    typed = structure_validation_errors(
+        ["第 7 步（reactor / heat）的 source_macro_step=001 无效。"],
+        {
+            "steps": [
+                {
+                    "step_number": 7,
+                    "workstation": "reactor",
+                    "operation": "heat",
+                    "source_macro_step": 1,
+                }
+            ]
+        },
+    )
+    assert typed[0]["source_macro_step"] == 1
+    assert isinstance(typed[0]["source_macro_step"], int)
 
 
 def _plan_step(n, ws="General_Material_Station_V1", op="物料拿取"):
@@ -3400,6 +3827,185 @@ def _large_plan_result(n_steps):
             "device_plan": [_plan_step(i) for i in range(1, n_steps + 1)],
             "reagent_slot_plan": [], "container_plan": [],
             "temporal_adaptations": [], "offline_handoffs": []}
+
+
+def test_v1_chunk_loop_never_invokes_v2_device_step_hasher(monkeypatch):
+    import single_agent as single_agent_module
+
+    def unexpected_v2_hash(*_args, **_kwargs):
+        raise AssertionError("V1 entered the V2 device_step_id guard")
+
+    monkeypatch.setattr(
+        single_agent_module,
+        "device_step_hashes_for_chunks",
+        unexpected_v2_hash,
+    )
+    loader = WorkstationLoader(use_new_format=True)
+    validator = WorkflowValidator(loader)
+    plan = _large_plan_result(1)
+    translation = {
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": {"steps": [_material_wf_step(1)]},
+    }
+    model = _SequencedModel([plan, translation])
+    agent = SingleDeviceAgent(
+        model=model,
+        workstation_loader=loader,
+        workflow_validator=validator,
+    )
+
+    state = agent.run_state(RESEARCH_HANDOFF, exp_id="v1_boundary_exp")
+
+    assert agent._contract_version == "v1"
+    assert state.terminal_package["status"] == "success"
+
+
+def test_runtime_contract_selection_cannot_be_relabelled_by_handoff_metadata():
+    agent = SingleDeviceAgent.__new__(SingleDeviceAgent)
+    agent._contract_version = "v2"
+
+    resolution = agent._contract_resolution(
+        {
+            "contract_version": "v1",
+            "contract_resolution": {
+                "requested": "v1",
+                "effective": "v1",
+            },
+        }
+    )
+
+    assert resolution == {
+        "requested": "v2",
+        "source_input": "v1",
+        "effective": "v2",
+        "requested_matches_effective": True,
+        "source_matches_effective": False,
+    }
+
+
+class _V2RepairScopeProbe(SingleDeviceAgent):
+    def __init__(self, workflow_json, report):
+        self._contract_version = "v2"
+        self._configured_workflow_repair_limit = 10
+        self.workflow_json = copy.deepcopy(workflow_json)
+        self.report = copy.deepcopy(report)
+        self.translation_calls = 0
+
+    def _translate_plan_in_chunks(self, state, plan_result, chunk_cache, **kwargs):
+        self.translation_calls += 1
+        steps = copy.deepcopy(self.workflow_json.get("steps", []))
+        chunk_cache[0] = {"steps": copy.deepcopy(steps), "txt": "probe"}
+        step_map = {
+            step.get("step_number"): 0
+            for step in steps
+            if isinstance(step, dict) and isinstance(step.get("step_number"), int)
+        }
+        return (
+            {"steps": steps, "offline_handoffs": []},
+            "probe",
+            step_map,
+            [copy.deepcopy(steps)],
+        )
+
+    def _stamp_device_steps_with_macro_action(self, workflow_json, research_handoff):
+        return {}
+
+    def _apply_deterministic_completion(self, state, result):
+        return None
+
+    def _materialize_recipe_files(self, state, result):
+        return True
+
+    def _run_full_checks(self, result):
+        return copy.deepcopy(self.report)
+
+    def _normalize_quantity_contract(self, result, **kwargs):
+        return copy.deepcopy(result)
+
+    def _device_snapshot_id(self):
+        return "probe_snapshot"
+
+
+def test_v2_unanchored_cross_step_error_stops_without_unlocking_endpoints():
+    workflow_json = {
+        "steps": [
+            {"step_number": 1, "device_step_id": "DS_A"},
+            {"step_number": 2, "device_step_id": "DS_B"},
+        ]
+    }
+    report = {
+        "status": "failed",
+        "errors": ["A/B state continuity mismatch"],
+        "warnings": [],
+        "structured_errors": [
+            {
+                "error_code": "container_state_mismatch",
+                "message": "A/B state continuity mismatch",
+                "observed_step_numbers": [1, 2],
+                "observed_device_step_ids": ["DS_A", "DS_B"],
+            }
+        ],
+    }
+    agent = _V2RepairScopeProbe(workflow_json, report)
+    state = SingleDeviceAgentState(
+        research_handoff={}, exp_id="v2_unanchored_scope"
+    )
+
+    result = agent._translate_and_verify(
+        state, {"device_plan": [{"plan_step": 1}]}
+    )
+
+    assert agent.translation_calls == 1
+    assert result["dispatch_validation"]["repair_stop_reason"] == (
+        "unanchored_v2_validation_error"
+    )
+    assert result["dispatch_validation"]["authorized_device_step_ids"] == []
+    assert result["workflow_repair_cycle"]["modification_count"] == 0
+
+
+def test_v2_empty_chunk_stops_before_unauthorized_structural_addition():
+    report = {
+        "status": "failed",
+        "errors": ["workflow has no steps"],
+        "warnings": [],
+    }
+    agent = _V2RepairScopeProbe({"steps": []}, report)
+    accepted_plan = {
+        "device_plan": [{"plan_step": 1}],
+        "quantity_audit": {"status": "passed", "issues": []},
+    }
+    state = SingleDeviceAgentState(
+        research_handoff={},
+        exp_id="v2_empty_scope",
+        feasibility_accepted=True,
+        feasibility_certificate={
+            "accepted": True,
+            "accepted_device_plan_contract_sha256": (
+                device_plan_contract_digest(accepted_plan)
+            ),
+        },
+    )
+
+    result = agent._run_accepted_device_plan(
+        state,
+        accepted_plan,
+        allow_plan_rewrite=False,
+        resumed_from_manual=False,
+    )
+
+    assert agent.translation_calls == 1
+    validation = result["dispatch_validation"]
+    assert validation["repair_stop_reason"] == (
+        "empty_v2_translation_chunk_requires_structural_addition"
+    )
+    assert validation["authorized_device_step_ids"] == []
+    assert validation.get("_device_internal_error") is not True
+    assert result["status"] == "manual_required"
+    assert result["feedback_type"] == "human_review_required"
+    assert result["error_package"]["type"] == (
+        "device_workflow_repair_scope_requires_human"
+    )
+    assert result["workflow_repair_cycle"]["modification_count"] == 0
 
 
 def test_chunked_translation_assembles_and_renumbers():
@@ -5108,6 +5714,24 @@ def test_material_transition_contract_accepts_root_and_explicit_parent_child_lin
     ] is True
 
 
+def test_material_transition_plan_refs_are_typed_and_zero_is_valid():
+    zero = _valid_material_transition_plan()
+    zero["device_plan"][-1]["plan_step"] = 0
+    zero["batch_plan"][1]["source_plan_steps"] = [0]
+    zero["material_transitions"][0]["source_plan_steps"] = [0]
+    zero["material_ledger"]["entries"][1]["processing_step_refs"] = [0]
+
+    zero_result = _quantity_audit(zero)
+    assert zero_result["quantity_audit"]["status"] == "passed", (
+        zero_result["quantity_audit"]["issues"]
+    )
+
+    mismatched = _valid_material_transition_plan()
+    mismatched["material_transitions"][0]["source_plan_steps"] = ["2"]
+    mismatch_codes = _quantity_issue_codes(_quantity_audit(mismatched))
+    assert "invalid_material_transition_plan_ref" in mismatch_codes
+
+
 def test_material_transition_contract_rejects_deleted_transition_disguised_as_root():
     disguised = _valid_material_transition_plan()
     child = disguised["batch_plan"][1]
@@ -5377,12 +6001,20 @@ def test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield():
             )
 
     agent = QuantityRewriteProbe(repaired)
+    research_handoff = _quantity_research_handoff()
+    initial = agent._normalize_quantity_contract(
+        initial,
+        research_handoff=research_handoff,
+    )
     state = SingleDeviceAgentState(
-        research_handoff=_quantity_research_handoff(),
+        research_handoff=research_handoff,
         exp_id="mixed_quantity_rewrite",
         feasibility_accepted=True,
-        feasibility_certificate={"accepted": True},
     )
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, initial
+    )
+    old_certificate = copy.deepcopy(state.feasibility_certificate)
 
     result = agent._run_accepted_device_plan(
         state,
@@ -5398,9 +6030,80 @@ def test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield():
     assert result["error_package"]["type"] == (
         "device_quantity_human_review_required"
     )
-    assert _quantity_issue_codes(result) == {"unknown_yield"}
-    unknown = result["quantity_audit"]["issues"][0]
+    assert device_plan_contract_digest(result) == old_certificate[
+        "accepted_device_plan_contract_sha256"
+    ]
+    diagnostic_candidate = result["rejected_plan_rewrite_diagnostics"][
+        "candidate"
+    ]
+    assert _quantity_issue_codes(diagnostic_candidate) == {"unknown_yield"}
+    unknown = diagnostic_candidate["quantity_audit"]["issues"][0]
     assert unknown["scope"] == "human_review_required"
+
+
+def test_human_status_plan_rewrite_keeps_certified_plan_and_diagnostic_candidate():
+    class HumanStatusRewriteProbe(SingleDeviceAgent):
+        def _translate_and_verify(self, state, plan_result):
+            failed = self._merge_plan_and_translation(
+                plan_result,
+                {"workflow_txt": "", "workflow_json": {"steps": []}},
+            )
+            failed["status"] = "failed"
+            failed["dispatch_validation"] = {
+                "status": "failed",
+                "errors": ["requires plan rewrite"],
+                "warnings": [],
+                "checked_steps": 0,
+            }
+            return failed
+
+        def _invoke_device_plan_repair(self, state, current_plan, failed_workflow):
+            candidate = copy.deepcopy(current_plan)
+            candidate["status"] = "human_review_required"
+            candidate["quantity_audit"] = {
+                "status": "human_review_required",
+                "issues": [
+                    {
+                        "code": "unknown_yield",
+                        "scope": "human_review_required",
+                        "message": "yield remains unknown",
+                    }
+                ],
+            }
+            return candidate
+
+    handoff = _reagent_handoff()
+    agent = HumanStatusRewriteProbe(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    plan = agent._normalize_quantity_contract(
+        _reagent_plan("NaCl"), research_handoff=handoff
+    )
+    state = SingleDeviceAgentState(
+        research_handoff=handoff,
+        exp_id="human-status-rewrite-rollback",
+        feasibility_accepted=True,
+    )
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, plan
+    )
+    certificate = copy.deepcopy(state.feasibility_certificate)
+
+    result = agent._run_accepted_device_plan(
+        state,
+        plan,
+        allow_plan_rewrite=True,
+        resumed_from_manual=False,
+    )
+
+    assert result["status"] == "manual_required"
+    assert device_plan_contract_digest(result) == certificate[
+        "accepted_device_plan_contract_sha256"
+    ]
+    assert result["requires_scientific_review"] is False
+    diagnostic = result["rejected_plan_rewrite_diagnostics"]["candidate"]
+    assert diagnostic["requires_scientific_review"] is True
+    assert _quantity_issue_codes(diagnostic) == {"unknown_yield"}
 
 
 def _unapproved_planning_yield_plan():
@@ -6505,7 +7208,7 @@ def test_device_plan_rewrite_prompt_requires_staged_material_and_per_consumer_al
     assert "macro_source_coverage" in prompt
     assert "material_transitions" in prompt
     assert "processing_step_refs" in prompt
-    assert "derived/device_operational batch 不得 is_root_batch=true" in prompt
+    assert "derived_from_parent/device_measurement batch 不得 is_root_batch=true" in prompt
     assert "quantity_scope=per_batch" in prompt
     assert "per_batch_quantity" in prompt
     assert "multiplicity_ref" in prompt
@@ -6550,15 +7253,35 @@ def test_quantity_provenance_is_required_and_scientific_change_is_inferred():
         record.pop("source_kind")
         record.pop("source_refs")
         record.pop("calculation")
-    codes = _quantity_issue_codes(_quantity_audit(missing_provenance))
-    assert {
-        "missing_batch_quantity_source",
-        "missing_batch_quantity_source_refs",
-        "missing_batch_quantity_calculation",
-        "missing_ledger_quantity_source",
-        "missing_ledger_quantity_source_refs",
-        "missing_ledger_quantity_calculation",
-    } <= codes
+    normalized = _quantity_audit(missing_provenance)
+    codes = _quantity_issue_codes(normalized)
+    # R2: batch and ledger views are aligned -- unprovenanced numeric facts
+    # become explicit unknown accounts instead of fake-complete ones.
+    assert "missing_batch_quantity_source" not in codes
+    assert "missing_batch_quantity_source_refs" not in codes
+    assert "missing_batch_quantity_calculation" not in codes
+    assert "missing_ledger_quantity_source" not in codes
+    assert "missing_ledger_quantity_source_refs" not in codes
+    assert "missing_ledger_quantity_calculation" not in codes
+    (batch_record,) = [
+        batch
+        for batch in normalized["batch_plan"]
+        if batch.get("batch_id") == "precursor_A_batch_1"
+    ]
+    assert batch_record["quantity_status"] == "unknown"
+    assert batch_record["declared_total_quantity"] == {
+        "value": 0.18,
+        "unit": "mmol",
+    }
+    assert "total_quantity" not in batch_record
+    (ledger_entry,) = [
+        entry
+        for entry in normalized["material_ledger"]["entries"]
+        if entry.get("entry_id") == "precursor_A_allocation"
+    ]
+    assert ledger_entry["quantity_status"] == "unknown"
+    for field in ("produced", "consumed", "reserved", "balance"):
+        assert field not in ledger_entry
 
     mislabeled = _valid_quantity_plan()
     mislabeled["quantity_adjustments"] = [
@@ -6658,6 +7381,618 @@ def test_final_dispatch_formatter_exception_fails_closed_as_internal():
     )
     assert "simulated final formatter failure" in " ".join(
         package["dispatch_validation"]["errors"]
+    )
+
+
+def test_v2_final_workflow_digest_guard_rejects_post_validation_mutation(monkeypatch):
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    monkeypatch.setattr(
+        agent,
+        "_stamp_device_steps_with_macro_action",
+        lambda workflow_json, research_handoff: {},
+    )
+    state = SingleDeviceAgentState(
+        exp_id="v2_digest_guard",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        contract_resolution={
+            "requested": "v2",
+            "source_input": "v2",
+            "effective": "v2",
+            "requested_matches_effective": True,
+            "source_matches_effective": True,
+        },
+        feasibility_accepted=True,
+        feasibility_certificate={"accepted": True},
+    )
+    workflow_json = {
+        "steps": [
+            {
+                "step_number": 1,
+                "device_step_id": "DS_ONE",
+                "workstation": "General_Material_Station_V1",
+                "operation": "物料拿取",
+                "parameters": {},
+            }
+        ]
+    }
+    result = {
+        "status": "success",
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": workflow_json,
+        "dispatch_validation": {
+            "status": "passed",
+            "errors": [],
+            "warnings": [],
+            "validated_workflow_sha256": "0" * 64,
+        },
+    }
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, result
+    )
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["dispatch_validation"]["assessment_source"] == (
+        "final_workflow_digest_guard_internal"
+    )
+    assert package["error_package"]["structured_errors"][0]["error_code"] == (
+        "final_workflow_digest_mismatch"
+    )
+
+
+def _v2_terminal_dispatch_guard_fixture(agent):
+    state = SingleDeviceAgentState(
+        exp_id="v2_dispatch_guard",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        contract_resolution={
+            "requested": "v2",
+            "source_input": "v2",
+            "effective": "v2",
+            "requested_matches_effective": True,
+            "source_matches_effective": True,
+        },
+        feasibility_accepted=True,
+        feasibility_certificate={"accepted": True},
+    )
+    workflow_json = {
+        "steps": [
+            {
+                "step_number": 1,
+                "device_step_id": "DS_ONE",
+                "workstation": "General_Material_Station_V1",
+                "operation": "物料拿取",
+                "parameters": {},
+            }
+        ]
+    }
+    checked_payload = {
+        "experiment_steps": {
+            "steps": [{"step_number": 1, "parameters": {"amount": 1}}],
+            "unknown_steps": None,
+        },
+        "plan_name": "chemagent_workflow",
+    }
+    result = {
+        "status": "success",
+        "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+        "workflow_json": workflow_json,
+        "dispatch_validation": {
+            "status": "passed",
+            "errors": [],
+            "warnings": [],
+            "validated_workflow_sha256": agent._normalization_digest(
+                workflow_json
+            ),
+            "validated_dispatch_payload_binding_sha256": (
+                agent._dispatch_payload_binding_digest(checked_payload)
+            ),
+        },
+    }
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, result
+    )
+    return state, result, checked_payload
+
+
+def _nondefault_device_plan_contract():
+    return {
+        "feasibility": {"is_feasible": True, "blocking_constraints": []},
+        "macro_plan_summary": "signed non-default plan",
+        "sample_control_matrix": [{"sample_id": "sample_signed"}],
+        "device_self_check": {"status": "passed"},
+        "reagent_slot_plan": [{"工作站": "station", "原液编号": 1}],
+        "container_plan": [{"container_id": "vial_signed"}],
+        "quantity_adjustments": [
+            {
+                "adjustment_id": "qa_signed",
+                "requires_scientific_review": True,
+            }
+        ],
+        "quantity_requirement_dispositions": [
+            {"requirement_id": "qr_signed", "status": "satisfied"}
+        ],
+        "batch_plan": [{"batch_id": "batch_signed"}],
+        "material_transitions": [{"transition_id": "transition_signed"}],
+        "material_ledger": {"entries": [{"material_id": "material_signed"}]},
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "operation": "物料拿取",
+            }
+        ],
+        "temporal_adaptations": [
+            {
+                "adaptation_id": "time_signed",
+                "requires_scientific_review": True,
+            }
+        ],
+        "offline_handoffs": [{"handoff_id": "offline_signed"}],
+        "requires_scientific_review": False,
+        "quantity_contract_required": True,
+        "pending_quantity_human_review": {
+            "status": "passed",
+            "review_id": "review_signed",
+        },
+        "quantity_audit": {"status": "passed", "issues": []},
+    }
+
+
+def _signed_terminal_contract_fixture(agent):
+    state = SingleDeviceAgentState(
+        exp_id="v2-terminal-plan-binding",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        feasibility_accepted=True,
+    )
+    plan = _nondefault_device_plan_contract()
+    certificate = agent._build_feasibility_certificate(state, plan)
+    state.feasibility_certificate = copy.deepcopy(certificate)
+    workflow_json = {
+        "steps": [
+            {
+                "step_number": 1,
+                "device_step_id": "DS_SIGNED",
+                "workstation": "General_Material_Station_V1",
+                "operation": "物料拿取",
+                "parameters": {},
+            }
+        ]
+    }
+    result = agent._merge_plan_and_translation(
+        plan,
+        {
+            "workflow_txt": "第1步 General_Material_Station_V1：物料拿取",
+            "workflow_json": workflow_json,
+        },
+    )
+    return state, result, certificate
+
+
+def test_failed_terminal_preserves_complete_signed_device_plan_contract():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state, result, certificate = _signed_terminal_contract_fixture(agent)
+    result["dispatch_validation"] = {
+        "status": "failed",
+        "errors": ["injected deterministic workflow failure"],
+        "warnings": [],
+        "checked_steps": 1,
+    }
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "failed"
+    assert device_plan_contract_digest(package) == certificate[
+        "accepted_device_plan_contract_sha256"
+    ]
+    assert package["quantity_requirement_dispositions"]
+    assert package["material_transitions"]
+    assert package["offline_handoffs"]
+    assert package["pending_quantity_human_review"]["review_id"] == (
+        "review_signed"
+    )
+
+
+def test_failed_terminal_guard_blocks_drifted_signed_plan_field():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state, result, _ = _signed_terminal_contract_fixture(agent)
+    result["container_plan"] = [{"container_id": "unsigned-failed-drift"}]
+    result["dispatch_validation"] = {
+        "status": "failed",
+        "errors": ["injected deterministic workflow failure"],
+        "warnings": [],
+        "checked_steps": 1,
+    }
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["dispatch_validation"]["assessment_source"] == (
+        "terminal_plan_certificate_guard_internal"
+    )
+
+
+def test_quantity_audit_manual_branch_also_guards_signed_plan_drift():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state, result, _ = _signed_terminal_contract_fixture(agent)
+    result["container_plan"] = [{"container_id": "unsigned-quantity-drift"}]
+    result["quantity_audit"] = {
+        "status": "human_review_required",
+        "issues": [{"code": "unknown_yield", "message": "needs review"}],
+        "requires_scientific_review": True,
+    }
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["dispatch_validation"]["assessment_source"] == (
+        "terminal_plan_certificate_guard_internal"
+    )
+
+
+def test_success_terminal_preserves_complete_signed_device_plan_contract(
+    monkeypatch,
+):
+    import single_agent as single_agent_module
+
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    monkeypatch.setattr(
+        agent,
+        "_stamp_device_steps_with_macro_action",
+        lambda workflow_json, research_handoff: {},
+    )
+    state, result, certificate = _signed_terminal_contract_fixture(agent)
+    checked_payload = {
+        "experiment_steps": {"steps": [{"step_number": 1}], "unknown_steps": None},
+        "plan_name": "chemagent_workflow",
+    }
+    result["dispatch_validation"] = {
+        "status": "passed",
+        "errors": [],
+        "warnings": [],
+        "validated_workflow_sha256": agent._normalization_digest(
+            result["workflow_json"]
+        ),
+        "validated_dispatch_payload_binding_sha256": (
+            agent._dispatch_payload_binding_digest(checked_payload)
+        ),
+    }
+    final_payload = copy.deepcopy(checked_payload)
+    final_payload["plan_name"] = state.exp_id
+    monkeypatch.setattr(
+        single_agent_module,
+        "format_dispatch_payload",
+        lambda *_args, **_kwargs: {
+            "payload": copy.deepcopy(final_payload),
+            "mapped_steps": 1,
+            "unmapped_steps": 0,
+            "warnings": [],
+        },
+    )
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "success"
+    assert device_plan_contract_digest(package) == certificate[
+        "accepted_device_plan_contract_sha256"
+    ]
+    assert package["sample_control_matrix"] == result["sample_control_matrix"]
+    assert package["quantity_requirement_dispositions"]
+    assert package["material_transitions"]
+    assert package["offline_handoffs"]
+
+
+def test_scientific_review_requirement_is_signed_from_all_sticky_sources():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    sources = [
+        {"requires_scientific_review": True},
+        {"quantity_audit": {"requires_scientific_review": True}},
+        {
+            "temporal_adaptations": [
+                {"requires_scientific_review": True}
+            ]
+        },
+    ]
+    for index, source in enumerate(sources):
+        state = SingleDeviceAgentState(
+            exp_id=f"review-source-{index}",
+            research_handoff=RESEARCH_HANDOFF,
+            contract_version="v2",
+        )
+        plan = {"device_plan": [{"plan_step": 1}], **copy.deepcopy(source)}
+        certificate = agent._build_feasibility_certificate(state, plan)
+        assert plan["requires_scientific_review"] is True
+        assert certificate["accepted_device_plan_contract_sha256"] == (
+            device_plan_contract_digest(plan)
+        )
+
+    progress_state = SingleDeviceAgentState(
+        exp_id="review-source-progress",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        feasibility_progress=[
+            {"candidate": {"requires_scientific_review": True}}
+        ],
+    )
+    progress_plan = {"device_plan": [{"plan_step": 1}]}
+    progress_certificate = agent._build_feasibility_certificate(
+        progress_state, progress_plan
+    )
+    assert progress_plan["requires_scientific_review"] is True
+    assert progress_certificate["accepted_device_plan_contract_sha256"] == (
+        device_plan_contract_digest(progress_plan)
+    )
+
+
+def test_post_certificate_runtime_exception_preserves_signed_plan_contract(
+    monkeypatch,
+):
+    plan = _reagent_plan("NaCl")
+    plan["requires_scientific_review"] = True
+    agent = SingleDeviceAgent(
+        model=FakeModel(plan),
+        workstation_loader=FakeWorkstationLoader(),
+        contract_version="v1",
+    )
+
+    def fail_after_certificate(*_args, **_kwargs):
+        raise RuntimeError("injected post-certificate failure")
+
+    monkeypatch.setattr(
+        agent, "_run_accepted_device_plan", fail_after_certificate
+    )
+
+    state = agent.run_state(
+        _reagent_handoff(), exp_id="post-certificate-runtime-failure"
+    )
+    package = state.terminal_package
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["feasibility_accepted"] is True
+    assert package["feasibility_certificate"]["accepted"] is True
+    assert package["requires_scientific_review"] is True
+    assert device_plan_contract_digest(package) == package[
+        "feasibility_certificate"
+    ]["accepted_device_plan_contract_sha256"]
+
+
+def _assert_certificate_builder_failure_never_half_commits_acceptance(
+    monkeypatch,
+    route_only,
+):
+    if route_only:
+        payload = _a01_connectivity_and_quantity_error()
+        payload["constraint_classification"] = {}
+        payload["error_package"] = {}
+        handoff = RESEARCH_HANDOFF
+    else:
+        payload = _reagent_plan("NaCl")
+        handoff = _reagent_handoff()
+    agent = SingleDeviceAgent(
+        model=FakeModel(payload),
+        workstation_loader=FakeWorkstationLoader(),
+        contract_version="v1",
+    )
+
+    def fail_certificate_issuance(*_args, **_kwargs):
+        raise RuntimeError("injected certificate issuance failure")
+
+    monkeypatch.setattr(
+        agent,
+        "_build_feasibility_certificate",
+        fail_certificate_issuance,
+    )
+
+    state = agent.run_state(
+        handoff,
+        exp_id=(
+            "route-only-certificate-issuance-failure"
+            if route_only
+            else "accepted-plan-certificate-issuance-failure"
+        ),
+    )
+
+    assert state.status == "failed"
+    assert state.feasibility_accepted is False
+    assert state.feasibility_certificate == {}
+    assert state.accepted_device_plan_contract == {}
+    assert state.terminal_package["status"] == "failed"
+    assert state.terminal_package["feasibility_accepted"] is False
+    assert state.terminal_package["feasibility_certificate"] == {}
+
+
+def test_accepted_plan_certificate_builder_failure_is_atomic(monkeypatch):
+    _assert_certificate_builder_failure_never_half_commits_acceptance(
+        monkeypatch,
+        route_only=False,
+    )
+
+
+def test_route_only_certificate_builder_failure_is_atomic(monkeypatch):
+    _assert_certificate_builder_failure_never_half_commits_acceptance(
+        monkeypatch,
+        route_only=True,
+    )
+
+
+def test_terminal_plan_certificate_guard_blocks_late_contract_drift():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state = SingleDeviceAgentState(
+        exp_id="terminal-contract-drift",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        feasibility_accepted=True,
+    )
+    plan = _nondefault_device_plan_contract()
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, plan
+    )
+    drifted = copy.deepcopy(plan)
+    drifted.update(
+        {
+            "status": "success",
+            "container_plan": [{"container_id": "late-unsigned-container"}],
+            "dispatch_payload": {"must_not_escape": True},
+        }
+    )
+
+    guarded = agent._guard_terminal_plan_certificate_binding(state, drifted)
+
+    assert guarded["status"] == "failed"
+    assert guarded["feedback_type"] == "device_internal_error"
+    assert guarded["dispatch_payload"] == {}
+    assert guarded["dispatch_validation"]["assessment_source"] == (
+        "terminal_plan_certificate_guard_internal"
+    )
+
+
+def test_manual_terminal_package_also_blocks_late_contract_drift():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state = SingleDeviceAgentState(
+        exp_id="manual-terminal-contract-drift",
+        research_handoff=RESEARCH_HANDOFF,
+        contract_version="v2",
+        feasibility_accepted=True,
+    )
+    plan = _nondefault_device_plan_contract()
+    state.feasibility_certificate = agent._build_feasibility_certificate(
+        state, plan
+    )
+    manual = copy.deepcopy(plan)
+    manual.update(
+        {
+            "status": "manual_required",
+            "container_plan": [{"container_id": "late-manual-drift"}],
+            "error_package": {"type": "human_review_required"},
+        }
+    )
+
+    package = agent._normalize_terminal_package(state, manual)
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["dispatch_validation"]["assessment_source"] == (
+        "terminal_plan_certificate_guard_internal"
+    )
+
+
+def test_v2_final_dispatch_payload_guard_rejects_formatter_a_then_b(monkeypatch):
+    import single_agent as single_agent_module
+
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    monkeypatch.setattr(
+        agent,
+        "_stamp_device_steps_with_macro_action",
+        lambda workflow_json, research_handoff: {},
+    )
+    state, result, checked_payload = _v2_terminal_dispatch_guard_fixture(agent)
+    changed_payload = copy.deepcopy(checked_payload)
+    changed_payload["plan_name"] = state.exp_id
+    changed_payload["experiment_steps"]["steps"][0]["parameters"]["amount"] = 2
+    monkeypatch.setattr(
+        single_agent_module,
+        "format_dispatch_payload",
+        lambda *_args, **_kwargs: {
+            "payload": changed_payload,
+            "mapped_steps": 1,
+            "unmapped_steps": 0,
+            "warnings": [],
+        },
+    )
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "failed"
+    assert package["feedback_type"] == "device_internal_error"
+    assert package["dispatch_validation"]["assessment_source"] == (
+        "final_dispatch_payload_digest_guard_internal"
+    )
+    assert package["error_package"]["structured_errors"][0]["error_code"] == (
+        "final_dispatch_payload_mismatch"
+    )
+    assert package.get("dispatch_payload", {}) == {}
+
+
+def test_v2_final_dispatch_binding_allows_only_runtime_plan_name(monkeypatch):
+    import single_agent as single_agent_module
+
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    monkeypatch.setattr(
+        agent,
+        "_stamp_device_steps_with_macro_action",
+        lambda workflow_json, research_handoff: {},
+    )
+    state, result, checked_payload = _v2_terminal_dispatch_guard_fixture(agent)
+    final_payload = copy.deepcopy(checked_payload)
+    final_payload["plan_name"] = state.exp_id
+    monkeypatch.setattr(
+        single_agent_module,
+        "format_dispatch_payload",
+        lambda *_args, **_kwargs: {
+            "payload": final_payload,
+            "mapped_steps": 1,
+            "unmapped_steps": 0,
+            "warnings": [],
+        },
+    )
+
+    package = agent._normalize_terminal_package(state, result)
+
+    assert package["status"] == "success"
+    assert package["dispatch_payload"] == final_payload
+    validation = package["dispatch_validation"]
+    assert validation["validated_dispatch_payload_binding_sha256"] == (
+        validation["final_dispatch_payload_binding_sha256"]
+    )
+    assert validation["dispatch_payload_sha256"] == agent._normalization_digest(
+        final_payload
     )
 
 
@@ -6812,6 +8147,176 @@ def test_macro_completion_order_still_rejects_wholesale_two_before_one():
     assert any("执行顺序" in error for error in errors)
 
 
+def test_alignment_preserves_opaque_macro_ids_and_does_not_split_strings():
+    macro_ids = ["001", "1,2", "phase-alpha", 1, "1"]
+    handoff = {
+        "macro_action_steps": [
+            {"macro_step_id": macro_id, "操作": f"operation-{index}"}
+            for index, macro_id in enumerate(macro_ids)
+        ]
+    }
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": index,
+                "source_macro_step": macro_id,
+                "source_macro_steps": [macro_id],
+            }
+            for index, macro_id in enumerate(macro_ids, start=1)
+        ]
+    }
+
+    assert SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan
+    ) == []
+    assert [
+        step["source_macro_step"] for step in plan["device_plan"]
+    ] == macro_ids
+
+
+def test_alignment_rejects_int_string_macro_id_mismatch():
+    handoff = {
+        "macro_action_steps": [{"macro_step_id": "1", "操作": "string id"}]
+    }
+    plan = {"device_plan": [{"plan_step": 1, "source_macro_step": 1}]}
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan
+    )
+
+    assert any("不存在" in error and "source_macro_step=1" in error for error in errors)
+    assert any("'1'" in error and "覆盖" in error for error in errors)
+
+
+def test_alignment_macro_identity_failures_are_structured_and_do_not_crash():
+    missing_handoff = {"macro_action_steps": [{"操作": "missing identifier"}]}
+    invalid_plan = {
+        "device_plan": [{"plan_step": 1, "source_macro_step": True}]
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        missing_handoff, invalid_plan
+    )
+    records = structure_validation_errors(errors, {})
+
+    assert {record["error_code"] for record in records} >= {
+        "missing_macro_id",
+        "invalid_macro_id",
+    }
+
+
+def test_alignment_conflicting_step_identity_mirrors_block_as_structured_error():
+    handoff = {
+        "macro_action_steps": [
+            {
+                "macro_step_id": 1,
+                "logical_step_id": "1",
+                "macro_action_id": "MA_SHARED",
+                "操作": "conflicting aliases",
+            }
+        ]
+    }
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "source_macro_step_id": 1,
+                "source_macro_step": 1,
+                "source_macro_steps": [1],
+            }
+        ]
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(handoff, plan)
+    records = structure_validation_errors(errors, {})
+
+    assert any("conflicting_macro_id_mirrors" in error for error in errors)
+    assert any(
+        record.get("error_code") == "conflicting_macro_id_mirrors"
+        for record in records
+    )
+
+
+def test_conflicting_research_step_mirrors_force_manual_result_without_dispatch():
+    handoff = {
+        "macro_action_steps": [
+            {
+                "macro_step_id": 1,
+                "logical_step_id": "1",
+                "macro_action_id": "MA_SHARED",
+                "操作": "conflicting aliases",
+            }
+        ]
+    }
+    candidate = {
+        "status": "device_plan",
+        "device_plan": [{"plan_step": 1, "source_macro_step": 1}],
+        "workflow_json": {"steps": [{"step_number": 1}]},
+        "dispatch_payload": {"must_not_survive": True},
+        "dispatch_formatting": {"must_not_survive": True},
+        "feasibility_accepted": True,
+        "feasibility_certificate": {"accepted": True},
+    }
+    findings = SingleDeviceAgent._external_return_wait_findings(
+        handoff, candidate
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["type"] == "invalid_research_macro_identity"
+    assert findings[0]["error_code"] == "conflicting_macro_id_mirrors"
+
+    state = SingleDeviceAgentState(
+        exp_id="identity-conflict",
+        research_handoff=handoff,
+    )
+    agent = SingleDeviceAgent.__new__(SingleDeviceAgent)
+    result = agent._external_return_wait_result(state, candidate, findings)
+
+    assert result["status"] == "manual_required"
+    assert result["failure_stage"] == "research_macro_identity"
+    assert result["dispatch_payload"] == {}
+    assert result["dispatch_formatting"] == {}
+    assert result["feasibility_accepted"] is False
+    assert result["error_package"]["type"] == "invalid_research_macro_identity"
+    assert result["return_wait_audit"]["status"] == "blocked"
+    assert result["manual_repair_context"]["research_macro_identity_errors"] == findings
+
+
+def test_source_macro_step_id_prevents_offline_handoff_identity_inference():
+    agent = SingleDeviceAgent.__new__(SingleDeviceAgent)
+    agent._active_semantic_analysis = {}
+    handoff = {
+        "macro_action_steps": [
+            {"macro_step_id": 1, "操作": "matching objective"},
+            {"macro_step_id": 2, "操作": "other operation"},
+        ]
+    }
+    state = SingleDeviceAgentState(
+        exp_id="explicit-source-id",
+        research_handoff=handoff,
+    )
+    candidate = {
+        "device_plan": [],
+        "offline_handoffs": [
+            {
+                "name": "matching objective",
+                "source_macro_step_id": 2,
+            }
+        ],
+    }
+
+    normalized = agent._normalize_plan_handoff_steps(state, candidate)
+
+    assert normalized["offline_handoffs"] == [
+        {
+            "name": "matching objective",
+            "source_macro_step_id": 2,
+            "source_macro_step": 2,
+            "source_macro_steps": [2],
+        }
+    ]
+
+
 def _b01_multisource_handoff():
     return {
         "task": {"query": "B01-shaped route", "current_stage": "synthesis"},
@@ -6955,6 +8460,352 @@ def test_b01_multisource_trace_normalizes_without_cloning_or_state_drift():
     assert workflow_steps[0]["source_macro_steps"] == [1, 2, 3, 4]
 
 
+def test_workflow_trace_inheritance_keeps_plan_and_macro_id_types_distinct():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    plan_steps = [
+        {
+            "plan_step": 1,
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+        },
+        {
+            "plan_step": "1",
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": "1",
+        },
+    ]
+    workflow_steps = [
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+        },
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": "1",
+        },
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+            "source_plan_step": [],
+        },
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+            "source_plan_step": "unknown",
+        },
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+            "source_plan_step": None,
+        },
+        {
+            "workstation": "General_Material_Station_V1",
+            "source_macro_step": 1,
+            "source_plan_step": "",
+        },
+    ]
+
+    agent._inherit_workflow_source_traces(workflow_steps, plan_steps)
+
+    assert workflow_steps[0]["source_plan_step"] == 1
+    assert isinstance(workflow_steps[0]["source_plan_step"], int)
+    assert workflow_steps[1]["source_plan_step"] == "1"
+    assert isinstance(workflow_steps[1]["source_plan_step"], str)
+    assert workflow_steps[2]["source_plan_step"] == []
+    assert workflow_steps[3]["source_plan_step"] == "unknown"
+    assert workflow_steps[4]["source_plan_step"] is None
+    assert workflow_steps[5]["source_plan_step"] == ""
+
+
+def test_offline_handoff_inference_preserves_opaque_typed_macro_ids():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    for macro_id in (0, 1, "1", "001", "1,2"):
+        handoff = {
+            "macro_action_steps": [
+                {
+                    "macro_step_id": macro_id,
+                    "操作": "unique offline transfer",
+                    "试剂/对象": "sample alpha",
+                }
+            ]
+        }
+        state = SingleDeviceAgentState(
+            exp_id="typed_handoff", research_handoff=handoff
+        )
+        normalized = agent._normalize_plan_handoff_steps(
+            state,
+            {
+                "device_plan": [],
+                "offline_handoffs": [
+                    {"name": "unique offline transfer", "sample": "sample alpha"}
+                ],
+            },
+        )
+        inferred = normalized["offline_handoffs"][0]
+        assert inferred["source_macro_step"] == macro_id
+        assert type(inferred["source_macro_step"]) is type(macro_id)
+
+    duplicate_state = SingleDeviceAgentState(
+        exp_id="duplicate_handoff",
+        research_handoff={
+            "macro_action_steps": [
+                {"macro_step_id": 1, "操作": "duplicate op"},
+                {"macro_step_id": 1, "操作": "duplicate op"},
+            ]
+        },
+    )
+    duplicate = agent._normalize_plan_handoff_steps(
+        duplicate_state,
+        {"device_plan": [], "offline_handoffs": [{"name": "duplicate op"}]},
+    )
+    assert "source_macro_step" not in duplicate["offline_handoffs"][0]
+
+    malformed = agent._normalize_plan_handoff_steps(
+        duplicate_state,
+        {
+            "device_plan": [],
+            "offline_handoffs": [
+                {"name": "duplicate op", "source_macro_steps": "1,2"}
+            ],
+        },
+    )
+    assert malformed["offline_handoffs"][0]["source_macro_steps"] == "1,2"
+    assert "source_macro_step" not in malformed["offline_handoffs"][0]
+
+
+def test_macro_action_stamping_uses_typed_ids_and_is_atomic_on_conflict():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    research_handoff = {
+        "macro_action_steps": [
+            {"macro_step_id": 1, "macro_action_id": "MA_INT"},
+            {"macro_step_id": "1", "macro_action_id": "MA_STRING"},
+        ]
+    }
+    workflow = {
+        "steps": [
+            {"source_macro_step": 1, "source_plan_step": 1},
+            {"source_macro_step": "1", "source_plan_step": "1"},
+            {
+                "source_macro_step": 1,
+                "source_macro_step_id": "1",
+                "source_plan_step": 2,
+            },
+        ]
+    }
+
+    agent._stamp_device_steps_with_macro_action(workflow, research_handoff)
+
+    integer_step, string_step, conflicting_step = workflow["steps"]
+    assert integer_step["source_macro_step_id"] == 1
+    assert integer_step["macro_action_id"] == "MA_INT"
+    assert string_step["source_macro_step_id"] == "1"
+    assert string_step["macro_action_id"] == "MA_STRING"
+    assert integer_step["device_step_id"] != string_step["device_step_id"]
+    assert "device_step_id" not in conflicting_step
+    assert "macro_action_id" not in conflicting_step
+    assert workflow["trace_stamping_issues"][0]["error_code"] == (
+        "conflicting_macro_source"
+    )
+    snapshot = copy.deepcopy(workflow)
+    agent._stamp_device_steps_with_macro_action(workflow, research_handoff)
+    assert workflow == snapshot
+
+
+def test_v2_stamping_gives_one_plan_expansion_distinct_stable_device_ids():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=FakeWorkstationLoader(),
+        contract_version="v2",
+    )
+    research_handoff = {
+        "macro_action_steps": [
+            {"macro_step_id": 1, "macro_action_id": "MA_ONE"}
+        ]
+    }
+    workflow = {
+        "steps": [
+            {
+                "source_macro_step": 1,
+                "source_plan_step": 7,
+                "operation": operation,
+            }
+            for operation in ("open_lid", "add_liquid", "close_lid")
+        ]
+    }
+
+    agent._stamp_device_steps_with_macro_action(workflow, research_handoff)
+
+    ids = [step["device_step_id"] for step in workflow["steps"]]
+    assert len(ids) == len(set(ids)) == 3
+    assert [value.rsplit("_", 1)[-1] for value in ids] == ["001", "002", "003"]
+    assert {step["source_plan_step"] for step in workflow["steps"]} == {7}
+    snapshot = copy.deepcopy(ids)
+
+    agent._stamp_device_steps_with_macro_action(workflow, research_handoff)
+
+    assert [step["device_step_id"] for step in workflow["steps"]] == snapshot
+
+
+def test_macro_action_stamping_rejects_unresolved_sources_without_default_leakage():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    research_handoff = {
+        "macro_action": {
+            "macro_action_id": "MA_DEFAULT",
+            "observation_point_id": "OBS_DEFAULT",
+        },
+        "macro_action_steps": [
+            {"macro_step_id": 1},
+            {"macro_step_id": 2},
+            {"macro_step_id": 2},
+        ],
+    }
+    workflow = {
+        "steps": [
+            {"source_macro_step": "unknown", "source_plan_step": 1},
+            {"source_macro_step": 2, "source_plan_step": 2},
+            {"source_macro_step": 1, "source_plan_step": 3},
+        ]
+    }
+
+    agent._stamp_device_steps_with_macro_action(workflow, research_handoff)
+
+    unknown, ambiguous, known = workflow["steps"]
+    assert unknown == {"source_macro_step": "unknown", "source_plan_step": 1}
+    assert ambiguous == {"source_macro_step": 2, "source_plan_step": 2}
+    assert known["source_macro_step_id"] == 1
+    assert known["macro_action_id"] == "MA_DEFAULT"
+    assert known["observation_point_id"] == "OBS_DEFAULT"
+    assert [issue["error_code"] for issue in workflow["trace_stamping_issues"]] == [
+        "unknown_macro_id",
+        "ambiguous_macro_id",
+    ]
+
+
+def test_macro_action_stamping_rejects_explicit_ids_without_research_authority():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    workflow = {
+        "steps": [
+            {
+                "source_macro_step": 1,
+                "source_plan_step": 1,
+                "macro_action_id": "UNPROVED",
+            }
+        ]
+    }
+    original = copy.deepcopy(workflow["steps"][0])
+
+    agent._stamp_device_steps_with_macro_action(
+        workflow, {"macro_action_steps": [{"macro_step_id": 1}]}
+    )
+
+    assert workflow["steps"][0] == original
+    assert workflow["trace_stamping_issues"][0]["error_code"] == (
+        "unverified_trace_id"
+    )
+
+
+def test_macro_action_stamping_requires_a_resolvable_source_before_defaults():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    defaults = {
+        "macro_action_id": "MA_DEFAULT",
+        "observation_point_id": "OBS_DEFAULT",
+    }
+    workflow = {
+        "steps": [
+            {"source_plan_step": 1},
+            {"source_plan_step": 2, "source_macro_step": None},
+            {"source_plan_step": 3, "source_macro_step": ""},
+            {
+                "source_plan_step": 4,
+                "macro_action_id": "MA_DEFAULT",
+                "observation_point_id": "OBS_DEFAULT",
+            },
+        ]
+    }
+    original = copy.deepcopy(workflow["steps"])
+
+    agent._stamp_device_steps_with_macro_action(
+        workflow,
+        {
+            "macro_action": defaults,
+            "macro_action_steps": [{"macro_step_id": 1}],
+        },
+    )
+
+    assert workflow["steps"] == original
+    assert [issue["error_code"] for issue in workflow["trace_stamping_issues"]] == [
+        "missing_macro_source",
+        "invalid_macro_id",
+        "invalid_macro_id",
+        "missing_macro_source",
+    ]
+    assert any(
+        "workflow_trace_identity_conflict" in error
+        for error in agent._workflow_plan_step_trace_errors(
+            {"device_plan": [], "workflow_json": workflow}
+        )
+    )
+
+
+def test_stage1_route_gap_uses_semantic_typed_macro_identity():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(), workstation_loader=FakeWorkstationLoader()
+    )
+    agent._active_semantic_analysis = {
+        "macro_step_assessments": [
+            {
+                "source_macro_step": 1,
+                "observation_only": {"value": False},
+                "joint_requirements": [
+                    {
+                        "required": True,
+                        "process": "hydrogen_reduction",
+                        "temperature_c": 450,
+                    }
+                ],
+            }
+        ]
+    }
+    agent._prove_high_temperature_hydrogen_gap = lambda _text: {
+        "status": "proved_gap",
+        "required_temperature_c": 450.0,
+        "hydrogen_reduction_workstations": [],
+    }
+    integer_state = SingleDeviceAgentState(
+        exp_id="typed_gap",
+        research_handoff={
+            "macro_action_steps": [
+                {"macro_step_id": 1, "步骤序号": "1", "操作": "reduce"}
+            ]
+        },
+    )
+    result = agent._verified_stage1_core_route_gap_result(integer_state, {})
+    assert result is not None
+    assert result["feasibility"]["unsupported_items"][0]["macro_steps"] == [1]
+
+    string_state = SingleDeviceAgentState(
+        exp_id="typed_gap_mismatch",
+        research_handoff={
+            "macro_action_steps": [
+                {"macro_step_id": "1", "步骤序号": 1, "操作": "reduce"}
+            ]
+        },
+    )
+    assert agent._verified_stage1_core_route_gap_result(string_state, {}) is None
+
+
 def test_b01_state_changes_are_allowed_but_new_bal_sample_is_rejected():
     handoff = _b01_multisource_handoff()
     plan = _b01_multisource_plan()
@@ -7000,7 +8851,8 @@ def _bad_unknown_parameter_translation():
     }
 
 
-def test_stage1_reagent_drift_is_rejected_before_certificate():
+def test_stage1_reagent_drift_is_rejected_before_certificate(monkeypatch):
+    monkeypatch.setenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "1")  # legacy full-regen path opt-in
     drifted = _reagent_plan("KCl")
     model = _SequencedModel([drifted, drifted])
     agent = SingleDeviceAgent(model=model, workstation_loader=FakeWorkstationLoader())
@@ -7020,7 +8872,8 @@ def test_stage1_reagent_drift_is_rejected_before_certificate():
     )
 
 
-def test_stage1_plan_repair_uses_all_latest_findings_and_stays_device_local():
+def test_stage1_plan_repair_uses_all_latest_findings_and_stays_device_local(monkeypatch):
+    monkeypatch.setenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "1")  # legacy full-regen path opt-in
     handoff = {
         "task": {"query": "eight-step audit", "current_stage": "synthesis"},
         "macro_action_steps": [
@@ -7055,7 +8908,8 @@ def test_stage1_plan_repair_uses_all_latest_findings_and_stays_device_local():
     assert package["error_package"]["type"] != "research_replan_required"
 
 
-def test_stage1_plan_repair_accepts_clean_third_and_final_candidate():
+def test_stage1_plan_repair_accepts_clean_third_and_final_candidate(monkeypatch):
+    monkeypatch.setenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "1")  # legacy full-regen path opt-in
     drifted = _reagent_plan("KCl")
     clean = _reagent_plan("NaCl")
     model = _SequencedModel([drifted, drifted, clean])
@@ -7191,7 +9045,8 @@ def test_stage1_matching_repair_hard_gap_promotes_and_filters_local_errors():
     assert "取液量" not in blocking
 
 
-def test_stage1_incomplete_truth_keeps_core_offline_in_human_device_scope():
+def test_stage1_incomplete_truth_keeps_core_offline_in_human_device_scope(monkeypatch):
+    monkeypatch.setenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "1")  # legacy full-regen path opt-in
     plan = _high_temperature_hydrogen_offline_plan()
     model = _SequencedModel([plan])
     agent = SingleDeviceAgent(
@@ -7498,6 +9353,16 @@ def test_plan_level_rewrite_reagent_drift_is_rejected_after_certificate():
     assert package["failure_scope"] == "device_plan"
     assert package["error_package"]["type"] == "device_plan_rewrite_rejected"
     assert "试剂" in json.dumps(package["error_package"], ensure_ascii=False)
+    assert device_plan_contract_digest(package) == package[
+        "feasibility_certificate"
+    ]["accepted_device_plan_contract_sha256"]
+    rejected_candidate = package["rejected_plan_rewrite_diagnostics"][
+        "candidate"
+    ]
+    assert package["device_plan"][0]["source_reagent_identity"] == "NaCl"
+    assert rejected_candidate["device_plan"][0]["source_reagent_identity"] == (
+        "KCl"
+    )
 
 
 def _complete_plan_rewrite_contract(plan):
@@ -8252,6 +10117,437 @@ def test_feasible_case_c_unknown_yield_gets_certificate_then_manual():
     ]
 
 
+def test_v2_feasibility_certificate_binds_contract_version():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state = SingleDeviceAgentState(
+        exp_id="v2-certificate-contract",
+        research_handoff=_reagent_handoff(),
+        contract_version="v2",
+    )
+    accepted_plan = _reagent_plan("NaCl")
+    certificate = agent._build_feasibility_certificate(state, accepted_plan)
+
+    assert certificate["certificate_version"] == "2.4"
+    assert certificate["contract_version"] == "v2"
+    assert certificate["accepted_device_plan_contract_sha256"].startswith(
+        "device_plan_contract_"
+    )
+    assert agent._validate_feasibility_certificate(
+        state, certificate, require_snapshot_match=False
+    ) == []
+    assert agent._certificate_plan_binding_errors(
+        certificate, accepted_plan, label="accepted plan"
+    ) == []
+
+    downgraded = copy.deepcopy(certificate)
+    downgraded["contract_version"] = "v1"
+    errors = agent._validate_feasibility_certificate(
+        state, downgraded, require_snapshot_match=False
+    )
+    assert any("合同版本" in error for error in errors)
+    assert any("protected_digest" in error for error in errors)
+
+    sidecar_drift = copy.deepcopy(accepted_plan)
+    sidecar_drift["container_plan"] = [
+        {"容器编号": 1, "容器类型": "进样瓶", "用途": "drift"}
+    ]
+    binding_errors = agent._certificate_plan_binding_errors(
+        certificate, sidecar_drift, label="accepted plan"
+    )
+    assert any("完整 Device Plan 合同" in error for error in binding_errors)
+
+    forged_plan_digest = copy.deepcopy(certificate)
+    forged_plan_digest["accepted_device_plan_contract_sha256"] = (
+        "device_plan_contract_forged"
+    )
+    errors = agent._validate_feasibility_certificate(
+        state, forged_plan_digest, require_snapshot_match=False
+    )
+    assert any("protected_digest" in error for error in errors)
+
+    forged_certificate_id = copy.deepcopy(certificate)
+    forged_certificate_id["certificate_id"] = "feasibility_forged"
+    errors = agent._validate_feasibility_certificate(
+        state, forged_certificate_id, require_snapshot_match=False
+    )
+    assert any("certificate_id" in error for error in errors)
+
+    forged_matrix_signature = copy.deepcopy(certificate)
+    forged_matrix_signature["sample_matrix_signature"] = "sample_matrix_forged"
+    errors = agent._validate_feasibility_certificate(
+        state, forged_matrix_signature, require_snapshot_match=False
+    )
+    assert any("sample_matrix_signature" in error for error in errors)
+
+
+def test_successor_feasibility_certificate_binds_revision_and_lineage():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    state = SingleDeviceAgentState(
+        exp_id="v2-successor-certificate",
+        research_handoff=_reagent_handoff(),
+        contract_version="v2",
+    )
+    accepted_plan = _reagent_plan("NaCl")
+    original = agent._build_feasibility_certificate(state, accepted_plan)
+    revised_plan = copy.deepcopy(accepted_plan)
+    revised_plan["container_plan"] = [
+        {"容器编号": 1, "容器类型": "进样瓶", "用途": "合法设备映射"}
+    ]
+
+    successor = agent._issue_successor_feasibility_certificate(
+        state,
+        accepted_plan,
+        revised_plan,
+        original,
+        repair_request_id="device-repair-test",
+        repair_authority="human_device_plan_override",
+        declared_changes=[
+            {
+                "field": "container_plan",
+                "before": [],
+                "after": revised_plan["container_plan"],
+            }
+        ],
+        declarations={"route_changed": False},
+    )
+
+    assert successor["certificate_id"] != original["certificate_id"]
+    assert successor["supersedes_certificate_id"] == original["certificate_id"]
+    assert successor["repair_request_id"] == "device-repair-test"
+    assert successor["repair_authority"] == "human_device_plan_override"
+    assert successor["authorized_change_scope"]["changed_contract_fields"] == [
+        "container_plan"
+    ]
+    assert agent._validate_feasibility_certificate(
+        state, successor, require_snapshot_match=False
+    ) == []
+    assert agent._certificate_plan_binding_errors(
+        successor, revised_plan, label="revised plan"
+    ) == []
+    assert agent._certificate_plan_binding_errors(
+        successor, accepted_plan, label="old plan"
+    )
+
+
+def test_v1_legacy_certificate_without_id_gets_complete_successor_lineage():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v1",
+    )
+    state = SingleDeviceAgentState(
+        exp_id="v1-legacy-successor",
+        research_handoff=_reagent_handoff(),
+        contract_version="v1",
+    )
+    accepted_plan = _reagent_plan("NaCl")
+    legacy = agent._build_feasibility_certificate(state, accepted_plan)
+    legacy.pop("certificate_id")
+    expected_predecessor = feasibility_certificate_id(
+        protected_digest=legacy["protected_digest"],
+        device_snapshot_id=legacy["device_snapshot_id"],
+        device_truth_sha256=legacy["device_truth_sha256"],
+    )
+    revised_plan = copy.deepcopy(accepted_plan)
+    revised_plan["container_plan"] = [
+        {"容器编号": 1, "容器类型": "进样瓶", "用途": "manual revision"}
+    ]
+
+    successor = agent._issue_successor_feasibility_certificate(
+        state,
+        accepted_plan,
+        revised_plan,
+        legacy,
+        repair_request_id="legacy-v1-manual-repair",
+        repair_authority="human_device_plan_override",
+    )
+
+    assert successor["supersedes_certificate_id"] == expected_predecessor
+    assert successor["repair_request_id"] == "legacy-v1-manual-repair"
+    assert successor["repair_authority"] == "human_device_plan_override"
+    assert "authorized_change_scope" in successor
+    assert agent._validate_feasibility_certificate(
+        state, successor, require_snapshot_match=False
+    ) == []
+
+
+def test_v2_manual_override_rejects_repair_request_plan_not_bound_to_certificate():
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    handoff = _reagent_handoff()
+    seed_state = SingleDeviceAgentState(
+        exp_id="v2-plan-binding-seed",
+        research_handoff=handoff,
+        contract_version="v2",
+    )
+    accepted_plan = _reagent_plan("NaCl")
+    certificate = agent._build_feasibility_certificate(
+        seed_state, accepted_plan
+    )
+    drifted_plan = copy.deepcopy(accepted_plan)
+    drifted_plan["container_plan"] = [
+        {"容器编号": 9, "容器类型": "未获证容器", "用途": "drift"}
+    ]
+    repair_request = {
+        "request_id": "device-repair-plan-drift",
+        "contract_version": "v2",
+        "contract_resolution": {
+            "requested": "v2",
+            "effective": "v2",
+            "requested_matches_effective": True,
+        },
+        "feasibility_certificate": copy.deepcopy(certificate),
+        "last_device_plan": drifted_plan,
+        "frozen_route_signature": certificate["route_signature"],
+        "frozen_sample_matrix_signature": certificate[
+            "sample_matrix_signature"
+        ],
+        "device_snapshot_signature": certificate[
+            "device_snapshot_signature"
+        ],
+        "frozen_sample_matrix": copy.deepcopy(
+            certificate["sample_control_matrix"]
+        ),
+    }
+    override = {
+        "contract_version": "v2",
+        "device_plan": copy.deepcopy(drifted_plan),
+        "route_signature": certificate["route_signature"],
+        "sample_matrix_signature": certificate["sample_matrix_signature"],
+        "device_snapshot_signature": certificate[
+            "device_snapshot_signature"
+        ],
+        "declarations": {
+            "route_changed": False,
+            "sample_matrix_changed": False,
+            "reagent_identity_or_order_changed": False,
+            "observation_points_changed": False,
+        },
+        "changes": [],
+    }
+    resume_state = SingleDeviceAgentState(
+        exp_id="v2-plan-binding-resume",
+        research_handoff=handoff,
+        contract_version="v2",
+    )
+
+    _, errors = agent._prepare_device_plan_override(
+        resume_state, override, repair_request
+    )
+
+    assert any(
+        "repair request last_device_plan" in error
+        and "完整 Device Plan 合同" in error
+        for error in errors
+    )
+
+
+def _v2_rejected_override_fixture(*, tamper_certificate: bool = False):
+    agent = SingleDeviceAgent(
+        model=RaisingModel(),
+        workstation_loader=WorkstationLoader(use_new_format=True),
+        contract_version="v2",
+    )
+    handoff = _reagent_handoff()
+    seed_state = SingleDeviceAgentState(
+        exp_id="v2-rejected-override-seed",
+        research_handoff=handoff,
+        contract_version="v2",
+    )
+    accepted_plan = _reagent_plan("NaCl")
+    accepted_plan["container_plan"] = [
+        {"容器编号": 1, "容器类型": "进样瓶", "用途": "certified"}
+    ]
+    accepted_plan["offline_handoffs"] = [
+        {"handoff_id": "offline-certified", "reason": "signed sidecar"}
+    ]
+    certificate = agent._build_feasibility_certificate(seed_state, accepted_plan)
+    if tamper_certificate:
+        certificate["protected_digest"] = "sha256_tampered"
+    repair_request = {
+        "request_id": "device-repair-rejected-override",
+        "contract_version": "v2",
+        "contract_resolution": {
+            "requested": "v2",
+            "effective": "v2",
+            "requested_matches_effective": True,
+        },
+        "feasibility_certificate": copy.deepcopy(certificate),
+        "last_device_plan": copy.deepcopy(accepted_plan),
+        "frozen_route_signature": certificate["route_signature"],
+        "frozen_sample_matrix_signature": certificate[
+            "sample_matrix_signature"
+        ],
+        "device_snapshot_signature": certificate["device_snapshot_signature"],
+        "frozen_sample_matrix": copy.deepcopy(
+            certificate["sample_control_matrix"]
+        ),
+    }
+    rejected_candidate = copy.deepcopy(accepted_plan)
+    rejected_candidate["container_plan"] = [
+        {"容器编号": 9, "容器类型": "未授权容器", "用途": "rejected"}
+    ]
+    rejected_candidate["offline_handoffs"] = [
+        {"handoff_id": "offline-rejected", "reason": "unvalidated"}
+    ]
+    override = {
+        "contract_version": "v2",
+        "device_plan": rejected_candidate,
+        "route_signature": certificate["route_signature"],
+        "sample_matrix_signature": certificate["sample_matrix_signature"],
+        "device_snapshot_signature": certificate["device_snapshot_signature"],
+        "declarations": {
+            "route_changed": True,
+            "sample_matrix_changed": False,
+            "reagent_identity_or_order_changed": False,
+            "observation_points_changed": False,
+        },
+        "changes": [],
+    }
+    resume_state = SingleDeviceAgentState(
+        exp_id="v2-rejected-override-resume",
+        research_handoff=handoff,
+        contract_version="v2",
+    )
+    prepared, errors = agent._prepare_device_plan_override(
+        resume_state, override, repair_request
+    )
+    assert errors
+    manual = agent._manual_override_rejected_result(
+        resume_state,
+        prepared,
+        errors,
+        repair_request,
+    )
+    package = agent._normalize_terminal_package(resume_state, manual)
+    return agent, resume_state, accepted_plan, certificate, package
+
+
+def test_rejected_manual_override_rolls_back_all_actionable_plan_fields():
+    _, state, accepted_plan, certificate, package = (
+        _v2_rejected_override_fixture()
+    )
+
+    assert state.feasibility_accepted is True
+    assert package["feasibility_accepted"] is True
+    assert package["container_plan"] == accepted_plan["container_plan"]
+    assert package["offline_handoffs"] == accepted_plan["offline_handoffs"]
+    assert device_plan_contract_digest(package) == certificate[
+        "accepted_device_plan_contract_sha256"
+    ]
+    diagnostics = package["rejected_override_diagnostics"]
+    assert diagnostics["candidate"]["container_plan"] != package["container_plan"]
+    assert diagnostics["candidate"]["offline_handoffs"] != package[
+        "offline_handoffs"
+    ]
+
+
+def test_rejected_override_with_invalid_prior_certificate_is_not_accepted():
+    _, state, _, _, package = _v2_rejected_override_fixture(
+        tamper_certificate=True
+    )
+
+    assert state.feasibility_accepted is False
+    assert package["feasibility_accepted"] is False
+    assert package["feasibility_certificate"] == {}
+
+
+def test_automatic_plan_rewrite_issues_successor_certificate_before_translation():
+    initial_plan = {
+        "device_plan": [{"plan_step": 1, "operation": "transfer"}],
+        "container_plan": [],
+        "quantity_audit": {"status": "passed", "issues": []},
+    }
+    revised_plan = copy.deepcopy(initial_plan)
+    revised_plan["container_plan"] = [
+        {"容器编号": 1, "容器类型": "进样瓶", "用途": "合法替换"}
+    ]
+    revised_plan["plan_changes"] = [
+        {
+            "field": "container_plan",
+            "before": [],
+            "after": revised_plan["container_plan"],
+        }
+    ]
+
+    class RewriteCertificateProbe(SingleDeviceAgent):
+        def __init__(self):
+            super().__init__(
+                model=RaisingModel(),
+                workstation_loader=FakeWorkstationLoader(),
+            )
+            self.translation_calls = 0
+
+        def _normalize_quantity_contract(self, result, **kwargs):
+            normalized = copy.deepcopy(result)
+            normalized["quantity_audit"] = {"status": "passed", "issues": []}
+            return normalized
+
+        def _translate_and_verify(self, state, plan_result):
+            self.translation_calls += 1
+            if self.translation_calls == 1:
+                return {
+                    "status": "failed",
+                    "workflow_json": {"steps": []},
+                    "dispatch_validation": {
+                        "status": "failed",
+                        "errors": ["container mapping requires plan rewrite"],
+                    },
+                }
+            return {
+                "status": "success",
+                "workflow_json": {"steps": [{"step_number": 1}]},
+                "dispatch_validation": {"status": "passed", "errors": []},
+                "quantity_audit": {"status": "passed", "issues": []},
+            }
+
+        def _invoke_device_plan_repair(self, state, current_plan, failed_workflow):
+            return copy.deepcopy(revised_plan)
+
+        def _validate_repaired_device_plan(
+            self, state, previous_plan, candidate_plan
+        ):
+            return copy.deepcopy(candidate_plan), []
+
+    agent = RewriteCertificateProbe()
+    state = SingleDeviceAgentState(
+        exp_id="successor-before-translation",
+        research_handoff={},
+        feasibility_accepted=True,
+    )
+    original = agent._build_feasibility_certificate(state, initial_plan)
+    state.feasibility_certificate = copy.deepcopy(original)
+
+    result = agent._run_accepted_device_plan(
+        state,
+        initial_plan,
+        allow_plan_rewrite=True,
+        resumed_from_manual=False,
+    )
+
+    successor = state.feasibility_certificate
+    assert result["status"] == "success"
+    assert agent.translation_calls == 2
+    assert successor["certificate_id"] != original["certificate_id"]
+    assert successor["supersedes_certificate_id"] == original["certificate_id"]
+    assert successor["repair_authority"] == "automatic_device_plan_rewrite"
+    assert successor["accepted_device_plan_contract_sha256"] == (
+        device_plan_contract_digest(revised_plan)
+    )
+    assert result["feasibility_certificate"] == successor
+
+
 def test_manual_structured_quantity_error_preserves_approval_target_ids():
     structured = SingleDeviceAgent._manual_structured_errors(
         quantity_audit={
@@ -8627,12 +10923,245 @@ def test_manual_override_reagent_drift_is_rejected_without_stage1_llm():
     assert "试剂" in json.dumps(rejected["error_package"], ensure_ascii=False)
 
 
+def _identity_retention_v2_fixture():
+    handoff = {
+        "macro_action_steps": [
+            {"步骤序号": 1, "操作": "准备与交接", "试剂/对象": "Ni(NO3)2 原液、去离子水"},
+            {"步骤序号": 2, "操作": "制备样品", "试剂/对象": "Ni(NO3)2、NaOH"},
+        ]
+    }
+    semantic = {
+        "material_identity_registry": [
+            {"identity_id": "SOL_NI", "roles": ["reagent"], "aliases": ["Ni(NO3)2原液"]},
+            {"identity_id": "H2O_DI", "roles": ["solvent"], "aliases": ["去离子水"]},
+            {"identity_id": "SAMPLE_X", "roles": ["sample"], "aliases": ["样品X"]},
+        ],
+        "macro_step_assessments": [
+            {
+                "source_macro_step": 1,
+                "material_identities": [
+                    {"identity_id": "SOL_NI"},
+                    {"identity_id": "H2O_DI"},
+                    {"identity_id": "SAMPLE_X"},
+                ],
+            },
+            {
+                "source_macro_step": 2,
+                "material_identities": [
+                    {"identity_id": "SOL_NI"},
+                    {"identity_id": "SAMPLE_X"},
+                ],
+            },
+        ],
+    }
+    return handoff, semantic
+
+
+def test_identity_retention_v2_rejects_sample_bound_only_to_another_macro():
+    handoff, semantic = _identity_retention_v2_fixture()
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "source_macro_steps": [2],
+                "source_material_identity_ids": ["SOL_NI", "SAMPLE_X"],
+            }
+        ],
+        "offline_handoffs": [
+            {
+                "source_macro_steps": [1],
+                "source_material_identity_ids": ["SOL_NI", "H2O_DI"],
+            }
+        ],
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan, semantic_analysis=semantic
+    )
+
+    assert any(
+        "source_macro_step=1" in error and "SAMPLE_X" in error
+        for error in errors
+    )
+
+
+def test_identity_retention_v2_accepts_same_macro_structured_batch_binding():
+    handoff, semantic = _identity_retention_v2_fixture()
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "source_macro_steps": [2],
+                "source_material_identity_ids": ["SOL_NI", "SAMPLE_X"],
+            }
+        ],
+        "offline_handoffs": [
+            {
+                "source_macro_steps": [1],
+                "source_material_identity_ids": ["SOL_NI", "H2O_DI"],
+            }
+        ],
+        "batch_plan": [
+            {
+                "batch_id": "batch-sample-x",
+                "material_identity_id": "SAMPLE_X",
+                "source_macro_steps": [1],
+            }
+        ],
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan, semantic_analysis=semantic
+    )
+
+    assert errors == []
+
+
+def test_identity_retention_v2_sample_role_absent_everywhere_still_errors():
+    handoff, semantic = _identity_retention_v2_fixture()
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "source_macro_steps": [2],
+                "source_material_identity_ids": ["SOL_NI"],
+            }
+        ],
+        "offline_handoffs": [
+            {
+                "source_macro_steps": [1],
+                "source_material_identity_ids": ["SOL_NI", "H2O_DI"],
+            }
+        ],
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan, semantic_analysis=semantic
+    )
+
+    assert any("SAMPLE_X" in error for error in errors)
+
+
+def test_identity_retention_v2_resource_role_stays_strict_even_when_used_elsewhere():
+    handoff, semantic = _identity_retention_v2_fixture()
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "source_macro_steps": [2],
+                "source_material_identity_ids": ["SOL_NI", "H2O_DI", "SAMPLE_X"],
+            }
+        ],
+        "offline_handoffs": [
+            {
+                "source_macro_steps": [1],
+                "source_material_identity_ids": ["SOL_NI"],
+            }
+        ],
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan, semantic_analysis=semantic
+    )
+
+    drift = [error for error in errors if "未保留冻结" in error]
+    assert len(drift) == 1
+    assert "H2O_DI" in drift[0]
+    assert "SAMPLE_X" in drift[0]
+
+
+def test_identity_retention_v2_unregistered_identity_stays_strict():
+    handoff, semantic = _identity_retention_v2_fixture()
+    semantic["macro_step_assessments"][0]["material_identities"].append(
+        {"identity_id": "MYSTERY"}
+    )
+    plan = {
+        "device_plan": [
+            {
+                "plan_step": 1,
+                "workstation": "General_Material_Station_V1",
+                "source_macro_steps": [2],
+                "source_material_identity_ids": ["SOL_NI", "SAMPLE_X"],
+            }
+        ],
+        "offline_handoffs": [
+            {
+                "source_macro_steps": [1],
+                "source_material_identity_ids": ["SOL_NI", "H2O_DI"],
+            }
+        ],
+    }
+
+    errors = SingleDeviceAgent._device_plan_research_alignment_errors(
+        handoff, plan, semantic_analysis=semantic
+    )
+
+    assert any("MYSTERY" in error for error in errors)
+
+
+class _ScriptMonkeypatch:
+    """Minimal monkeypatch substitute for the script-mode fallback runner.
+
+    Unlike pytest's fixture this does not auto-restore, so the __main__
+    runner must call undo() after each test.
+    """
+
+    def __init__(self):
+        self._undos = []
+
+    def setattr(self, target, name, value):
+        existed = hasattr(target, name)
+        previous = getattr(target, name, None)
+        setattr(target, name, value)
+        self._undos.append(
+            lambda: setattr(target, name, previous) if existed else delattr(target, name)
+        )
+
+    def setenv(self, name, value):
+        existed = name in os.environ
+        previous = os.environ.get(name)
+        os.environ[name] = value
+        self._undos.append(
+            lambda: os.environ.__setitem__(name, previous)
+            if existed
+            else lambda: os.environ.pop(name, None)
+        )
+
+    def delenv(self, name, raising=True):
+        existed = name in os.environ
+        previous = os.environ.get(name)
+        os.environ.pop(name, None)
+        self._undos.append(
+            lambda: os.environ.__setitem__(name, previous) if existed else None
+        )
+
+    def undo(self):
+        for undo in reversed(self._undos):
+            undo()
+        self._undos = []
+
+
 if __name__ == "__main__":
+    # Definition order matches pytest collection order; alphabetical
+    # order leaks cross-test global state differently and breaks the
+    # fallback runner.
     tests = [
         value
-        for name, value in sorted(globals().items())
+        for name, value in globals().items()
         if name.startswith("test_") and callable(value)
     ]
     for test in tests:
-        test()
+        varnames = getattr(getattr(test, "__code__", None), "co_varnames", ())
+        if varnames[:1] == ("monkeypatch",):
+            patch = _ScriptMonkeypatch()
+            try:
+                test(patch)
+            finally:
+                patch.undo()
+        else:
+            test()
     print(f"single device agent tests passed ({len(tests)}/{len(tests)})")

@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from .identity import encode_json_scalar_identity
 from .v2 import LogicalContainerV2, ValidationIssueV2
 
 
@@ -41,15 +42,24 @@ class LogicalContainerContractError(ValueError):
 
 
 def parse_logical_container_requirements(
-    step: dict[str, Any], *, sequence: int, step_id: str = "",
+    step: dict[str, Any], *, sequence: int, step_id: Any = None,
 ) -> list[LogicalContainerV2]:
     """Validate/convert without modifying the candidate, using canonical V2 types.
 
     ``sequence`` and JSON array indices, not model-generated step numbers, locate
     the candidate. Missing IDs can still be filled by the compatibility adapter.
     """
-    step_id = str(step_id or step.get("macro_step_id") or step.get("logical_step_id")
-                  or f"MS_{sequence:03d}")
+    resolved_step_id = step_id
+    if resolved_step_id is None and step.get("macro_step_id") is not None:
+        resolved_step_id = step["macro_step_id"]
+    if resolved_step_id is None and step.get("logical_step_id") is not None:
+        resolved_step_id = step["logical_step_id"]
+    if resolved_step_id is None:
+        resolved_step_id = f"MS_{sequence:03d}"
+    step_id = encode_json_scalar_identity(
+        resolved_step_id,
+        f"macro_plan[{sequence - 1}].macro_step_id",
+    )
     base_path = f"/macro_plan/{sequence - 1}/container_requirements"
     raw_containers = step.get("container_requirements", [])
     issues: list[ValidationIssueV2] = []

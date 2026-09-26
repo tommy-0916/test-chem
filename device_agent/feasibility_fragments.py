@@ -12,6 +12,23 @@ import hashlib
 import json
 from typing import Any
 
+try:
+    from .macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+        normalize_macro_id,
+        semantic_macro_id,
+    )
+except ImportError:
+    from macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+        normalize_macro_id,
+        semantic_macro_id,
+    )
+
 
 class FeasibilityFragmentError(ValueError):
     """A planning fragment cannot be joined without losing or changing evidence.
@@ -100,6 +117,22 @@ def _scalar(value: Any, path: str, *, zero: bool = False) -> str:
     return key
 
 
+def _macro_scalar(value: Any, path: str) -> Any:
+    try:
+        return normalize_macro_id(value, path)
+    except MacroIdentityError as exc:
+        _fail(exc.path, str(exc).split(": ", 1)[-1], code=exc.code)
+
+
+def _typed_scalar_key(value: Any, path: str) -> tuple[str, Any]:
+    """Return one fail-closed, type-preserving JSON scalar identity key."""
+
+    try:
+        return macro_id_key(value, path)
+    except MacroIdentityError as exc:
+        _fail(exc.path, str(exc).split(": ", 1)[-1], code=exc.code)
+
+
 def _records(value: Any, path: str) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         _fail(path, "expected an array")
@@ -120,12 +153,36 @@ def _append_unique(previous: list[Any], incoming: list[Any]) -> list[Any]:
     return output
 
 
-def _key(record: dict[str, Any], fields: tuple[str, ...], path: str) -> tuple[str, ...]:
+def _key(record: dict[str, Any], fields: tuple[str, ...], path: str) -> tuple[Any, ...]:
     if "requirement_index" in fields:
         index = record.get("requirement_index")
         if isinstance(index, bool) or not isinstance(index, int) or index < 0:
             _fail(path + ".requirement_index", "expected a nonnegative integer")
-    return tuple(_scalar(record.get(field), f"{path}.{field}", zero=field == "requirement_index") for field in fields)
+    resolved: list[Any] = []
+    for field in fields:
+        if field == "source_macro_step":
+            try:
+                source_values = extract_source_macro_ids(
+                    record,
+                    path,
+                    required=True,
+                )
+            except MacroIdentityError as exc:
+                _fail(
+                    exc.path,
+                    str(exc).split(": ", 1)[-1],
+                    code=exc.code,
+                )
+            resolved.append(macro_id_key(source_values[0]))
+            continue
+        resolved.append(
+            _scalar(
+                record.get(field),
+                f"{path}.{field}",
+                zero=field == "requirement_index",
+            )
+        )
+    return tuple(resolved)
 
 
 def _merge_table(previous: Any, incoming: Any, fields: tuple[str, ...], path: str) -> list[dict[str, Any]]:
@@ -144,31 +201,55 @@ def _merge_table(previous: Any, incoming: Any, fields: tuple[str, ...], path: st
     return output
 
 
-def _sources(record: dict[str, Any], path: str, macro_ids: list[str]) -> list[str]:
-    primary = record.get("source_macro_step")
-    many = record.get("source_macro_steps")
-    if primary is None and many is None:
-        _fail(path, "missing source_macro_step/source_macro_steps")
-    sources = [] if many is None else many
-    if not isinstance(sources, list):
-        _fail(f"{path}.source_macro_steps", "expected an array")
-    sources = [_scalar(value, f"{path}.source_macro_steps") for value in sources]
-    if primary is not None:
-        scalar = _scalar(primary, f"{path}.source_macro_step")
-        if not sources:
-            sources = [scalar]
-        elif sources[0] != scalar:
-            _fail(path, "primary source must equal the first source_macro_steps entry")
-    if not sources or len(set(sources)) != len(sources):
+def _validate_reagent_slots(records: list[dict[str, Any]]) -> None:
+    """Require stable identities for reagent-slot records emitted now.
+
+    Names are presentation.  The immutable identity ID plus the
+    workstation-scoped slot key are the contract used by workflow
+    normalization and dispatch validation.  Callers intentionally validate
+    only the incoming fragment records: an untouched legacy checkpoint may
+    predate these fields and must remain resumable, but it is never upgraded by
+    guessing an identity or display name.
+    """
+    for index, record in enumerate(records):
+        path = f"reagent_slot_plan[{index}]"
+        identity_id = record.get("material_identity_id")
+        canonical_name = record.get("canonical_name")
+        if not isinstance(identity_id, str) or not identity_id.strip():
+            _fail(
+                f"{path}.material_identity_id",
+                "expected a nonempty stable identity ID",
+                code="MISSING_MATERIAL_IDENTITY_ID",
+            )
+        if not isinstance(canonical_name, str) or not canonical_name.strip():
+            _fail(
+                f"{path}.canonical_name",
+                "expected a nonempty canonical display name",
+                code="MISSING_CANONICAL_NAME",
+            )
+
+
+def _sources(record: dict[str, Any], path: str, macro_ids: list[Any]) -> list[Any]:
+    try:
+        sources = extract_source_macro_ids(
+            record,
+            path,
+            required=True,
+        )
+    except MacroIdentityError as exc:
+        _fail(exc.path, str(exc).split(": ", 1)[-1], code=exc.code)
+    source_keys = [macro_id_key(value) for value in sources]
+    macro_keys = [macro_id_key(value) for value in macro_ids]
+    if not sources or len(set(source_keys)) != len(source_keys):
         _fail(path, "source list must be nonempty and contain unique IDs")
-    if any(source not in macro_ids for source in sources):
+    if any(source not in macro_keys for source in source_keys):
         _fail(path, "source references an unknown Research macro ID")
-    if sources != sorted(sources, key=macro_ids.index):
+    if source_keys != sorted(source_keys, key=macro_keys.index):
         _fail(path, "source_macro_steps must follow frozen Research order")
     return sources
 
 
-def _validate_plan_steps(steps: Any, macro_ids: list[str]) -> list[dict[str, Any]]:
+def _validate_plan_steps(steps: Any, macro_ids: list[Any]) -> list[dict[str, Any]]:
     records = _records(steps, "device_plan")
     for index, step in enumerate(records, start=1):
         identifier = step.get("plan_step")
@@ -250,30 +331,94 @@ def _apply_updates(candidate: dict[str, Any], updates: Any) -> None:
         record["allocation"] = current_allocations
 
 
-def _check_references(candidate: dict[str, Any], macro_ids: list[str]) -> None:
-    plan_ids = {str(item["plan_step"]) for item in candidate["device_plan"]}
+def _check_references(candidate: dict[str, Any], macro_ids: list[Any]) -> None:
+    plan_ids = {
+        _typed_scalar_key(item["plan_step"], f"device_plan[{index}].plan_step")
+        for index, item in enumerate(candidate["device_plan"])
+    }
     batches = {str(item["batch_id"]) for item in candidate.get("batch_plan", [])}
     transitions = {str(item["transition_id"]) for item in candidate.get("material_transitions", [])}
     adjustments = {str(item["adjustment_id"]) for item in candidate.get("quantity_adjustments", [])}
+    macro_keys = {macro_id_key(value) for value in macro_ids}
+    macro_reference_candidates: dict[str, list[tuple[str, Any]]] = {}
+    for value in macro_ids:
+        # ``source_refs`` are legacy text references even though Research macro
+        # IDs are typed JSON scalars.  Preserve their established spelling for
+        # string IDs while also admitting the same spelling for numeric IDs.
+        # Keep every typed candidate so a mixed namespace such as 1 and "1"
+        # fails closed instead of silently binding the text to either one.
+        token = value if isinstance(value, str) else str(value)
+        macro_reference_candidates.setdefault(token, []).append(
+            macro_id_key(value)
+        )
     list_refs = {
-        "source_plan_steps": plan_ids, "processing_step_refs": plan_ids,
-        "source_macro_steps": set(macro_ids), "parent_batch_ids": batches,
+        "parent_batch_ids": batches,
         "child_batch_ids": batches, "material_transition_ids": transitions,
     }
     scalar_refs = {
-        "source_plan_step": plan_ids, "plan_step": plan_ids,
-        "source_macro_step": set(macro_ids), "batch_id": batches,
+        "batch_id": batches,
         "parent_batch_id": batches,
     }
+    plan_list_refs = {"source_plan_steps", "processing_step_refs"}
+    plan_scalar_refs = {"source_plan_step", "plan_step"}
 
     def walk(value: Any, path: str) -> None:
         if isinstance(value, list):
             for index, item in enumerate(value):
                 walk(item, f"{path}[{index}]")
         elif isinstance(value, dict):
+            if any(
+                field in value
+                for field in (
+                    "source_macro_step_id",
+                    "source_macro_step",
+                    "source_macro_steps",
+                )
+            ):
+                try:
+                    source_values = extract_source_macro_ids(value, path)
+                except MacroIdentityError as exc:
+                    _fail(
+                        exc.path,
+                        str(exc).split(": ", 1)[-1],
+                        code=exc.code,
+                    )
+                for reference in source_values:
+                    if macro_id_key(reference) not in macro_keys:
+                        _fail(
+                            path,
+                            f"dangling reference {reference!r}",
+                            code="DANGLING_REFERENCE",
+                        )
             for key, item in value.items():
                 child_path = f"{path}.{key}"
-                if key in list_refs:
+                if key in {
+                    "source_macro_step_id",
+                    "source_macro_step",
+                    "source_macro_steps",
+                }:
+                    pass
+                elif key in plan_list_refs:
+                    if not isinstance(item, list):
+                        _fail(child_path, "expected a reference array")
+                    for index, reference in enumerate(item):
+                        reference_key = _typed_scalar_key(
+                            reference, f"{child_path}[{index}]"
+                        )
+                        if reference_key not in plan_ids:
+                            _fail(
+                                child_path,
+                                f"dangling reference {reference!r}",
+                                code="DANGLING_REFERENCE",
+                            )
+                elif key in plan_scalar_refs and item not in (None, ""):
+                    if _typed_scalar_key(item, child_path) not in plan_ids:
+                        _fail(
+                            child_path,
+                            f"dangling reference {item!r}",
+                            code="DANGLING_REFERENCE",
+                        )
+                elif key in list_refs:
                     if not isinstance(item, list):
                         _fail(child_path, "expected a reference array")
                     for reference in item:
@@ -287,9 +432,27 @@ def _check_references(candidate: dict[str, Any], macro_ids: list[str]) -> None:
                     for reference in refs:
                         if not isinstance(reference, str):
                             continue
-                        for prefix, allowed in (("material_transition:", transitions), ("quantity_adjustment:", adjustments), ("macro_step:", set(macro_ids))):
+                        for prefix, allowed in (
+                            ("material_transition:", transitions),
+                            ("quantity_adjustment:", adjustments),
+                        ):
                             if reference.startswith(prefix) and reference[len(prefix):] not in allowed:
                                 _fail(child_path, f"dangling reference {reference!r}", code="DANGLING_REFERENCE")
+                        if reference.startswith("macro_step:"):
+                            token = reference[len("macro_step:"):]
+                            candidates = macro_reference_candidates.get(token, [])
+                            if not candidates:
+                                _fail(child_path, f"dangling reference {reference!r}", code="DANGLING_REFERENCE")
+                            if len(candidates) > 1:
+                                _fail(
+                                    child_path,
+                                    f"ambiguous typed reference {reference!r}",
+                                    code="AMBIGUOUS_REFERENCE",
+                                    details={
+                                        "reference": reference,
+                                        "typed_candidates": candidates,
+                                    },
+                                )
                 walk(item, child_path)
 
     # Scientific matrix/provenance content is not interpreted as Device references.
@@ -303,18 +466,34 @@ def _any_review(value: Any) -> bool:
     return isinstance(value, list) and any(_any_review(item) for item in value)
 
 
-def _check_arguments(aggregate: Any, current_macro_id: Any, all_macro_ids: Any) -> tuple[str, list[str]]:
+def _check_arguments(aggregate: Any, current_macro_id: Any, all_macro_ids: Any) -> tuple[Any, list[Any]]:
     if not isinstance(aggregate, dict) or not isinstance(all_macro_ids, list):
         _fail("arguments", "aggregate must be an object and macro IDs an array")
-    macros = [_scalar(item, "all_macro_ids") for item in all_macro_ids]
-    if not macros or len(set(macros)) != len(macros):
+    macros = [
+        _macro_scalar(item, f"all_macro_ids[{index}]")
+        for index, item in enumerate(all_macro_ids)
+    ]
+    macro_keys = [macro_id_key(item) for item in macros]
+    if not macros or len(set(macro_keys)) != len(macro_keys):
         _fail("all_macro_ids", "expected unique frozen Research IDs")
-    current = _scalar(current_macro_id, "current_macro_id")
+    current = _macro_scalar(current_macro_id, "current_macro_id")
+    current_key = macro_id_key(current)
     progress = aggregate.get(_PROGRESS, {})
     if not isinstance(progress, dict) or not isinstance(progress.get("completed_macro_ids", []), list):
         _fail(_PROGRESS, "expected completed_macro_ids array")
     completed = progress.get("completed_macro_ids", [])
-    if completed != macros[:len(completed)] or len(completed) >= len(macros) or macros[len(completed)] != current:
+    try:
+        completed_keys = [
+            macro_id_key(value, f"{_PROGRESS}.completed_macro_ids[{index}]")
+            for index, value in enumerate(completed)
+        ]
+    except MacroIdentityError as exc:
+        _fail(exc.path, str(exc).split(": ", 1)[-1], code=exc.code)
+    if (
+        completed_keys != macro_keys[: len(completed_keys)]
+        or len(completed_keys) >= len(macro_keys)
+        or macro_keys[len(completed_keys)] != current_key
+    ):
         _fail("current_macro_id", "fragments must follow frozen Research order exactly once", code="ORDER_VIOLATION")
     if aggregate and aggregate.get("status") not in _CONTINUABLE:
         _fail("aggregate.status", "a hard-terminal candidate cannot be resumed", code="TERMINAL_STATE")
@@ -361,7 +540,7 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
         _fail("aggregate", "expected an object")
     plan_fields = (
         "plan_step", "workstation", "operation", "操作", "sample_id",
-        "source_macro_step", "source_macro_steps", "batch_id",
+        "source_macro_step_id", "source_macro_step", "source_macro_steps", "batch_id",
         "container_type", "container_id", "容器类型", "容器编号",
         "objective", "parameters", "source_reagent_identity",
         "material_identity_id", "input_batch_ids", "output_batch_ids",
@@ -372,28 +551,28 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
     table_fields = {
         "container_plan": (
             "容器类型", "容器编号", "sample_id", "batch_id", "用途",
-            "lid_state", "盖状态", "source_macro_step", "source_macro_steps",
+            "lid_state", "盖状态", "source_macro_step_id", "source_macro_step", "source_macro_steps",
             "lifecycle", "生命周期", "capacity", "max_volume",
             "material_identity_id",
         ),
         "reagent_slot_plan": (
             "工作站", "原液编号", "试剂", "试剂名称", "sample_id",
-            "source_macro_step", "source_macro_steps", "material_identity_id",
-            "concentration", "volume", "quantity",
+            "source_macro_step_id", "source_macro_step", "source_macro_steps", "material_identity_id",
+            "canonical_name", "concentration", "volume", "quantity",
         ),
         "quantity_adjustments": (
-            "adjustment_id", "source_macro_step", "requirement_index",
+            "adjustment_id", "source_macro_step_id", "source_macro_step", "requirement_index",
             "before", "after", "formula", "source", "reason",
             "requires_scientific_review",
         ),
         "quantity_requirement_dispositions": (
-            "source_macro_step", "requirement_index", "disposition",
+            "source_macro_step_id", "source_macro_step", "requirement_index", "disposition",
             "decision", "plan_step", "workstation", "operation", "parameter",
             "evidence_refs", "requires_scientific_review",
         ),
         "batch_plan": (
             "batch_id", "sample_id", "quantity_mode", "consumer_ids",
-            "source_macro_step", "source_macro_steps",
+            "source_macro_step_id", "source_macro_step", "source_macro_steps",
             "material_id", "material_identity_id", "research_material_identity_id",
             "is_root_batch", "parent_batch_id", "parent_batch_ids",
             "total_quantity", "parent_quantity", "per_batch_quantity",
@@ -403,7 +582,7 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
         ),
         "material_transitions": (
             "transition_id", "sample_id", "parent_batch_id", "child_batch_ids",
-            "source_macro_step", "source_macro_steps",
+            "source_macro_step_id", "source_macro_step", "source_macro_steps",
             "parent_batch_ids", "material_id", "material_identity_id",
             "transition_kind", "source_plan_steps", "quantity_basis",
             "input_allocations", "output_allocations",
@@ -471,7 +650,7 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
         "entry_id", "batch_id", "sample_id", "material_id",
         "material_identity_id", "consumer_id", "produced", "consumed",
         "remaining", "allocation", "source_refs", "processing_step_refs",
-        "source_macro_step", "source_macro_steps",
+        "source_macro_step_id", "source_macro_step", "source_macro_steps",
     )
     symbols["material_ledger"] = {
         "entries": [
@@ -491,7 +670,7 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
         "handoff_id", "offline_handoff_id", "name", "operation",
         "measurement", "instrument", "semantic_classification",
         "sample_id", "sample_ids", "material_id", "material_identity_id",
-        "source_macro_step", "source_macro_steps", "source_plan_step",
+        "source_macro_step_id", "source_macro_step", "source_macro_steps", "source_plan_step",
         "source_plan_steps", "input", "inputs", "input_materials",
         "output", "outputs", "output_materials", "required_return_data",
         "required_returns", "intermediate_returns", "return_contract",
@@ -504,7 +683,7 @@ def build_prefix_symbol_table(aggregate: dict[str, Any]) -> dict[str, Any]:
         if isinstance(record, dict)
     ]
     temporal_fields = (
-        "adaptation_id", "source_macro_step", "source_macro_steps",
+        "adaptation_id", "source_macro_step_id", "source_macro_step", "source_macro_steps",
         "source_plan_step", "source_plan_steps", "sample_id", "sample_ids",
         "batch_id", "batch_ids", "material_id", "material_identity_id",
         "workstation", "operation", "original_requirement",
@@ -534,18 +713,27 @@ def build_fragment_request_context(
     if not isinstance(steps, list):
         _fail("research_handoff.macro_action_steps", "expected an array")
 
-    def macro_id(step: dict[str, Any], index: int) -> str:
-        # Keep this identical to SingleDeviceAgent._semantic_macro_id so the
-        # prompt view, semantic contract and deterministic merger share one
-        # namespace even when Research also supplies descriptive IDs.
-        return str(step.get("步骤序号", step.get("step", index))).strip()
-
-    indexed = {
-        macro_id(step, index): step
-        for index, step in enumerate(steps, start=1)
-        if isinstance(step, dict)
-    }
-    if current not in indexed:
+    indexed: dict[tuple[str, Any], dict[str, Any]] = {}
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            _fail(f"research_handoff.macro_action_steps[{index}]", "expected an object")
+        try:
+            identifier = semantic_macro_id(
+                step, f"research_handoff.macro_action_steps[{index}]"
+            )
+        except MacroIdentityError as exc:
+            _fail(exc.path, str(exc).split(": ", 1)[-1], code=exc.code)
+        key = macro_id_key(identifier)
+        if key in indexed:
+            _fail(
+                f"research_handoff.macro_action_steps[{index}]",
+                f"duplicate typed macro identifier {identifier!r}",
+                code="DUPLICATE_MACRO_ID",
+            )
+        indexed[key] = step
+    current_key = macro_id_key(current)
+    macro_keys = [macro_id_key(identifier) for identifier in macros]
+    if current_key not in indexed:
         _fail("current_macro_id", "not found in research_handoff")
     outline_fields = (
         "macro_step_id", "logical_step_id", "macro_action_id", "步骤序号", "step",
@@ -553,18 +741,28 @@ def build_fragment_request_context(
         "container_requirements", "material_inputs", "material_outputs",
     )
     outline = [
-        _compact_record(indexed[identifier], outline_fields)
-        for identifier in macros
-        if identifier in indexed
+        _compact_record(indexed[key], outline_fields)
+        for key in macro_keys
+        if key in indexed
     ]
     assessments = semantic_analysis.get("macro_step_assessments", [])
+    assessment_records: list[tuple[tuple[str, Any], dict[str, Any]]] = []
+    if isinstance(assessments, list):
+        for index, item in enumerate(assessments):
+            if not isinstance(item, dict):
+                continue
+            identifier = _macro_scalar(
+                item.get("source_macro_step"),
+                f"semantic_analysis.macro_step_assessments[{index}].source_macro_step",
+            )
+            assessment_records.append((macro_id_key(identifier), item))
     relevant_assessments = [
         copy.deepcopy(item)
-        for item in assessments
-        if isinstance(item, dict)
-        and str(item.get("source_macro_step") or "").strip() == current
-    ] if isinstance(assessments, list) else []
-    remaining_ids = macros[macros.index(current):]
+        for key, item in assessment_records
+        if key == current_key
+    ]
+    current_position = macro_keys.index(current_key)
+    remaining_keys = set(macro_keys[current_position:])
     dependency_fields = outline_fields + (
         "试剂/对象", "parameters", "参数", "quantity_requirements",
         "intermediate_returns", "required_returns", "dependencies",
@@ -572,7 +770,7 @@ def build_fragment_request_context(
     )
     remaining_dependencies = [
         _compact_record(
-            indexed[identifier],
+            indexed[key],
             dependency_fields,
             exact_fields=(
                 "参数", "parameters", "quantity_requirements",
@@ -581,8 +779,8 @@ def build_fragment_request_context(
                 "material_outputs",
             ),
         )
-        for identifier in remaining_ids
-        if identifier in indexed
+        for key in macro_keys[current_position:]
+        if key in indexed
     ]
     semantic_dependency_fields = (
         "source_macro_step", "required_capabilities", "quantity_semantics",
@@ -598,10 +796,9 @@ def build_fragment_request_context(
                 "material_identities", "joint_requirements",
             ),
         )
-        for item in assessments
-        if isinstance(item, dict)
-        and str(item.get("source_macro_step") or "").strip() in remaining_ids
-    ] if isinstance(assessments, list) else []
+        for key, item in assessment_records
+        if key in remaining_keys
+    ]
     task = research_handoff.get("task")
     task_view = {
         field: copy.deepcopy(task[field])
@@ -612,7 +809,7 @@ def build_fragment_request_context(
         "context_contract": "feasibility_fragment_context_v1",
         "current_macro_id": current,
         "task": task_view,
-        "current_macro": copy.deepcopy(indexed[current]),
+        "current_macro": copy.deepcopy(indexed[current_key]),
         "macro_outline": outline,
         "remaining_dependency_view": remaining_dependencies,
         "frozen_sample_control_matrix": copy.deepcopy(matrix),
@@ -692,7 +889,7 @@ def build_material_state_digest(
             "plan_steps": [item.get("plan_step") for item in device_plan],
             "batch_ids": [str(item.get("batch_id")) for item in batch_records],
             "transition_ids": [str(item.get("transition_id")) for item in transitions],
-            "macro_ids": [str(item) for item in all_macro_ids],
+            "macro_ids": copy.deepcopy(all_macro_ids),
         },
         "rule": (
             "引用 ID 必须来自 allowed_reference_ids；整批记录最多一个总消费者，"
@@ -872,7 +1069,7 @@ def merge_fragment(aggregate: dict[str, Any], fragment: dict[str, Any], current_
     previous_count = len(candidate["device_plan"])
     for index, step in enumerate(new_steps):
         sources = _sources(step, f"device_plan[{index}]", macros)
-        if sources[0] != current:
+        if macro_id_key(sources[0]) != macro_id_key(current):
             _fail(f"device_plan[{index}].source_macro_step", "new physical step must have the current primary source")
     candidate["device_plan"].extend(copy.deepcopy(new_steps))
     _validate_plan_steps(candidate["device_plan"], macros)
@@ -886,12 +1083,29 @@ def merge_fragment(aggregate: dict[str, Any], fragment: dict[str, Any], current_
         if identifier in reused_ids:
             _fail("reused_plan_steps", "duplicate prior step reference")
         reused_ids.add(identifier)
-        if current not in _sources(candidate["device_plan"][identifier - 1], "reused_plan_steps", macros):
+        if macro_id_key(current) not in {
+            macro_id_key(value)
+            for value in _sources(
+                candidate["device_plan"][identifier - 1],
+                "reused_plan_steps",
+                macros,
+            )
+        }:
             _fail("reused_plan_steps", "prior physical step does not cover the current macro")
     _apply_updates(candidate, fragment.get("prior_record_updates", []))
     for field, fields in _TABLE_KEYS.items():
         if field in fragment or field in candidate:
-            candidate[field] = _merge_table(candidate.get(field, []), fragment.get(field, []), fields, field)
+            incoming_records = fragment.get(field, [])
+            if field == "reagent_slot_plan":
+                # Migration boundary: historical accepted prefixes can contain
+                # slot records from before stable identity fields were required.
+                # Preserve those records when this fragment does not touch
+                # them.  Every slot explicitly emitted now is held to the new
+                # contract before merge/conflict handling, so neither a new
+                # binding nor an attempted replacement can bypass identity
+                # validation.  No legacy value is synthesized here.
+                _validate_reagent_slots(_records(incoming_records, field))
+            candidate[field] = _merge_table(candidate.get(field, []), incoming_records, fields, field)
     if "material_ledger" in fragment or "material_ledger" in candidate:
         previous = candidate.get("material_ledger", {})
         incoming = fragment.get("material_ledger", {})
@@ -905,7 +1119,15 @@ def merge_fragment(aggregate: dict[str, Any], fragment: dict[str, Any], current_
             candidate[field] = _append_unique(_records(candidate.get(field, []), field), _records(fragment.get(field, []), field))
     for index, handoff in enumerate(candidate.get("offline_handoffs", [])):
         _sources(handoff, f"offline_handoffs[{index}]", macros)
-    covered = bool(new_steps or reused_ids) or any(current in _sources(item, "offline_handoffs", macros) for item in candidate.get("offline_handoffs", []))
+    current_key = macro_id_key(current, "current_macro_step")
+    covered = bool(new_steps or reused_ids) or any(
+        current_key
+        in {
+            macro_id_key(source, "offline_handoffs.source_macro_step")
+            for source in _sources(item, "offline_handoffs", macros)
+        }
+        for item in candidate.get("offline_handoffs", [])
+    )
     if status in _CONTINUABLE and not covered:
         _fail("coverage", "current macro has no new/reused physical step or sourced offline handoff", code="COVERAGE_MISSING")
     for field in ("feasibility", "device_self_check", "device_capability_summary"):

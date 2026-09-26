@@ -8,6 +8,7 @@ import copy
 import json
 import sys
 from pathlib import Path
+from uuid import uuid4
 from typing import Any, Dict, List
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,19 @@ except ImportError:  # pragma: no cover - direct script execution
         HumanQuantityApprovalError,
         file_sha256 as approval_request_sha256,
         validate_human_quantity_approvals,
+    )
+
+try:
+    from .feasibility_certificate import (
+        FEASIBILITY_CERTIFICATE_VERSION,
+        FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+        strict_feasibility_certificate_version,
+    )
+except ImportError:  # pragma: no cover - direct script execution
+    from feasibility_certificate import (  # type: ignore
+        FEASIBILITY_CERTIFICATE_VERSION,
+        FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+        strict_feasibility_certificate_version,
     )
 
 
@@ -187,6 +201,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the extracted macro_plan before running device agent.",
     )
+    parser.add_argument(
+        "--relationship-bindings",
+        help=(
+            "Optional frozen, manually evidence-bound V2 material-operation "
+            "authority JSON with automation_claim=false. Caller-supplied automated "
+            "authorities are rejected; omit this option to use the internal "
+            "deterministic resolver. The authority remains separate from the "
+            "canonical Research handoff and is revalidated against the generated "
+            "Device candidate and current workstation-truth digest before any "
+            "relationship is compiled."
+        ),
+    )
+    parser.add_argument(
+        "--diagnostic-workflow-on-material-block",
+        action="store_true",
+        help=(
+            "If a V2 material relationship audit stops the Device Plan, start "
+            "an isolated workflow preview and its automatic scoped repair "
+            "handoff from frozen saved files. This never accepts the Plan, "
+            "issues a certificate, or dispatches a laboratory task."
+        ),
+    )
+    parser.add_argument(
+        "--diagnostic-workflow-output-dir",
+        help="Fresh directory for the opt-in, non-dispatching workflow diagnostic.",
+    )
     return parser
 
 
@@ -199,16 +239,89 @@ def load_json_object(path_text: str) -> Dict[str, Any]:
     return data
 
 
+def validate_repair_contract_boundary(
+    request: Dict[str, Any],
+    override: Dict[str, Any],
+    runtime_contract_version: str,
+) -> None:
+    """Fail closed if a frozen repair crosses its selected contract path."""
+
+    request_version = str(request.get("contract_version") or "").strip()
+    override_version = str(override.get("contract_version") or "").strip()
+    resolution = request.get("contract_resolution")
+    resolution = resolution if isinstance(resolution, dict) else {}
+    if request_version not in {"v1", "v2"}:
+        raise SystemExit(
+            "Device repair request lacks a valid frozen contract_version"
+        )
+    if override_version != request_version:
+        raise SystemExit(
+            "Device repair override contract_version does not match its request"
+        )
+    if runtime_contract_version != request_version:
+        raise SystemExit(
+            "runtime --contract-version does not match the frozen Device repair request"
+        )
+    if (
+        str(resolution.get("requested") or "").strip() != request_version
+        or str(resolution.get("effective") or "").strip() != request_version
+        or resolution.get("requested_matches_effective") is not True
+    ):
+        raise SystemExit(
+            "Device repair request contract_resolution is missing or inconsistent"
+        )
+    certificate = request.get("feasibility_certificate")
+    certificate = certificate if isinstance(certificate, dict) else {}
+    certificate_contract_version = str(
+        certificate.get("contract_version") or ""
+    ).strip()
+    certificate_version = strict_feasibility_certificate_version(certificate)
+    if (
+        certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+        and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+    ):
+        raise SystemExit(
+            "obsolete full-contract feasibility_certificate requires re-audit "
+            f"and version {FEASIBILITY_CERTIFICATE_VERSION} re-issuance"
+        )
+    if (
+        request_version == "v2"
+        and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+    ):
+        raise SystemExit(
+            "V2 repair request feasibility_certificate version is unsupported or missing"
+        )
+    if request_version == "v2" and certificate_contract_version != "v2":
+        raise SystemExit(
+            "V2 repair request feasibility_certificate lacks its frozen contract_version"
+        )
+    if (
+        certificate_contract_version
+        and certificate_contract_version != request_version
+    ):
+        raise SystemExit(
+            "feasibility_certificate contract_version does not match the repair request"
+        )
+
+
 def extract_macro_plan(research_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     handoff = research_state.get("device_adaptation_handoff")
     if isinstance(handoff, dict):
-        macro_plan = handoff.get("待执行 macro plan") or handoff.get("macro_plan")
+        macro_plan = (
+            handoff.get("待执行 macro plan")
+            or handoff.get("macro_plan")
+            or handoff.get("macro_action_steps")
+        )
         if isinstance(macro_plan, list) and macro_plan:
             return macro_plan
 
     external_handoff = research_state.get("B. 发给下游 device adaptation layer agent 的外部交接输出")
     if isinstance(external_handoff, dict):
-        macro_plan = external_handoff.get("待执行 macro plan") or external_handoff.get("macro_plan")
+        macro_plan = (
+            external_handoff.get("待执行 macro plan")
+            or external_handoff.get("macro_plan")
+            or external_handoff.get("macro_action_steps")
+        )
         if isinstance(macro_plan, list) and macro_plan:
             return macro_plan
 
@@ -216,9 +329,17 @@ def extract_macro_plan(research_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     if isinstance(macro_plan, list) and macro_plan:
         return macro_plan
 
+    macro_action_steps = research_state.get("macro_action_steps")
+    if isinstance(macro_action_steps, list) and macro_action_steps:
+        return macro_action_steps
+
     persistent_outputs = research_state.get("persistent_outputs")
     if isinstance(persistent_outputs, dict):
-        macro_plan = persistent_outputs.get("待执行 macro plan") or persistent_outputs.get("macro_plan")
+        macro_plan = (
+            persistent_outputs.get("待执行 macro plan")
+            or persistent_outputs.get("macro_plan")
+            or persistent_outputs.get("macro_action_steps")
+        )
         if isinstance(macro_plan, list) and macro_plan:
             return macro_plan
 
@@ -226,7 +347,8 @@ def extract_macro_plan(research_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         "Could not find a non-empty macro_plan in research state. Expected one of: "
         "device_adaptation_handoff['待执行 macro plan'], "
         "B. 发给下游 device adaptation layer agent 的外部交接输出['待执行 macro plan'], "
-        "top-level macro_plan, or persistent_outputs['待执行 macro plan']."
+        "top-level macro_plan/macro_action_steps, or "
+        "persistent_outputs['待执行 macro plan']."
     )
 
 
@@ -283,6 +405,8 @@ def summarize_knowledge_hits(hits: Any, limit: int = 5) -> List[Dict[str, Any]]:
 def build_device_agent_input_package(
     research_state: Dict[str, Any],
     macro_plan: List[Dict[str, Any]],
+    *,
+    canonical_v2_package: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     persistent = first_dict(
         research_state.get("persistent_outputs"),
@@ -403,13 +527,277 @@ def build_device_agent_input_package(
         },
     }
     canonical = first_dict(
+        canonical_v2_package,
         research_state.get("research_action_package_v2"),
         handoff.get("research_action_package_v2"),
     )
+    if str(package["contract_version"]).strip().lower() == "v2" and not canonical:
+        raise ValueError(
+            "V2 Device input construction requires a validated canonical Research package"
+        )
     if canonical:
         package["research_action_package_v2"] = copy.deepcopy(canonical)
         package["contract_version"] = "v2"
+        # V2 callers receive only the signed package projection plus the two
+        # digest-verified raw collections.  Do not let this compatibility
+        # builder reintroduce unbound task/context/contract mirrors.
+        from chem_agent_contracts.v2 import canonicalize_v2_device_handoff
+
+        package = canonicalize_v2_device_handoff(package, package=canonical)
     return package
+
+
+def validate_v2_research_handoff_consistency(
+    research_state: Dict[str, Any],
+    selected_macro_plan: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Return one validated canonical package or fail on split-brain mirrors.
+
+    A normal Research state persists the raw macro plan and canonical V2
+    package at the top level and in its handoff snapshots.  Device historically
+    selected the raw plan from the handoff first but the canonical package from
+    the top level first, so a partially rewritten/restored file could make the
+    generator and auditor consume different objects.  Compare every mirror
+    that is actually present, then rebuild the canonical package from the
+    top-level source when that normal source is available.
+
+    Historical handoff-only states remain supported without requiring a
+    synthetic top-level mirror, but any raw plan they carry is rebuilt through
+    the same adapter and must agree with every canonical package mirror.  Raw
+    and canonical plans are never allowed to feed generation and audit as two
+    independent authorities.
+    """
+
+    from chem_agent_contracts.adapters import research_state_to_v2
+    from chem_agent_contracts.v2 import (
+        ResearchActionPackageV2,
+        validate_raw_steps_against_canonical,
+    )
+
+    for container_key in (
+        "device_adaptation_handoff",
+        "persistent_outputs",
+        "A. research layer 内部持久化输出",
+        "B. 发给下游 device adaptation layer agent 的外部交接输出",
+    ):
+        if container_key in research_state and not isinstance(
+            research_state[container_key], dict
+        ):
+            raise SystemExit(
+                f"invalid V2 Research handoff container {container_key}: "
+                "expected an object"
+            )
+
+    handoff = first_dict(research_state.get("device_adaptation_handoff"))
+    external_handoff = first_dict(
+        research_state.get(
+            "B. 发给下游 device adaptation layer agent 的外部交接输出"
+        )
+    )
+    persistent = first_dict(research_state.get("persistent_outputs"))
+    internal_persistent = first_dict(
+        research_state.get("A. research layer 内部持久化输出")
+    )
+
+    raw_plan_mirrors: List[tuple[str, List[Dict[str, Any]]]] = []
+    raw_plan_locations = (
+        ("macro_plan", research_state, "macro_plan"),
+        ("macro_action_steps", research_state, "macro_action_steps"),
+        (
+            "device_adaptation_handoff.待执行 macro plan",
+            handoff,
+            "待执行 macro plan",
+        ),
+        ("device_adaptation_handoff.macro_plan", handoff, "macro_plan"),
+        (
+            "device_adaptation_handoff.macro_action_steps",
+            handoff,
+            "macro_action_steps",
+        ),
+        (
+            "external_handoff.待执行 macro plan",
+            external_handoff,
+            "待执行 macro plan",
+        ),
+        ("external_handoff.macro_plan", external_handoff, "macro_plan"),
+        (
+            "external_handoff.macro_action_steps",
+            external_handoff,
+            "macro_action_steps",
+        ),
+        (
+            "persistent_outputs.待执行 macro plan",
+            persistent,
+            "待执行 macro plan",
+        ),
+        ("persistent_outputs.macro_plan", persistent, "macro_plan"),
+        (
+            "persistent_outputs.macro_action_steps",
+            persistent,
+            "macro_action_steps",
+        ),
+        (
+            "internal_persistent_outputs.待执行 macro plan",
+            internal_persistent,
+            "待执行 macro plan",
+        ),
+        (
+            "internal_persistent_outputs.macro_plan",
+            internal_persistent,
+            "macro_plan",
+        ),
+        (
+            "internal_persistent_outputs.macro_action_steps",
+            internal_persistent,
+            "macro_action_steps",
+        ),
+    )
+    for label, container, key in raw_plan_locations:
+        if key not in container:
+            continue
+        value = container[key]
+        if (
+            not isinstance(value, list)
+            or not value
+            or any(not isinstance(item, dict) for item in value)
+        ):
+            raise SystemExit(
+                f"invalid V2 Research raw macro-plan mirror {label}: expected "
+                "a non-empty array of step objects"
+            )
+        raw_plan_mirrors.append((label, value))
+
+    def canonical_json(value: Any) -> str:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    selected_json = canonical_json(selected_macro_plan)
+    for label, value in raw_plan_mirrors:
+        if canonical_json(value) != selected_json:
+            raise SystemExit(
+                "V2 Research handoff has divergent raw macro-plan mirrors: "
+                f"selected plan does not match {label}"
+            )
+
+    canonical_mirrors: List[tuple[str, Dict[str, Any]]] = []
+    canonical_locations = (
+        (
+            "research_action_package_v2",
+            research_state,
+            "research_action_package_v2",
+        ),
+        (
+            "device_adaptation_handoff.research_action_package_v2",
+            handoff,
+            "research_action_package_v2",
+        ),
+        (
+            "external_handoff.research_action_package_v2",
+            external_handoff,
+            "research_action_package_v2",
+        ),
+        (
+            "persistent_outputs.research_action_package_v2",
+            persistent,
+            "research_action_package_v2",
+        ),
+        (
+            "internal_persistent_outputs.research_action_package_v2",
+            internal_persistent,
+            "research_action_package_v2",
+        ),
+    )
+    for label, container, key in canonical_locations:
+        if key not in container:
+            continue
+        value = container[key]
+        if not isinstance(value, dict) or not value:
+            raise SystemExit(
+                f"invalid V2 Research canonical package mirror {label}: "
+                "expected a non-empty object"
+            )
+        if not str(value.get("research_contract_hash") or "").strip():
+            raise SystemExit(
+                f"invalid V2 Research canonical package mirror {label}: "
+                "missing research_contract_hash"
+            )
+        canonical_mirrors.append((label, value))
+
+    parsed_mirrors: List[tuple[str, ResearchActionPackageV2]] = []
+    for label, value in canonical_mirrors:
+        try:
+            parsed_mirrors.append(
+                (label, ResearchActionPackageV2.model_validate(value))
+            )
+        except Exception as exc:
+            raise SystemExit(f"invalid {label}: {exc}") from exc
+
+    if parsed_mirrors:
+        expected_hash = parsed_mirrors[0][1].research_contract_hash
+        for label, package in parsed_mirrors[1:]:
+            if package.research_contract_hash != expected_hash:
+                raise SystemExit(
+                    "V2 Research handoff has divergent canonical package mirrors: "
+                    f"{label} does not match {parsed_mirrors[0][0]}"
+                )
+
+        canonical_package = parsed_mirrors[0][1]
+        if raw_plan_mirrors:
+            try:
+                validate_raw_steps_against_canonical(
+                    selected_macro_plan, canonical_package
+                )
+            except Exception as exc:
+                raise SystemExit(
+                    f"V2 Research raw/canonical macro step binding failed: {exc}"
+                ) from exc
+
+    if raw_plan_mirrors:
+        try:
+            rebuild_source = copy.deepcopy(research_state)
+            # The adapter's canonical source is explicit here.  Alias
+            # locations were already checked byte-for-byte above, so this
+            # avoids one extraction order feeding generation while another
+            # feeds the hash rebuild.
+            rebuild_source["macro_plan"] = copy.deepcopy(selected_macro_plan)
+            rebuilt = research_state_to_v2(rebuild_source)
+        except Exception as exc:
+            raise SystemExit(
+                f"cannot rebuild V2 Research package from persisted state: {exc}"
+            ) from exc
+        if parsed_mirrors and (
+            rebuilt.research_contract_hash
+            != parsed_mirrors[0][1].research_contract_hash
+        ):
+            raise SystemExit(
+                "V2 Research canonical package does not match the persisted raw "
+                "macro plan/action/evidence state"
+            )
+        return (
+            parsed_mirrors[0][1].model_dump(mode="json", exclude_none=True)
+            if parsed_mirrors
+            else rebuilt.model_dump(mode="json", exclude_none=True)
+        )
+
+    if parsed_mirrors:
+        return parsed_mirrors[0][1].model_dump(mode="json", exclude_none=True)
+
+    # Compatibility fallback for a package-only V2 state that predates the
+    # embedded canonical package.  In ordinary execution extract_macro_plan()
+    # has already required a raw plan, so this branch is primarily available
+    # to callers that validate an isolated authority object.  The adapter
+    # preserves missing material completeness as unresolved; it never guesses
+    # relationships here.
+    try:
+        return research_state_to_v2(research_state).model_dump(
+            mode="json", exclude_none=True
+        )
+    except Exception as exc:
+        raise SystemExit(f"cannot build V2 Research package from handoff: {exc}") from exc
 
 
 def device_input_package_to_text(package: Dict[str, Any]) -> str:
@@ -464,6 +852,13 @@ def default_checkpoint_dir(_research_state_path: str) -> str:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.diagnostic_workflow_on_material_block and (
+        args.contract_version != "v2" or not args.output or not args.package_output
+    ):
+        raise SystemExit(
+            "--diagnostic-workflow-on-material-block requires V2, --output, "
+            "and --package-output so the blocked source files can be frozen"
+        )
     os.environ["CHEM_LLM_COMPONENT"] = "device"
     configure_model_env(args)
 
@@ -481,9 +876,35 @@ def main() -> int:
         if args.prior_repair_request
         else None
     )
+    relationship_binding_authority = (
+        load_json_object(args.relationship_bindings)
+        if args.relationship_bindings
+        else None
+    )
+    if (
+        relationship_binding_authority is not None
+        and args.contract_version != "v2"
+    ):
+        raise SystemExit("--relationship-bindings requires --contract-version v2")
+    if relationship_binding_authority is not None and (
+        relationship_binding_authority.get("authoring_mode")
+        != "manual_evidence_bound"
+        or relationship_binding_authority.get("automation_claim") is not False
+    ):
+        raise SystemExit(
+            "--relationship-bindings accepts only a manual_evidence_bound "
+            "authority with automation_claim=false; omit the sidecar to use the "
+            "internal automated resolver"
+        )
     if bool(device_plan_override) != bool(prior_repair_request):
         raise SystemExit(
             "--device-plan-override and --prior-repair-request must be provided together"
+        )
+    if device_plan_override and prior_repair_request:
+        validate_repair_contract_boundary(
+            prior_repair_request,
+            device_plan_override,
+            args.contract_version,
         )
     approval_validation: Dict[str, Any] = {}
     validated_human_quantity_approvals: List[Dict[str, Any]] = []
@@ -508,17 +929,42 @@ def main() -> int:
                 f"invalid human quantity approval in Device repair override: {exc}"
             ) from exc
     macro_plan = extract_macro_plan(research_state)
-    device_input_package = build_device_agent_input_package(research_state, macro_plan)
+    validated_v2_research_package: Dict[str, Any] | None = None
     if args.contract_version == "v2":
-        from chem_agent_contracts.adapters import research_state_to_v2
-
-        canonical = research_state.get("research_action_package_v2")
-        if not isinstance(canonical, dict):
-            canonical = research_state_to_v2(research_state).model_dump(
-                mode="json", exclude_none=True
-            )
+        validated_v2_research_package = validate_v2_research_handoff_consistency(
+            research_state,
+            macro_plan,
+        )
+    device_input_package = build_device_agent_input_package(
+        research_state,
+        macro_plan,
+        canonical_v2_package=validated_v2_research_package,
+    )
+    source_contract_version = str(
+        device_input_package.get("contract_version")
+        or research_state.get("contract_version")
+        or ""
+    ).strip()
+    if args.contract_version == "v2":
         device_input_package["contract_version"] = "v2"
-        device_input_package["research_action_package_v2"] = copy.deepcopy(canonical)
+        device_input_package["research_action_package_v2"] = copy.deepcopy(
+            validated_v2_research_package
+        )
+    else:
+        # A canonical V2 source may be intentionally replayed through the V1
+        # compatibility path.  Preserve its source version as evidence, but do
+        # not let input metadata override the explicitly selected runtime.
+        device_input_package["contract_version"] = "v1"
+    device_input_package["contract_resolution"] = {
+        "requested": args.contract_version,
+        "source_input": source_contract_version,
+        "effective": args.contract_version,
+        "requested_matches_effective": True,
+        "source_matches_effective": (
+            not source_contract_version
+            or source_contract_version == args.contract_version
+        ),
+    }
     if device_plan_override:
         device_input_package["device_repair_resume"] = {
             "request_id": prior_repair_request.get("request_id", ""),
@@ -544,6 +990,7 @@ def main() -> int:
         "starting device agent: "
         f"research_state={args.research_state}, macro_steps={len(macro_plan)}, "
         "mode=single_agent, "
+        f"contract={args.contract_version}, "
         f"model={args.model_name or os.getenv('REFINER_LLM_MODEL_NAME', 'env/default')}, "
         f"wire_api={args.wire_api}, "
         f"workstations_dir={args.workstations_dir or os.getenv('CHEM_WORKSTATIONS_NEW_DIR', 'default')}, "
@@ -584,6 +1031,10 @@ def main() -> int:
             run_kwargs["human_quantity_approval_bundle"] = (
                 human_quantity_approval_bundle
             )
+    if relationship_binding_authority is not None:
+        run_kwargs["relationship_binding_authority"] = (
+            relationship_binding_authority
+        )
     state = workflow.run_state(device_input_package, **run_kwargs)
     state_dict = state.to_dict()
     package = state.terminal_package or {}
@@ -620,6 +1071,61 @@ def main() -> int:
 
     dump_json(args.output, state_dict)
     dump_json(args.package_output, package)
+    diagnostic_exit_code = 0
+    if args.diagnostic_workflow_on_material_block:
+        structured_errors = error_package.get("structured_errors")
+        material_blocked = (
+            package.get("status") == "manual_required"
+            and isinstance(structured_errors, list)
+            and any(
+                isinstance(item, dict)
+                and item.get("type") == "binding_ledger_unresolved"
+                for item in structured_errors
+            )
+        )
+        if material_blocked:
+            diagnostic_dir = (
+                Path(args.diagnostic_workflow_output_dir).expanduser().resolve()
+                if args.diagnostic_workflow_output_dir
+                else Path(args.package_output).expanduser().resolve().parent
+                / ("device-workflow-diagnostic-" + uuid4().hex)
+            )
+            try:
+                from diagnostic_from_blocked_run import run_from_blocked_files
+
+                diagnostic = run_from_blocked_files(
+                    research_state_path=Path(args.research_state).expanduser().resolve(),
+                    device_state_path=Path(args.output).expanduser().resolve(),
+                    package_path=Path(args.package_output).expanduser().resolve(),
+                    output_dir=diagnostic_dir,
+                    model_name=args.model_name or os.getenv("REFINER_LLM_MODEL_NAME", "kimi-k3"),
+                    endpoint_url=args.base_url or os.getenv(
+                        "REFINER_LLM_ENDPOINT_URL", "https://api.kimi.com/coding/v1"
+                    ),
+                    reasoning_effort=args.reasoning_effort,
+                    timeout_seconds=args.timeout_seconds,
+                    max_tokens=args.max_tokens,
+                )
+                diagnostic_status = str(diagnostic.get("status") or "unknown")
+                diagnostic_reason = str(diagnostic.get("reason") or "")
+                print(
+                    "device workflow diagnostic: "
+                    f"status={diagnostic_status}, reason={diagnostic_reason or 'none'}, "
+                    f"output={diagnostic_dir}; "
+                    "production Device package remains blocked",
+                    flush=True,
+                )
+                if diagnostic_status != "diagnostic_blocked":
+                    diagnostic_exit_code = 2
+            except Exception as exc:
+                # Provider errors may include credential-bearing request text.
+                # Never print or persist the raw exception.
+                print(
+                    "device workflow diagnostic preparation failed: "
+                    f"{type(exc).__name__}; production Device package remains blocked",
+                    flush=True,
+                )
+                diagnostic_exit_code = 2
     if args.human_readable_output:
         try:
             import sys as _sys
@@ -663,7 +1169,7 @@ def main() -> int:
     if args.print_package_json:
         print(json.dumps(package, ensure_ascii=False, indent=2), flush=True)
 
-    return 0
+    return diagnostic_exit_code
 
 
 if __name__ == "__main__":

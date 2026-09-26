@@ -17,6 +17,23 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .dispatch_formatter import (
+        CONVERSION_FILENAME,
+        CURATED_OPERATION_ALIASES,
+        CURATED_STATION_ALIASES,
+        _normalize_name,
+        audit_material_execution_dispatch_guards,
+    )
+except ImportError:  # Direct CLI compatibility.
+    from dispatch_formatter import (
+        CONVERSION_FILENAME,
+        CURATED_OPERATION_ALIASES,
+        CURATED_STATION_ALIASES,
+        _normalize_name,
+        audit_material_execution_dispatch_guards,
+    )
+
+try:
     from .skill_contract_audit import (
         LABEL_VALUE_RE, MODULE_DIRS, OPERATION_HEADING_RE, ParameterNode,
         _dynamic_pattern, _json_type, _normalize_type, _range_from_node,
@@ -27,6 +44,20 @@ except ImportError:  # Direct CLI compatibility.
         LABEL_VALUE_RE, MODULE_DIRS, OPERATION_HEADING_RE, ParameterNode,
         _dynamic_pattern, _json_type, _normalize_type, _range_from_node,
         _type_matches, _value_in_range, load_workstation_catalog,
+    )
+try:
+    from .reagent_slot_identity import (
+        build_reagent_slot_registry,
+        collect_material_identity_registry_evidence,
+        validate_reagent_slot_identity_roots,
+        validate_reagent_slot_identities,
+    )
+except ImportError:  # Direct CLI compatibility.
+    from reagent_slot_identity import (
+        build_reagent_slot_registry,
+        collect_material_identity_registry_evidence,
+        validate_reagent_slot_identity_roots,
+        validate_reagent_slot_identities,
     )
 
 DEFAULT_WORKSTATION_ROOT = (
@@ -153,6 +184,7 @@ class _Checker:
     def __init__(self, payload: Any, root: Path, artifact_root: Path | None,
                  initial_state: Any, require_payload: bool):
         self.original = payload
+        self.input_sha256 = _digest(payload)
         self.root, self.artifact_root = root, artifact_root
         self.initial_state, self.require_payload = initial_state, require_payload
         self.findings: list[dict[str, Any]] = []
@@ -169,11 +201,16 @@ class _Checker:
         self.source_bottles: dict[tuple[str, str], tuple[str, str]] = {}
         self.liquid_totals: dict[tuple[str, str, int, str], _LiquidTotal] = {}
         self.cross_source_totals: dict[tuple[str, str, int, str], _LiquidTotal] = {}
+        self.reagent_slot_bindings: dict[tuple[str, int], Any] = {}
+        self.authoritative_slot_registry = False
         self.executed: set[str] = {"input"}
         self.assumptions: list[str] = []
         self.payload_source = "none"
         self.source_correspondence = "unverified"
         self.file_dependencies: set[str] = set()
+        # P5: planned vs verified runtime sample-state layering.
+        self._wire_operations_cache: set[tuple[str, str]] | None = None
+        self._material_context_cache: Any = None
 
     def add(self, code: str, message: str, pointer: str, *, stage: str = "workflow_contract",
             severity: str = "error", expected: Any = _MISSING, actual: Any = _MISSING,
@@ -184,7 +221,13 @@ class _Checker:
         if self.index is not None:
             item.update(step_index=self.index, step_number=_safe(self.step.get("step_number")),
                         workstation=self.step.get("workstation", ""), operation=self.step.get("operation", ""))
-            for key in ("source_plan_step", "source_macro_step", "macro_action_id", "observation_point_id"):
+            for key in (
+                "source_plan_step",
+                "source_macro_step_id",
+                "source_macro_step",
+                "macro_action_id",
+                "observation_point_id",
+            ):
                 if key in self.step:
                     item[key] = _safe(self.step[key])
         if self.station is not None:
@@ -265,6 +308,161 @@ class _Checker:
             return None
         code = self.aliases.get(name.strip()) or self.aliases.get(name.strip().replace(" ", ""))
         return self.stations.get(code)
+
+    def check_reagent_slot_identities(
+        self,
+        package: dict[str, Any],
+        prefix: str,
+        workflow: dict[str, Any],
+    ) -> None:
+        """Run the shared identity rule in read-only checker mode.
+
+        Projection and legacy migration belong upstream.  This method only
+        validates the package registry and the workflow references, then maps
+        their structured pointers into the checker envelope.
+        """
+        if "reagent_slot_plan" not in package:
+            return
+        self.executed.add("reagent_slot_identity")
+        plan = package.get("reagent_slot_plan")
+        plan_steps = package.get("device_plan")
+        before = _digest((workflow, plan, plan_steps))
+        try:
+            registry = build_reagent_slot_registry(
+                plan, station_resolver=self.resolve
+            )
+            validation = validate_reagent_slot_identities(
+                workflow,
+                plan,
+                station_resolver=self.resolve,
+                plan_steps=plan_steps,
+            )
+        except Exception as exc:  # Defensive isolation for a strict checker.
+            self.add(
+                "reagent_slot_identity_check_internal_error",
+                f"原液槽位身份检查未完成：{type(exc).__name__}: {exc}",
+                prefix + "/reagent_slot_plan",
+                stage="cross_step",
+                severity="unverified",
+            )
+            return
+        after = _digest((workflow, plan, plan_steps))
+        if after != before:
+            self.add(
+                "reagent_slot_identity_check_mutated_input",
+                "原液槽位身份检查器修改了输入；结果不能作为只读审计依据。",
+                prefix + "/reagent_slot_plan",
+                stage="checker",
+            )
+            return
+        if registry.ok and registry.bindings:
+            registry_evidence = collect_material_identity_registry_evidence(
+                package
+            )
+            root_validation = validate_reagent_slot_identity_roots(
+                plan,
+                batch_plan=package.get("batch_plan"),
+                material_ledger=package.get("material_ledger"),
+                material_identity_registry=registry_evidence,
+            )
+            slot_ids = root_validation.claimed_identity_ids
+            untrusted_ids = root_validation.untrusted_identity_ids
+            if not root_validation.trusted_identity_ids:
+                self.add(
+                    "reagent_slot_identity_unanchored",
+                    "原液槽位声明了 material_identity_id，但 package 未提供可独立核验的"
+                    "根批次、物料身份注册表或含身份 ID 的物料台账；这些自报 ID 不能作为"
+                    "跨槽累计限额的权威身份依据。",
+                    prefix + "/reagent_slot_plan",
+                    stage="cross_step",
+                    severity="unverified",
+                    material_identity_ids=sorted(slot_ids),
+                    rule_id="reagent_slot_identity/v1",
+                )
+            elif untrusted_ids:
+                self.add(
+                    "untrusted_reagent_slot_identity",
+                    "原液槽位中的 material_identity_id 不属于 package 的可信物料身份根；"
+                    "不能用未锚定 ID 拆分同一试剂的累计量。",
+                    prefix + "/reagent_slot_plan",
+                    stage="cross_step",
+                    expected="every slot identity is a member of a trusted material registry",
+                    actual=sorted(untrusted_ids),
+                    trusted_identity_sources=list(
+                        root_validation.evidence_sources
+                    ),
+                    rule_id="reagent_slot_identity/v1",
+                )
+            else:
+                self.reagent_slot_bindings = dict(registry.bindings)
+                self.authoritative_slot_registry = True
+
+        for issue in validation.errors:
+            item = dict(issue)
+            code = str(item.pop("code", "reagent_slot_identity_error"))
+            message = str(item.pop("message", code))
+            raw_pointer = str(item.pop("json_pointer", "/reagent_slot_plan"))
+            if raw_pointer == "/steps" or raw_pointer.startswith("/steps/"):
+                pointer = self.workflow_pointer + raw_pointer
+            elif raw_pointer.startswith("/"):
+                pointer = prefix + raw_pointer
+            else:
+                pointer = raw_pointer
+
+            step_match = re.match(r"^/steps/(\d+)(?:/|$)", raw_pointer)
+            previous_context = (self.index, self.step, self.station)
+            if step_match:
+                step_index = int(step_match.group(1))
+                if step_index < len(self.steps):
+                    step = self.steps[step_index]
+                    self.index = step_index
+                    self.step = step if isinstance(step, dict) else {}
+                    self.station = self.resolve(self.step.get("workstation"))
+            item.pop("rule_id", None)
+            expected = item.pop("expected", _MISSING)
+            actual = item.pop("actual", _MISSING)
+            related = item.pop("related_pointers", None)
+            self.add(
+                code,
+                message,
+                pointer,
+                stage="cross_step",
+                expected=expected,
+                actual=actual,
+                related=related if isinstance(related, list) else None,
+                rule_id="reagent_slot_identity/v1",
+                **{key: _safe(value) for key, value in item.items()},
+            )
+            self.index, self.step, self.station = previous_context
+
+    def check_material_execution_guards(
+        self,
+        package: dict[str, Any],
+        prefix: str,
+    ) -> None:
+        """Fail closed when planned material sidecars lack an executable gate."""
+
+        findings = audit_material_execution_dispatch_guards(package)
+        if not findings:
+            return
+        self.executed.add("material_execution_guards")
+        for raw in findings:
+            item = dict(raw)
+            code = str(item.pop("code", "material_execution_guard_invalid"))
+            message = str(item.pop("message", code))
+            pointer = str(item.pop("json_pointer", ""))
+            if pointer.startswith("/"):
+                pointer = prefix + pointer
+            stage = str(item.pop("stage", "dispatch_payload"))
+            severity = str(item.pop("severity", "error"))
+            self.add(
+                code,
+                message,
+                pointer,
+                stage=stage,
+                severity=severity,
+                **{key: _safe(value) for key, value in item.items()},
+            )
 
     def validate_object(self, parameters: dict[str, Any], nodes: dict[str, ParameterNode], pointer: str) -> None:
         matches: dict[str, list[str]] = {name: [] for name in nodes}
@@ -400,6 +598,154 @@ class _Checker:
         except OSError as exc:
             self.add("unreadable_input_file", f"无法读取所需文件：{exc}", pointer, stage="files", node=node, actual=value)
 
+    def _wire_contract_operations(self) -> set[tuple[str, str]]:
+        """(platform station, operation) pairs with a wire contract in the
+        selected export.  An absent/unreadable export means nothing is
+        runtime-verified (fail closed)."""
+        if self._wire_operations_cache is not None:
+            return self._wire_operations_cache
+        operations: set[tuple[str, str]] = set()
+        try:
+            raw = (self.root / CONVERSION_FILENAME).read_text(encoding="utf-8-sig")
+            payload = json.loads(raw)
+        except (OSError, ValueError):
+            payload = None
+        steps = payload.get("steps") if isinstance(payload, dict) else None
+        if isinstance(steps, list):
+            for item in steps:
+                if (
+                    isinstance(item, dict)
+                    and isinstance(item.get("workstation"), str)
+                    and isinstance(item.get("operation"), str)
+                ):
+                    operations.add((item["workstation"], item["operation"]))
+        self._wire_operations_cache = operations
+        return operations
+
+    def _step_runtime_verified(self, operation: str) -> bool:
+        """True only when the selected export carries a wire contract for
+        this station + operation -- the platform evidence that the declared
+        output state was actually produced."""
+        station = self.station
+        if station is None:
+            return False
+        contracts = self._wire_contract_operations()
+        if not contracts:
+            return False
+        station_names = {station.code, station.display_name}
+        for name in list(station_names):
+            alias_target = CURATED_STATION_ALIASES.get(name)
+            if alias_target:
+                station_names.add(alias_target)
+        matched_stations = {
+            contracted
+            for contracted, _ in contracts
+            if contracted in station_names
+            or any(
+                _normalize_name(name) == _normalize_name(contracted)
+                for name in station_names
+            )
+        }
+        if not matched_stations:
+            return False
+        operation_names = {operation}
+        operation_names.update(CURATED_OPERATION_ALIASES.get(operation, []))
+        operation_names.update(
+            alias
+            for alias, targets in CURATED_OPERATION_ALIASES.items()
+            if operation in targets
+        )
+        for contracted_station in matched_stations:
+            for contracted, contracted_op in contracts:
+                if contracted != contracted_station:
+                    continue
+                if contracted_op in operation_names:
+                    return True
+                if any(
+                    _normalize_name(name) == _normalize_name(contracted_op)
+                    for name in operation_names
+                ):
+                    return True
+        return False
+
+    def _material_context(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        """device_plan steps and material transitions from the package
+        payload, used as internal material-semantic evidence for the
+        planned sample-state layer."""
+        if self._material_context_cache is not None:
+            return self._material_context_cache
+        plan_steps: dict[str, Any] = {}
+        transitions: dict[str, Any] = {}
+        payload = self.original
+        if isinstance(payload, dict):
+            device_plan = payload.get("device_plan")
+            if isinstance(device_plan, list):
+                for item in device_plan:
+                    if isinstance(item, dict) and item.get("plan_step") is not None:
+                        plan_steps[str(item.get("plan_step"))] = item
+            material_transitions = payload.get("material_transitions")
+            if isinstance(material_transitions, list):
+                for item in material_transitions:
+                    if isinstance(item, dict):
+                        transition_id = str(item.get("transition_id") or "").strip()
+                        if transition_id:
+                            transitions[transition_id] = item
+        self._material_context_cache = (plan_steps, transitions)
+        return self._material_context_cache
+
+    def _step_material_state_change(self, step: dict[str, Any] | None) -> bool:
+        """Whether the plan declares a material state change at this step
+        (workflow material_event_kind or the bound device_plan step)."""
+        if not isinstance(step, dict):
+            return False
+        if str(step.get("material_event_kind") or "").strip() == "state_change":
+            return True
+        plan_steps, _ = self._material_context()
+        plan_step = plan_steps.get(str(step.get("source_plan_step") or "").strip())
+        if isinstance(plan_step, dict):
+            return (
+                str(plan_step.get("material_event_kind") or "").strip() == "state_change"
+            )
+        return False
+
+    def _planned_after_sample_states(self, step: dict[str, Any] | None) -> set[str] | None:
+        """Sample states declared by the bound material transitions'
+        after-states, when the sidecar carries structured evidence."""
+        if not isinstance(step, dict):
+            return None
+        plan_steps, transitions = self._material_context()
+        plan_step = plan_steps.get(str(step.get("source_plan_step") or "").strip())
+        transition_ids: list[str] = []
+        if isinstance(step.get("material_transition_ids"), list):
+            transition_ids.extend(
+                str(value).strip()
+                for value in step.get("material_transition_ids") or []
+                if str(value).strip()
+            )
+        if isinstance(plan_step, dict) and isinstance(
+            plan_step.get("material_transition_ids"), list
+        ):
+            transition_ids.extend(
+                str(value).strip()
+                for value in plan_step.get("material_transition_ids") or []
+                if str(value).strip()
+            )
+        states: set[str] = set()
+        for transition_id in dict.fromkeys(transition_ids):
+            transition = transitions.get(transition_id)
+            if not isinstance(transition, dict):
+                continue
+            after_states = transition.get("after_material_states")
+            if after_states is None:
+                after_states = transition.get("after_material_state")
+            if not isinstance(after_states, list):
+                after_states = [after_states]
+            for value in after_states:
+                parsed = _sample_states(str(value or ""))
+                if parsed:
+                    states |= parsed
+        return states or None
+
     def initialize_state(self) -> None:
         if self.initial_state is None:
             return
@@ -436,7 +782,10 @@ class _Checker:
                 else:
                     state["volume"] = float(volume)
             if isinstance(item.get("sample_state"), str):
-                state["sample"] = _sample_states(item["sample_state"])
+                initial_samples = _sample_states(item["sample_state"])
+                state["sample"] = initial_samples
+                if initial_samples:
+                    state["verified_sample"] = set(initial_samples)
             elif "sample_state" in item:
                 self.add("invalid_initial_state", "sample_state 必须是状态字符串。", _ptr(pointer, "sample_state"),
                          stage="input", actual=item["sample_state"])
@@ -484,7 +833,7 @@ class _Checker:
         self.validate_object(parameters, operation.parameters, _ptr(pointer, "parameters"))
         self.check_counts(parameters, operation.parameters, _ptr(pointer, "parameters"))
         schema_failed = any(f["severity"] == "error" for f in self.findings[before:])
-        self.check_flow(parameters, operation_name, pointer, schema_failed)
+        self.check_flow(parameters, operation_name, pointer, schema_failed, step)
 
     def check_counts(self, params: dict[str, Any], nodes: dict[str, ParameterNode], pointer: str) -> None:
         for count_name, ids_name in (("容器数量", "容器编号"), ("样品载体数量", "样品载体编号")):
@@ -510,11 +859,13 @@ class _Checker:
                     if type(value) is not int or value <= 0:
                         self.add("invalid_target_container", "目标瓶号必须表示正整数容器编号。",
                                  _ptr(_ptr(_ptr(pointer, name), i), target), actual=value)
-                if all(type(x) is int for x in targets + ids) and sorted(targets) != sorted(ids):
+                # 每瓶多路物料（如 Ni+Mo 各一行）是合法形状（计划 key_values 声明每瓶各物料用量），
+                # 按目标瓶集合与声明容器集合一致性判定，不按行数 multiplicity 判定。
+                if all(type(x) is int for x in targets + ids) and set(targets) != set(ids):
                     self.add("container_target_mismatch", "操作的目标瓶号与容器编号不一致。", _ptr(pointer, name),
-                             expected=ids, actual=targets, related=[_ptr(pointer, "容器编号")])
+                             expected=ids, actual=sorted(set(targets)), related=[_ptr(pointer, "容器编号")])
 
-    def check_flow(self, params: dict[str, Any], operation: str, pointer: str, schema_failed: bool) -> None:
+    def check_flow(self, params: dict[str, Any], operation: str, pointer: str, schema_failed: bool, step: dict[str, Any] | None = None) -> None:
         self.executed.add("cross_step")
         kind, ids = params.get("容器类型"), params.get("容器编号")
         if not isinstance(kind, str) or not isinstance(ids, list) or not all(type(x) is int and x > 0 for x in ids):
@@ -538,14 +889,18 @@ class _Checker:
         input_kind, kind_line = _io_value(inputs, "容器类型")
         out_kind, output_kind_line = _io_value(outputs, "容器类型")
         io_failed = False
-        if input_kind and input_kind not in {"不限", "与输入保持一致"} and kind not in input_kind.split("或"):
+        # 容器类型列表可用"或"或"及"连接（如纯移液："进样瓶及50ml耐热瓶"）。
+        # 只影响对 Skill 原文的读取，不扩大任何操作声明的受理范围。
+        if input_kind and input_kind not in {"不限", "与输入保持一致"} and kind not in re.split(r"或|及", input_kind):
             self.add("container_type_conflict", "容器类型不满足该操作的输入约束。", _ptr(_ptr(pointer, "parameters"), "容器类型"),
                      stage="cross_step", expected=input_kind, actual=kind, skill_line=kind_line)
             io_failed = True
         if out_kind and out_kind not in {"与输入保持一致", kind}:
-            self.add("container_transition_unverified", "输出容器发生变化，但缺少可核验的源到目标容器编号映射。", pointer,
-                     stage="cross_step", severity="unverified", expected=out_kind, actual=kind, skill_line=output_kind_line)
-            io_failed = True
+            if not self._verified_container_transition(step, params, kind, ids, out_kind, pointer, output_kind_line):
+                self.add("container_transition_unverified", "输出容器发生变化，但缺少可核验的源到目标容器编号映射。", pointer,
+                         stage="cross_step", severity="unverified", expected=out_kind, actual=kind, skill_line=output_kind_line,
+                         suggestion="提供 container_transition_map：逐对列出源/目标逻辑容器编号。仅证明内部映射完整，不代表平台 wire 映射通过。")
+                io_failed = True
         if input_sample and input_sample != "不限" and allowed_samples is None:
             self.add("sample_contract_unverified", "该样品输入条件超出当前规则词表，不能自动放行。", pointer,
                      stage="contracts", severity="unverified", actual=input_sample, skill_line=sample_line)
@@ -565,7 +920,8 @@ class _Checker:
             state = self.states.setdefault(key, {})
             if acquisition and not state:
                 # This is an explicit static precondition of the acquisition operation.
-                state.update(lid=required_lid or output_lid, volume=0.0, origin=pointer, sample={"empty"})
+                state.update(lid=required_lid or output_lid, volume=0.0, origin=pointer,
+                             sample={"empty"}, verified_sample={"empty"})
                 assumption = "物料获取步骤的初始容器按其 Skill 输入条件建模；未核实实时库存。"
                 if assumption not in self.assumptions:
                     self.assumptions.append(assumption)
@@ -587,23 +943,60 @@ class _Checker:
                              skill_line=next((n for n, line in inputs if required_lid in line), None))
                     conflict = True
             if allowed_samples is not None and not state.get("invalid"):
+                # P5: planned_state != verified_runtime_state.  The verified
+                # layer only advances through wire-contract-backed steps (or
+                # caller-provided initial_state); the planned layer follows
+                # the declared plan.  A conflict against either layer stays
+                # an error; a requirement satisfied only by the plan is an
+                # unverified signal and must not block downstream analysis.
                 current_samples = state.get("sample")
-                if not current_samples:
-                    self.add("unknown_initial_sample_state", f"无法确认容器 {kind}/{number} 的样品状态。", pointer,
-                             stage="cross_step", severity="unverified", expected=input_sample, actual="unknown",
-                             related=related, skill_line=sample_line,
-                             suggestion="提供 initial_state.sample_state 或补齐有明确输出状态的前序步骤。")
-                    conflict = True
-                elif current_samples.isdisjoint(allowed_samples):
+                verified_samples = state.get("verified_sample")
+                reference_samples = (
+                    verified_samples if verified_samples else current_samples
+                )
+                if not reference_samples:
+                    if state.get("sample_pending_confirmation"):
+                        # Upstream evidence existed but an unconfirmed material
+                        # state change cleared both layers: keep static analysis
+                        # moving without fabricating a state, and without
+                        # blocking downstream steps.
+                        self.add("sample_state_unverified",
+                                 f"容器 {kind}/{number} 的前序物料状态迁移缺少运行时确认，真实样品状态未知。", pointer,
+                                 stage="cross_step", severity="unverified", expected=input_sample,
+                                 actual="planned=unknown;verified=unknown",
+                                 planned=None, verified=None,
+                                 related=related, skill_line=sample_line,
+                                 suggestion="该平台步骤缺少 wire 合同证据；正式 dispatch 仍需运行时状态确认。")
+                    else:
+                        self.add("unknown_initial_sample_state", f"无法确认容器 {kind}/{number} 的样品状态。", pointer,
+                                 stage="cross_step", severity="unverified", expected=input_sample, actual="unknown",
+                                 related=related, skill_line=sample_line,
+                                 planned=sorted(current_samples) if current_samples else None,
+                                 verified=None,
+                                 suggestion="提供 initial_state.sample_state 或补齐有明确输出状态的前序步骤。")
+                        conflict = True
+                elif reference_samples.isdisjoint(allowed_samples):
                     self.add("sample_state_conflict", f"容器 {kind}/{number} 的样品状态不满足该操作。", pointer,
-                             stage="cross_step", expected=input_sample, actual=sorted(current_samples),
-                             related=related, skill_line=sample_line)
+                             stage="cross_step", expected=input_sample, actual=sorted(reference_samples),
+                             related=related, skill_line=sample_line,
+                             planned=sorted(current_samples) if current_samples else None,
+                             verified=sorted(verified_samples) if verified_samples else None)
                     conflict = True
-                elif not current_samples <= allowed_samples:
+                elif not reference_samples <= allowed_samples:
                     self.add("ambiguous_sample_state", f"容器 {kind}/{number} 只有部分可能状态满足该操作，需核实真实状态。", pointer,
-                             stage="cross_step", severity="unverified", expected=input_sample, actual=sorted(current_samples),
-                             related=related, skill_line=sample_line)
+                             stage="cross_step", severity="unverified", expected=input_sample, actual=sorted(reference_samples),
+                             related=related, skill_line=sample_line,
+                             planned=sorted(current_samples) if current_samples else None,
+                             verified=sorted(verified_samples) if verified_samples else None)
                     conflict = True
+                elif not verified_samples:
+                    self.add("sample_state_unverified",
+                             f"容器 {kind}/{number} 的计划样品状态满足该操作，但缺少运行时确认。", pointer,
+                             stage="cross_step", severity="unverified", expected=input_sample,
+                             actual="planned=" + ",".join(sorted(reference_samples)) + ";verified=unknown",
+                             planned=sorted(reference_samples), verified=None,
+                             related=related, skill_line=sample_line,
+                             suggestion="该平台步骤缺少 wire 合同证据；正式 dispatch 仍需运行时状态确认。")
             cap = re.search(r"(?:体积|液量)[^\n。；]{0,18}?(?:不超过|不能超过|不得超过|最大(?:为)?|≤)\s*(\d+(?:\.\d+)?)\s*m[lL]", input_text)
             if cap:
                 if "volume" not in state:
@@ -623,12 +1016,91 @@ class _Checker:
                 state.pop("lid", None)
             if out_sample and out_sample != "与输入保持一致":
                 state["sample"] = output_samples
+                state.pop("sample_pending_confirmation", None)
+                if output_samples and self._step_runtime_verified(operation):
+                    state["verified_sample"] = set(output_samples)
+                else:
+                    state.pop("verified_sample", None)
+            elif out_sample == "不限":
+                state["sample"] = output_samples
+                state.pop("verified_sample", None)
+                state.pop("sample_pending_confirmation", None)
+            elif self._step_material_state_change(step):
+                # The plan declares a material state change but neither the
+                # skill nor the material sidecar names the resulting state:
+                # keep both layers unknown rather than faking the old state.
+                planned_after = self._planned_after_sample_states(step)
+                if planned_after:
+                    state["sample"] = set(planned_after)
+                    state.pop("sample_pending_confirmation", None)
+                else:
+                    state.pop("sample", None)
+                    state["sample_pending_confirmation"] = True
+                state.pop("verified_sample", None)
             if number in additions and "volume" in state:
                 state["volume"] += additions[number]
             # Removal/transfer volumes cannot be inferred from arbitrary prose.
             if re.search(r"离心|倾倒|纯移液|清洗", operation):
                 state.pop("volume", None)
             state["origin"] = pointer
+
+    def _verified_container_transition(self, step: dict[str, Any] | None, params: dict[str, Any], kind: str,
+                                       ids: list[int], out_kind: str, pointer: str, skill_line: int | None) -> bool:
+        """Verify an explicit container_transition_map for operations whose declared
+        output container kind differs from the input kind (e.g. 进样瓶 -> 料斗).
+
+        The annotation is logical-layer traceability evidence: it pairs the step's
+        own source container ids (parameters.容器编号) with target container ids of
+        the Skill-declared output kind. It stays in workflow_json; the dispatch
+        formatter never copies it into the wire payload, so a verified map proves
+        the internal mapping is complete — it does not prove the platform wire
+        mapping. A missing map keeps the previous unverified finding; an invalid
+        map is an error and also keeps it.
+        """
+        annotation = step.get("container_transition_map") if isinstance(step, dict) else None
+        if annotation is None:
+            return False
+        p = _ptr(pointer, "container_transition_map")
+
+        def invalid(code: str, message: str, ptr: str | None = None, **kwargs: Any) -> bool:
+            self.add(code, message, ptr or p, stage="cross_step", skill_line=skill_line, **kwargs)
+            return False
+
+        if not isinstance(annotation, dict):
+            return invalid("container_transition_map_invalid", "容器转移映射必须是对象。", actual=annotation)
+        source_kind = annotation.get("source_kind")
+        target_kind = annotation.get("target_kind")
+        pairs = annotation.get("pairs")
+        if source_kind != kind:
+            return invalid("container_transition_map_invalid", "映射的 source_kind 必须等于本步骤的容器类型。",
+                           expected=kind, actual=source_kind)
+        if target_kind != out_kind:
+            return invalid("container_transition_map_invalid", "映射的 target_kind 必须等于设备合同声明的输出容器类型。",
+                           expected=out_kind, actual=target_kind)
+        if not isinstance(pairs, list) or not pairs:
+            return invalid("container_transition_map_invalid", "映射的 pairs 必须是非空数组。", actual=pairs)
+        source_ids: list[int] = []
+        target_ids: list[int] = []
+        for i, pair in enumerate(pairs):
+            pp = _ptr(_ptr(p, "pairs"), i)
+            if not isinstance(pair, dict):
+                return invalid("container_transition_map_invalid", "映射对必须是对象。", ptr=pp, actual=pair)
+            source_id, target_id = pair.get("source_id"), pair.get("target_id")
+            if type(source_id) is not int or source_id <= 0 or type(target_id) is not int or target_id <= 0:
+                return invalid("container_transition_map_invalid", "映射对的 source_id/target_id 必须是正整数。",
+                               ptr=pp, actual=pair)
+            source_ids.append(source_id)
+            target_ids.append(target_id)
+        if sorted(source_ids) != sorted(ids):
+            return invalid("container_transition_map_incomplete",
+                           "映射必须恰好覆盖本步骤参数中的全部源容器编号。",
+                           expected=sorted(ids), actual=sorted(source_ids))
+        # 多对一合批（同组成整批并入同一料斗）由计划证据声明，映射层如实承载；
+        # 不禁止目标重复，合并授权必须出现在 evidence 中。
+        for pair in pairs:
+            state = self.states.setdefault((target_kind, pair["target_id"]), {})
+            state.update(origin=p)
+        return True
 
     def check_additions(self, params: dict[str, Any], pointer: str) -> dict[int, float]:
         additions: dict[int, float] = {}
@@ -668,7 +1140,10 @@ class _Checker:
                 bottle_key = f"{int(bottle_match[1])}号原液瓶"
                 label = name.strip() if isinstance(name, str) else None
                 identity = (self.station.code, bottle_key)
-                if isinstance(name, str):
+                binding = self.reagent_slot_bindings.get(
+                    (self.station.code, int(bottle_match[1]))
+                )
+                if not self.authoritative_slot_registry and isinstance(name, str):
                     previous = self.source_bottles.get(identity)
                     if previous and previous[0] != label:
                         self.add("source_bottle_identity_conflict", "同一原液瓶在不同步骤被指派了不同试剂。", field.rsplit("/", 1)[0],
@@ -685,7 +1160,43 @@ class _Checker:
                              stage="cross_step", expected=float(total_limit), actual=float(source_total.amount),
                              related=source_origins, skill_line=total_line,
                              actual_ml_fraction=str(source_total.amount))
-                if label is not None and total_limit is not None:
+                if (
+                    self.authoritative_slot_registry
+                    and binding is not None
+                    and total_limit is not None
+                ):
+                    candidate = self.cross_source_totals.setdefault(
+                        (*scope, binding.material_identity_id), _LiquidTotal()
+                    )
+                    candidate_origins = list(candidate.origins)
+                    candidate.record(exact_volume, bottle_key, field)
+                    known_overflow = any(
+                        self.liquid_totals[(*scope, key)].amount > total_limit
+                        for key in candidate.bottles
+                    )
+                    if (
+                        len(candidate.bottles) > 1
+                        and candidate.amount > total_limit
+                        and not known_overflow
+                    ):
+                        self.add(
+                            "total_reagent_volume",
+                            "同一物料身份从多个原液槽位向同一目标容器的累计加注量超过单种溶液限值。",
+                            field,
+                            stage="cross_step",
+                            expected=float(total_limit),
+                            actual=float(candidate.amount),
+                            related=candidate_origins,
+                            skill_line=total_line,
+                            identity_basis="material_identity_id",
+                            material_identity_id=binding.material_identity_id,
+                            source_bottles=sorted(
+                                candidate.bottles,
+                                key=lambda key: int(key.split("号", 1)[0]),
+                            ),
+                            actual_ml_fraction=str(candidate.amount),
+                        )
+                elif label is not None and total_limit is not None:
                     # Equal labels are possible identity, not proof of equal composition,
                     # concentration or batch. Block only when that uncertainty affects
                     # the bound; do not invent new machine parameters or merge aliases.
@@ -720,6 +1231,7 @@ class _Checker:
         package, prefix = self.original, ""
         if isinstance(package.get("terminal_package"), dict):
             package, prefix = package["terminal_package"], "/terminal_package"
+        self.check_material_execution_guards(package, prefix)
         bare_wire = "workflow_json" not in package and "steps" not in package and "experiment_steps" in package
         if "workflow_json" in package:
             workflow, self.workflow_pointer = package["workflow_json"], prefix + "/workflow_json"
@@ -737,6 +1249,7 @@ class _Checker:
                 self.add("invalid_workflow_structure", "workflow.steps 必须为数组。", self.workflow_pointer, stage="input", actual=workflow)
                 return self.finish()
             self.steps = workflow["steps"]
+            self.check_reagent_slot_identities(package, prefix, workflow)
             if not self.steps:
                 self.add("empty_workflow", "空工作流不能下发。", self.workflow_pointer + "/steps", stage="input", actual=[])
             self.executed.add("workflow_contract")
@@ -829,6 +1342,19 @@ class _Checker:
         return self.finish()
 
     def finish(self) -> dict[str, Any]:
+        if (
+            _digest(self.original) != self.input_sha256
+            and not any(
+                item.get("code") == "checker_mutated_input"
+                for item in self.findings
+            )
+        ):
+            self.add(
+                "checker_mutated_input",
+                "检查期间输入对象被修改；本报告不能作为只读检查依据。",
+                "",
+                stage="checker",
+            )
         unique, seen = [], set()
         for finding in self.findings:
             key = _digest(finding)
@@ -845,7 +1371,7 @@ class _Checker:
                           "not_verifiable" if any(f["severity"] == "unverified" for f in related) else "passed",
                           "finding_count": len(related)})
         return {"report_version": REPORT_VERSION, "status": status, "dispatchable": status == "passed",
-                "scope": "static_dispatch_contract", "input_sha256": _digest(self.original),
+                "scope": "static_dispatch_contract", "input_sha256": self.input_sha256,
                 "source_manifest": self.manifest, "payload_source": self.payload_source,
                 "source_correspondence": self.source_correspondence,
                 "check_context": {"artifact_root": str(self.artifact_root) if self.artifact_root else None,
@@ -857,8 +1383,14 @@ class _Checker:
                 "assumptions": self.assumptions,
                 "limitations": ["仅核验本地设备合同；未连接设备，未验证实时库存、校准、文件在设备端的可达性或实验效果。",
                                 "自然语言规则只覆盖已实现的容器、盖状态、样品状态、加液和等待边界；不等同完整化学语义审核。",
-                                "加液累计按工作站和目标容器类型/编号划分；同名跨源瓶仅作潜在同种溶液的保守上界检查，"
-                                "未核验浓度、批次、不同名称的别名关系或跨工作站的溶液身份及统计范围。"]}
+                                (
+                                    "原液身份按 package 中工作站局部槽位、material_identity_id 与 canonical_name 的结构化绑定核验；"
+                                    "未独立验证浓度、批次内容真实性或跨工作站的累计统计范围。"
+                                    if self.authoritative_slot_registry
+                                    else
+                                    "加液累计按工作站和目标容器类型/编号划分；同名跨源瓶仅作潜在同种溶液的保守上界检查，"
+                                    "未核验浓度、批次、不同名称的别名关系或跨工作站的溶液身份及统计范围。"
+                                )]}
 
 
 def check_dispatch(payload: Any, *, source_path: str | Path | None = None,

@@ -265,10 +265,62 @@ MACRO_STEP_CONTRACT_PROMPT = """
 当前设备 skill 是 step 层，仅据其中声明的 I/O、容器兼容和返回信息细化：
 {device_context_json}
 
-每个 macro step 保留 步骤序号、操作、试剂/对象、参数、来源、quantity_requirements，并增加：
-- material_inputs / material_outputs：数组；每项 name、state、quantity={{"mode":"exact","value":数值,"unit":"单位"}}
-  及 provenance={{"kind":"paper|user|agent_inferred","reference":"来源","rationale":"推断理由"}}。
-  主动投料必须是 exact；未知产率的中间产物可使用 quantity={{"mode":"all_available"}}。
+每个 macro step 必须给出稳定字符串 macro_step_id，并保留步骤序号、操作、试剂/对象、参数、来源、
+quantity_requirements。材料合同只能依据已授权的实验语义填写，不得按步骤编号、工作站类别或常见流程猜测：
+- material_inputs / material_intermediates / material_outputs：数组；每项必须区分
+  material_id（材料种类）和 material_instance_id（这一批/这一状态实例），并给出 name、state、
+  logical_container_id、provenance。input 另给 material_origin=external_inventory|upstream_output；
+  upstream_output 必须给 parent_output_refs=[{{"macro_step_id":"上游步骤ID", "material_instance_id":"上游输出实例ID"}}]。
+  macro 内中间态使用 material_origin=same_step_relation，不得伪装成外部 input。
+- quantity 的 exact 仅表示计划目标或估计，必须增加 semantic=planned_target|planning_estimate；
+  它不证明上游库存足够，也不表示设备已经称量、产出或消费了该数值；人工批准计划值也不能把它变成实测值。
+  all_available 必须使用 semantic=whole_batch_unspecified 且不得带 value/unit；runtime_measured 必须使用
+  semantic=runtime_measurement_required、不得带 value、且必须用 unit 冻结未来报告的预期单位；它只表示未来运行时测量要求，不是实测证据。
+- material_relations：显式关系数组。每项给 relation_id、event_kind
+  (none|state_change|process_same_material|split_same_material|replicate_same_material)、
+  input_material_instance_ids、output_material_instance_ids、logical_container_ids、quantity_basis、
+  source_operation_ref（指向整个 Research package 内全局唯一的操作段 ID）及 provenance。一个 macro 内有净化、洗涤、干燥等多段
+  转换时，用 material_intermediates 和多条有序 relation 表达，不得压成一个转换。
+  process_same_material、split_same_material、replicate_same_material 必须保持同一 material_id；每个 input
+  实例只能被一条 relation 消费，每个 output 只能由一条 relation 产出。分支必须由一条显式 split relation
+  产生不同 output 实例，不能让两条下游关系各自“使用全部”。process_same_material 不能用来绕过端点、
+  event_kind 或数量账目检查；材料身份变化必须用有证据的 state_change。
+  quantity_basis 只能为 whole_batch、conserved_inventory、runtime_measurement_required 或
+  planning_yield_lower_bound；后者必须给 planning_quantity={{"mode":"exact","semantic":"planning_estimate",
+  "value":数值,"unit":"单位"}} 及明确来源。split/replicate/多输入输出若不是 runtime_measurement_required，
+  必须给覆盖全部实例的 input_allocations/output_allocations；计划估计不得冒充执行实测。
+- operation_segments：非空数组，把当前 macro 中每个有授权依据的操作段写成
+  {{segment_id, material_effect, source_operation_ref, device_implementation, provenance}}。material_effect 只能为
+  none|register_existing_input|observe_without_material_change|consume_material|produce_material|
+  transform_material|transfer_material|split_material|merge_material|unknown。不得由“步骤名称像登记/
+  观察/干燥”来猜 material_effect；无法从当前证据确定时写 unknown，并使相关合同字段
+  保持 unresolved。每个 operation_segments[].segment_id 必须在整个 Research package 内全局唯一；
+  每条 material_relations[].source_operation_ref 必须精确匹配同 macro 内一个 operation_segments[].segment_id；
+  所有会消耗、产出、转换、转移、分样或合并物料的 segment
+  必须由非 none relation 覆盖。
+  每个被非 none relation 引用的 segment 还必须给
+  device_implementation={{"ordered_steps":[{{"role_id":"本 segment 内稳定且唯一的抽象角色 ID",
+  "capability_id":"本轮 device_context.experiment_capabilities 中 support_status=supported 的精确 id"}}],
+  "commit_role_id":"ordered_steps 中唯一负责提交物料状态转换的 role_id"}}。ordered_steps 表示所需能力的
+  科学顺序，可以包含多个角色；一个角色不能重复。这里只能选择抽象 capability_id，不得填写或暗示
+  station_code、工作站名称、Skill operation、实体容器、槽位或机器参数；这些物理实现仍由 Device 决定。
+  device_context 未声明所需 capability 时不得按操作文本或常识猜测，也不得删改已有证据支持的
+  material relation；保留科学关系本身的 declared 语义，但不要编造 device_implementation，发布门应明确停止。
+- material_contract_status：必须分别为 material_inputs、material_intermediates、material_outputs、
+  logical_containers、material_relations 声明 declared|not_applicable|unresolved。declared 必须有完整非空记录；
+  not_applicable 必须为空；unresolved 表示证据不足并会在进入 Device 前停止，不能用空数组冒充不适用。
+  每个 not_applicable 必须在 material_applicability 中有且只有一条结构化声明：
+  {{contract_field, assertion:"no_<contract_field>", operation_segment_ids:[...], provenance}}。这些 segment 和 provenance
+  必须可回溯到当前用户输入或当前证据包；不得据操作名称、关键词或步骤类别判定 N/A。
+  material_relations=not_applicable 所引 segment 只能是 none、register_existing_input 或
+  observe_without_material_change；否则为冲突。证据不足则标为 unresolved 并停止。
+  material_relations=not_applicable 只说明本步没有物料转换边，不能连带关闭其他物料字段：登记已存在、
+  已装载的原液/样品时，仍须按原始证据声明 material_inputs、实例身份和逻辑容器；样品矩阵中的目标产物
+  不能冒充已存在库存。若原始证据不能确定登记对象是否已经存在，则相应字段必须为 unresolved。
+  对这种只登记、不消费的特定外部批次，若可用数量尚未测量，可在 input 使用
+  runtime_measured/runtime_measurement_required；这只是后续需要数量时的待测要求，不是已经获得的库存读数。
+  若 Research 的科学关系已经明确，即使 Device 当前编译器或工作站尚不支持，也必须保留 declared；
+  下游软件/设备能力不足应由 Device 单独阻断，不能反写成 Research 证据不足。
 - container_requirements：数组；每项 logical_container_id、container_type、count、capacity_ml、lid_state，
   只填有依据的需求；未知数值用 null，不得虚构容器兼容性。logical_container_id 表示同一样品的逻辑容器，
   不是实体瓶号、机器槽位、原液瓶位或工作站编码。保留跨步骤物料与容器连续性。
@@ -288,11 +340,15 @@ MACRO_STEP_CONTRACT_PROMPT = """
 
 V2 具体实验设计要求：
 - 当前输出只允许服务于 macro action 中的一个 experiment_group/sample_id。
-- 所有主动投加的材料必须在 material_inputs 与 quantity_requirements 中给出数值和单位；
+- 所有主动投加的材料必须在 material_inputs 与 quantity_requirements 中给出计划目标数值和单位；
   禁止“适量”“若干”“按需”等模糊投料。
-- 文献没有给出关键参数时，必须给出明确数值，来源写 agent_inferred/agent补全并说明推导理由；
-  这类值可以继续进入 Device，不触发人工审核。
-- 只有无法预知的产物收率或设备运行时测量可以使用 all_available/runtime_measured 语义。
+- 用户任务与当前证据都没有给出关键物料、数量、路线或终点时，不得用 agent_inferred 补成具体事实；
+  对应 material contract 维度必须保持 unresolved，并在 Research -> Device 发布门停止。agent_inferred
+  只可用于步骤总体说明或非权威推理记录，不能作为 material ports、relations、operation_segments 或
+  material_applicability 的放行依据。
+- 只有特定实例整批流转可使用 all_available；运行时待测可使用 runtime_measured。all_available 不得携带
+  value/unit；runtime_measured 不得携带 value，但必须用 unit 冻结未来报告单位。二者都不证明实际产量，
+  人工批准或自然语言说明也不能变成 observed/actual 数量证据。
 """
 
 MACRO_STEP_CONTRACT_PROMPT = MACRO_STEP_CONTRACT_PROMPT.replace(
@@ -355,12 +411,14 @@ macro plan design
 5. macro step 的格式和粒度不能是泛化研究建议，每个 macro step 必须同时包含具体实验操作、使用的试剂/样品/对象、以及关键实验参数。
 6. 在设备能力满足的情况下，优先把“从知识库论文抽取的实验过程”转成 macro_plan
 7. 不得随意改写论文抽取步骤中的试剂、用量、体积、温度、时间等具体参数
-8. 若论文 protocol 足够完整，直接忠实转换；若论文没有读取到完整步骤或关键参数大量缺失，可以基于论文和化学常识补全一个可执行 macro plan，但必须在 current_stage_plan 中说明“部分参数为 agent 补全”
+8. 若论文 protocol 足够完整，直接忠实转换；若关键物料、数量、路线或终点缺失，不得用化学常识补成
+   可执行事实。V2 必须把相应 material contract 维度保留为 unresolved 并停止发布；总体说明可记录
+   agent_inferred 的判断，但不能把它当作物料证据。
 9. 若设备边界上下文非空，macro_plan 仍应保持化学实验语义，不要选择具体机器容器、工作站、
     容器编号或设备动作；只需避免明确要求当前平台不存在的大型设备（如反应釜/高压釜）或在线表征能力。
-10. 如果论文路线含有明显超出当前平台的大型设备，可在不改变科学目标和目标材料的前提下，
-    从化学语义层面改为常压、低温、外部预配、外部表征等可交给下游进一步适配的路线；
-    具体选择进样瓶/西林瓶/50ml耐热瓶、原料瓶位、开盖/关盖、分瓶、配平、清洗动作等由 device agent 完成。
+10. 如果论文路线含有当前平台不支持的设备或能力，保持原有科学路线并明确报告 capability blocker；
+    不得擅自改为常压、低温、外部预配、外部表征或其他不同物料边界。具体物理容器和机器动作仍由
+    device agent 在不改变科学语义的范围内决定。
 11. 若设备边界上下文非空，macro_plan 还必须避免“容器连续性硬冲突”：
     工作站、默认容器运输、物料转移和样品处理链视为联通，不要求相邻 Skill 重复声明运输边；
     不要把缺少显式运输文字当作硬冲突。只在后续 operation 明确不接受当前容器类型、相态或
@@ -369,19 +427,17 @@ macro plan design
     若文献路线含有会造成设备容器断链的环节，应优先选择化学上等价、设备可适配的宏观表达，或在
     current_stage_plan 中说明该环节需由 device layer 判定可行性，不要把不可转移的容器切换写成必需步骤。
     特别注意：不能仅写“保持同一兼容反应容器路径”“后续直接进入分离”等口头声明来绕过容器断链。
-    若静置/老化会触发不可连通的暂存容器，应在化学语义层面改写为反应体系内继续搅拌熟化/继续反应，
-    或明确作为外部/人工等待 handoff 后重新装载的步骤；如果真源提供同类容器的暂存/存储路径，固定时间的静置老化可以保留。
-12. 若设备边界上下文显示固体称量或大体积离心存在限制，macro_plan 必须选择设备可适配的化学语义表达：
-    - 前驱体盐溶液优先写成“外部预配并已装载的原液/前驱体溶液”，不要要求设备内称量 mmol 级固体并配液；
-    - 单个样品的反应总体积应低于后续固液分离输入上限并留有余量；若使用两种前驱体液，优先采用小体积等比例体系；
+    若静置/老化会触发不可连通的暂存容器，保持已授权的静置/老化语义并报告 capability blocker；
+    只有原始任务或当前证据明确授权时，才可写外部/人工 handoff 或改成搅拌熟化。
+12. 若设备边界上下文显示固体称量或大体积离心存在限制，必须保留原任务的物料形态、库存边界和尺度：
+    - 不得把固体改写成“外部预配并已装载的原液/前驱体溶液”；
+    - 不得为了满足设备上限擅自缩小反应体积或改变配比；超出能力时明确阻断；
     - “持续磁力搅拌条件下加入”“边搅拌边滴加”“同步搅拌加液”或缓慢/控速加入是可保留的化学时间语义，
       但必须允许下游 device agent 将其改写成固定体积分批加液、批次间固定转速搅拌的可审计节拍；
       不要把缺少单站原子化并行能力直接当成 feasibility_error。
-    - 对需要结晶/老化的 PBA 体系，应写成固定条件的搅拌老化/搅拌熟化，例如室温、500-800 rpm、固定分钟数；
-      若设备真源存在同类容器暂存路径，也可写固定时长的静置老化，不得把“静置”本身当作硬阻塞。
-13. 若原始 query 没有明确要求泡沫镍/金属片/刚性基底，而设备上下文没有接受刚性载体完成后处理
-    的 operation，不得仅因参考论文使用该载体而主动引入它；优先选择粉末或悬浊液形态的化学
-    等价 NiFe LDH 路线。若 query 明确要求刚性载体，必须保持其身份，不能把它写成可离心沉淀。
+    - 结晶/老化方式、温度、转速和时长只能来自用户任务或当前证据；不得用体系类别套入固定模板。
+13. 不得仅因参考论文或设备便利而引入、移除或替换特定载体/基底；证据中的刚性载体不能自动改成
+    粉末或悬浊液，反之亦然。物料形态没有明确依据时保持 unresolved，而不是选择“化学等价”路线。
 
 ## macro step 粒度标尺
 每个 macro step 应该像结构化文献抽取中的 `参数列表`：
@@ -389,20 +445,25 @@ macro plan design
 - `操作` 应是短语级实验动作，例如“配制 NiCo-PBA 前驱体 A 液”“共沉淀制备 NiCo-PBA”“制备电极浆料并涂覆”
 - `试剂/对象` 应列出核心试剂、样品或被处理对象，例如“Ni(NO3)2 + sodium citrate”“K3Co(CN)6”“NiCo@A-NiCo-PBA/FTO”
 - `参数` 应保留自然语言实验条件，优先包含 mmol、mg、mL、浓度、溶剂比例、时间、温度、电压、参比电极等关键量
-- `quantity_requirements` 逐项说明数量语义、来源、可调整性和权限边界；数量语义必须由你
-  根据完整 query、macro action、前后步骤和科学目的判断，不能只根据“取样/称量/干燥”等
-  单个关键词分类。允许的 `kind` 为
+- `quantity_requirements` 逐项说明数量语义、来源、可调整性和权限边界；每项必须用
+  `material_id` 精确绑定本步已声明的 material port，并带完整结构化 `provenance`。数量语义必须由你
+  根据当前用户任务或当前 evidence item 的明确片段判断，不能只根据“取样/称量/干燥”等
+  单个关键词分类，也不能从 `参数` 文本正则回填。允许的 `kind` 为
   `scientific_input_setpoint`、`target_dose`、`whole_batch`、`runtime_measured_inventory`；
   `whole_batch` 不填写虚构 value/unit，表示整批直接进入下一操作，只有后续 Skill/科学约束明确要求定量
-  取样时才另外增加 `target_dose`。`target_dose` 是目标取用量，不等于整批实际库存读数。
-- 每个数值的 `source` 只能是 `user_query`、`literature`、`agent_proposed` 或
-  `workstation_requirement`；Research 不得自行声称 `workstation_requirement`，除非设备摘要明确列出该
-  control。`agent_proposed` 必须将 `adjustability` 设为 `scientific_review_required`。
-- 每项还必须给 `owner/required_by/device_policy/scientifically_fixed`：用户/文献科学量属于
-  `research_scientific`；Skill 必填执行值属于 `device_execution + bind_skill_setpoint`；模型自行提出的
-  target_dose 属于 `device_execution + device_semantic_decision`，由 Device 模型结合下游 Skill、科学目的
-  与可观测量判断保留/调整/删除/whole_batch；运行时读数属于 `runtime_observation + runtime_only`。
-  不得把待 Device 判断的执行目标升级为冻结科学量。
+  取样时才另外增加 `target_dose`。`runtime_measured_inventory` 在 quantity_requirements 中同样不填写
+  value/unit；未来报告单位写在所绑定 material port 的 quantity.unit 中。`target_dose` 是目标取用量，
+  不等于整批实际库存读数。
+- `source=user_query` 时 provenance.kind 必须为 user，并精确绑定
+  `evidence_bundle.query` 的 source_path/excerpt/source_digest；`source=literature` 时 provenance.kind
+  必须为 paper，并精确绑定当前 evidence_id 及该 item 的 excerpt 路径/摘录/digest。
+  `source=process_semantics` 只可复用上述 user/paper 证据说明明确的整批或待测语义。
+  不允许 `agent_proposed`、`workstation_requirement`、裸 `evidence` 字符串或无证据来源升级为
+  Research 科学数量；缺少精确绑定时保持相关合同维度 unresolved 并阻断发布。正常生成不得使用
+  `manual_revision`；它只允许由修订 CLI 注入。
+- 每项还必须给 `owner=research_scientific`、`required_by=research_plan`、
+  `device_policy=scientific_review_before_change` 和与来源一致的 `scientifically_fixed`。计划目标、预计值、
+  运行时待测值和实际测量值不得互相替代。
 - 设备摘要的 `I/O/CReq` 给出容器输入、输出和数量/状态约束；`Ctl` 只是控制设定，`Qout` 是物料
   输出效果，`Report` 才是设备返回的数值。
   `Report=未声明` 时不得把烘干、称量、转移或表征工作站写成会返回实际整批质量/收率。
@@ -410,7 +471,8 @@ macro plan design
 - 不要把洗涤、干燥、离心、陈化简单删掉；如果它们在文献中和合成段绑定，可写进同一个 step 的 `参数`
 - 通常输出 4-8 个 macro steps；若参考案例有可迁移的 `参数列表`，优先沿用其粒度并按当前 query 做必要改写
 - 如果 extracted_protocols 提供了高质量 steps，则 macro_plan 应与其中最相关 protocol 的 steps 保持同源、同参数
-- 如果 extracted_protocols 只有零散 PDF 句子、步骤缺少试剂/参数、或多数参数为“文献未说明”，允许生成 agent 补全 plan；但不要把补全内容伪装成论文原文
+- 如果 extracted_protocols 只有零散 PDF 句子、步骤缺少试剂/参数、或多数参数为“文献未说明”，
+  可以生成非权威的总体说明，但不得补齐可执行物料事实；V2 相应维度保持 unresolved 并停止发布。
 
 ## 格式示例
 下面是目标粒度示例，只用于学习格式和粒度，不表示当前任务必须使用这些试剂：
@@ -441,40 +503,101 @@ macro plan design
   "current_stage_plan": "对当前 stage 的完整化学语义实验计划描述",
   "macro_plan": [
     {{
+      "macro_step_id": "MS_001",
       "步骤序号": 1,
       "操作": "步骤名称",
       "试剂/对象": "对象",
       "参数": "自然语言参数",
       "provenance": {{
         "kind": "paper | user | agent_inferred",
-        "reference": "论文标识、用户要求或当前独立证据包",
-        "rationale": "agent_inferred 时必填：数值推导理由"
+        "reference": "paper 时精确等于当前 evidence item 的 evidence_id；user 时标识当前用户任务",
+        "rationale": "agent_inferred 时必填：数值推导理由",
+        "source_path": "user 时必须为 evidence_bundle.query；paper 时必须为 evidence_bundle.items[i].excerpt",
+        "excerpt": "对应 source_path 字段中的精确片段"
       }},
       "material_inputs": [
         {{
+          "material_id": "water",
+          "material_instance_id": "water_loaded_batch_01",
           "name": "主动加入的具体材料",
           "state": "solid | liquid | solution | suspension",
-          "quantity": {{"mode": "exact", "value": 5, "unit": "mg"}},
-          "provenance": {{"kind": "paper | user | agent_inferred", "reference": "来源", "rationale": "推断理由"}}
+          "material_origin": "external_inventory",
+          "parent_output_refs": [],
+          "logical_container_id": "reaction_container_01",
+          "quantity": {{"mode": "exact", "semantic": "planned_target", "value": 5, "unit": "mg"}},
+          "provenance": {{"kind": "paper | user", "reference": "paper 时为当前 evidence_id；user 时标识当前任务", "source_path": "paper/user 必填的规范路径", "excerpt": "该路径字段的精确片段"}}
         }}
       ],
+      "material_intermediates": [],
       "material_outputs": [
         {{
+          "material_id": "product",
+          "material_instance_id": "product_batch_01",
           "name": "本步输出物",
           "state": "solution | suspension | solid | other",
-          "quantity": {{"mode": "all_available"}},
-          "provenance": {{"kind": "agent_inferred", "reference": "mass balance", "rationale": "产率需运行时测量"}}
+          "logical_container_id": "reaction_container_01",
+          "quantity": {{"mode": "runtime_measured", "semantic": "runtime_measurement_required", "unit": "mg"}},
+          "provenance": {{"kind": "paper | user", "reference": "授权该输出身份/状态的当前来源", "source_path": "可核验的当前 package 路径", "excerpt": "精确来源片段"}}
         }}
+      ],
+      "material_relations": [
+        {{
+          "relation_id": "MR_001",
+          "event_kind": "state_change",
+          "input_material_instance_ids": ["water_loaded_batch_01"],
+          "output_material_instance_ids": ["product_batch_01"],
+          "logical_container_ids": ["reaction_container_01"],
+          "quantity_basis": "runtime_measurement_required",
+          "source_operation_ref": "MS_001/OP_01",
+          "provenance": {{"kind":"paper | user","reference":"授权该关系的当前来源","source_path":"可核验的当前 package 路径","excerpt":"精确来源片段"}}
+        }}
+      ],
+      "operation_segments": [
+        {{
+          "segment_id": "MS_001/OP_01",
+          "material_effect": "transform_material",
+          "source_operation_ref": "当前证据中授权这段操作的稳定引用",
+          "device_implementation": {{
+            "ordered_steps": [
+              {{"role_id":"MS_001/OP_01/ROLE_01","capability_id":"从本轮 device_context.experiment_capabilities 精确选择的抽象能力 ID"}}
+            ],
+            "commit_role_id": "MS_001/OP_01/ROLE_01"
+          }},
+          "provenance": {{"kind":"paper","reference":"当前 evidence bundle 中的精确 evidence_id","source_path":"evidence_bundle.items[0].excerpt","excerpt":"该 evidence item excerpt 中的精确片段"}}
+        }}
+      ],
+      "material_applicability": [
+        {{
+          "contract_field": "material_intermediates",
+          "assertion": "no_material_intermediates",
+          "operation_segment_ids": ["MS_001/OP_01"],
+          "provenance": {{"kind":"paper","reference":"当前 evidence bundle 中明确支持该断言的 evidence_id","source_path":"evidence_bundle.items[0].excerpt","excerpt":"明确支持不适用断言的精确片段"}}
+        }}
+      ],
+      "material_contract_status": {{
+        "material_inputs": "declared",
+        "material_intermediates": "not_applicable",
+        "material_outputs": "declared",
+        "logical_containers": "declared",
+        "material_relations": "declared"
+      }},
+      "container_requirements": [
+        {{"logical_container_id":"reaction_container_01","container_type":"reaction vessel","count":1,"capacity_ml":10,"lid_state":"unknown"}}
       ],
       "quantity_requirements": [
         {{
-          "kind": "scientific_input_setpoint | target_dose | whole_batch | runtime_measured_inventory",
-          "material": "该数量对应的物料",
+          "kind": "scientific_input_setpoint",
+          "material_id": "water",
+          "material": "主动加入的具体材料",
           "value": 5,
           "unit": "mg",
-          "source": "user_query | literature | agent_proposed | workstation_requirement",
-          "evidence": "逐字来源片段或明确来源说明",
-          "adjustability": "fixed | scalable_with_scientific_review | scientific_review_required | runtime"
+          "source": "user_query | literature | process_semantics",
+          "provenance": {{"kind":"user | paper","reference":"当前任务或精确 evidence_id","source_path":"evidence_bundle.query 或 evidence_bundle.items[i].excerpt","excerpt":"对应字段的精确片段"}},
+          "adjustability": "fixed | scalable_with_scientific_review | runtime",
+          "owner": "research_scientific",
+          "required_by": "research_plan",
+          "device_policy": "scientific_review_before_change",
+          "scientifically_fixed": true
         }}
       ]
     }}
@@ -482,21 +605,29 @@ macro plan design
   "macro_plan_summary": "一句话概括这段 macro plan 在做什么"
 }}
 
+上面的 relation 仅展示字段形状，不是通用 state_change 模板；实际 event_kind、实例和关系必须逐步依据获准语义填写。
+
 要求：
 - macro_plan 必须是一个步骤数组
 - 每一步必须包含 步骤序号、操作、试剂/对象、参数
 - 参数保持实验自然语言，不要翻译成 workstation 级动作
 - 每一步必须给出 `provenance`。文献或用户直接给定值写 paper/user；自行补全写
-  `agent_inferred` 并给出非空 rationale。可同时保留旧字段 `来源` 供 V1 视图使用。
+  `agent_inferred` 并给出非空 rationale。user 必须写
+  `source_path="evidence_bundle.query"`与用户原文的精确 `excerpt`；系统在发布前确认摘录后确定性写入
+  该 query 字段的 `source_digest`。仅填“user request”或非空 reference 不算绑定。paper 的
+  `reference` 必须精确等于当前 evidence item 的 `evidence_id`，并写出
+  `source_path="evidence_bundle.items[i].excerpt"` 及该 excerpt 字段中的精确片段；系统仅在这些字段
+  可核验时写入该完整 excerpt 字段的 `source_digest`，不得用题目/DOI 子串模糊匹配。正常生成绝对不得输出 `manual_revision`；该 kind 只能
+  由离线修订 CLI 校验 manifest 后注入。可同时保留旧字段 `来源` 供 V1 视图使用。
 - `quantity_requirements` 是必需数组。没有数值数量需求但要把产物整批继续处理时，至少输出一条
   `kind=whole_batch`；若一步确实没有物料数量语义，可输出空数组。不得把通用设备摘要中的可配置范围
-  端点或示例值抄成当前任务的固定数量。
+  端点或示例值抄成当前任务的固定数量。每项必须包含与本步 material port 精确一致的 `material_id`
+  以及按上述规则绑定当前 query/evidence item 的完整 provenance；缺失时不得从参数文本回填或升级来源。
 - 如果输入包含设备边界上下文，参数应尽量写成下游可判断的固定化学条件，例如固定体积、固定时间、
   固定洗涤次数、固定温度、离线 observation/handoff；不要选择具体机器容器、工作站、容器编号或机器动作。
-- 如果输入包含设备边界上下文且当前平台无法低质量固体称量/大体积离心，参数应优先使用
-  “已预配并已装载的前驱体原液”“小体积顺序加液后搅拌”“室温 500-800 rpm 搅拌老化 720 min”
-  这类固定化学条件；需要保持加料与搅拌的时间关系时，可明确写出分批/间隔节拍，
-  不要要求设备提供不可中断的连续流或未在真源中出现的在线联动。
+- 设备边界上下文不能授权改变物料形态、库存边界、反应尺度、路线或终点；当前平台缺少能力时保留
+  原始要求并明确 capability blocker。只有当前用户任务或证据已授权时，才可声明外部预配、分批节拍、
+  老化方式或具体条件。
 - `步骤序号` 从 1 开始连续编号
 - `current_stage_plan` 必须写成一个高层化学语义计划字符串，但内容上要覆盖：
   当前 stage 名称、目标 observation point、stage goal、planning logic、key variables、expected observation、stage completion condition
@@ -636,18 +767,23 @@ V2 macro step design
 ## 规则
 1. 只设计附加的 macro action 中的一个 experiment_group/sample_id；不并行新增对照组、重复组或未来 stage。
 2. 步骤必须覆盖完整样品 lineage，并以可产生真实 observation 的步骤结束。
-3. 只有本调用给出的当前证据包可作为 paper 来源。未在其中找到的数值必须给出明确值，
-   并标记 `agent_inferred`、非空 rationale；不得伪装成文献参数。
+3. 只有本调用给出的当前证据包可作为 paper 来源。用户任务和当前证据中都找不到的物料、数值、
+   路线或终点不得补成具体事实；对应 material contract 维度保持 `unresolved` 并停止发布。
+   `agent_inferred` 只可描述步骤总体推理，不能证明物料端口、关系、操作段或不适用断言。
 4. 每一项主动投料都必须有数值和单位。禁止“适量”“若干”“按需”。未知产率的整批中间物用
    `all_available`/`whole_batch`，不得虚构库存质量。
 5. 保持化学实验语义；不选具体工作站、版本、机器参数、实体容器号或槽位。
    允许声明逻辑容器类型、数量、容量和盖状态要求。
 6. 使用上下文中选中 operation contract 的 I/O、容器、科学控制范围和返回字段作为边界。
    工作站没有声明的返回值不得当作自动闭环测量。
-7. 若平台限制固体称量或体积，用“外部预配且已装载的原液”和具体小体积；
-   加液与搅拌的时序可表达为固定体积分批加液+批间固定搅拌。
-8. 必须保留化学必需的反应、熟化、分离、定量洗涤、干燥和目标表征；
-   使用固定时间/次数/温度，不用颜色、澄清度或“干燥至”作为设备自动终点。
+7. 设备能力限制不授权 Research 改变物料形态、库存边界、配方体积或加料时序；不得把固体输入改成
+   “外部预配且已装载的原液”，也不得擅自缩量或改成分批加液。无法按原证据表达时保留阻断，交给
+   明确授权的 Research 修订或人工审查。
+8. 只保留用户任务或当前证据明确授权的反应、熟化、分离、洗涤、干燥、表征及终点；不得为了补齐
+   一条看似完整的工艺链而新增操作。缺少操作或终点依据时相应维度保持 unresolved。
+9. 用户 query 才能作为 kind=user 的来源。上游生成的 macro action、调研报告和 device_context
+   只能作为规划上下文或能力边界，不能冒充用户原文。不得把纯空容器拿取、摆放或设备转运单独写成
+   Research 化学 macro step；在相关化学步骤的 container_requirements 中声明逻辑容器需求。
 
 ## 输出
 只输出 JSON object：
@@ -655,14 +791,26 @@ V2 macro step design
   "current_stage_plan": "覆盖 stage 目标、逻辑、变量、预期 observation 和完成条件",
   "macro_plan": [
     {{
+      "macro_step_id": "当前 stage 内稳定步骤 ID",
       "步骤序号": 1,
       "操作": "短语级化学操作",
       "试剂/对象": "具体材料或样品",
       "参数": "带数值和单位的实验条件",
-      "来源": "paper_id/title 或 agent补全",
-      "provenance": {{"kind":"paper|user|agent_inferred","reference":"来源","rationale":"推导理由"}},
+      "来源": "精确 evidence_id 或 agent补全",
+      "provenance": {{"kind":"paper|user|agent_inferred","reference":"paper 时精确 evidence_id","source_path":"paper 时为 evidence_bundle.items[i].excerpt；user 时为 evidence_bundle.query","excerpt":"对应字段中的精确片段","rationale":"agent_inferred 的推导理由"}},
       "material_inputs": [],
+      "material_intermediates": [],
       "material_outputs": [],
+      "material_relations": [],
+      "operation_segments": [],
+      "material_applicability": [],
+      "material_contract_status": {{
+        "material_inputs":"unresolved",
+        "material_intermediates":"unresolved",
+        "material_outputs":"unresolved",
+        "logical_containers":"unresolved",
+        "material_relations":"unresolved"
+      }},
       "quantity_requirements": [],
       "container_requirements": [],
       "intermediate_returns": []
@@ -672,6 +820,16 @@ V2 macro step design
 }}
 
 每步的 V2 字段精确合同见下方“已先行确定的 macro action 与步骤接口”。
+上面的 unresolved 是防止复制示例后误放行的占位状态；实际输出必须逐字段依据当前证据改成
+declared 或确实不适用的 not_applicable。任何 unresolved 都会在 Research -> Device 发布前停止。
+ paper provenance 必须精确绑定当前 evidence item：reference 等于完整 evidence_id，source_path 使用
+ 该 item 的 evidence_source_path，excerpt 为其 evidence_excerpt 中的精确片段；没有可核验摘录的
+ 本地命中不能标成 paper。不得用论文题目、DOI 或短字符串做模糊子串匹配。
+ user provenance 必须绑定 evidence_bundle.query 中的用户原文。source_digest 仅由确定性质量检查和
+ 发布门在上述绑定核验后写入；模型不要生成该字段。
+quantity_requirements 每项必须用 material_id 绑定本步 material port，并带同样可核验的 user/paper
+provenance；不得从参数中的裸数值、名称子串、设备范围或模型常识回填或升级来源。缺失时保持
+相关合同维度 unresolved 并阻断发布；正常生成不得输出 manual_revision。
 输出前检查：序号连续；每步操作/对象/参数完整；主动投料全部定量；lineage 连续；最后一步到达 observation point。
 """
 
@@ -718,11 +876,14 @@ post-observation macro plan design
 - 这不是实验结果异常，而是设备适应层判断上一段 macro plan 不能落地
 - 必须读取 observation 中的 unsupported_reasons、blocking_constraints、unsupported_requested_items
 - 必须读取 observation 中的 previous_stage_context、previous_macro_action、prior_paper_hits
-- 新 macro_plan 必须保留上一次规划的科学目标和论文依据；只在化学动作本身不可由设备层映射时修改化学路线
+- 新 macro_plan 必须保留上一次规划的科学目标、物料形态、库存边界、操作顺序和论文依据；
+  device_feasibility_error 本身不授权修改化学路线
 - 不要把具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平、单步洗涤展开等设备层映射细节写入 macro_plan
-- 如果被拒绝项是反应釜、高压釜、聚四氟乙烯内衬反应釜这类化学路线级大型设备要求，可以在不改变目标材料/目标 observation 的前提下改为常压、低温、室温老化或外部预配等化学语义路线
+- 如果被拒绝项是路线级设备或能力要求，应保留原要求并明确阻断；只有当前用户任务或当前证据包
+  已经明确授权替代路线时，才可形成可追溯的 Research 修订。不得自动改成常压、低温、室温老化或外部预配
 - 如果被拒绝项只是缺少具体容器、工作站或设备动作表达，应在 macro_plan_summary 中说明“交由 device agent 选择/映射”，不要把它改写成具体设备 workflow
-- 若某个目标 observation 只能离线完成，应在 macro_plan 中明确写成“离线 observation”，不要伪造设备层不存在的工作站
+- 若某个目标 observation 无法由当前设备完成，只有原任务/证据已授权离线 handoff 时才保留该边界；
+  否则明确阻断，不得自动把在线要求改成离线 observation
 
 ## 输出要求
 只输出 JSON：
@@ -744,7 +905,8 @@ post-observation macro plan design
 - 每一步必须包含具体实验操作、试剂/对象、参数
 - 参数应包含关键实验条件，不要输出占位性研究建议
 - 不要重复上一段已经完成且 observation 已确认成功的 macro steps，除非需要复现实验或修复异常
-- 每一步可附加可选字段 `来源`：标注该步骤参数来自哪个 protocol（paper_id 或文献题目，可带页码）；agent 补全的写 "agent补全"。缺失不算错误。"""
+- V2 物料与路线修订必须使用当前用户任务或当前 evidence item 的精确来源绑定；缺少依据的维度保持
+  unresolved，不能用“agent补全”放行。"""
 
 
 DEVICE_ADAPTATION_MACRO_PLAN_DESIGN_PROMPT = """## 任务名称
@@ -787,24 +949,26 @@ device-adaptation macro plan design
 
 ## 硬性边界
 - 必须保留输入中的 current_stage 原意、stage_route、原始 query、目标材料/目标相和目标 observation point。
-- 不允许把目标从 K2Fe[Fe(CN)6]·2H2O / 亚铁氰化铁改成其他材料或只做颜色/产量观察。
-- 不允许把 XRD completion condition 改成颜色、质量、浑浊度或其他过程 observation。
-- 如果设备层没有 XRD 工作站，XRD 必须写成“离线 XRD observation / 送样 / 数据回传”，不能伪造设备内 XRD 工作站。
+- 不允许改变输入中任何目标材料、材料身份/相态、库存边界或 completion condition，也不得用更容易的
+  过程 observation 替代目标 observation。
+- 缺少目标 observation 能力时明确阻断；只有原任务或当前证据已授权离线 handoff 时才能保留该边界，
+  且不能伪造设备内工作站。
 - research layer 的输出是化学语义 macro action：说明应做什么实验、用什么试剂/样品、关键摩尔量/浓度/体积/温度/时间/洗涤次数/目标 observation。
 - 不要选择具体机器容器、工作站、容器编号、原液瓶位、开盖/关盖、分瓶/配平、单步纯化动作、机器人转移路径或设备字段；这些属于下游 device agent 的职责。
-- 只允许修改确实属于化学路线层面的不可执行点，例如反应釜/高压釜/强制在线表征/必须人工闭环判断等；如果只是缺少容器选择或设备动作表达，不要改合成目标，也不要把它写成设备 workflow。
-- 若上一段方案含有设备层不支持的大型设备，可改成常压、低温、室温老化、外部预配原液、离线表征等化学语义替代；具体由哪种容器和工作站完成，交给 device agent。
-- 优先保留上一段 macro plan 中的核心试剂、化学计量关系和论文依据；若需要缩放，应说明按比例缩放而不是更换合成目标。
+- 设备反馈只能指出能力缺口，不能授权 Research 修改化学路线；路线级不可执行点必须阻断并等待用户、
+  当前证据或显式 Research 修订授权。容器/机器动作缺失仍交由 Device 映射。
+- 必须逐字保留上一段 macro plan 中有来源的试剂、物料形态、库存边界、化学计量、尺度、顺序和论文依据；
+  不得因设备上限自动缩放或换成外部预配。
 - 必须读取 unsupported_reasons、blocking_constraints、unsupported_requested_items，避免再次输出这些不支持项。
 - macro_plan 的每一步应是正向可执行命令，不要把“不使用某设备”写成设备动作。
 - 不要直接照抄 observation 中被设备层判定不支持的动作、容器、工作站、传感器、闭环判断或在线表征能力。
-- 如果最终 observation point 需要设备外表征，必须明确区分“设备内可执行步骤”和“离线 handoff/数据回传”，但不要伪造设备描述中没有的表征工作站。
+- 如果最终 observation point 需要当前设备外的能力，只有既有 Research 合同已授权离线 handoff 时才可
+  区分设备内步骤与离线边界；否则保持 capability blocker。
 - 不得把整个 current stage 都改成 offline_handoff 来规避一个局部错误；只把真源没有任何兼容
   operation 的最小连续化学处理段设为离线边界，其前后仍可执行的合成、加液、反应、分散或表征
   必须保留为正向 macro action，供 Device 产生非空 workflow。
-- 若原始 query 没有明确要求泡沫镍/金属片/刚性基底，而设备反馈指出刚性载体状态不兼容，
-  应改用不改变 NiFe LDH 目标材料的自由粉末/悬浊液制备路线；不要继续保留泡沫镍，也不要把
-  它伪装成悬浊液或沉淀。只有 query 明确要求载体时才保留，并由 Device 声明最小 offline_handoff。
+- 设备反馈指出载体或物料状态不兼容时，保持证据中的真实身份并阻断；不得根据 query 是否提及某载体，
+  自动把刚性载体改成粉末/悬浊液或反向引入载体。
 
 ## 输出要求
 只输出 JSON：
@@ -824,11 +988,12 @@ device-adaptation macro plan design
 要求：
 - macro_plan 必须严格属于当前 stage。
 - 参数应包含关键实验条件、体积/摩尔量/温度/时间/转速等，不要输出占位性研究建议。
-- 参数必须写成固定条件；不要写“洗涤至/洗至/直至上清/干燥至/观察颜色/观察浑浊”等需要闭环判断或设备实时感知的表达。
-  “缓慢滴加/边滴入边搅拌/同步搅拌”可以作为化学时间语义保留，并在交给 device agent 时转成分批、间隔和固定转速参数。
+- 参数只能保留原任务或当前证据给出的固定条件；若终点或时间关系需要设备未声明的闭环感知，明确阻断，
+  不得自行把连续/同步语义改成分批、间隔或固定转速。
 - 参数不要写“进样瓶编号”“原液编号”“工作站”“液体进样站”“纯化工作站”“烘干机”等机器执行字段，除非这些词来自原始化学对象且确实是研究目标的一部分。
-- 最后一类目标 observation 若设备不可执行，应作为离线 observation/handoff 继续保留。
-- 每一步可附加可选字段 `来源`：保留原步骤的文献 protocol 引用（paper_id/文献题目/页码）；设备适配改写的步骤标注 "agent补全(设备适配改写)"。缺失不算错误。"""
+- 最终 observation 若设备不可执行且原合同未授权离线 handoff，应保持阻断。
+- 所有物料、路线和操作修改必须绑定当前用户任务或当前 evidence item 的精确来源；缺少依据时保持
+  unresolved，不得标注“agent补全(设备适配改写)”后放行。"""
 
 
 ABNORMAL_OBSERVATION_SURVEY_QUERY_GENERATE_PROMPT = """## 任务名称

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import copy
 import json
 import sys
 import types
+
+import pytest
 
 import device_agent.run_from_research_state as run_module
 from device_agent.run_from_research_state import (
     build_parser,
     device_input_package_to_text,
+    validate_repair_contract_boundary,
 )
 
 
@@ -101,13 +105,28 @@ def test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg(
         encoding="utf-8",
     )
     request_path.write_text(
-        json.dumps({"request_id": "device-repair-001"}),
+        json.dumps(
+            {
+                "request_id": "device-repair-001",
+                "contract_version": "v2",
+                "contract_resolution": {
+                    "requested": "v2",
+                    "effective": "v2",
+                    "requested_matches_effective": True,
+                },
+                "feasibility_certificate": {
+                    "accepted": True,
+                    "contract_version": "v2",
+                },
+            }
+        ),
         encoding="utf-8",
     )
     override_path.write_text(
         json.dumps(
             {
                 "request_id": "device-repair-001",
+                "contract_version": "v2",
                 "device_plan": [{"plan_step": 1}],
                 "human_quantity_approvals": [{"untrusted": True}],
             }
@@ -151,7 +170,7 @@ def test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg(
 
     class FakeAgent:
         def __init__(self, **kwargs):
-            pass
+            captured["agent_kwargs"] = kwargs
 
         def run_state(self, handoff, **kwargs):
             captured["handoff"] = handoff
@@ -182,9 +201,46 @@ def test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg(
     )
 
     assert run_module.main() == 0
+    assert captured["agent_kwargs"]["contract_version"] == "v2"
+    assert captured["handoff"]["contract_version"] == "v2"
+    assert captured["handoff"]["contract_resolution"] == {
+        "requested": "v2",
+        "source_input": "v1",
+        "effective": "v2",
+        "requested_matches_effective": True,
+        "source_matches_effective": False,
+    }
     assert captured["kwargs"]["human_quantity_approval_bundle"] is typed_bundle
     assert "human_quantity_approvals" not in captured["kwargs"][
         "device_plan_override"
     ]
     assert "human_quantity_approval_validation" not in captured["handoff"]
     assert "validated_human_quantity_approvals" not in captured["handoff"]
+
+
+def test_repair_contract_boundary_rejects_request_override_or_runtime_drift():
+    request = {
+        "contract_version": "v2",
+        "contract_resolution": {
+            "requested": "v2",
+            "effective": "v2",
+            "requested_matches_effective": True,
+        },
+        "feasibility_certificate": {
+            "accepted": True,
+            "contract_version": "v2",
+        },
+    }
+    override = {"contract_version": "v2"}
+
+    validate_repair_contract_boundary(request, override, "v2")
+
+    bad_override = dict(override, contract_version="v1")
+    with pytest.raises(SystemExit, match="override contract_version"):
+        validate_repair_contract_boundary(request, bad_override, "v2")
+    with pytest.raises(SystemExit, match="runtime --contract-version"):
+        validate_repair_contract_boundary(request, override, "v1")
+    bad_resolution = copy.deepcopy(request)
+    bad_resolution["contract_resolution"]["effective"] = "v1"
+    with pytest.raises(SystemExit, match="contract_resolution"):
+        validate_repair_contract_boundary(bad_resolution, override, "v2")

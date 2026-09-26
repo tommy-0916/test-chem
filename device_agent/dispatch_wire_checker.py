@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .contract_value_normalizer import normalize_contract_scalar
     from .dispatch_formatter import (
         CONVERSION_FILENAME, CURATED_OPERATION_ALIASES, CURATED_STATION_ALIASES,
         DispatchCatalog, WORKFLOW_ONLY_PLATFORM_METADATA, _normalize_name,
@@ -27,6 +28,7 @@ try:
         load_workstation_catalog,
     )
 except ImportError:  # Direct script execution.
+    from contract_value_normalizer import normalize_contract_scalar
     from dispatch_formatter import (
         CONVERSION_FILENAME, CURATED_OPERATION_ALIASES, CURATED_STATION_ALIASES,
         DispatchCatalog, WORKFLOW_ONLY_PLATFORM_METADATA, _normalize_name,
@@ -370,7 +372,7 @@ class _WireCheck:
         if not isinstance(step, dict):
             self.add("dispatch_step_invalid", "Wire step must be an object", pointer, actual=step)
             return
-        allowed = {"step_number", "workstation", "operation", "parameters", "id", "source_macro_step", "macro_action_id", "observation_point_id", "notes"}
+        allowed = {"step_number", "workstation", "operation", "parameters", "id", "source_macro_step_id", "source_macro_step", "macro_action_id", "observation_point_id", "notes"}
         for key in sorted(step.keys() - allowed):
             self.add("dispatch_unknown_step_field", "Wire step field is not in the generator contract", _ptr(pointer, key), actual=step[key])
         number = step.get("step_number")
@@ -472,10 +474,11 @@ class _WireCheck:
                     continue
                 value = copy.deepcopy(raw_value)
                 declared = node.type_name.lower()
-                if isinstance(value, str) and declared in {"int", "integer"} and re.fullmatch(r"-?\d+", value):
-                    value = int(value)
-                elif isinstance(value, str) and declared in {"number", "float", "double"} and re.fullmatch(r"-?\d+(?:\.\d+)?", value):
-                    value = float(value)
+                normalized = normalize_contract_scalar(
+                    value, node.type_name, node.unit
+                )
+                if normalized.accepted:
+                    value = normalized.new_value
                 elif isinstance(value, (int, float)) and not isinstance(value, bool) and declared in {"string", "str"}:
                     value = format(value, "g")
                 params[node.name] = value
@@ -562,7 +565,33 @@ def check_wire_payload(workflow: Any, payload: Any, *, workstation_root: Path,
                 checker.add("dispatch_duplicate_step_number", "Wire step_number repeats an earlier step", _ptr(pointer, "step_number"), actual=number, related=[seen[number]])
             seen[number] = _ptr(pointer, "step_number")
         if expected is not None and index < len(expected["experiment_steps"]["steps"]):
-            checker.compare(expected["experiment_steps"]["steps"][index], step, pointer, _ptr(_ptr(workflow_pointer, "steps"), index))
+            expected_step = expected["experiment_steps"]["steps"][index]
+            platform_station = catalog.resolve_station(step.get("workstation")) if isinstance(step, dict) else None
+            platform_operation = (
+                catalog.resolve_operation(platform_station, step.get("operation"))
+                if platform_station and isinstance(step, dict) else None
+            )
+            if platform_station is None or platform_operation is None:
+                # No platform wire contract for this station/operation: the
+                # passthrough expected step and the whitelisted payload step
+                # legitimately differ in every field, so the per-field delta is
+                # grouped under the root-cause finding instead of standalone
+                # dispatch_value_missing/dispatch_value_added error cascades.
+                exp_keys = set(expected_step) if isinstance(expected_step, dict) else set()
+                act_keys = set(step) if isinstance(step, dict) else set()
+                root_codes = (
+                    "dispatch_wire_station_unverified", "dispatch_wire_station_invalid",
+                    "dispatch_wire_operation_unverified", "dispatch_wire_operation_invalid",
+                )
+                for finding in reversed(checker.findings):
+                    if finding.get("step_index") == index and finding.get("code") in root_codes:
+                        finding["wire_field_delta"] = {
+                            "omitted_from_payload": sorted(exp_keys - act_keys),
+                            "added_vs_source_mapping": sorted(act_keys - exp_keys),
+                        }
+                        break
+            else:
+                checker.compare(expected_step, step, pointer, _ptr(_ptr(workflow_pointer, "steps"), index))
     semantic_workflow, projection_complete, field_maps = checker.semantic_projection(steps)
     result = {"findings": checker.findings, "checked_steps": len(steps), "source": source,
               "source_correspondence": "not_available" if standalone else ("checked" if expected is not None else "unverified"),

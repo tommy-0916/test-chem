@@ -20,7 +20,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -35,6 +35,16 @@ from device_agent.human_quantity_approval import (  # noqa: E402
     HumanQuantityApprovalError,
     approval_contract_template,
     validate_human_quantity_approvals,
+)
+from device_agent.feasibility_certificate import (  # noqa: E402
+    FEASIBILITY_CERTIFICATE_VERSION,
+    FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+    device_plan_contract_digest,
+    device_plan_contract_view,
+    feasibility_certificate_id,
+    feasibility_certificate_protected_payload,
+    stable_digest as certificate_stable_digest,
+    strict_feasibility_certificate_version,
 )
 from device_agent.dispatch_checker import check_dispatch, write_check_report  # noqa: E402
 from chem_agent_contracts.adapters import build_observation_event_v2  # noqa: E402
@@ -135,6 +145,55 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _contract_versions_from_args(args: Sequence[str]) -> List[str]:
+    """Read explicit contract flags without letting a later flag win."""
+
+    versions: List[str] = []
+    index = 0
+    while index < len(args):
+        value = str(args[index])
+        if value == "--contract-version":
+            if index + 1 >= len(args):
+                raise ValueError("--contract-version requires v1 or v2")
+            versions.append(str(args[index + 1]).strip())
+            index += 2
+            continue
+        if value.startswith("--contract-version="):
+            versions.append(value.split("=", 1)[1].strip())
+        index += 1
+    return versions
+
+
+def _validated_package_contract_version(
+    package: Dict[str, Any],
+    expected: str,
+    *,
+    label: str,
+) -> str:
+    """Return a package's proven effective contract or fail closed."""
+
+    version = str(package.get("contract_version") or "").strip()
+    resolution = _as_dict(package.get("contract_resolution"))
+    if version not in {"v1", "v2"}:
+        raise DeviceRepairResumeError(
+            f"{label} lacks a valid contract_version"
+        )
+    if (
+        str(resolution.get("requested") or "").strip() != version
+        or str(resolution.get("effective") or "").strip() != version
+        or resolution.get("requested_matches_effective") is not True
+    ):
+        raise DeviceRepairResumeError(
+            f"{label} has an inconsistent contract_resolution"
+        )
+    if version != expected:
+        raise DeviceRepairResumeError(
+            f"{label} effective contract_version={version} does not match "
+            f"requested contract_version={expected}"
+        )
+    return version
+
+
 def _first_nonempty(*values: Any) -> Any:
     for value in values:
         if value not in (None, "", [], {}):
@@ -175,6 +234,31 @@ def package_feasibility_accepted(package: Dict[str, Any]) -> bool:
         if isinstance(certificate, dict) and certificate.get("accepted") is True:
             return True
     return False
+
+
+def canonical_success_envelope(package: Dict[str, Any]) -> bool:
+    """Return true only for an unambiguous, non-dispatched success envelope.
+
+    Raw/legacy Device output uses ``success`` with no route (or ``none``),
+    while the V2 wire adapter uses ``ready_for_dispatch`` with route
+    ``success``.  Error-routing metadata is not allowed to coexist with either
+    pair: a contradictory package must remain at a fail-closed route.
+    """
+
+    status = str(package.get("status") or "").strip().lower()
+    route = str(package.get("feedback_route") or "").strip().lower()
+    feedback_type = str(package.get("feedback_type") or "").strip().lower()
+    failure_scope = str(package.get("failure_scope") or "").strip().lower()
+    canonical_pair = (
+        status == "success" and route in {"", "none"}
+    ) or (
+        status == "ready_for_dispatch" and route == "success"
+    )
+    return (
+        canonical_pair
+        and feedback_type in {"", "none"}
+        and failure_scope in {"", "none"}
+    )
 
 
 def feedback_route(package: Dict[str, Any]) -> str:
@@ -236,18 +320,35 @@ def feedback_route(package: Dict[str, Any]) -> str:
         for node in nested
     )
 
-    if status == "terminal_unmappable" or route == "terminal":
-        return "terminal"
-    if status in {"success", "ready_for_dispatch"}:
-        if failed_device_gate:
-            return "device"
-        return "success"
+    # Human intervention is the safest interpretation of any explicit human
+    # marker, including a malformed package that also claims success or a
+    # terminal condition.
     if (
         status == "manual_required"
         or route == "human"
         or feedback_type == "human_review_required"
+        or scope in {"human", "human_review", "human_review_required"}
     ):
         return "human"
+    if (
+        status == "terminal_unmappable"
+        or route == "terminal"
+        or feedback_type == "terminal_unmappable"
+        or scope in {"terminal", "terminal_unmappable"}
+    ):
+        return "terminal"
+    if (
+        route == "device"
+        or scope == "device"
+        or scope in DEVICE_LOCAL_FAILURE_SCOPES
+        or scope.startswith("device_")
+        or feedback_type in DEVICE_LOCAL_FEEDBACK_TYPES
+        or feedback_type.startswith("device_")
+        or failed_device_gate
+    ):
+        return "device"
+    if canonical_success_envelope(package):
+        return "success"
     if (
         not feasibility_accepted
         and not nested_device_scope
@@ -259,10 +360,6 @@ def feedback_route(package: Dict[str, Any]) -> str:
         and scope == RESEARCH_FAILURE_SCOPE
     ):
         return "research"
-    if route == "device" or scope in DEVICE_LOCAL_FAILURE_SCOPES:
-        return "device"
-    if feedback_type == "device_internal_error":
-        return "device"
     # Unknown or internally contradictory legacy packages stay at Device.
     # Campaign termination is reserved for the explicit V2 terminal contract.
     return "device"
@@ -516,6 +613,7 @@ def is_transient_device_internal_error(package: Dict[str, Any]) -> bool:
 class CampaignConfig:
     query: str
     campaign_id: str = ""
+    requested_contract_version: str = "v2"
     references: List[str] = field(default_factory=list)
     max_iterations: int = MAX_CAMPAIGN_ITERATIONS
     feasibility_deadlock_limit: int = 3
@@ -531,6 +629,23 @@ class CampaignConfig:
     forward_only: bool = False
 
     def __post_init__(self) -> None:
+        if self.requested_contract_version not in {"v1", "v2"}:
+            raise ValueError(
+                "requested_contract_version must be 'v1' or 'v2'"
+            )
+        for label, values in (
+            ("research_args", self.research_args),
+            ("device_args", self.device_args),
+        ):
+            contract_versions = _contract_versions_from_args(values)
+            if any(
+                version != self.requested_contract_version
+                for version in contract_versions
+            ):
+                raise ValueError(
+                    f"{label} --contract-version conflicts with "
+                    "requested_contract_version"
+                )
         if not 1 <= self.max_iterations <= MAX_CAMPAIGN_ITERATIONS:
             raise ValueError(
                 "max_iterations must be between 1 and "
@@ -795,28 +910,11 @@ class CampaignRunner:
                     consecutive_feasibility = 0
                     previous_feasibility_keys = set()
                     if self.config.forward_only:
-                        try:
-                            self._check_package_for_dispatch(package, iteration_dir)
-                        except DispatchCheckBlockedError:
-                            stop_reason = STOP_DEVICE_ERROR
-                            break
-                        stop_reason = STOP_READY_FOR_DISPATCH
-                        self._trace.append(
-                            {
-                                "iteration": iteration,
-                                "phase": "device",
-                                "status": package_status or "ready_for_dispatch",
-                                "forward_only": True,
-                                "workflow_steps": len(
-                                    _as_dict(package.get("workflow_json")).get(
-                                        "steps", []
-                                    )
-                                ),
-                            }
-                        )
-                        self._log(
-                            f"iteration {iteration}: forward-only workflow is "
-                            "ready for dispatch; stopping before execution"
+                        stop_reason = self._forward_only_stop_reason(
+                            package,
+                            iteration_dir,
+                            iteration=iteration,
+                            phase="device",
                         )
                         break
                     needs_review = package_requires_review(package)
@@ -1037,6 +1135,17 @@ class CampaignRunner:
             device_plan_override_path=override_path,
             prior_repair_request_path=request_path,
         )
+        _validated_package_contract_version(
+            package,
+            str(request.get("contract_version") or ""),
+            label="Device repair resume output",
+        )
+        if canonical_success_envelope(package):
+            self._validate_resumed_success_certificate(
+                package,
+                request,
+                override,
+            )
         package_path = resume_dir / "device_package.json"
         if not package_path.exists():
             package_path.write_text(
@@ -1052,19 +1161,30 @@ class CampaignRunner:
 
         if route == "human":
             stop_reason = STOP_MANUAL_REQUIRED
-            self._write_device_repair_artifacts(
-                resume_dir,
-                state_path,
-                package,
-                campaign_iteration=campaign_iteration,
-                parent_request_id=str(request.get("request_id") or ""),
-                repair_generation=int(request.get("repair_generation") or 1) + 1,
-            )
+            if package_feasibility_accepted(package):
+                self._write_device_repair_artifacts(
+                    resume_dir,
+                    state_path,
+                    package,
+                    campaign_iteration=campaign_iteration,
+                    parent_request_id=str(request.get("request_id") or ""),
+                    repair_generation=(
+                        int(request.get("repair_generation") or 1) + 1
+                    ),
+                )
+            else:
+                self._write_unverifiable_review_request(
+                    resume_dir,
+                    _as_dict(package.get("error_package")),
+                )
             self._trace.append(
                 {
                     "iteration": campaign_iteration,
                     "phase": "device_repair_resume",
                     "status": "human_review_required_again",
+                    "feasibility_accepted": package_feasibility_accepted(
+                        package
+                    ),
                 }
             )
         elif route == "terminal":
@@ -1078,12 +1198,33 @@ class CampaignRunner:
                 }
             )
         elif route == "success":
-            needs_review = package_requires_review(package)
-            if needs_review and self.adapter.real_lab_boundary:
-                approval = load_review_approval(resume_dir)
-                if approval is None:
-                    stop_reason = STOP_REVIEW_REQUIRED
-                    self._write_review_request(resume_dir, package)
+            if self.config.forward_only:
+                stop_reason = self._forward_only_stop_reason(
+                    package,
+                    resume_dir,
+                    iteration=campaign_iteration,
+                    phase="device_repair_resume",
+                    allowed_certificate_scopes={
+                        "accepted_device_plan_revision"
+                    },
+                )
+            else:
+                needs_review = package_requires_review(package)
+                if needs_review and self.adapter.real_lab_boundary:
+                    approval = load_review_approval(resume_dir)
+                    if approval is None:
+                        stop_reason = STOP_REVIEW_REQUIRED
+                        self._write_review_request(resume_dir, package)
+                    else:
+                        stop_reason, goal_reached, state, final_state_path = (
+                            self._execute_resumed_package(
+                                package,
+                                state,
+                                state_path,
+                                resume_dir,
+                                campaign_iteration,
+                            )
+                        )
                 else:
                     stop_reason, goal_reached, state, final_state_path = (
                         self._execute_resumed_package(
@@ -1094,16 +1235,6 @@ class CampaignRunner:
                             campaign_iteration,
                         )
                     )
-            else:
-                stop_reason, goal_reached, state, final_state_path = (
-                    self._execute_resumed_package(
-                        package,
-                        state,
-                        state_path,
-                        resume_dir,
-                        campaign_iteration,
-                    )
-                )
         else:
             # A feasibility certificate already exists for every repair
             # request. Even a malformed package claiming route="research" is
@@ -1181,7 +1312,13 @@ class CampaignRunner:
         campaign_iteration: int,
     ) -> tuple[str, bool, Dict[str, Any], Path]:
         try:
-            observation = self._execute_checked_package(package, resume_dir)
+            observation = self._execute_checked_package(
+                package,
+                resume_dir,
+                allowed_certificate_scopes={
+                    "accepted_device_plan_revision"
+                },
+            )
         except DispatchCheckBlockedError:
             return STOP_DEVICE_ERROR, False, state, state_path
         (resume_dir / "observation_in.json").write_text(
@@ -1301,6 +1438,14 @@ class CampaignRunner:
             elif route == "success":
                 consecutive_feasibility = 0
                 previous_feasibility_keys = set()
+                if self.config.forward_only:
+                    stop_reason = self._forward_only_stop_reason(
+                        package,
+                        iteration_dir,
+                        iteration=iteration,
+                        phase="device",
+                    )
+                    break
                 if package_requires_review(package) and self.adapter.real_lab_boundary:
                     if load_review_approval(iteration_dir) is None:
                         stop_reason = STOP_REVIEW_REQUIRED
@@ -1358,6 +1503,208 @@ class CampaignRunner:
             last_package,
         )
 
+    @staticmethod
+    def _validate_v2_success_certificate_core(
+        package: Dict[str, Any],
+        *,
+        label: str = "successful V2 Device output",
+        allowed_scopes: Optional[Set[str]] = None,
+    ) -> Dict[str, Any]:
+        """Validate the certificate facts shared by normal and resume success.
+
+        Lineage is deliberately excluded: only a manual repair successor has a
+        predecessor/request/authority scope.  Every V2 success, however, must
+        carry the same current certificate version and bind the exact accepted
+        Device Plan that is about to cross the dispatch boundary.
+        """
+
+        if package.get("feasibility_accepted") is not True:
+            raise DeviceRepairResumeError(
+                f"{label} requires feasibility_accepted=true"
+            )
+        certificate = _as_dict(package.get("feasibility_certificate"))
+        if certificate.get("accepted") is not True:
+            raise DeviceRepairResumeError(
+                f"{label} requires an accepted feasibility_certificate"
+            )
+        certificate_version = strict_feasibility_certificate_version(certificate)
+        if (
+            certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            raise DeviceRepairResumeError(
+                f"{label} carries obsolete full-contract feasibility_certificate "
+                f"version {certificate_version}; version "
+                f"{FEASIBILITY_CERTIFICATE_VERSION} expands the signed Device Plan "
+                "scope with material execution sidecars, so the plan must be "
+                "re-audited and re-issued"
+            )
+        if certificate_version != FEASIBILITY_CERTIFICATE_VERSION:
+            raise DeviceRepairResumeError(
+                f"{label} requires feasibility_certificate version "
+                f"{FEASIBILITY_CERTIFICATE_VERSION}"
+            )
+        if str(certificate.get("contract_version") or "").strip() != "v2":
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate contract_version is invalid"
+            )
+        effective_scopes = (
+            set(allowed_scopes)
+            if allowed_scopes is not None
+            else {"accepted_device_plan"}
+        )
+        if certificate.get("acceptance_scope") not in effective_scopes:
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate acceptance_scope is invalid"
+            )
+
+        protected = feasibility_certificate_protected_payload(certificate)
+        protected_digest = certificate_stable_digest(protected)
+        if certificate.get("protected_digest") != protected_digest:
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate protected_digest is invalid"
+            )
+        expected_certificate_id = feasibility_certificate_id(
+            protected_digest=protected_digest,
+            device_snapshot_id=str(certificate.get("device_snapshot_id") or ""),
+            device_truth_sha256=str(certificate.get("device_truth_sha256") or ""),
+        )
+        if certificate.get("certificate_id") != expected_certificate_id:
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate certificate_id is invalid"
+            )
+
+        route_signature = str(certificate.get("route_signature") or "")
+        if not route_signature or route_signature != str(
+            certificate.get("research_plan_signature") or ""
+        ):
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate route_signature is invalid"
+            )
+        expected_matrix_signature = certificate_stable_digest(
+            certificate.get("sample_control_matrix", []),
+            prefix="sample_matrix",
+        )
+        if certificate.get("sample_matrix_signature") != expected_matrix_signature:
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate sample_matrix_signature is invalid"
+            )
+        snapshot_signature = str(
+            certificate.get("device_snapshot_signature") or ""
+        )
+        if not snapshot_signature or snapshot_signature != str(
+            certificate.get("device_truth_sha256") or ""
+        ):
+            raise DeviceRepairResumeError(
+                f"{label} feasibility_certificate device_snapshot_signature is invalid"
+            )
+
+        accepted_plan_digest = str(
+            certificate.get("accepted_device_plan_contract_sha256") or ""
+        )
+        if not accepted_plan_digest or accepted_plan_digest != device_plan_contract_digest(
+            package
+        ):
+            raise DeviceRepairResumeError(
+                f"{label} does not match its feasibility_certificate plan digest"
+            )
+        expected_step_digest = certificate_stable_digest(
+            package.get("device_plan", []),
+            prefix="device_plan",
+        )
+        if certificate.get("accepted_device_plan_signature") != expected_step_digest:
+            raise DeviceRepairResumeError(
+                f"{label} does not match its feasibility_certificate device_plan signature"
+            )
+        return certificate
+
+    @staticmethod
+    def _validate_resumed_success_certificate(
+        package: Dict[str, Any],
+        request: Dict[str, Any],
+        override: Dict[str, Any],
+    ) -> None:
+        """Require a signed current-version successor before resume execution."""
+
+        if str(request.get("contract_version") or "").strip() != "v2":
+            return
+
+        predecessor = _as_dict(request.get("feasibility_certificate"))
+        certificate = CampaignRunner._validate_v2_success_certificate_core(
+            package,
+            label="successful V2 Device repair output",
+            allowed_scopes={"accepted_device_plan_revision"},
+        )
+        if certificate.get("acceptance_scope") != "accepted_device_plan_revision":
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate acceptance_scope is invalid"
+            )
+
+        predecessor_id = str(predecessor.get("certificate_id") or "")
+        if not predecessor_id or certificate.get("supersedes_certificate_id") != predecessor_id:
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate does not supersede the frozen certificate"
+            )
+        request_id = str(request.get("request_id") or "")
+        if not request_id or certificate.get("repair_request_id") != request_id:
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate repair_request_id is invalid"
+            )
+        if certificate.get("repair_authority") != "human_device_plan_override":
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate repair_authority is invalid"
+            )
+
+        frozen_fields = (
+            "contract_version",
+            "research_plan_signature",
+            "target_materials",
+            "reaction_route",
+            "reagent_identity_and_order",
+            "observation_points",
+            "sample_control_matrix",
+            "accepted_device_sample_control_matrix",
+            "device_sample_ids",
+            "semantic_analysis",
+            "external_return_contracts",
+            "device_snapshot_id",
+            "device_truth_sha256",
+        )
+        for field_name in frozen_fields:
+            if certificate.get(field_name) != predecessor.get(field_name):
+                raise DeviceRepairResumeError(
+                    "successor feasibility_certificate changes frozen field "
+                    f"{field_name}"
+                )
+        before = device_plan_contract_view(request.get("last_device_plan"))
+        after = device_plan_contract_view(package)
+        expected_changed_fields = [
+            key for key in before if before[key] != after[key]
+        ]
+        scope = _as_dict(certificate.get("authorized_change_scope"))
+        if scope.get("changed_contract_fields") != expected_changed_fields:
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate changed_contract_fields is invalid"
+            )
+        expected_changes = (
+            copy.deepcopy(override.get("changes"))
+            if isinstance(override.get("changes"), list)
+            else []
+        )
+        if scope.get("declared_changes") != expected_changes:
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate declared_changes is invalid"
+            )
+        expected_declarations = (
+            copy.deepcopy(override.get("declarations"))
+            if isinstance(override.get("declarations"), dict)
+            else {}
+        )
+        if scope.get("declarations") != expected_declarations:
+            raise DeviceRepairResumeError(
+                "successor feasibility_certificate declarations scope is invalid"
+            )
+
     def _next_device_repair_resume_dir(self, campaign_iteration: int) -> Path:
         prefix = f"iteration_{campaign_iteration:02d}_device_repair_resume_"
         existing: List[int] = []
@@ -1399,14 +1746,94 @@ class CampaignRunner:
             raise DeviceRepairResumeError(
                 "repair request campaign_id does not match the selected campaign"
             )
-        if not _as_dict(request.get("feasibility_certificate")).get("accepted"):
+        request_contract = str(
+            request.get("contract_version") or ""
+        ).strip()
+        request_resolution = _as_dict(request.get("contract_resolution"))
+        override_contract = str(
+            override.get("contract_version") or ""
+        ).strip()
+        if request_contract not in {"v1", "v2"}:
+            raise DeviceRepairResumeError(
+                "repair request lacks a valid frozen contract_version"
+            )
+        if (
+            str(request_resolution.get("requested") or "").strip()
+            != request_contract
+            or str(request_resolution.get("effective") or "").strip()
+            != request_contract
+            or request_resolution.get("requested_matches_effective") is not True
+        ):
+            raise DeviceRepairResumeError(
+                "repair request contract_resolution is missing or inconsistent"
+            )
+        if override_contract != request_contract:
+            raise DeviceRepairResumeError(
+                "override contract_version does not match repair request"
+            )
+        if request_contract != self.config.requested_contract_version:
+            raise DeviceRepairResumeError(
+                "repair request contract_version does not match the selected runtime"
+            )
+
+        certificate = _as_dict(request.get("feasibility_certificate"))
+        if not certificate.get("accepted"):
             raise DeviceRepairResumeError(
                 "Device repair resume requires an accepted feasibility_certificate"
+            )
+        certificate_contract = str(
+            certificate.get("contract_version") or ""
+        ).strip()
+        if request_contract == "v2" and certificate_contract != "v2":
+            raise DeviceRepairResumeError(
+                "V2 feasibility_certificate lacks its frozen contract_version"
+            )
+        certificate_version = strict_feasibility_certificate_version(certificate)
+        if (
+            request_contract == "v2"
+            and certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            raise DeviceRepairResumeError(
+                "V2 feasibility_certificate version 2.4 is obsolete because its "
+                "signed Device Plan scope omits material execution sidecars; "
+                "re-audit and re-issue a version 2.5 certificate"
+            )
+        if (
+            request_contract == "v2"
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            raise DeviceRepairResumeError(
+                "V2 feasibility_certificate version is unsupported or missing"
+            )
+        if certificate_contract and certificate_contract != request_contract:
+            raise DeviceRepairResumeError(
+                "feasibility_certificate contract_version does not match repair request"
             )
         if str(override.get("request_id") or "") != str(
             request.get("request_id") or ""
         ):
             raise DeviceRepairResumeError("override request_id does not match request")
+
+        request_seed = {
+            "campaign_id": self.config.campaign_id,
+            "campaign_iteration": int(request.get("campaign_iteration") or 0),
+            "query": str(request.get("query") or ""),
+            "repair_generation": int(request.get("repair_generation") or 1),
+            "research_state_sha256": str(
+                request.get("research_state_sha256") or ""
+            ),
+            "route_signature": request.get("frozen_route_signature"),
+            "effective_contract_version": request_contract,
+            "last_plan": request.get("last_device_plan"),
+        }
+        expected_request_id = (
+            "device-repair-" + _value_signature(request_seed)[:16]
+        )
+        if str(request.get("request_id") or "") != expected_request_id:
+            raise DeviceRepairResumeError(
+                "repair request_id does not match its frozen content"
+            )
 
         state_path = Path(str(request.get("research_state_path") or "")).expanduser()
         if not state_path.is_absolute():
@@ -1442,6 +1869,96 @@ class CampaignRunner:
             if not expected or actual != expected:
                 raise DeviceRepairResumeError(
                     f"override {override_key} does not match frozen request"
+                )
+
+        certificate_signature_pairs = (
+            (
+                certificate.get("route_signature")
+                or certificate.get("research_plan_signature"),
+                request.get("frozen_route_signature"),
+                "route",
+            ),
+            (
+                certificate.get("sample_matrix_signature"),
+                request.get("frozen_sample_matrix_signature"),
+                "sample matrix",
+            ),
+            (
+                certificate.get("device_snapshot_signature")
+                or certificate.get("device_truth_sha256"),
+                request.get("device_snapshot_signature"),
+                "device snapshot",
+            ),
+        )
+        for certificate_value, request_value, label in certificate_signature_pairs:
+            if certificate_value and str(certificate_value) != str(request_value):
+                raise DeviceRepairResumeError(
+                    f"feasibility_certificate {label} signature does not match request"
+                )
+
+        if certificate.get("route_signature") and certificate.get(
+            "route_signature"
+        ) != certificate.get("research_plan_signature"):
+            raise DeviceRepairResumeError(
+                "feasibility_certificate route_signature is invalid"
+            )
+        expected_matrix_signature = certificate_stable_digest(
+            certificate.get("sample_control_matrix", []),
+            prefix="sample_matrix",
+        )
+        if certificate.get("sample_matrix_signature") and certificate.get(
+            "sample_matrix_signature"
+        ) != expected_matrix_signature:
+            raise DeviceRepairResumeError(
+                "feasibility_certificate sample_matrix_signature is invalid"
+            )
+        if certificate.get("device_snapshot_signature") and certificate.get(
+            "device_snapshot_signature"
+        ) != certificate.get("device_truth_sha256"):
+            raise DeviceRepairResumeError(
+                "feasibility_certificate device_snapshot_signature is invalid"
+            )
+
+        if (
+            certificate_version == "2.3"
+            or certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+        ):
+            protected = feasibility_certificate_protected_payload(certificate)
+            expected_protected_digest = certificate_stable_digest(protected)
+            if certificate.get("protected_digest") != expected_protected_digest:
+                raise DeviceRepairResumeError(
+                    "feasibility_certificate protected_digest is invalid"
+                )
+            expected_certificate_id = feasibility_certificate_id(
+                protected_digest=expected_protected_digest,
+                device_snapshot_id=str(
+                    certificate.get("device_snapshot_id") or ""
+                ),
+                device_truth_sha256=str(
+                    certificate.get("device_truth_sha256") or ""
+                ),
+            )
+            if certificate.get("certificate_id") != expected_certificate_id:
+                raise DeviceRepairResumeError(
+                    "feasibility_certificate certificate_id is invalid"
+                )
+            accepted_plan_digest = str(
+                certificate.get("accepted_device_plan_contract_sha256") or ""
+            )
+            if request_contract == "v2" and not accepted_plan_digest:
+                raise DeviceRepairResumeError(
+                    "V2 feasibility_certificate lacks its accepted Device Plan digest"
+                )
+            if (
+                request_contract == "v2"
+                and accepted_plan_digest
+                and accepted_plan_digest != (
+                device_plan_contract_digest(request.get("last_device_plan"))
+                )
+            ):
+                raise DeviceRepairResumeError(
+                    "repair request last_device_plan does not match its "
+                    "feasibility_certificate"
                 )
 
         if _value_signature(request.get("frozen_route_payload")) != str(
@@ -1565,6 +2082,11 @@ class CampaignRunner:
         for reference in references:
             command += ["--reference", reference]
         command += self.config.research_args
+        if not _contract_versions_from_args(self.config.research_args):
+            command += [
+                "--contract-version",
+                self.config.requested_contract_version,
+            ]
 
         completed = subprocess.run(
             command,
@@ -1608,6 +2130,11 @@ class CampaignRunner:
         if prior_repair_request_path:
             command += ["--prior-repair-request", str(prior_repair_request_path)]
         command += self.config.device_args
+        if not _contract_versions_from_args(self.config.device_args):
+            command += [
+                "--contract-version",
+                self.config.requested_contract_version,
+            ]
         # Pin generation and dispatch checking to the same selected contract
         # root. A subprocess .env file must not silently select another source.
         command += ["--workstations-dir", str(self._dispatch_workstation_root())]
@@ -1627,7 +2154,13 @@ class CampaignRunner:
                 "device step produced no package file "
                 f"(exit={completed.returncode}): {completed.stderr[-800:]}"
             )
-        return json.loads(package_path.read_text(encoding="utf-8"))
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+        _validated_package_contract_version(
+            package,
+            self.config.requested_contract_version,
+            label="Device subprocess output",
+        )
+        return package
 
     # ------------------------------------------------------------------
     # helpers
@@ -1876,6 +2409,8 @@ class CampaignRunner:
             self._sample_matrix_from_state(research_state),
             [],
         )
+        if not isinstance(sample_matrix, (list, dict)):
+            sample_matrix = []
         device_snapshot = _first_nonempty(
             certificate.get("device_snapshot"),
             certificate.get("workstation_snapshot"),
@@ -1921,49 +2456,80 @@ class CampaignRunner:
         research_state_sha256 = (
             _file_sha256(research_state_path) if research_state_path.exists() else ""
         )
-        raw_last_device_plan = _first_nonempty(
-            package.get("device_plan"),
+        explicit_last_device_plan = _first_nonempty(
             package.get("last_device_plan"),
             manual_context.get("last_device_plan"),
             error_package.get("last_device_plan"),
             {},
         )
-        if isinstance(raw_last_device_plan, dict):
-            last_device_plan = copy.deepcopy(raw_last_device_plan)
+        raw_device_plan = package.get("device_plan")
+        if isinstance(raw_device_plan, list):
+            # Keep repair resumption on the exact same signed projection as
+            # certificate issuance.  A hand-maintained field list previously
+            # dropped new 2.5 material execution sidecars and made an otherwise
+            # valid certificate fail its resume digest check.
+            last_device_plan = {
+                "status": "device_plan",
+                **device_plan_contract_view(package),
+            }
+            if "quantity_audit" in package:
+                last_device_plan["quantity_audit"] = copy.deepcopy(
+                    package.get("quantity_audit")
+                )
+        elif isinstance(raw_device_plan, dict):
+            last_device_plan = copy.deepcopy(raw_device_plan)
+        elif isinstance(explicit_last_device_plan, dict) and explicit_last_device_plan:
+            last_device_plan = copy.deepcopy(explicit_last_device_plan)
         else:
             last_device_plan = {
                 "status": "device_plan",
-                "device_plan": copy.deepcopy(raw_last_device_plan)
-                if isinstance(raw_last_device_plan, list)
-                else [],
-                "feasibility": copy.deepcopy(package.get("feasibility", {})),
-                "macro_plan_summary": package.get("macro_plan_summary", ""),
-                "device_self_check": copy.deepcopy(
-                    package.get("device_self_check", {})
-                ),
-                "reagent_slot_plan": copy.deepcopy(
-                    package.get("reagent_slot_plan", [])
-                ),
-                "container_plan": copy.deepcopy(package.get("container_plan", [])),
-                "quantity_adjustments": copy.deepcopy(
-                    package.get("quantity_adjustments", [])
-                ),
-                "batch_plan": copy.deepcopy(package.get("batch_plan", [])),
-                "material_transitions": copy.deepcopy(
-                    package.get("material_transitions", [])
-                ),
-                "material_ledger": copy.deepcopy(
-                    package.get("material_ledger", {})
-                ),
-                "quantity_audit": copy.deepcopy(package.get("quantity_audit", {})),
-                "temporal_adaptations": copy.deepcopy(
-                    package.get("temporal_adaptations", [])
-                ),
-                "offline_handoffs": copy.deepcopy(
-                    package.get("offline_handoffs", [])
-                ),
-                "sample_control_matrix": copy.deepcopy(sample_matrix),
+                **device_plan_contract_view(package),
             }
+            if "quantity_audit" in package:
+                last_device_plan["quantity_audit"] = copy.deepcopy(
+                    package.get("quantity_audit")
+                )
+        effective_contract_version = _validated_package_contract_version(
+            package,
+            self.config.requested_contract_version,
+            label="Device package selected for repair",
+        )
+        certificate_contract_version = str(
+            certificate.get("contract_version") or ""
+        ).strip()
+        certificate_version = strict_feasibility_certificate_version(certificate)
+        if (
+            certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            raise DeviceRepairResumeError(
+                "obsolete full-contract feasibility_certificate requires "
+                f"re-audit and version {FEASIBILITY_CERTIFICATE_VERSION} re-issuance"
+            )
+        if (
+            effective_contract_version == "v2"
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            raise DeviceRepairResumeError(
+                "V2 feasibility_certificate version is unsupported or missing"
+            )
+        if (
+            effective_contract_version == "v2"
+            and certificate_contract_version != "v2"
+        ):
+            raise DeviceRepairResumeError(
+                "V2 feasibility_certificate lacks its frozen contract_version"
+            )
+        if (
+            certificate_contract_version
+            and certificate_contract_version != effective_contract_version
+        ):
+            raise DeviceRepairResumeError(
+                "feasibility_certificate contract_version does not match Device package"
+            )
+        contract_resolution = copy.deepcopy(
+            _as_dict(package.get("contract_resolution"))
+        )
         request_seed = {
             "campaign_id": self.config.campaign_id,
             "campaign_iteration": campaign_iteration,
@@ -1971,6 +2537,7 @@ class CampaignRunner:
             "repair_generation": repair_generation,
             "research_state_sha256": research_state_sha256,
             "route_signature": route_signature,
+            "effective_contract_version": effective_contract_version,
             "last_plan": last_device_plan,
         }
         request_id = "device-repair-" + _value_signature(request_seed)[:16]
@@ -1989,6 +2556,8 @@ class CampaignRunner:
             "campaign_iteration": campaign_iteration,
             "query": self.config.query,
             "created_at": datetime.now().isoformat(timespec="seconds"),
+            "contract_version": effective_contract_version,
+            "contract_resolution": contract_resolution,
             "research_state_path": str(research_state_path),
             "research_state_sha256": research_state_sha256,
             "feasibility_certificate": certificate,
@@ -2090,6 +2659,7 @@ class CampaignRunner:
             "sample_matrix_sha256": request["frozen_sample_matrix_sha256"],
             "device_snapshot_signature": device_snapshot_signature,
             "device_snapshot_sha256": request["device_snapshot_sha256"],
+            "contract_version": effective_contract_version,
             "declarations": {
                 "route_changed": False,
                 "sample_matrix_changed": False,
@@ -2130,6 +2700,7 @@ class CampaignRunner:
             "",
             "```bash",
             "python run_campaign.py \\",
+            f"  --contract-version {effective_contract_version} \\",
             f"  --resume-device-repair {shlex.quote(str(request_path))} \\",
             "  --device-plan-override /path/to/device_plan_override.json",
             "```",
@@ -2261,6 +2832,57 @@ class CampaignRunner:
             )
         ).read_all()
 
+        def read_json_object(path: Path) -> Dict[str, Any]:
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return {}
+            return value if isinstance(value, dict) else {}
+
+        final_research_state = read_json_object(final_state_path)
+        research_effective = str(
+            final_research_state.get("contract_version")
+            or _as_dict(
+                final_research_state.get("contract_resolution")
+            ).get("effective")
+            or ""
+        ).strip()
+        device_effective = ""
+        device_contract_path = ""
+        for package_path in reversed(
+            sorted(
+                self.campaign_dir.rglob("device_package.json"),
+                key=lambda path: path.as_posix(),
+            )
+        ):
+            device_package = read_json_object(package_path)
+            if not device_package:
+                continue
+            device_effective = str(
+                _as_dict(device_package.get("contract_resolution")).get(
+                    "effective"
+                )
+                or device_package.get("contract_version")
+                or ""
+            ).strip()
+            device_contract_path = str(package_path)
+            break
+        resolved_versions = [
+            value for value in (research_effective, device_effective) if value
+        ]
+        contract_resolution = {
+            "requested": self.config.requested_contract_version,
+            "research_effective": research_effective,
+            "device_effective": device_effective,
+            "matched": bool(resolved_versions)
+            and all(
+                value == self.config.requested_contract_version
+                for value in resolved_versions
+            ),
+            "research_state_path": str(final_state_path),
+            "device_package_path": device_contract_path,
+        }
+
         summary = {
             "campaign_id": self.config.campaign_id,
             "query": self.config.query,
@@ -2272,6 +2894,7 @@ class CampaignRunner:
             "adapter": self.adapter.name,
             "plan_versions": len(ledger_records),
             "final_state_path": str(final_state_path),
+            "contract_resolution": contract_resolution,
             "cumulative_device_constraints": list(self._campaign_constraints),
             "trace": self._trace,
         }
@@ -2291,6 +2914,9 @@ class CampaignRunner:
             f"- started_at: {started_at}",
             f"- finished_at: {finished_at}",
             f"- final_state: {final_state_path}",
+            f"- contract_requested: {self.config.requested_contract_version}",
+            f"- research_contract_effective: {research_effective or 'unavailable'}",
+            f"- device_contract_effective: {device_effective or 'unavailable'}",
             "",
             "## 计划版本演化（含修改/放弃原因）",
             "",
@@ -2354,34 +2980,81 @@ class CampaignRunner:
         return (source if source.is_absolute() else REPO_ROOT / source).resolve()
 
     def _check_package_for_dispatch(
-        self, package: Dict[str, Any], iteration_dir: Path
+        self,
+        package: Dict[str, Any],
+        iteration_dir: Path,
+        *,
+        allowed_certificate_scopes: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
         """Recheck a package against the current dispatch contract."""
 
-        try:
-            report = check_dispatch(
-                package,
-                source_path=iteration_dir / "device_package.json",
-                artifact_root=iteration_dir,
-                workstation_root=self._dispatch_workstation_root(),
-                require_payload=True,
-            )
-        except Exception as exc:
-            # Contract-loader or checker faults are Device errors, never a
-            # reason to dispatch or to replan the chemistry through Research.
+        resolution = _as_dict(package.get("contract_resolution"))
+        certificate = _as_dict(package.get("feasibility_certificate"))
+        declared_contracts = {
+            self.config.requested_contract_version,
+            str(package.get("contract_version") or "").strip(),
+            str(resolution.get("requested") or "").strip(),
+            str(resolution.get("effective") or "").strip(),
+            str(certificate.get("contract_version") or "").strip(),
+        }
+        certificate_error: DeviceRepairResumeError | None = None
+        if canonical_success_envelope(package) and "v2" in declared_contracts:
+            try:
+                self._validate_v2_success_certificate_core(
+                    package,
+                    allowed_scopes=allowed_certificate_scopes,
+                )
+            except DeviceRepairResumeError as exc:
+                certificate_error = exc
+
+        if certificate_error is not None:
             report = {
-                "status": "not_verifiable",
+                "status": "failed",
                 "dispatchable": False,
                 "findings": [{
-                    "severity": "error", "code": "checker_internal_error",
-                    "path": "", "message": f"{type(exc).__name__}: {exc}",
+                    "severity": "error",
+                    "code": "invalid_v2_feasibility_certificate",
+                    "path": "/feasibility_certificate",
+                    "message": str(certificate_error),
                 }],
                 "summary": {"errors": 1, "warnings": 0},
-                "checks": {},
+                "checks": {
+                    "feasibility_certificate": {
+                        "status": "failed",
+                        "certificate_version": certificate.get(
+                            "certificate_version"
+                        ),
+                    }
+                },
                 "input_sha256": _value_signature(package),
                 "source_manifest": {},
                 "checked_steps": [],
             }
+        else:
+            try:
+                report = check_dispatch(
+                    package,
+                    source_path=iteration_dir / "device_package.json",
+                    artifact_root=iteration_dir,
+                    workstation_root=self._dispatch_workstation_root(),
+                    require_payload=True,
+                )
+            except Exception as exc:
+                # Contract-loader or checker faults are Device errors, never a
+                # reason to dispatch or to replan the chemistry through Research.
+                report = {
+                    "status": "not_verifiable",
+                    "dispatchable": False,
+                    "findings": [{
+                        "severity": "error", "code": "checker_internal_error",
+                        "path": "", "message": f"{type(exc).__name__}: {exc}",
+                    }],
+                    "summary": {"errors": 1, "warnings": 0},
+                    "checks": {},
+                    "input_sha256": _value_signature(package),
+                    "source_manifest": {},
+                    "checked_steps": [],
+                }
         paths: Dict[str, str] = {}
         try:
             paths = write_check_report(report, iteration_dir)
@@ -2398,6 +3071,11 @@ class CampaignRunner:
             "report_paths": paths,
             "iteration_dir": str(iteration_dir),
             "research_invoked": False,
+            "finding_codes": [
+                str(item.get("code") or "")
+                for item in report.get("findings", [])
+                if isinstance(item, dict) and item.get("code")
+            ],
         })
         if not dispatchable:
             self._log(
@@ -2407,12 +3085,58 @@ class CampaignRunner:
             raise DispatchCheckBlockedError(report, paths)
         return report
 
+    def _forward_only_stop_reason(
+        self,
+        package: Dict[str, Any],
+        iteration_dir: Path,
+        *,
+        iteration: int,
+        phase: str,
+        allowed_certificate_scopes: Optional[Set[str]] = None,
+    ) -> str:
+        """Run the fresh dispatch gate, but never invoke an adapter or Research."""
+
+        try:
+            self._check_package_for_dispatch(
+                package,
+                iteration_dir,
+                allowed_certificate_scopes=allowed_certificate_scopes,
+            )
+        except DispatchCheckBlockedError:
+            return STOP_DEVICE_ERROR
+        self._trace.append(
+            {
+                "iteration": iteration,
+                "phase": phase,
+                "status": str(package.get("status") or "ready_for_dispatch"),
+                "forward_only": True,
+                "workflow_steps": len(
+                    _as_dict(package.get("workflow_json")).get("steps", [])
+                ),
+                "research_invoked": False,
+                "adapter_invoked": False,
+            }
+        )
+        self._log(
+            f"iteration {iteration}: forward-only workflow is ready for "
+            "dispatch; stopping before execution"
+        )
+        return STOP_READY_FOR_DISPATCH
+
     def _execute_checked_package(
-        self, package: Dict[str, Any], iteration_dir: Path
+        self,
+        package: Dict[str, Any],
+        iteration_dir: Path,
+        *,
+        allowed_certificate_scopes: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
         """Recheck the package and execute it only after the check passes."""
 
-        self._check_package_for_dispatch(package, iteration_dir)
+        self._check_package_for_dispatch(
+            package,
+            iteration_dir,
+            allowed_certificate_scopes=allowed_certificate_scopes,
+        )
         return self._attach_actual_execution_parameters(
             self.adapter.execute(package, iteration_dir), package
         )

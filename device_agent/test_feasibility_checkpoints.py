@@ -355,6 +355,32 @@ def test_success_closes_active_run_and_same_input_gets_new_exp_id(
     assert second.read(second.key("fragment_1", {"macro": 1})) is None
 
 
+def test_ready_for_dispatch_closes_checkpoint_as_dispatchable(
+    tmp_path: Path,
+) -> None:
+    store = DeviceCheckpointStore(
+        tmp_path / "ready-for-dispatch",
+        {"research": "same"},
+        metadata={"exp_id": "ready-for-dispatch"},
+    )
+    agent = SingleDeviceAgent.__new__(SingleDeviceAgent)
+    agent._checkpoint_store = store
+    state = SingleDeviceAgentState(
+        research_handoff=_handoff(1), exp_id="ready-for-dispatch"
+    )
+    package = {
+        "status": "ready_for_dispatch",
+        "workflow_json": {"steps": [{"step_number": 1}]},
+    }
+
+    agent._finalize_checkpoint_run(state, package)
+
+    assert store.lifecycle_state == "complete"
+    assert store.dispatchable is True
+    assert package["checkpoints"]["terminal_status"] == "ready_for_dispatch"
+    assert package["checkpoints"]["dispatchable"] is True
+
+
 def test_run_state_success_then_same_handoff_starts_fresh_identity(
     tmp_path: Path,
 ) -> None:

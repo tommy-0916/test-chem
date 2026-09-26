@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "run_id": "01b2263b4e254001a69d690d7c44030b",
-  "directory": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c\\01b2263b4e254001a69d690d7c44030b",
-  "binding_sha256": "fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c",
+  "run_id": "d671184b3914472eafa614d62380d236",
+  "directory": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\f935b20b1457aa049eb42ebb1585795abaa197b5f8a1d4382abb00a613ae32f0\\d671184b3914472eafa614d62380d236",
+  "binding_sha256": "f935b20b1457aa049eb42ebb1585795abaa197b5f8a1d4382abb00a613ae32f0",
   "binding": {
-    "research_handoff_sha256": "000de5da3bfac0b778d4c017876cb940233b1c0d5a68b0164e9de869a5628fc7",
+    "research_handoff_sha256": "97b94f35699f2c1eeb2f5aa5a8056901102b26c67ff810ab6acceed244cef838",
     "device_truth_sha256": "device_truth_967a4f979fa21f79e86da9db4eac48e950d610e0a17439ce776c72c797e6186a",
     "contract_version": "v2",
     "semantic_analysis_enabled": true,
     "feasibility_mode": "",
     "fragment_contract_sha256": "a2209c914406c8fd0002729d28923cd826ff495478ef62422c5c43a814143f7d",
-    "implementation_sha256": "b6347f5bb56fafac644a0a26993fc6d97cb2471fad3970d8c35f544ed0310114",
+    "implementation_sha256": "c394e6c03dc4a75c0cd435e8a309755c19fdc1b93838d750e7cbea412829245d",
     "planning_model": {
       "adapter": "utils.llm_factory.CodexResponsesModel",
       "backends": [
@@ -28,31 +28,26 @@
       "feasibility_reasoning_effort": ""
     }
   },
-  "lifecycle_state": "complete",
-  "terminal_status": "manual_required",
+  "lifecycle_state": "active",
+  "terminal_status": "",
   "dispatchable": false,
   "latest": {
-    "stage": "feasibility_device_plan_chunk_6_of_6",
-    "path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\fbafafde2b5f453475a7d6baeeaf0f4c0d7d75daf0a3beca3be59cc8fe814f9c\\01b2263b4e254001a69d690d7c44030b\\feasibility_device_plan_chunk_6_of_6-6faeb72baf7f1ab20a177ac5283dd0d9b5fe652915d515fd5bf0fc62e87c7180-0.json"
+    "stage": "feasibility_device_plan_chunk_7_of_7",
+    "path": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\device_checkpoints_kimi\\f935b20b1457aa049eb42ebb1585795abaa197b5f8a1d4382abb00a613ae32f0\\d671184b3914472eafa614d62380d236\\feasibility_device_plan_chunk_7_of_7-931a218935f3e389ba1ef2010d9aee7584049256cc36b1047ceebcb9eb90ec5a-0.json"
   },
   "resumed_stages": [
     "semantic_analysis",
-    "feasibility_device_plan_chunk_1_of_6",
-    "feasibility_device_plan_chunk_2_of_6",
-    "feasibility_device_plan_chunk_3_of_6",
-    "feasibility_device_plan_chunk_4_of_6",
-    "feasibility_device_plan_chunk_5_of_6",
-    "feasibility_device_plan_chunk_6_of_6",
-    "feasibility_device_plan_chunk_1_of_6",
-    "feasibility_device_plan_chunk_2_of_6",
-    "feasibility_device_plan_chunk_3_of_6",
-    "feasibility_device_plan_chunk_4_of_6",
-    "feasibility_device_plan_chunk_5_of_6",
-    "feasibility_device_plan_chunk_6_of_6",
-    "feasibility_device_plan_chunk_1_of_6",
-    "feasibility_device_plan_chunk_2_of_6",
-    "feasibility_device_plan_chunk_3_of_6",
-    "feasibility_device_plan_chunk_4_of_6",
-    "feasibility_device_plan_chunk_5_of_6"
+    "feasibility_device_plan_chunk_1_of_7",
+    "feasibility_device_plan_chunk_2_of_7",
+    "feasibility_device_plan_chunk_3_of_7",
+    "feasibility_device_plan_chunk_4_of_7",
+    "feasibility_device_plan_chunk_5_of_7",
+    "feasibility_device_plan_chunk_6_of_7",
+    "feasibility_device_plan_chunk_7_of_7",
+    "feasibility_device_plan_chunk_1_of_7",
+    "feasibility_device_plan_chunk_2_of_7",
+    "feasibility_device_plan_chunk_3_of_7",
+    "feasibility_device_plan_chunk_4_of_7",
+    "feasibility_device_plan_chunk_5_of_7"
   ]
 }

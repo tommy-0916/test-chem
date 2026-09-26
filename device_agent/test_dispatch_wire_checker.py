@@ -114,6 +114,34 @@ class WireCheckerTests(unittest.TestCase):
         self.assertEqual(plan["1号原液瓶"]["原液用量"], 0.5)
         self.assertNotIn("N号原液瓶", plan)
 
+    def test_unit_bearing_numeric_projection_matches_wire_payload(self):
+        workflow = {
+            "steps": [{
+                "step_number": 1,
+                "workstation": "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
+                "operation": "开始搅拌",
+                "parameters": {
+                    "容器类型": "进样瓶",
+                    "容器数量": 1,
+                    "容器编号": [1],
+                    "搅拌速度": "600 rpm",
+                    "搅拌时间": "2 min",
+                },
+            }]
+        }
+        original = copy.deepcopy(workflow)
+
+        result = self.check(workflow)
+
+        self.assertEqual(workflow, original)
+        self.assertEqual(result["findings"], [])
+        expected = result["expected_payload"]["experiment_steps"]["steps"][0]
+        semantic = result["semantic_workflow"]["steps"][0]
+        self.assertEqual(expected["parameters"]["搅拌速度"], 600)
+        self.assertEqual(expected["parameters"]["搅拌时间"], 2)
+        self.assertEqual(semantic["parameters"]["搅拌速度"], 600)
+        self.assertEqual(semantic["parameters"]["搅拌时间"], 2)
+
     def test_duplicate_bottle_conversion_must_not_overwrite_silently(self):
         step = addition()
         sources = step["parameters"]["加样方案"][0]["N号原液瓶"]

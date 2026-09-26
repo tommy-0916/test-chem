@@ -27,10 +27,14 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
+    from .contract_value_normalizer import normalize_contract_scalar
     from .utils.paths import workstation_dir
+    from .utils.workstation_loader import resolve_explicit_alias
     from .skill_contract_audit import parse_operation_schemas
 except ImportError:  # Direct script execution from device_agent/.
+    from contract_value_normalizer import normalize_contract_scalar
     from utils.paths import workstation_dir
+    from utils.workstation_loader import resolve_explicit_alias
     from skill_contract_audit import parse_operation_schemas
 
 CONVERSION_FILENAME = "0410数据转换.txt"
@@ -72,6 +76,10 @@ CURATED_STATION_ALIASES: Dict[str, str] = {
     "Multi_Channel_Solid_Weighing_Workstation_V1": "多通道固体称量_V1",
     "液体进样站": "移液平台1ml_V2",
     "移液平台": "移液平台1ml_V2",
+    "移液平台_1ml_V1": "移液平台1ml_V1",
+    "移液平台_1ml_V2": "移液平台1ml_V2",
+    "移液平台_5ml_V1": "移液平台5ml_V1",
+    "移液平台_5ml_V2": "移液平台5ml_V2",
     "烘干机": "烘干机_V1",
     "离心机": "离心机_V1",
     "纯化工作站": "纯化工作站_V1",
@@ -128,6 +136,328 @@ WORKFLOW_ONLY_PLATFORM_METADATA: Dict[Tuple[str, str], set[str]] = {
     ): {"容器类型", "容器数量"},
 }
 
+
+MATERIAL_EXECUTION_CONTRACT_FIELDS = (
+    "material_runtime_measurement_obligations",
+    "material_consumption_events",
+    "material_relationship_compiler",
+)
+_MATERIAL_RELATIONSHIP_COMPILER_RULE = "material-relationship-compiler/v1"
+
+
+def _material_guard_finding(
+    code: str,
+    message: str,
+    json_pointer: str,
+    **details: Any,
+) -> Dict[str, Any]:
+    finding: Dict[str, Any] = {
+        "code": code,
+        "severity": "error",
+        "stage": "dispatch_payload",
+        "message": message,
+        "json_pointer": json_pointer,
+    }
+    finding.update(details)
+    return finding
+
+
+def audit_material_execution_dispatch_guards(
+    material_contract: Any,
+) -> List[Dict[str, Any]]:
+    """Validate the signed planning sidecars needed before material dispatch.
+
+    The platform wire envelope has no channel for executing a pending material
+    measurement gate or for turning a planned consumption into an idempotent
+    execution-ledger commit.  This audit therefore verifies sidecar identity
+    and fails closed while execution inventory is not independently ready.
+    It never treats planned targets, estimates, or compiler metadata as an
+    observed quantity.
+    """
+
+    if not isinstance(material_contract, dict):
+        return [
+            _material_guard_finding(
+                "material_execution_contract_invalid",
+                "material execution contract must be an object",
+                "",
+                actual=type(material_contract).__name__,
+            )
+        ]
+
+    declared_fields = {
+        field for field in MATERIAL_EXECUTION_CONTRACT_FIELDS
+        if field in material_contract
+    }
+    if not declared_fields:
+        return []
+
+    findings: List[Dict[str, Any]] = []
+    obligations = material_contract.get(
+        "material_runtime_measurement_obligations", []
+    )
+    consumptions = material_contract.get("material_consumption_events", [])
+    manifest = material_contract.get("material_relationship_compiler", {})
+    if not isinstance(obligations, list):
+        findings.append(
+            _material_guard_finding(
+                "material_runtime_obligations_invalid",
+                "material_runtime_measurement_obligations must be an array",
+                "/material_runtime_measurement_obligations",
+            )
+        )
+        obligations = []
+    if not isinstance(consumptions, list):
+        findings.append(
+            _material_guard_finding(
+                "material_consumption_events_invalid",
+                "material_consumption_events must be an array",
+                "/material_consumption_events",
+            )
+        )
+        consumptions = []
+    if not isinstance(manifest, dict):
+        findings.append(
+            _material_guard_finding(
+                "material_relationship_compiler_manifest_invalid",
+                "material_relationship_compiler must be an object",
+                "/material_relationship_compiler",
+            )
+        )
+        manifest = {}
+
+    has_contract = bool(obligations) or bool(consumptions) or bool(manifest)
+    if not has_contract:
+        return findings
+    if not manifest:
+        findings.append(
+            _material_guard_finding(
+                "material_relationship_compiler_manifest_missing",
+                "material execution sidecars are not bound to a compiler manifest",
+                "/material_relationship_compiler",
+            )
+        )
+        manifest = {}
+
+    obligation_ids: List[str] = []
+    managed_obligation_ids: List[str] = []
+    transition_to_obligation: Dict[str, str] = {}
+    for index, raw in enumerate(obligations):
+        pointer = f"/material_runtime_measurement_obligations/{index}"
+        if not isinstance(raw, dict):
+            findings.append(
+                _material_guard_finding(
+                    "material_runtime_obligation_invalid",
+                    "runtime measurement obligation must be an object",
+                    pointer,
+                )
+            )
+            continue
+        obligation_id = str(raw.get("obligation_id") or "").strip()
+        if not obligation_id:
+            findings.append(
+                _material_guard_finding(
+                    "material_runtime_obligation_id_missing",
+                    "runtime measurement obligation has no stable obligation_id",
+                    pointer + "/obligation_id",
+                )
+            )
+        elif obligation_id in obligation_ids:
+            findings.append(
+                _material_guard_finding(
+                    "material_runtime_obligation_id_duplicate",
+                    "runtime measurement obligation_id is duplicated",
+                    pointer + "/obligation_id",
+                    actual=obligation_id,
+                )
+            )
+        else:
+            obligation_ids.append(obligation_id)
+            if raw.get("construction_rule") == _MATERIAL_RELATIONSHIP_COMPILER_RULE:
+                managed_obligation_ids.append(obligation_id)
+        transition_id = str(raw.get("transition_id") or "").strip()
+        if transition_id and obligation_id:
+            transition_to_obligation[transition_id] = obligation_id
+        if (
+            raw.get("status") != "pending"
+            or raw.get("record_phase") != "planned"
+            or raw.get("quantity_assertion") != "planned_only"
+            or raw.get("execution_fact") is not False
+            or raw.get("actual_measurements") != []
+        ):
+            findings.append(
+                _material_guard_finding(
+                    "material_runtime_obligation_not_planned_only",
+                    "a signed plan may contain only pending planned-only measurement obligations; it cannot assert runtime observations",
+                    pointer,
+                )
+            )
+        for gate_name, policy in (
+            (
+                "pre_consumption_gate",
+                "all_measurements_verified_and_quantity_sufficient",
+            ),
+            ("downstream_consumption_gate", "all_output_measurements_verified"),
+        ):
+            gate = raw.get(gate_name)
+            if (
+                not isinstance(gate, dict)
+                or gate.get("policy") != policy
+                or not isinstance(
+                    gate.get("blocked_until_measurement_event_ids"), list
+                )
+            ):
+                findings.append(
+                    _material_guard_finding(
+                        "material_runtime_gate_invalid",
+                        "runtime measurement obligation lacks its deterministic measurement gate",
+                        pointer + f"/{gate_name}",
+                        expected_policy=policy,
+                    )
+                )
+
+    consumption_ids: List[str] = []
+    managed_consumption_ids: List[str] = []
+    runtime_blocked_consumptions = 0
+    for index, raw in enumerate(consumptions):
+        pointer = f"/material_consumption_events/{index}"
+        if not isinstance(raw, dict):
+            findings.append(
+                _material_guard_finding(
+                    "material_consumption_event_invalid",
+                    "material consumption event must be an object",
+                    pointer,
+                )
+            )
+            continue
+        event_id = str(raw.get("consumption_event_id") or "").strip()
+        if not event_id:
+            findings.append(
+                _material_guard_finding(
+                    "material_consumption_event_id_missing",
+                    "material consumption event has no stable consumption_event_id",
+                    pointer + "/consumption_event_id",
+                )
+            )
+        elif event_id in consumption_ids:
+            findings.append(
+                _material_guard_finding(
+                    "material_consumption_event_id_duplicate",
+                    "material consumption_event_id is duplicated",
+                    pointer + "/consumption_event_id",
+                    actual=event_id,
+                )
+            )
+        else:
+            consumption_ids.append(event_id)
+            if raw.get("construction_rule") == _MATERIAL_RELATIONSHIP_COMPILER_RULE:
+                managed_consumption_ids.append(event_id)
+        if (
+            raw.get("status") != "pending_execution"
+            or raw.get("record_phase") != "planned"
+            or raw.get("quantity_assertion") != "planned_only"
+            or raw.get("execution_fact") is not False
+            or raw.get("actual_quantity") is not None
+        ):
+            findings.append(
+                _material_guard_finding(
+                    "material_consumption_event_not_planned_only",
+                    "a signed plan may contain only pending planned-only consumption events; it cannot assert an executed debit",
+                    pointer,
+                )
+            )
+        transition_id = str(raw.get("transition_id") or "").strip()
+        if transition_id in transition_to_obligation:
+            blocked_ids = raw.get("blocked_until_measurement_event_ids")
+            if not isinstance(blocked_ids, list) or not blocked_ids:
+                findings.append(
+                    _material_guard_finding(
+                        "runtime_consumption_gate_missing",
+                        "a runtime-measured input cannot be consumed without explicit measurement-event gates",
+                        pointer + "/blocked_until_measurement_event_ids",
+                        obligation_id=transition_to_obligation[transition_id],
+                    )
+                )
+            else:
+                runtime_blocked_consumptions += 1
+
+    if manifest:
+        if manifest.get("construction_rule") != _MATERIAL_RELATIONSHIP_COMPILER_RULE:
+            findings.append(
+                _material_guard_finding(
+                    "material_relationship_compiler_manifest_invalid",
+                    "material relationship compiler manifest has an unknown construction_rule",
+                    "/material_relationship_compiler/construction_rule",
+                    actual=manifest.get("construction_rule"),
+                )
+            )
+        for field, actual_ids in (
+            (
+                "managed_runtime_measurement_obligation_ids",
+                managed_obligation_ids,
+            ),
+            ("managed_consumption_event_ids", managed_consumption_ids),
+        ):
+            declared = manifest.get(field)
+            if (
+                not isinstance(declared, list)
+                or any(not isinstance(value, str) or not value for value in declared)
+                or sorted(declared) != sorted(actual_ids)
+            ):
+                findings.append(
+                    _material_guard_finding(
+                        "material_execution_manifest_coverage_mismatch",
+                        "compiler manifest does not exactly cover its material execution sidecar IDs",
+                        f"/material_relationship_compiler/{field}",
+                        expected=sorted(actual_ids),
+                        actual=declared,
+                    )
+                )
+
+    if obligations or consumptions:
+        quantity_audit = material_contract.get("quantity_audit")
+        if not isinstance(quantity_audit, dict):
+            findings.append(
+                _material_guard_finding(
+                    "material_execution_readiness_missing",
+                    "material execution sidecars require an independent inventory-readiness decision before dispatch",
+                    "/quantity_audit",
+                )
+            )
+        elif quantity_audit.get("execution_inventory_ready") is not True:
+            findings.append(
+                _material_guard_finding(
+                    "material_execution_inventory_not_ready",
+                    "planned quantities and pending measurement obligations are not execution inventory; dispatch remains blocked",
+                    "/quantity_audit/execution_inventory_ready",
+                    actual=quantity_audit.get("execution_inventory_ready"),
+                    inventory_readiness_status=quantity_audit.get(
+                        "inventory_readiness_status"
+                    ),
+                )
+            )
+
+    if obligations:
+        findings.append(
+            _material_guard_finding(
+                "runtime_material_guard_not_dispatchable",
+                "the current platform payload cannot execute signed measurement, sufficiency, and stop-before-consumption gates",
+                "/material_runtime_measurement_obligations",
+                pending_obligation_ids=sorted(obligation_ids),
+                gated_consumption_event_count=runtime_blocked_consumptions,
+            )
+        )
+    if consumptions:
+        findings.append(
+            _material_guard_finding(
+                "material_consumption_commit_not_dispatchable",
+                "the current platform payload cannot carry signed consumption-event identities or atomically reserve and commit inventory; planned events must not be treated as executed debits",
+                "/material_consumption_events",
+                pending_consumption_event_ids=sorted(consumption_ids),
+            )
+        )
+    return findings
+
 # ``0410数据转换.txt`` predates the 50 mL support now declared by the latest
 # lab-design-all Liquid_Handling_Station_1ml_V2 Skill.  Keep the old wire field
 # names/types, but widen only the container enum/range proven by that Skill.
@@ -153,10 +483,22 @@ class DispatchCatalog:
     def __init__(self) -> None:
         self.stations: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
         self.station_ids: Dict[str, int] = {}
+        # Compatibility storage for stricter checker subclasses.  The base
+        # formatter resolver deliberately does not consult this normalized
+        # index because normalized-name matching is not an explicit alias.
         self._normalized_station_index: Dict[str, str] = {}
+        self._station_alias_targets: Dict[str, set[str]] = {
+            alias: {target} for alias, target in CURATED_STATION_ALIASES.items()
+        }
         # English station code → 对照表 display name (loader-provided); lets
         # every English identifier bridge to the platform name generically.
         self._code_to_display: Dict[str, str] = {}
+
+    def _register_station_alias(self, alias: str, target: str) -> None:
+        alias = str(alias or "").strip()
+        target = str(target or "").strip()
+        if alias and target:
+            self._station_alias_targets.setdefault(alias, set()).add(target)
 
     @classmethod
     def load(cls, workstation_loader: Any = None) -> "DispatchCatalog":
@@ -236,9 +578,6 @@ class DispatchCatalog:
                             "range": param.get("range"),
                         }
                 self.stations.setdefault(station, {})[operation] = specs
-                self._normalized_station_index.setdefault(
-                    _normalize_name(station), station
-                )
             break  # first existing spec wins
 
     def _load_from_loader(self, workstation_loader: Any) -> None:
@@ -281,11 +620,9 @@ class DispatchCatalog:
                             }
                         operation_specs[operation_name] = specs
                     self.stations[platform] = operation_specs
-                    for identifier in (platform, code_name, display):
-                        if identifier:
-                            self._normalized_station_index.setdefault(
-                                _normalize_name(identifier), platform
-                            )
+            if platform:
+                for identifier in (code_name, display):
+                    self._register_station_alias(identifier, platform)
             match = STATION_CODE_RE.search(content)
             if not match:
                 continue
@@ -304,57 +641,19 @@ class DispatchCatalog:
     # ------------------------------------------------------------------
 
     def resolve_station(self, name: str) -> Optional[str]:
-        text = str(name or "").strip()
-        if not text or not self.stations:
-            return None
-        if text in self.stations:
-            return text
-        if text in CURATED_STATION_ALIASES:
-            candidate = CURATED_STATION_ALIASES[text]
-            if candidate in self.stations:
-                return candidate
-        # English station codes bridge through the 对照表 display name.
-        display = self._code_to_display.get(text)
-        if display:
-            if display in CURATED_STATION_ALIASES:
-                candidate = CURATED_STATION_ALIASES[display]
-                if candidate in self.stations:
-                    return candidate
-            normalized_display = _normalize_name(display)
-            if normalized_display in self._normalized_station_index:
-                return self._normalized_station_index[normalized_display]
-        normalized = _normalize_name(text)
-        if normalized in self._normalized_station_index:
-            return self._normalized_station_index[normalized]
-        # containment fallback for suffix-only differences
-        for norm, station in self._normalized_station_index.items():
-            if norm and (norm in normalized or normalized in norm):
-                return station
-        return None
+        return resolve_explicit_alias(
+            name,
+            self.stations,
+            self._station_alias_targets,
+        )
 
     def resolve_operation(self, platform_station: str, operation: str) -> Optional[str]:
         operations = self.stations.get(platform_station, {})
-        text = str(operation or "").strip()
-        if not text:
-            return None
-        if text in operations:
-            return text
-        for candidate in CURATED_OPERATION_ALIASES.get(text, []):
-            if candidate in operations:
-                return candidate
-        normalized = _normalize_name(text)
-        for candidate in operations:
-            if _normalize_name(candidate) == normalized:
-                return candidate
-        for candidate in operations:
-            norm_candidate = _normalize_name(candidate)
-            if norm_candidate.startswith(normalized) or normalized.startswith(
-                norm_candidate
-            ):
-                return candidate
-        if len(operations) == 1:
-            return next(iter(operations))
-        return None
+        return resolve_explicit_alias(
+            operation,
+            operations,
+            CURATED_OPERATION_ALIASES,
+        )
 
     def resolve_parameter(
         self,
@@ -404,29 +703,22 @@ def _coerce_value(value: Any, spec: Dict[str, Any]) -> Tuple[Any, Optional[str]]
     declared = str(spec.get("type", "") or "").lower()
     if declared in {"", "array"} or isinstance(value, (list, dict)):
         return value, None
-    if declared == "int":
-        if isinstance(value, bool):
-            return int(value), None
-        if isinstance(value, int):
-            return value, None
-        if isinstance(value, float) and value.is_integer():
-            return int(value), None
-        text = str(value).strip()
+    if declared in {"int", "integer", "float", "number", "double"}:
+        text = value.strip() if isinstance(value, str) else ""
         # SKILL label/value enums dispatch the value: 是→1, 否→0
-        if text in {"是", "true", "True"}:
+        if declared in {"int", "integer"} and text in {"是", "true", "True"}:
             return 1, None
-        if text in {"否", "false", "False"}:
+        if declared in {"int", "integer"} and text in {"否", "false", "False"}:
             return 0, None
-        if re.fullmatch(r"-?\d+", text):
-            return int(text), None
-        return value, f"无法把 `{value!r}` 转为平台 int 类型"
-    if declared == "float":
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value), None
-        text = str(value).strip()
-        if re.fullmatch(r"-?\d+(?:\.\d+)?", text):
-            return float(text), None
-        return value, f"无法把 `{value!r}` 转为平台 float 类型"
+        normalized = normalize_contract_scalar(value, declared, spec.get("unit"))
+        if normalized.accepted:
+            return normalized.new_value, None
+        return (
+            value,
+            f"无法把 `{value!r}` 按平台 {declared}"
+            f"{(' / ' + str(spec.get('unit'))) if spec.get('unit') else ''} 契约转换"
+            f"（{normalized.reason}）",
+        )
     if declared == "string":
         if isinstance(value, str):
             return value, None
@@ -481,12 +773,16 @@ def format_dispatch_payload(
     catalog: DispatchCatalog,
     *,
     plan_name: str = "",
+    material_contract: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Convert a validated workflow into the platform's exact dispatch form.
 
-    Returns ``{"payload": envelope, "warnings": [...], "mapped_steps": n,
-    "unmapped_steps": n}``. Original workflow_json is left untouched; steps
-    that cannot be mapped keep their original form and are flagged.
+    Returns ``{"payload": envelope-or-None, "warnings": [...],
+    "mapped_steps": n, "unmapped_steps": n, "material_guard_findings": [...]}``.
+    When a material contract is supplied, an unresolved execution-inventory or
+    runtime-measurement guard suppresses the executable payload.  Original
+    inputs are left untouched; steps that cannot be mapped keep their original
+    form and are flagged.
     """
     warnings: List[str] = []
     formatted_steps: List[Dict[str, Any]] = []
@@ -575,7 +871,12 @@ def format_dispatch_payload(
         if station_id:
             formatted["id"] = station_id
         # keep the observation-hierarchy trace (issue 6) on dispatch steps too
-        for trace_key in ("source_macro_step", "macro_action_id", "observation_point_id"):
+        for trace_key in (
+            "source_macro_step_id",
+            "source_macro_step",
+            "macro_action_id",
+            "observation_point_id",
+        ):
             if step.get(trace_key) is not None:
                 formatted[trace_key] = step[trace_key]
         formatted_steps.append(formatted)
@@ -585,11 +886,18 @@ def format_dispatch_payload(
         "experiment_steps": {"steps": formatted_steps, "unknown_steps": None},
         "plan_name": plan_name or "chemagent_workflow",
     }
+    material_guard_findings = (
+        audit_material_execution_dispatch_guards(material_contract)
+        if material_contract is not None
+        else []
+    )
     return {
-        "payload": envelope,
+        "payload": None if material_guard_findings else envelope,
         "warnings": warnings,
         "mapped_steps": mapped,
         "unmapped_steps": unmapped,
+        "material_guard_findings": material_guard_findings,
+        "dispatchable": not material_guard_findings and unmapped == 0,
     }
 
 

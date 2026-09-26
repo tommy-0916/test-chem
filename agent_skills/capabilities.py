@@ -76,8 +76,156 @@ EXPERIMENT_RULES = (
 )
 
 
+# Reviewed, exact capability-to-Skill-operation bindings.  These records are
+# deliberately keyed by both the canonical station code and the abstract
+# capability ID.  They are not derived from operation names, descriptions,
+# macro ordinals, or material names.  Every listed operation is authorized as
+# a direct satisfier of that capability role; same-station prerequisites such
+# as opening/closing a lid, sample preparation, or pick/place helpers are not
+# included merely because they appear in the same workflow.  Updating a
+# workstation Skill therefore requires an explicit review of this table before
+# the generated truth index can be rebuilt successfully.
+REVIEWED_CAPABILITY_OPERATION_BINDINGS: dict[
+    tuple[str, str], tuple[str, ...]
+] = {
+    ("Centrifuge_V1", "solid-liquid-separation"): ("离心-复位机制",),
+    ("Cleaning_and_Dispensing_Workstation_V1", "liquid-dosing"): (
+        "批量加液流程",
+    ),
+    ("Container_storaging_Station_V1", "sample-storage"): (
+        "静置",
+        "物料放置",
+    ),
+    ("Cooling_Workstation_V1", "cooling"): ("冷却流程",),
+    ("Drying_Oven_V1", "drying-aging"): ("烘干主流程",),
+    ("General_Material_Station_V1", "container-supply"): ("物料拿取",),
+    ("Heat_Resistant_Material_Station", "container-supply"): ("容器拿取",),
+    ("Heating_Magnetic_Stirring_Workstation_V1", "heated-stirring"): (
+        "加热磁力搅拌全流程",
+    ),
+    (
+        "Intelligent_Photocatalysis_Container_Transfer_Station_V1",
+        "sample-routing",
+    ): (
+        "光催化压膜转运至中转位_96位孔板",
+        "平台联动孔板拿取_96位孔板",
+        "平台联动孔板放置_96位孔板",
+    ),
+    ("Liquid_Handling_Station_1ml_V1", "liquid-dosing"): (
+        "移液到96位孔板",
+        "加液_物料绑定",
+    ),
+    ("Liquid_Handling_Station_1ml_V2", "liquid-dosing"): ("加液_物料绑定",),
+    ("Liquid_Handling_Station_4Channel_V1", "liquid-dosing"): ("液体加样",),
+    ("Liquid_Handling_Station_5ml_V1", "liquid-dosing"): ("加液_物料绑定",),
+    ("Liquid_Handling_Station_5ml_V2", "liquid-transfer"): ("纯移液",),
+    ("Liquid_Handling_Station_5ml_V3", "liquid-dosing"): ("反应管加样",),
+    ("Liquid_Pouring_Workstation_V1", "supernatant-removal"): ("液体倾倒",),
+    ("Muffle_Furnace_V1", "calcination"): ("马弗炉加热流程_96石英孔板",),
+    ("Multi_Channel_Solid_Weighing_Workstation_V1", "solid-dosing"): (
+        "固体进样-文件传参-机器人",
+    ),
+    ("Multi_Channel_Solid_Weighing_Workstation_V2", "solid-dosing"): (
+        "固体称量",
+    ),
+    ("Plate_storaging_Station_V1", "sample-storage"): (
+        "回收96孔板和氢气膜",
+        "回收96孔板",
+    ),
+    ("Purification_Workstation_V1", "solid-liquid-separation"): ("纯化离心",),
+    ("Purification_Workstation_V1", "washing-purification"): ("纯化离心",),
+    ("Room_Temperture_Magnetic_Stirrer_Workstation_V1", "ambient-mixing"): (
+        "开始搅拌",
+    ),
+    ("Single_Channel_Solid_Weighing_Workstation_V1", "solid-dosing"): (
+        "固体进样",
+    ),
+    ("Solid_Sample_Transfer_Workstation_V1", "solid-transfer"): (
+        "固体样品转移",
+    ),
+    ("Ultrasonic_Disperser_V1", "ultrasonic-treatment"): ("超声清洗",),
+    ("Ultrasonic_Disperser_V2", "ultrasonic-treatment"): ("超声清洗",),
+    ("Ultrasonic_Liquid_Handling_Workstation_V1", "ultrasonic-treatment"): (
+        "超声加液流程",
+        "开启超声",
+    ),
+    ("Dual_Station_Electrochemical_Workstation_V2", "electrochemistry"): (
+        "电化学检测",
+    ),
+    (
+        "High_Temperature_High_Pressure_Microreaction_Platform_V1",
+        "thermal-catalysis",
+    ): ("反应釜微反应",),
+    ("Photocatalysis_Workstation_V1", "photocatalysis"): ("光催化流程",),
+    ("Photocatalysis_Workstation_V2", "photocatalysis"): ("光催化流程",),
+    ("Photocatalysis_Workstation_V2", "photodeposition"): ("光催化流程",),
+    ("Post_Reaction_Processing_Platform_V1", "reaction-workup"): ("后处理",),
+    ("Darkbox_Imaging_Workstation_V1", "darkbox-imaging"): ("暗箱光照流程",),
+    ("Fluorescence_Spectrometer_V1", "fluorescence"): ("荧光光谱进样绘图",),
+    ("Gas_Chromatograph_V1", "gas-chromatography"): ("气相分析",),
+    (
+        "Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1",
+        "high-speed-imaging",
+    ): ("多样品测试-无活化",),
+    ("Infrared_Spectrometer_V1", "infrared"): ("谱学红外流程-夹具识别",),
+    (
+        "Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation",
+        "wettability",
+    ): ("接触角-张力仪实验-迭代",),
+    (
+        "LED_Illumination_and_Membrane_Clamping_Workstation_V1",
+        "photocatalytic-hydrogen",
+    ): ("氢气检测膜压膜后光照流程",),
+    ("Liquid_Chromatograph_V1", "liquid-chromatography"): ("液相分析",),
+    ("Microplate_Reader_V1", "microplate-assay"): ("酶标仪303谱学流程",),
+    ("Spectroscopy_Container_Transfer_Station_V1", "sample-routing"): (
+        "容器中转",
+    ),
+    ("UV_Vis_Spectrometer_V1", "uv-vis"): ("紫外光谱进样绘图",),
+    ("XRD_V1", "xrd"): ("XRD滴液检测全流程",),
+}
+
+# A station description can claim a scientific capability even though its
+# executable Skill operations do not implement that claim.  Keep such reviewed
+# discrepancies explicit and fail closed: they are not empty mappings and must
+# never authorize a Device operation.
+REVIEWED_CAPABILITY_OPERATION_GAPS: dict[tuple[str, str], str] = {
+    (
+        "Spectroscopy_Magnetic_Stirrer_Workstation_V1",
+        "spectroscopy-preparation",
+    ): (
+        "the station description declares parallel magnetic stirring, but the "
+        "only executable operation, 样品架放置-夹具识别, contains no stirring "
+        "operation or stirring-control contract"
+    ),
+}
+
+
 def semantic_mapping_digest() -> str:
-    return hashlib.sha256(json.dumps(EXPERIMENT_RULES, ensure_ascii=False).encode()).hexdigest()
+    reviewed_bindings = [
+        [station_code, capability_id, list(operation_names)]
+        for (station_code, capability_id), operation_names in sorted(
+            REVIEWED_CAPABILITY_OPERATION_BINDINGS.items()
+        )
+    ]
+    reviewed_gaps = [
+        [station_code, capability_id, reason]
+        for (station_code, capability_id), reason in sorted(
+            REVIEWED_CAPABILITY_OPERATION_GAPS.items()
+        )
+    ]
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "experiment_rules": EXPERIMENT_RULES,
+                "capability_operation_bindings": reviewed_bindings,
+                "capability_operation_gaps": reviewed_gaps,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def extract_experiment_capabilities(station: dict[str, Any]) -> list[dict[str, Any]]:
@@ -94,11 +242,153 @@ def extract_experiment_capabilities(station: dict[str, Any]) -> list[dict[str, A
             continue
         prefix = re.split(r"[。；，,;]", description[:match.start()])[-1]
         denied = bool(re.search(r"不支持|不能|不可|禁止|不具备|不提供", prefix[-12:]))
-        result.append({
+        record = {
             "id": identifier, "name": label, "support_status": "unsupported" if denied else "supported",
             "evidence": {**source, "quote": prefix + match.group(0) if denied else match.group(0)},
-        })
+        }
+        reviewed_operations = REVIEWED_CAPABILITY_OPERATION_BINDINGS.get(
+            (code, identifier)
+        )
+        reviewed_gap = REVIEWED_CAPABILITY_OPERATION_GAPS.get((code, identifier))
+        if not denied and reviewed_gap:
+            record["declared_support_status"] = "supported"
+            record["support_status"] = "unsupported"
+            record["operation_mapping_status"] = "truth_gap"
+            record["operation_mapping_gap"] = {
+                "code": "no_executable_operation_contract",
+                "reason": reviewed_gap,
+            }
+        elif not denied and reviewed_operations:
+            record["operation_mapping_status"] = "mapped"
+            record["operation_names"] = list(reviewed_operations)
+        result.append(record)
     return result
+
+
+def validated_capability_operation_bindings(
+    station: dict[str, Any],
+) -> dict[str, list[str]]:
+    """Validate and return the reviewed bindings for one generated station.
+
+    This is intentionally fail-closed.  Every supported capability in the
+    generated truth record must have one reviewed mapping, every reviewed
+    mapping must name a currently supported capability, and every mapped
+    operation must exist exactly once in the parsed Skill contract.
+    """
+
+    station_code = str(station.get("station_code") or "").strip()
+    if not station_code:
+        raise ValueError("capability-operation binding requires station_code")
+    raw_capabilities = station.get("experiment_capabilities")
+    raw_operations = station.get("operations")
+    if not isinstance(raw_capabilities, list) or not isinstance(raw_operations, list):
+        raise ValueError(
+            f"{station_code}: capability-operation binding requires capability and operation arrays"
+        )
+
+    supported_ids = [
+        str(capability.get("id") or "").strip()
+        for capability in raw_capabilities
+        if isinstance(capability, dict)
+        and capability.get("support_status") == "supported"
+    ]
+    if any(not capability_id for capability_id in supported_ids) or len(
+        supported_ids
+    ) != len(set(supported_ids)):
+        raise ValueError(
+            f"{station_code}: supported capability IDs must be unique and nonempty"
+        )
+    operation_names = [
+        str(operation.get("name") or "").strip()
+        for operation in raw_operations
+        if isinstance(operation, dict)
+    ]
+    if any(not operation_name for operation_name in operation_names) or len(
+        operation_names
+    ) != len(set(operation_names)):
+        raise ValueError(
+            f"{station_code}: parsed Skill operation names must be unique and nonempty"
+        )
+
+    configured = {
+        capability_id: list(reviewed_operations)
+        for (configured_station, capability_id), reviewed_operations in (
+            REVIEWED_CAPABILITY_OPERATION_BINDINGS.items()
+        )
+        if configured_station == station_code
+    }
+    configured_gaps = {
+        capability_id: reason
+        for (configured_station, capability_id), reason in (
+            REVIEWED_CAPABILITY_OPERATION_GAPS.items()
+        )
+        if configured_station == station_code
+    }
+    observed_gaps = {
+        str(capability.get("id") or "").strip(): capability
+        for capability in raw_capabilities
+        if isinstance(capability, dict)
+        and capability.get("operation_mapping_status") == "truth_gap"
+    }
+    if set(observed_gaps) != set(configured_gaps):
+        raise ValueError(
+            f"{station_code}: reviewed capability-operation truth gaps do not match "
+            f"generated capability records (missing={sorted(set(configured_gaps) - set(observed_gaps))}, "
+            f"unexpected={sorted(set(observed_gaps) - set(configured_gaps))})"
+        )
+    for capability_id, reason in configured_gaps.items():
+        gap_record = observed_gaps[capability_id]
+        expected_gap = {
+            "code": "no_executable_operation_contract",
+            "reason": reason,
+        }
+        if (
+            gap_record.get("support_status") != "unsupported"
+            or gap_record.get("declared_support_status") != "supported"
+            or gap_record.get("operation_mapping_gap") != expected_gap
+            or gap_record.get("operation_names")
+        ):
+            raise ValueError(
+                f"{station_code}/{capability_id}: truth gap must remain explicitly "
+                "unsupported and must not authorize operations"
+            )
+    missing = sorted(set(supported_ids) - set(configured))
+    stale = sorted(set(configured) - set(supported_ids))
+    if missing or stale:
+        raise ValueError(
+            f"{station_code}: reviewed capability-operation bindings do not match "
+            f"supported capabilities (missing={missing}, stale={stale})"
+        )
+
+    available_operations = set(operation_names)
+    for capability_id, reviewed_operations in configured.items():
+        if not reviewed_operations or len(reviewed_operations) != len(
+            set(reviewed_operations)
+        ):
+            raise ValueError(
+                f"{station_code}/{capability_id}: reviewed operations must be nonempty and unique"
+            )
+        unknown_operations = sorted(
+            set(reviewed_operations) - available_operations
+        )
+        if unknown_operations:
+            raise ValueError(
+                f"{station_code}/{capability_id}: reviewed operations are absent from "
+                f"the parsed Skill contract: {unknown_operations}"
+            )
+        capability_record = next(
+            capability
+            for capability in raw_capabilities
+            if isinstance(capability, dict)
+            and capability.get("support_status") == "supported"
+            and str(capability.get("id") or "").strip() == capability_id
+        )
+        if capability_record.get("operation_names") != reviewed_operations:
+            raise ValueError(
+                f"{station_code}/{capability_id}: capability record does not carry "
+                "the exact reviewed operation mapping"
+            )
+    return configured
 
 
 def _resolve_path(value: str | Path) -> Path:
@@ -318,7 +608,18 @@ def _sanitize_projection(context: dict[str, Any], tier: str) -> dict[str, Any]:
             continue
         entry = _pick_scalars(original, common)
         if tier == "experiment":
-            entry.update(_pick_scalars(original, ("id", "support_status")))
+            entry.update(
+                _pick_scalars(
+                    original,
+                    (
+                        "id",
+                        "support_status",
+                        "declared_support_status",
+                        "operation_mapping_status",
+                    ),
+                )
+            )
+            entry.update(_pick(original, ("operation_mapping_gap",)))
             if "evidence" in original:
                 entry["evidence"] = _pick_scalars(original["evidence"], ("line", "section", "quote", "document"))
         else:
@@ -478,7 +779,19 @@ def project_device_context(context: dict[str, Any], tier: str) -> dict[str, Any]
             for capability in capabilities:
                 if not isinstance(capability, dict):
                     continue
-                entry = {key: copy.deepcopy(capability[key]) for key in ("id", "name", "support_status", "evidence") if key in capability}
+                entry = {
+                    key: copy.deepcopy(capability[key])
+                    for key in (
+                        "id",
+                        "name",
+                        "support_status",
+                        "declared_support_status",
+                        "operation_mapping_status",
+                        "operation_mapping_gap",
+                        "evidence",
+                    )
+                    if key in capability
+                }
                 entry["evidence"] = _compact_evidence(entry.get("evidence"))
                 result[item_key].append({**common, **entry})
             if not capabilities:

@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from chem_agent_contracts.identity import decode_package_identity
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from agent_skills.responses_diagnostics import (
     format_responses_failure,
@@ -56,6 +58,26 @@ except ImportError:
         merge_fragment,
     )
 try:
+    from .feasibility_certificate import (
+        FEASIBILITY_CERTIFICATE_VERSION,
+        FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+        device_plan_contract_digest,
+        device_plan_contract_view,
+        feasibility_certificate_id,
+        feasibility_certificate_protected_payload,
+        strict_feasibility_certificate_version,
+    )
+except ImportError:
+    from feasibility_certificate import (
+        FEASIBILITY_CERTIFICATE_VERSION,
+        FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS,
+        device_plan_contract_digest,
+        device_plan_contract_view,
+        feasibility_certificate_id,
+        feasibility_certificate_protected_payload,
+        strict_feasibility_certificate_version,
+    )
+try:
     from .checkpoints import (
         DeviceCheckpointStore,
         digest as checkpoint_digest,
@@ -74,6 +96,16 @@ from utils.paths import chem_resources_root, format_reference_path, workstation_
 from utils.workstation_loader import WorkstationLoader
 
 from workflow_normalizer import SkillContractEngine
+try:
+    from .reagent_slot_identity import (
+        collect_material_identity_registry_evidence,
+        enrich_legacy_reagent_slot_plan,
+    )
+except ImportError:
+    from reagent_slot_identity import (
+        collect_material_identity_registry_evidence,
+        enrich_legacy_reagent_slot_plan,
+    )
 try:
     from .skill_loading import WorkstationSkillSession, WorkstationTruthChangedError, invoke_with_tools
 except ImportError:
@@ -117,20 +149,52 @@ from recipe_materializer import (
     materialize_workflow_recipe_files,
 )
 try:
+    from . import binding_ledger
+except ImportError:
+    import binding_ledger
+try:
+    from . import material_relationship_compiler
+except ImportError:
+    import material_relationship_compiler
+try:
+    from . import material_operation_binding
+except ImportError:
+    import material_operation_binding
+try:
+    from .macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+        normalize_macro_id,
+        semantic_macro_id,
+    )
+except ImportError:
+    from macro_identity import (
+        MacroIdentityError,
+        extract_source_macro_ids,
+        macro_id_key,
+        normalize_macro_id,
+        semantic_macro_id,
+    )
+try:
     from .v2_validation import (
         build_validation_issues_v2,
         chunk_hashes,
         device_step_hashes,
+        device_step_hashes_for_chunks,
         locked_chunk_violations,
         merge_scoped_device_step_repair,
+        namespaced_lock_hashes,
     )
 except ImportError:
     from v2_validation import (
         build_validation_issues_v2,
         chunk_hashes,
         device_step_hashes,
+        device_step_hashes_for_chunks,
         locked_chunk_violations,
         merge_scoped_device_step_repair,
+        namespaced_lock_hashes,
     )
 
 logger = logging.getLogger(__name__)
@@ -182,7 +246,6 @@ DEFAULT_STAGE1_PLAN_REPAIR_LIMIT = 3
 DEFAULT_STAGE1_PATCH_REPAIR_LIMIT = 3
 DEFAULT_JSON_FORMAT_RETRY_LIMIT = 2
 DEFAULT_SEMANTIC_CONTRACT_REPAIR_LIMIT = 2
-FEASIBILITY_CERTIFICATE_VERSION = "2.2"
 
 # Single source of truth for the file-dosing recipe contract.  The
 # deterministic audit, the repair-context builder and the patch validator all
@@ -643,6 +706,85 @@ _ALLOWED_MATERIAL_EVENT_KINDS = frozenset(
         "process_same_material",
     }
 )
+# Ledger quantity provenance contract (B01 engineering-path issue
+# draft, round R1).  A numeric ledger/batch quantity is only real
+# when its source and derivation are explicit; otherwise the
+# quantity stays explicitly unknown -- it must never be materialized
+# as a default 0.
+_LEDGER_QUANTITY_SOURCE_KINDS = frozenset(
+    {
+        "research_explicit",
+        "device_measurement",
+        "derived_from_parent",
+        "split_from_parent",
+        "merge_from_children",
+        "runtime_pending",
+        "unknown",
+    }
+)
+_LEDGER_QUANTITY_STATUSES = frozenset(
+    {"known", "unknown", "pending_measurement"}
+)
+# Schema-v1 values migrated 1:1 to the R1 enum above; this is a
+# versioned contract migration, not a per-station or per-case alias.
+_LEGACY_LEDGER_SOURCE_KINDS = {
+    "research": "research_explicit",
+    "derived": "derived_from_parent",
+    "device_operational": "device_measurement",
+}
+# Issue codes that mean "an unknown quantity was not marked as such"
+# rather than "a known quantity violates arithmetic".
+_UNKNOWN_QUANTITY_ISSUE_CODES = frozenset(
+    {"invalid_ledger_quantity_status", "unknown_ledger_entry_with_numeric_quantity"}
+)
+# Placeholder tokens that must never survive into formal ID fields.
+_PLACEHOLDER_ID_TOKENS = frozenset(
+    {"", "none", "null", "nil", "n/a", "na", "unknown", "-", "--"}
+)
+
+
+def _is_placeholder_id(value: Any) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().lower() in _PLACEHOLDER_ID_TOKENS
+
+
+def _sanitize_formal_id_list(values: Any) -> Tuple[List[Any], List[Any]]:
+    """Split formal ID list entries into (kept, placeholder) values."""
+    if not isinstance(values, list):
+        return [], []
+    kept: List[Any] = []
+    removed: List[Any] = []
+    for value in values:
+        if _is_placeholder_id(value):
+            removed.append(value)
+        else:
+            kept.append(value)
+    return kept, removed
+
+
+def _merge_quantity_normalization_events(
+    previous: Any, current: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Carry normalization events across rewrites so re-auditing an
+    already-normalized plan stays idempotent."""
+    merged: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    previous_events = previous if isinstance(previous, list) else []
+    for event in list(previous_events) + list(current):
+        if not isinstance(event, dict):
+            continue
+        identity = json.dumps(
+            event, ensure_ascii=False, sort_keys=True, default=str
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(copy.deepcopy(event))
+    return merged[:200]
+
 _CONDITIONAL_REACTION_PROCESSING_WORKSTATIONS = frozenset(
     {
         "Room_Temperture_Magnetic_Stirrer_Workstation_V1",
@@ -1037,6 +1179,11 @@ FEASIBILITY_PLAN_SYSTEM_PROMPT = """
 3. 你负责选择具体工作站、容器策略、试剂策略、开盖/关盖时机、分瓶/配平、重复洗涤、干燥和离线 handoff 的**计划级决策**；具体参数字段名和 JSON 结构交给第二段。
    Research macro step 的 material_inputs/material_outputs、container_requirements 和
    intermediate_returns 是上游物料、逻辑容器和回传边界合同，必须逐项保留并实现。
+   对 V2 operation segment 的 `device_implementation.ordered_steps`，Research 只授权
+   `source_operation_ref + role_id + capability_id` 的有序能力义务，不指定物理设备操作。你必须从已加载的 Skill 真源
+   选择唯一的 workstation + skill_operation_name，并在 Device step 的
+   `operation_capabilities` 中同时回写 source_operation_ref、role_id、capability_id 和精确 operation 名称；不得从
+   宏步骤编号、物料名称或自由文本猜测。真源不能证明该组合时必须阻断，不能伪造操作。
    container_requirements.logical_container_id 不是实体瓶号或托盘槽位；在 container_plan
    中保留 logical_container_id，并另行分配实体容器与 batch/slot 对应。不得把逻辑编号
    直接写入机器参数，也不得把没有声明测量能力的中间返回当作可用实测库存。
@@ -1121,8 +1268,9 @@ FEASIBILITY_PLAN_SYSTEM_PROMPT = """
       hard 判定）；除此之外的 mg 级称量/分装一律必须映射为上述设备步骤。
     - 只要使用文件传参固体称量，device_plan.key_values 必须给出每一目标瓶的确定配方行：
       `瓶号 + 加样量(g) + 料罐号`。严禁写“按实测干粉量”“适量”“按比例称取”或只写比例。
-      若物理混合对照只给出 Ni:Fe 等比例，必须选择明确且可解释的固定批量，并按名义金属量/
-      摩尔质量换算为具体克数；不能把称量决定推迟到运行时，也不能改成外部预称取。
+      若物理混合对照只给比例而没有可追溯的绝对投料量，不得自行选择固定批量或由示例反推克数；
+      应保留比例并返回 human_review_required / Research 数量修订。只有输入已经给出绝对基准量时，
+      才能按明确公式换算为各组分克数；不能改成外部预称取。
 8. 不要改变研究目标、目标材料、当前 stage 或目标 observation point。
 9. 计划中的每个步骤都必须能从给定工作站 USAGE/AUDIT-RULES 找到依据；不要臆造不存在的工作站。
 10. 维护容器身份台账：同一个容器编号在整个计划中必须保持同一种容器类型。换瓶时保留
@@ -1254,6 +1402,17 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
   `research handoff.observation_evidence_catalog` 已由程序机械生成 digest 和唯一数量
   span；模型只能逐字选择其中的 `measurement_artifact`，不得自行计算/改写 hash、
   sample、material、batch、field 或 context。
+- 若 Research V2 macro step 的 `material_contract_status.material_relations=declared`，
+  必须读取每条 relation 的 `source_operation_ref` 及对应 operation segment 的
+  `device_implementation.ordered_steps`。每个 `{source_operation_ref, role_id, capability_id}` 必须恰好由一个
+  Device step 的 `operation_capabilities` 实现；Skill 真源必须证明该 step 所选的
+  `skill_operation_name` 属于该 capability。每个相关 step 还必须用
+  `logical_container_assignments=[{logical_container_id,physical_container_ids}]` 声明 Research
+  逻辑容器到本步骤真实物理容器的对应。`research_material_relation_ids`、
+  `logical_container_bindings`、`material_event_kind` 和 `material_transition_ids` 是确定性编译器
+  管理字段，初始计划不得借这些字段自行授权物料关系；编译器会在全部角色和容器映射通过后
+  原子生成。不得根据 macro 编号、workstation 类别、名称或数组顺序自行新增关系，不得把
+  所有处理统一写成 state_change。`not_applicable` 不生成物料边；`unresolved` 必须保持阻塞。
 - 只有 `source_kind=research` 且有可验证真源的 batch 才能是 root。每个 root
   必须显式给出 `material_id`、冻结语义合同中的 `material_identity_id` 以及
   research_source_refs；不得再靠物料名称子串判断身份。只有
@@ -1303,7 +1462,8 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
     {{
       "工作站": "使用该原液瓶的工作站名称",
       "原液编号": 1,
-      "名称": "原液/试剂名称",
+      "material_identity_id": "必须逐字取自 material_identity_registry 的稳定身份 ID",
+      "canonical_name": "该 material_identity_id 的权威显示名；workflow 的配料名称由此派生",
       "浓度或说明": "浓度、预配说明或固体说明",
       "来源": "来自哪个 macro step"
     }}
@@ -1323,7 +1483,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
       "kind": "unit_conversion | split_transfer | split_batch | replicate_batch | slot_reallocation | concentration_change | molar_ratio_change | amount_change",
       "before": {{"value": 0.18, "unit": "mmol"}},
       "after": {{"value": 0.54, "unit": "mmol"}},
-      "source_kind": "research | derived | device_operational",
+      "source_kind": "research_explicit | device_measurement | derived_from_parent | split_from_parent | merge_from_children | runtime_pending | unknown",
       "source_refs": ["macro_step:1"],
       "calculation": "0.18 mmol × 3 independent consumers = 0.54 mmol",
       "preserved_invariants": ["route", "reagent_identity", "sample_matrix"],
@@ -1349,6 +1509,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
     {{
       "batch_id": "batch_001",
       "quantity_mode": "numeric_inventory | whole_batch",
+      "quantity_status": "known | unknown | pending_measurement（数值无出处时标 unknown，planned 值保留在 declared_* 字段）",
       "material_id": "该批次分配所对应的物料/中间体身份",
       "material_identity_id": "每个批次引用冻结语义合同中的 identity_id",
       "research_material_identity_id": "root 批次必须引用冻结语义合同中的 identity_id",
@@ -1366,7 +1527,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
       "sample_id": "sample_A",
       "consumer_ids": ["consumer_1"],
       "allocation": {{"consumer_1": {{"value": 0.18, "unit": "mmol"}}}},
-      "source_kind": "device_operational",
+      "source_kind": "research_explicit",
       "source_refs": ["macro_step:1"],
       "calculation": "确定性分配式",
       "pooling_policy": "not_pooled | explicitly_authorized"
@@ -1394,6 +1555,8 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
       {{
         "entry_id": "material_001",
         "quantity_mode": "numeric_inventory | whole_batch",
+        "quantity_status": "known | unknown | pending_measurement",
+        "production_event_id": "同一 production event 的稳定 ID（如 MLPE_<transition>_<batch>）",
         "material_id": "中间体A",
         "batch_id": "batch_001",
         "sample_id": "sample_A",
@@ -1403,7 +1566,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
         "consumed": {{"value": 0.18, "unit": "mmol"}},
         "reserved": {{"value": 0, "unit": "mmol"}},
         "balance": {{"value": 0, "unit": "mmol"}},
-        "source_kind": "derived",
+        "source_kind": "derived_from_parent",
         "source_refs": ["material_transition:mt_001（child produced 必填）"],
         "calculation": "produced-consumed-reserved"
       }}
@@ -1412,17 +1575,22 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
   "device_plan": [
     {{
       "plan_step": 1,
+      "station_code": "工作站真源中的精确 station_code",
       "workstation": "工作站名称（真源中的名称）",
       "objective": "这一步要达成什么（化学语义）",
       "operation_intent": "操作意图（如 拿取容器/开盖/分批加液/搅拌/离心/烘干/固体转移/定量称量）",
+      "operation_capabilities": [{{"source_operation_ref":"逐字取自 Research relation.source_operation_ref","role_id":"逐字取自对应 operation segment 的 device_implementation.ordered_steps","capability_id":"逐字取自同一 role","skill_operation_name":"该工作站 Skill 中的精确 operation 名称"}}],
       "key_values": {{"体积/质量/温度/时间/转速等化学数值": "值+单位"}},
       "containers": {{"容器类型": "进样瓶", "容器编号": [1, 2]}},
+      "logical_container_assignments": [{{"logical_container_id":"逐字取自 Research relation.logical_container_ids","physical_container_ids":["本步骤 containers 中真实存在的物理容器ID"]}}],
       "source_macro_step": 1,
       "source_macro_steps": [1],
       "source_reagent_identity": "逐字回显该 source_macro_step 的 Research 试剂/对象身份",
       "source_material_identity_ids": ["逐项引用冻结语义合同 identity_id，不得自行按名称猜测"],
-      "material_event_kind": "none | state_change | split_same_material | replicate_same_material | process_same_material",
-      "material_transition_ids": ["mt_001（处理步必填）"],
+      "research_material_relation_ids": [],
+      "logical_container_bindings": {{}},
+      "material_event_kind": "none",
+      "material_transition_ids": [],
       "sample_lineage": {{
         "sample_id": "sample_A（仅转移/换瓶步必填）",
         "source_container": {{"container_type": "10ml耐压反应管", "container_id": "RT01"}},
@@ -1502,7 +1670,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
   "device_plan": ["必须输出与情况A相同结构的完整 best-known device_plan，不得为空"],
   "quantity_adjustments": ["完整 best-known sidecar"],
   "batch_plan": ["完整 best-known batch lineage"],
-  "material_ledger": {{"entries": ["完整 best-known ledger entries"]}}
+  "material_ledger": {{"entries": ["完整 best-known ledger entries；未知量标 quantity_status=unknown/pending_measurement 并省略数值字段，不得写 0 占位"]}}
 }}
 
 情况 C 仍表示路线和设备映射已通过：必须先用完整 device_plan 签发 feasibility certificate，
@@ -1535,14 +1703,16 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
   “反应管合并”操作而返回 feasibility_error。确需合并时，也不得只因跨站运输边未显式声明
   而拒绝；应选择接受目标相态/容器的现有转移操作，或在真实后处理 offline_handoff 中记录
   全量汇合和谱系。
-- Device 可以为满足消费量、称量下限或设备范围而新增完整批次，或调整单批/总量、浓度、
-  摩尔比，但必须在 quantity_adjustments 中逐项记录 before/after、来源、计算式和
-  `requires_scientific_review=true`，并保持研究目标、路线、试剂身份/顺序、observation point
-  及样品/对照矩阵不变。纯分次、分瓶、容量拆批、容器/料位变化和单位换算标记 false。
-  未知收率或未经授权的独立样品合批不得猜测，应返回 human_review_required 供人工判断，
-  不得把这类数量问题包装成 device_feasibility_error。
+- Device 只能在不改变 Research 名义总量、浓度、摩尔比、样品/对照矩阵和路线的前提下做
+  分次、分瓶、容量拆批、容器/料位安排和单位换算，并在 quantity_adjustments 中逐项记录
+  before/after、来源和计算式。新增完整批次或改变单批/总量、浓度、摩尔比属于科学修订；
+  未经明确授权不得实施，必须返回 human_review_required / Research 修订请求。未知收率、
+  缺少绝对剂量或未经授权的独立样品合批不得猜测，也不得包装成 device_feasibility_error。
 - 原液编号是工作站本地槽位，不是跨工作站全局编号。reagent_slot_plan 每项必须写明
-  `工作站`；同一试剂在不同工作站可以使用不同本地编号，不同工作站也可以各自复用 1 号。
+  `工作站`、逐字来自 material_identity_registry 的 `material_identity_id`，以及该身份的
+  `canonical_name`；workflow 中的 `配料名称`只是派生显示字段，必须由这份槽位绑定统一投影，
+  不得自行改写、缩写或用化学名称相似度猜测身份。同一试剂在不同工作站可以使用不同本地编号，
+  不同工作站也可以各自复用 1 号。
   只有同一工作站内才执行一瓶一液和固定编号约束。若无法确定本地编号，按该工作站参数表
   的合法范围自行分配并在 reagent_slot_plan 说明；需要偶数配平时自己选偶数容器并贯穿。
 - 对每个容器维护台账（类型/体积/带盖/用途/样品谱系）；同一容器可以直接跨站移动，换容器
@@ -1562,7 +1732,7 @@ quantity kind 和 material identity_id 规划；不得自行改写或省略。
   不得从3.0 mL均匀悬浊液只转1.5 mL，也不得为生成新对照而无说明削减原对照样品。
   若单次移液上限不足，拆成多次并保持累计体积；若需保留原样且所需产量可由确定性计算支持，
   Device 可复制完整独立批次并标记科学复核；若实际收率未知，则转人工复核而不是回 Research。
-- 每个数量写明 `source_kind=research|derived|device_operational`、source_refs 和 calculation；
+- 每个数量写明 `source_kind=research_explicit|device_measurement|derived_from_parent|split_from_parent|merge_from_children|runtime_pending|unknown`、source_refs 和 calculation；
   material_ledger 校验生产量、消费量、预留量、sample_id/batch_id 谱系与重复计量。
 - 不要把“建议/范围/上限”当作可贴边的默认值；必须贴边时在 device_layer_adaptations 解释。
 """.strip()
@@ -1636,9 +1806,10 @@ TRANSLATION_TASK_PROMPT = """
 - 化学数值（体积/质量/温度/时间/转速）从 device_plan.key_values 原样搬运，只做单位换算。
 - 文件传参固体称量步骤必须在 notes 保留「每瓶加样量=... g；料罐号=...」，上传文件由程序
   物化为任务专属 XLSX；不得只输出占位文件名而丢失配方行。
-- 若一个称量步骤有多个目标瓶或多个料罐，notes 必须逐行列出完整确定配方，例如
-  「瓶4: 加样量=0.0278 g, 料罐号=1；瓶4: 加样量=0.0089 g, 料罐号=2」。不得写
-  “按实测质量”“按比例”“分别定量”等运行时未知值。
+- 若一个称量步骤有多个目标容器或多个料罐，notes 必须逐条列出由冻结计划明确给出的
+  目标容器、加样质量、质量单位和料罐号；同一目标容器接收多种固体时也必须保留相互独立的
+  配方记录。不得从示例、容器编号、物料名称或步骤位置猜数值，也不得写“按实测质量”
+  “按比例”“分别定量”等无法下发的运行时未知值。
 - temporal_adaptations 与 offline_handoffs 从 device_plan 原样搬运。
 - workflow_txt 与 workflow_json 一一对应（块数相同、每块出现该步工作站名）。
 """.strip()
@@ -1817,6 +1988,8 @@ WORKFLOW_SKILL_REVIEW_TASK_PROMPT = """
 class SingleDeviceAgentState:
     research_handoff: Dict[str, Any]
     exp_id: str
+    contract_version: str = "v1"
+    contract_resolution: Dict[str, Any] = field(default_factory=dict)
     iteration_id: int = 0
     workflow_id: int = 0
     workstation_descriptions: str = ""
@@ -1832,9 +2005,18 @@ class SingleDeviceAgentState:
     raw_llm_output: Dict[str, Any] = field(default_factory=dict)
     feasibility_accepted: bool = False
     feasibility_certificate: Dict[str, Any] = field(default_factory=dict)
+    accepted_device_plan_contract: Dict[str, Any] = field(default_factory=dict)
     semantic_analysis: Dict[str, Any] = field(default_factory=dict)
     workflow_repair_history: List[Dict[str, Any]] = field(default_factory=list)
     workflow_repair_cycles: List[Dict[str, Any]] = field(default_factory=list)
+    plan_audit_records: List[Dict[str, Any]] = field(default_factory=list)
+    binding_ledger_issues: List[Dict[str, Any]] = field(default_factory=list)
+    # Versioned, evidence-bound sidecar kept outside the canonical Research
+    # handoff.  Device-plan fields are untrusted binding claims; only this
+    # frozen authority may permit the material compiler to attach a Research
+    # relationship to a concrete operation.
+    relationship_binding_authority: Dict[str, Any] = field(default_factory=dict)
+    relationship_binding_authority_origin: str = ""
     device_plan_rewrite_count: int = 0
     errors: List[str] = field(default_factory=list)
     llm_diagnostics: List[Dict[str, Any]] = field(default_factory=list)
@@ -1863,6 +2045,15 @@ class SingleDeviceAgent:
     # with ``__new__`` and inject only the collaborators they exercise.  Keep
     # that legacy path on V1 unless the caller explicitly opts into V2.
     _contract_version = "v1"
+    _NORMALIZATION_RULE_IDS = frozenset(
+        {
+            "reagent_slot_identity/v1",
+            "skill_station_id/v1",
+            "skill_enum_label/v1",
+            "contract_unit_scalar/v1",
+            "contract_string_scalar/v1",
+        }
+    )
 
     def __init__(
         self,
@@ -1911,6 +2102,33 @@ class SingleDeviceAgent:
         self._active_trusted_human_quantity_approvals: List[
             Dict[str, Any]
         ] = []
+
+    def _contract_resolution(
+        self, research_handoff: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Describe the requested, source, and actually selected contract."""
+
+        supplied = research_handoff.get("contract_resolution")
+        supplied = supplied if isinstance(supplied, dict) else {}
+        # The constructor-selected runtime is authoritative.  Upstream
+        # metadata describes the source, but cannot relabel which contract the
+        # current Device invocation requested.
+        requested = self._contract_version
+        source_input = str(
+            supplied.get("source_input")
+            or research_handoff.get("contract_version")
+            or ""
+        ).strip()
+        effective = self._contract_version
+        return {
+            "requested": requested,
+            "source_input": source_input,
+            "effective": effective,
+            "requested_matches_effective": requested == effective,
+            "source_matches_effective": (
+                not source_input or source_input == effective
+            ),
+        }
 
     def _device_snapshot_id(self) -> str:
         loader = self._workstation_loader
@@ -2205,7 +2423,7 @@ class SingleDeviceAgent:
         if not isinstance(promoted.get("device_plan"), list) or not promoted.get(
             "device_plan"
         ):
-            return {
+            package = {
                 "status": "failed",
                 "feedback_type": "device_internal_error",
                 "feedback_route": "device",
@@ -2881,9 +3099,15 @@ class SingleDeviceAgent:
         ):
             if not isinstance(step, dict):
                 continue
+            try:
+                macro_id = semantic_macro_id(
+                    step, f"macro_action_steps[{index - 1}]"
+                )
+            except MacroIdentityError:
+                macro_id = None
             route.append(
                 {
-                    "step": step.get("步骤序号", step.get("step", index)),
+                    "step": macro_id,
                     "operation": step.get("操作", step.get("operation", "")),
                     "reagent_or_object": step.get(
                         "试剂/对象", step.get("reagent_or_object", "")
@@ -2898,56 +3122,50 @@ class SingleDeviceAgent:
 
     @staticmethod
     def _source_macro_scalar(value: Any) -> Any:
-        """Return the stable scalar representation used in emitted plans."""
-        text = str(value).strip()
-        if re.fullmatch(r"[-+]?\d+", text):
-            try:
-                return int(text)
-            except ValueError:  # pragma: no cover - guarded by the regexp
-                pass
-        return text
+        """Validate one opaque macro scalar without parsing or type coercion."""
+        return normalize_macro_id(value, "source_macro_step")
 
     @classmethod
-    def _source_macro_step_ids(cls, payload: Dict[str, Any]) -> List[str]:
-        """Read the scalar/list trace contract without duplicating a step.
+    def _source_macro_step_ids(cls, payload: Dict[str, Any]) -> List[Any]:
+        """Read valid trace metadata; invalid shapes conservatively map to no IDs.
 
-        Models occasionally put a JSON array directly in ``source_macro_step``
-        for one physical operation shared by several Research steps.  Treat
-        that as trace metadata, not as a request to clone the operation.
+        Audit entry points call the strict shared helper directly so they can
+        report the precise structured error.  This compatibility wrapper keeps
+        secondary consumers fail-closed instead of turning malformed model
+        output into an unrelated internal exception.
         """
-        raw_values: List[Any] = []
+        try:
+            return extract_source_macro_ids(payload, "macro_source")
+        except MacroIdentityError:
+            return []
 
-        def append(value: Any) -> None:
-            if isinstance(value, (list, tuple, set)):
-                for nested in value:
-                    append(nested)
-                return
-            if isinstance(value, str):
-                stripped = value.strip()
-                if stripped.startswith("[") and stripped.endswith("]"):
-                    try:
-                        parsed = json.loads(stripped)
-                    except (TypeError, ValueError, json.JSONDecodeError):
-                        parsed = None
-                    if isinstance(parsed, list):
-                        append(parsed)
-                        return
-                if re.fullmatch(r"[-+]?\d+(?:\s*[,，]\s*[-+]?\d+)+", stripped):
-                    append(re.split(r"\s*[,，]\s*", stripped))
-                    return
-            if value not in (None, ""):
-                raw_values.append(value)
+    @classmethod
+    def _source_macro_keys(cls, payload: Dict[str, Any]) -> List[Tuple[str, Any]]:
+        """Return source IDs as type-tagged keys for comparisons and lookup."""
+        return [macro_id_key(value) for value in cls._source_macro_step_ids(payload)]
 
-        # Preserve the model's declared primary source when it is scalar;
-        # otherwise the first list member becomes the deterministic primary.
-        append(payload.get("source_macro_step"))
-        append(payload.get("source_macro_steps"))
-        result: List[str] = []
-        for value in raw_values:
-            source = str(value).strip()
-            if source and source not in result:
-                result.append(source)
-        return result
+    @staticmethod
+    def _typed_id_token(value: Any, path: str) -> str:
+        """Build a readable collision-resistant token without erasing ID type."""
+        kind, normalized = macro_id_key(value, path)
+        readable = re.sub(r"[^A-Za-z0-9_-]+", "_", str(normalized)).strip("_")
+        readable = readable[:32] or "id"
+        encoded = json.dumps(
+            [kind, normalized],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()[:10]
+        return f"{kind}_{readable}_{digest}"
+
+    @staticmethod
+    def _optional_typed_id_key(
+        value: Any, path: str
+    ) -> Optional[Tuple[str, Any]]:
+        try:
+            return macro_id_key(value, path)
+        except MacroIdentityError:
+            return None
 
     @classmethod
     def _normalize_source_macro_fields(cls, payload: Dict[str, Any]) -> bool:
@@ -2955,13 +3173,12 @@ class SingleDeviceAgent:
         sources = cls._source_macro_step_ids(payload)
         if not sources:
             return False
-        typed = [cls._source_macro_scalar(source) for source in sources]
         changed = (
-            payload.get("source_macro_step") != typed[0]
-            or payload.get("source_macro_steps") != typed
+            payload.get("source_macro_step") != sources[0]
+            or payload.get("source_macro_steps") != sources
         )
-        payload["source_macro_step"] = typed[0]
-        payload["source_macro_steps"] = typed
+        payload["source_macro_step"] = sources[0]
+        payload["source_macro_steps"] = sources
         return changed
 
     @classmethod
@@ -2986,23 +3203,28 @@ class SingleDeviceAgent:
         rewrite must still reach the frozen-identity validator and be rejected.
         """
 
-        research_identities: Dict[str, str] = {}
+        research_identities: Dict[Tuple[str, Any], str] = {}
         for index, step in enumerate(
             research_handoff.get("macro_action_steps", []) or [], start=1
         ):
             if not isinstance(step, dict):
                 continue
-            source = str(step.get("步骤序号", step.get("step", index))).strip()
+            try:
+                source = macro_id_key(cls._semantic_macro_id(step, index))
+            except MacroIdentityError:
+                continue
             raw_identity = step.get("试剂/对象", step.get("reagent_or_object", ""))
             identity = str(raw_identity).strip() if raw_identity is not None else ""
             research_identities[source] = identity
         valid_sources = set(research_identities)
 
-        certified_by_source_set: Dict[Tuple[str, ...], List[str]] = {}
+        certified_by_source_set: Dict[Tuple[Tuple[str, Any], ...], List[str]] = {}
         for step in previous_plan.get("device_plan", []) or []:
             if not isinstance(step, dict):
                 continue
-            sources = tuple(cls._source_macro_step_ids(step))
+            sources = tuple(
+                macro_id_key(source) for source in cls._source_macro_step_ids(step)
+            )
             if not sources or any(source not in valid_sources for source in sources):
                 continue
             raw_identity = step.get("source_reagent_identity")
@@ -3028,7 +3250,9 @@ class SingleDeviceAgent:
                 step.get("source_reagent_identity")
             ):
                 continue
-            sources = tuple(cls._source_macro_step_ids(step))
+            sources = tuple(
+                macro_id_key(source) for source in cls._source_macro_step_ids(step)
+            )
             if not sources or any(source not in valid_sources for source in sources):
                 # Invalid/missing source bindings are validator errors, not a
                 # license to infer an identity from unrelated plan text.
@@ -3090,16 +3314,28 @@ class SingleDeviceAgent:
             }.issubset(normalized):
                 continue
             normalized_change = copy.deepcopy(change)
-            normalized_change["before_step_ids"] = [
-                str(value).strip()
-                for value in before_step_ids
-                if str(value).strip()
-            ]
-            normalized_change["after_step_ids"] = [
-                str(value).strip()
-                for value in after_step_ids
-                if str(value).strip()
-            ]
+            normalized_before: List[Any] = []
+            normalized_after: List[Any] = []
+            try:
+                normalized_before = [
+                    normalize_macro_id(
+                        value,
+                        f"plan_changes.before_step_ids[{index}]",
+                    )
+                    for index, value in enumerate(before_step_ids)
+                ]
+                normalized_after = [
+                    normalize_macro_id(
+                        value,
+                        f"plan_changes.after_step_ids[{index}]",
+                    )
+                    for index, value in enumerate(after_step_ids)
+                ]
+            except MacroIdentityError:
+                # Invalid step references cannot authorize a structural rewrite.
+                continue
+            normalized_change["before_step_ids"] = normalized_before
+            normalized_change["after_step_ids"] = normalized_after
             if (
                 normalized_change["before_step_ids"]
                 and normalized_change["after_step_ids"]
@@ -3115,8 +3351,11 @@ class SingleDeviceAgent:
     ) -> List[str]:
         """Freeze recognizable step-to-Research-source bindings across rewrite."""
 
-        def step_key(step: Dict[str, Any]) -> str:
-            return str(step.get("plan_step", "")).strip()
+        def step_key(step: Dict[str, Any]) -> Optional[Tuple[str, Any]]:
+            try:
+                return macro_id_key(step.get("plan_step"), "device_plan.plan_step")
+            except MacroIdentityError:
+                return None
 
         def material_identity_ids(step: Dict[str, Any]) -> Set[str]:
             raw = step.get("source_material_identity_ids")
@@ -3128,29 +3367,36 @@ class SingleDeviceAgent:
                 if str(value).strip()
             }
 
-        previous_by_key: Dict[str, Dict[str, Any]] = {}
+        previous_by_key: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        previous_values: Dict[Tuple[str, Any], Any] = {}
         for step in previous_plan.get("device_plan", []) or []:
             if not isinstance(step, dict):
                 continue
             key = step_key(step)
-            if key and key not in previous_by_key:
+            if key is not None and key not in previous_by_key:
                 previous_by_key[key] = step
+                previous_values[key] = copy.deepcopy(step.get("plan_step"))
 
         errors: List[str] = []
-        repaired_by_key: Dict[str, Dict[str, Any]] = {}
-        repaired_keys: Set[str] = set()
+        repaired_by_key: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        repaired_values: Dict[Tuple[str, Any], Any] = {}
+        repaired_keys: Set[Tuple[str, Any]] = set()
         for step in repaired_plan.get("device_plan", []) or []:
             if not isinstance(step, dict):
                 continue
             key = step_key(step)
-            if key:
+            if key is not None:
                 if key in repaired_keys:
                     errors.append(
-                        f"device_plan rewrite 含重复 plan_step={key}，"
+                        "device_plan rewrite 含重复 typed plan_step="
+                        f"{step.get('plan_step')!r}，"
                         "无法审计原步骤绑定。"
                     )
                 repaired_keys.add(key)
                 repaired_by_key.setdefault(key, step)
+                repaired_values.setdefault(
+                    key, copy.deepcopy(step.get("plan_step"))
+                )
             previous = previous_by_key.get(key)
             if previous is None:
                 continue
@@ -3160,10 +3406,13 @@ class SingleDeviceAgent:
             # Its source set is frozen regardless of punctuation, objective,
             # workstation, or operation edits; true recomposition must use
             # explicit deleted/new keys and step-bound evidence below.
-            if before_sources != after_sources:
+            if [macro_id_key(value) for value in before_sources] != [
+                macro_id_key(value) for value in after_sources
+            ]:
                 errors.append(
                     "计划级 Device LLM 改变了既存 plan_step 的冻结 "
-                    f"source_macro_step 绑定：plan_step={key}, "
+                    "source_macro_step 绑定：plan_step="
+                    f"{previous_values.get(key, step.get('plan_step'))!r}, "
                     f"before={before_sources}, after={after_sources}。"
                 )
             before_material_ids = material_identity_ids(previous)
@@ -3183,11 +3432,15 @@ class SingleDeviceAgent:
             evidence = cls._structured_operation_recomposition_records(
                 repaired_plan
             )
-            covered_before: Set[str] = set()
-            covered_after: Set[str] = set()
+            covered_before: Set[Tuple[str, Any]] = set()
+            covered_after: Set[Tuple[str, Any]] = set()
             for record in evidence:
-                before_ids = set(record["before_step_ids"])
-                after_ids = set(record["after_step_ids"])
+                before_ids = {
+                    macro_id_key(value) for value in record["before_step_ids"]
+                }
+                after_ids = {
+                    macro_id_key(value) for value in record["after_step_ids"]
+                }
                 change_type = str(
                     record.get("change_type") or record.get("type") or ""
                 ).strip().lower()
@@ -3223,18 +3476,18 @@ class SingleDeviceAgent:
                     )
                     continue
                 before_union = {
-                    source
+                    macro_id_key(source)
                     for key in before_ids
                     for source in cls._source_macro_step_ids(previous_by_key[key])
                 }
                 after_union = {
-                    source
+                    macro_id_key(source)
                     for key in after_ids
                     for source in cls._source_macro_step_ids(repaired_by_key[key])
                 }
                 if len(before_ids) == 1:
                     before_sources = {
-                        source
+                        macro_id_key(source)
                         for source in cls._source_macro_step_ids(
                             previous_by_key[next(iter(before_ids))]
                         )
@@ -3246,11 +3499,12 @@ class SingleDeviceAgent:
                                 for source in cls._source_macro_step_ids(
                                     repaired_by_key[key]
                                 )
-                            }
+                            },
+                            key=repr,
                         )
                         for key in after_ids
                         if {
-                            source
+                            macro_id_key(source)
                             for source in cls._source_macro_step_ids(
                                 repaired_by_key[key]
                             )
@@ -3432,17 +3686,40 @@ class SingleDeviceAgent:
             for step in plan_result.get("device_plan", []) or []
             if isinstance(step, dict)
         ]
-        expected_order: List[str] = []
-        expected_reagents: Dict[str, List[str]] = {}
-        expected_material_ids: Dict[str, Set[str]] = {}
-        semantic_records = {
-            str(item.get("source_macro_step") or "").strip(): item
-            for item in (semantic_analysis or {}).get("macro_step_assessments", []) or []
-            if isinstance(item, dict)
-        }
+        expected_order: List[Tuple[str, Any]] = []
+        expected_values: Dict[Tuple[str, Any], Any] = {}
+        expected_reagents: Dict[Tuple[str, Any], List[str]] = {}
+        expected_material_ids: Dict[Tuple[str, Any], Set[str]] = {}
+        semantic_records: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        for assessment_index, item in enumerate(
+            (semantic_analysis or {}).get("macro_step_assessments", []) or []
+        ):
+            if not isinstance(item, dict):
+                continue
+            try:
+                assessment_id = normalize_macro_id(
+                    item.get("source_macro_step"),
+                    f"macro_step_assessments[{assessment_index}].source_macro_step",
+                )
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                continue
+            semantic_records[macro_id_key(assessment_id)] = item
         for index, step in enumerate(research_steps, start=1):
-            source = str(step.get("步骤序号", step.get("step", index)))
+            try:
+                source_value = cls._semantic_macro_id(step, index)
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                continue
+            source = macro_id_key(source_value)
+            if source in expected_values:
+                errors.append(
+                    "Research macro IDs must be unique by typed identity: "
+                    f"duplicate={source_value!r}"
+                )
+                continue
             expected_order.append(source)
+            expected_values[source] = source_value
             expected_reagents[source] = cls._reagent_identity_tokens(
                 step.get("试剂/对象", step.get("reagent_or_object", ""))
             )
@@ -3455,21 +3732,63 @@ class SingleDeviceAgent:
                 and str(item.get("identity_id") or "").strip()
             }
         expected_set = set(expected_order)
-        mapped: Dict[str, List[Dict[str, Any]]] = {}
-        actual_source_sets: List[List[str]] = []
-        for step in plan_steps:
-            sources = cls._source_macro_step_ids(step)
-            if not sources:
-                errors.append(
-                    f"device_plan[{step.get('plan_step', '?')}] 缺少 source_macro_step。"
-                )
+        mapped: Dict[Tuple[str, Any], List[Dict[str, Any]]] = {}
+        # A sample/product may be represented by a generated batch rather than
+        # repeated on every Device operation.  Count that identity only when
+        # the sidecar itself explicitly binds it to this same macro.  Presence
+        # elsewhere in the plan is not evidence for this macro.
+        structured_ids_by_macro: Dict[Tuple[str, Any], Set[str]] = {}
+        for batch_index, batch in enumerate(plan_result.get("batch_plan", []) or []):
+            if not isinstance(batch, dict):
                 continue
-            valid_sources: List[str] = []
-            for source in sources:
+            batch_ids = {
+                str(batch.get(field) or "").strip()
+                for field in (
+                    "material_identity_id",
+                    "research_material_identity_id",
+                )
+                if str(batch.get(field) or "").strip()
+            }
+            for field in (
+                "co_material_identity_ids",
+                "source_material_identity_ids",
+            ):
+                values = batch.get(field)
+                if isinstance(values, list):
+                    batch_ids.update(
+                        str(value).strip()
+                        for value in values
+                        if str(value).strip()
+                    )
+            try:
+                batch_sources = extract_source_macro_ids(
+                    batch, f"batch_plan[{batch_index}]"
+                )
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                batch_sources = []
+            for source_value in batch_sources:
+                source = macro_id_key(source_value)
+                if source in expected_set:
+                    structured_ids_by_macro.setdefault(source, set()).update(
+                        batch_ids
+                    )
+        actual_source_sets: List[List[Tuple[str, Any]]] = []
+        for plan_index, step in enumerate(plan_steps):
+            try:
+                source_values = extract_source_macro_ids(
+                    step, f"device_plan[{plan_index}]", required=True
+                )
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                continue
+            valid_sources: List[Tuple[str, Any]] = []
+            for source_value in source_values:
+                source = macro_id_key(source_value)
                 if source not in expected_set:
                     errors.append(
                         "device_plan 引用了 Research 不存在的 "
-                        f"source_macro_step={source}。"
+                        f"source_macro_step={source_value!r}。"
                     )
                     continue
                 mapped.setdefault(source, []).append(step)
@@ -3526,11 +3845,18 @@ class SingleDeviceAgent:
             for handoff in plan_result.get("offline_handoffs", []) or []
             if isinstance(handoff, dict)
         ]
-        for handoff in handoffs:
+        for handoff_index, handoff in enumerate(handoffs):
+            try:
+                handoff_values = extract_source_macro_ids(
+                    handoff, f"offline_handoffs[{handoff_index}]"
+                )
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                handoff_values = []
             sources = [
                 source
-                for source in cls._source_macro_step_ids(handoff)
-                if source in expected_set
+                for value in handoff_values
+                if (source := macro_id_key(value)) in expected_set
             ]
             if sources:
                 for source in sources:
@@ -3539,11 +3865,13 @@ class SingleDeviceAgent:
             if semantic_records:
                 continue
             handoff_text = cls._identity_text(_json_text(handoff))
-            scores: Dict[str, int] = {}
+            scores: Dict[Tuple[str, Any], int] = {}
             for index, research_step in enumerate(research_steps, start=1):
-                candidate_source = str(
-                    research_step.get("步骤序号", research_step.get("step", index))
-                )
+                try:
+                    candidate_value = cls._semantic_macro_id(research_step, index)
+                except MacroIdentityError:
+                    continue
+                candidate_source = macro_id_key(candidate_value)
                 operation = cls._identity_text(
                     research_step.get("操作", research_step.get("operation", ""))
                 )
@@ -3574,7 +3902,10 @@ class SingleDeviceAgent:
                     mapped.setdefault(winners[0], []).append(handoff)
         for source in expected_order:
             if source not in mapped:
-                errors.append(f"device_plan 缺少 Research macro step {source} 的覆盖。")
+                errors.append(
+                    "device_plan 缺少 Research macro step "
+                    f"{expected_values[source]!r} 的覆盖。"
+                )
                 continue
             if semantic_records:
                 mapped_ids = {
@@ -3584,10 +3915,12 @@ class SingleDeviceAgent:
                     for value in record.get("source_material_identity_ids", []) or []
                     if str(value).strip()
                 }
-                missing_ids = expected_material_ids.get(source, set()) - mapped_ids
+                retained_ids = mapped_ids | structured_ids_by_macro.get(source, set())
+                missing_ids = expected_material_ids.get(source, set()) - retained_ids
                 if missing_ids:
                     errors.append(
-                        f"source_macro_step={source} 未保留冻结 LLM 物料身份 ID："
+                        f"source_macro_step={expected_values[source]!r} "
+                        "未保留冻结 LLM 物料身份 ID："
                         f"missing={sorted(missing_ids)}。"
                     )
                 continue
@@ -3617,7 +3950,8 @@ class SingleDeviceAgent:
             ]
             if missing:
                 errors.append(
-                    f"source_macro_step={source} 未逐字保留 Research 试剂/对象身份："
+                    f"source_macro_step={expected_values[source]!r} "
+                    "未逐字保留 Research 试剂/对象身份："
                     f"missing={missing}。"
                 )
         # A physical Device operation may serve parallel Research branches.
@@ -3627,13 +3961,13 @@ class SingleDeviceAgent:
         order_index = {source: index for index, source in enumerate(expected_order)}
         parent = {source: source for source in expected_order}
 
-        def find(source: str) -> str:
+        def find(source: Tuple[str, Any]) -> Tuple[str, Any]:
             while parent[source] != source:
                 parent[source] = parent[parent[source]]
                 source = parent[source]
             return source
 
-        def union(left: str, right: str) -> None:
+        def union(left: Tuple[str, Any], right: Tuple[str, Any]) -> None:
             left_root, right_root = find(left), find(right)
             if left_root == right_root:
                 return
@@ -3664,7 +3998,7 @@ class SingleDeviceAgent:
         # defined by when each independent macro/cohort is *completed*, not by
         # its first appearance.  A true wholesale 2 -> 1 reversal still has
         # last(2) < last(1) and is rejected.
-        cohort_last_position: Dict[str, int] = {}
+        cohort_last_position: Dict[Tuple[str, Any], int] = {}
         for position, sources in enumerate(actual_source_sets):
             for source in sources:
                 if source not in cohort_index:
@@ -3673,7 +4007,7 @@ class SingleDeviceAgent:
                 cohort_last_position[root] = max(
                     position, cohort_last_position.get(root, -1)
                 )
-        ordered_roots: List[str] = []
+        ordered_roots: List[Tuple[str, Any]] = []
         for source in expected_order:
             root = find(source)
             if root not in ordered_roots:
@@ -3703,12 +4037,17 @@ class SingleDeviceAgent:
 
         def explicit_marker_records(
             payload: Dict[str, Any],
-        ) -> List[Tuple[List[str], Dict[str, bool]]]:
-            records: List[Tuple[List[str], Dict[str, bool]]] = []
+        ) -> List[
+            Tuple[List[Any], List[Tuple[str, Any]], Dict[str, bool]]
+        ]:
+            records: List[
+                Tuple[List[Any], List[Tuple[str, Any]], Dict[str, bool]]
+            ] = []
             for step in payload.get("device_plan", []) or []:
                 if not isinstance(step, dict):
                     continue
                 sources = cls._source_macro_step_ids(step)
+                source_keys = [macro_id_key(value) for value in sources]
                 text = _json_text(step)
                 found: Dict[str, bool] = {}
                 for match in re.findall(r"试剂\s*[A-Za-z0-9_-]+", text, re.I):
@@ -3729,7 +4068,7 @@ class SingleDeviceAgent:
                             # occurrence of the same marker.
                             found[marker] = found.get(marker, True) and stateful
                 if sources and found:
-                    records.append((sources, found))
+                    records.append((sources, source_keys, found))
             return records
 
         def marker_matches(marker: str, expected: str) -> bool:
@@ -3739,10 +4078,10 @@ class SingleDeviceAgent:
 
         research_identity_text = cls._identity_text(_json_text(research_handoff))
         plan_marker_records = explicit_marker_records(plan_result)
-        for sources, actual_markers in plan_marker_records:
+        for sources, source_keys, actual_markers in plan_marker_records:
             allowed = {
                 marker
-                for source in sources
+                for source in source_keys
                 for marker in expected_reagents.get(source, [])
             }
             if not allowed:
@@ -3768,10 +4107,12 @@ class SingleDeviceAgent:
                 )
 
         if isinstance(reference_plan, dict):
-            def canonical_markers(payload: Dict[str, Any]) -> Dict[str, Set[str]]:
-                markers: Dict[str, Set[str]] = {}
-                for sources, found in explicit_marker_records(payload):
-                    for source in sources:
+            def canonical_markers(
+                payload: Dict[str, Any]
+            ) -> Dict[Tuple[str, Any], Set[str]]:
+                markers: Dict[Tuple[str, Any], Set[str]] = {}
+                for _, source_keys, found in explicit_marker_records(payload):
+                    for source in source_keys:
                         allowed = expected_reagents.get(source, [])
                         matched = {
                             marker
@@ -3791,7 +4132,8 @@ class SingleDeviceAgent:
                 actual = after_markers.get(source, set())
                 if actual != expected:
                     errors.append(
-                        f"source_macro_step={source} 的显式试剂身份发生漂移："
+                        "source_macro_step="
+                        f"{expected_values.get(source, source)!r} 的显式试剂身份发生漂移："
                         f"before={sorted(expected)}, after={sorted(actual)}。"
                     )
         return list(dict.fromkeys(errors))
@@ -3934,7 +4276,12 @@ class SingleDeviceAgent:
         ):
             if not isinstance(step, dict):
                 continue
-            source = str(step.get("步骤序号", step.get("step", index)))
+            try:
+                source = semantic_macro_id(
+                    step, f"macro_action_steps[{index - 1}]"
+                )
+            except MacroIdentityError:
+                continue
             returns = step.get("intermediate_returns", [])
             if not isinstance(returns, list):
                 continue
@@ -3962,23 +4309,72 @@ class SingleDeviceAgent:
         candidate's proposed order. A terminal observation needs no machine
         wait command. The existing observation boundary can collect it.
         """
+        raw_research_steps = research_handoff.get("macro_action_steps", [])
+        identity_findings: List[Dict[str, Any]] = []
+        source_order: List[Any] = []
+        if not isinstance(raw_research_steps, list):
+            return [
+                {
+                    "type": "invalid_research_macro_identity",
+                    "error_code": "invalid_macro_record",
+                    "path": "research_handoff.macro_action_steps",
+                    "message": "Research macro_action_steps 必须为对象数组，不能进入 Device 可行性认证。",
+                }
+            ]
+        for index, step in enumerate(raw_research_steps):
+            if not isinstance(step, dict):
+                identity_findings.append(
+                    {
+                        "type": "invalid_research_macro_identity",
+                        "error_code": "invalid_macro_record",
+                        "path": f"research_handoff.macro_action_steps[{index}]",
+                        "message": (
+                            f"Research macro_action_steps[{index}] 不是对象，"
+                            "不能进入 Device 可行性认证。"
+                        ),
+                    }
+                )
+                continue
+            try:
+                source_order.append(
+                    semantic_macro_id(
+                        step, f"research_handoff.macro_action_steps[{index}]"
+                    )
+                )
+            except MacroIdentityError as exc:
+                identity_findings.append(
+                    {
+                        "type": "invalid_research_macro_identity",
+                        "error_code": exc.code.lower(),
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+        if identity_findings:
+            return identity_findings
+
         contracts = cls._external_return_contracts(research_handoff)
         if not contracts:
             return []
-        source_order = [
-            str(step.get("步骤序号", step.get("step", index)))
-            for index, step in enumerate(
-                research_handoff.get("macro_action_steps", []) or [], start=1
-            )
-            if isinstance(step, dict)
-        ]
         plan_steps = [
             item for item in candidate.get("device_plan", []) or []
             if isinstance(item, dict)
         ] if isinstance(candidate.get("device_plan", []), list) else []
-        plan_by_id = {
-            str(item.get("plan_step")): item for item in plan_steps
-        }
+        plan_by_id: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        ambiguous_plan_ids: Set[Tuple[str, Any]] = set()
+        for plan_index, item in enumerate(plan_steps):
+            key = cls._optional_typed_id_key(
+                item.get("plan_step"),
+                f"device_plan[{plan_index}].plan_step",
+            )
+            if key is None:
+                continue
+            if key in plan_by_id:
+                ambiguous_plan_ids.add(key)
+            else:
+                plan_by_id[key] = item
+        for key in ambiguous_plan_ids:
+            plan_by_id.pop(key, None)
         workflow = candidate.get("workflow_json")
         workflow_steps = workflow.get("steps", []) if isinstance(workflow, dict) else []
         machine_steps: List[Dict[str, Any]] = []
@@ -3986,13 +4382,25 @@ class SingleDeviceAgent:
             for item in steps if isinstance(steps, list) else []:
                 if not isinstance(item, dict) or not str(item.get("workstation") or "").strip():
                     continue
-                sources = set(cls._source_macro_step_ids(item))
+                sources = list(cls._source_macro_step_ids(item))
                 if kind == "workflow":
-                    source_plan = plan_by_id.get(str(item.get("source_plan_step")))
+                    source_plan_key = cls._optional_typed_id_key(
+                        item.get("source_plan_step"),
+                        "workflow.source_plan_step",
+                    )
+                    source_plan = (
+                        plan_by_id.get(source_plan_key)
+                        if source_plan_key is not None
+                        else None
+                    )
                     if source_plan is not None:
                         # Either trace can expose a crossed barrier; lying in
                         # one trace cannot erase the other frozen plan source.
-                        sources.update(cls._source_macro_step_ids(source_plan))
+                        for value in cls._source_macro_step_ids(source_plan):
+                            if macro_id_key(value) not in {
+                                macro_id_key(existing) for existing in sources
+                            }:
+                                sources.append(value)
                 machine_steps.append({
                     "kind": kind,
                     "step": item.get("plan_step") if kind == "device_plan" else item.get("step_number"),
@@ -4001,11 +4409,28 @@ class SingleDeviceAgent:
         findings: List[Dict[str, Any]] = []
         for contract in contracts:
             source = contract["source_macro_step"]
-            later = set(source_order[source_order.index(source) + 1:])
-            blocked = [item for item in machine_steps if item["sources"] & later]
+            source_keys = [macro_id_key(value) for value in source_order]
+            source_key = macro_id_key(source)
+            if source_key not in source_keys:
+                continue
+            later = set(source_keys[source_keys.index(source_key) + 1:])
+            blocked = [
+                item
+                for item in machine_steps
+                if {macro_id_key(value) for value in item["sources"]} & later
+            ]
             if not blocked:
                 continue
-            downstream = sorted({ref for item in blocked for ref in item["sources"] & later})
+            downstream = [
+                value
+                for value in source_order
+                if macro_id_key(value) in later
+                and any(
+                    macro_id_key(value)
+                    in {macro_id_key(source) for source in item["sources"]}
+                    for item in blocked
+                )
+            ]
             findings.append({
                 "type": "device_external_return_wait_required",
                 "source_macro_step": source,
@@ -4030,7 +4455,16 @@ class SingleDeviceAgent:
         findings: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Keep every scientific step for review, but expose no executable payload."""
-        pending = [copy.deepcopy(item["return_contract"]) for item in findings]
+        identity_findings = [
+            item
+            for item in findings
+            if item.get("type") == "invalid_research_macro_identity"
+        ]
+        pending = [
+            copy.deepcopy(item["return_contract"])
+            for item in findings
+            if isinstance(item.get("return_contract"), dict)
+        ]
         package = copy.deepcopy(candidate)
         prior_context = package.get("manual_repair_context")
         context = copy.deepcopy(prior_context) if isinstance(prior_context, dict) else {}
@@ -4040,22 +4474,36 @@ class SingleDeviceAgent:
         context["last_device_plan"] = copy.deepcopy(candidate.get("device_plan", []))
         context["research_handoff"] = copy.deepcopy(state.research_handoff)
         context["pending_returns"] = pending
+        if identity_findings:
+            context["research_macro_identity_errors"] = copy.deepcopy(
+                identity_findings
+            )
         context["allowed_changes"] = []
         context["resume_requires"] = (
-            "保留后续科学步骤，由 Research 在该 observation/manual_handoff 边界拆分执行；"
-            "获得真实返回并形成新的 Research 交接后再规划后续步骤。"
-            "Device override 或候选自述已满足等待不能解除此门。"
+            "Research 必须先修复冲突、缺失或非法的 typed macro step identity；"
+            "Device 不得按位置或 macro_action_id 猜测 step identity。"
+            if identity_findings
+            else (
+                "保留后续科学步骤，由 Research 在该 observation/manual_handoff 边界拆分执行；"
+                "获得真实返回并形成新的 Research 交接后再规划后续步骤。"
+                "Device override 或候选自述已满足等待不能解除此门。"
+            )
         )
         # An old/pre-gate certificate must never authorize the crossing, even
         # when this check runs after workflow repair or manual restoration.
         state.feasibility_accepted = False
         state.feasibility_certificate = {}
+        state.accepted_device_plan_contract = {}
         package.update({
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
             "failure_scope": "device_plan",
-            "failure_stage": "external_return_wait",
+            "failure_stage": (
+                "research_macro_identity"
+                if identity_findings
+                else "external_return_wait"
+            ),
             "exp_id": state.exp_id,
             "iteration_id": state.iteration_id,
             "workflow_id": state.workflow_id,
@@ -4067,13 +4515,24 @@ class SingleDeviceAgent:
             "dispatch_formatting": {},
             "macro_plan": copy.deepcopy(state.research_handoff),
             "pending_returns": pending,
-            "return_wait_audit": {"status": "waiting", "findings": copy.deepcopy(findings)},
+            "return_wait_audit": {
+                "status": "blocked" if identity_findings else "waiting",
+                "findings": copy.deepcopy(findings),
+            },
             "manual_repair_context": context,
             "requires_scientific_review": True,
             "agent_mode": "single_device_agent",
             "error_package": {
-                "type": "device_external_return_wait_required",
-                "assessment_source": "deterministic_frozen_research_return_contract",
+                "type": (
+                    "invalid_research_macro_identity"
+                    if identity_findings
+                    else "device_external_return_wait_required"
+                ),
+                "assessment_source": (
+                    "typed_macro_identity_contract"
+                    if identity_findings
+                    else "deterministic_frozen_research_return_contract"
+                ),
                 "feedback_route": "human",
                 "failure_scope": "device_plan",
                 "blocking_constraints": [item["message"] for item in findings],
@@ -4112,9 +4571,58 @@ class SingleDeviceAgent:
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
+        *,
+        acceptance_scope: str = "accepted_device_plan",
+        supersedes_certificate_id: str = "",
+        repair_request_id: str = "",
+        repair_authority: str = "",
+        authorized_change_scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if self._external_return_wait_findings(state.research_handoff, plan_result):
             raise ValueError("mandatory external return wait prevents feasibility certification")
+        # ``requires_scientific_review`` is part of the signed Device Plan
+        # contract and must already have been materialized before the final
+        # Plan audit.  Certificate construction is read-only with respect to
+        # the accepted object.
+        canonical_review_required = self._scientific_review_required(
+            plan_result,
+            feasibility_progress=state.feasibility_progress,
+        )
+        if plan_result.get("requires_scientific_review") is not canonical_review_required:
+            raise ValueError(
+                "final Device Plan was not canonicalized before feasibility certification"
+            )
+        expected_candidate_digest = checkpoint_digest(plan_result)
+        expected_plan_contract_digest = device_plan_contract_digest(plan_result)
+        latest_clean_audit = next(
+            (
+                record
+                for record in reversed(state.plan_audit_records)
+                if isinstance(record, dict)
+                and record.get("finding_count") == 0
+                and record.get("run_layer_status") == "clean"
+                and record.get("candidate_digest") == expected_candidate_digest
+                and record.get("device_plan_contract_digest")
+                == expected_plan_contract_digest
+            ),
+            {},
+        )
+        clean_audit_matches = bool(
+            isinstance(latest_clean_audit, dict)
+            and latest_clean_audit.get("finding_count") == 0
+            and latest_clean_audit.get("run_layer_status") == "clean"
+            and latest_clean_audit.get("candidate_digest")
+            == expected_candidate_digest
+            and latest_clean_audit.get("device_plan_contract_digest")
+            == expected_plan_contract_digest
+        )
+        if (
+            acceptance_scope != "route_only_pending_device_plan_repair"
+            and not clean_audit_matches
+        ):
+            raise ValueError(
+                "feasibility certification requires a clean audit bound to the final candidate"
+            )
         route = self._route_view(state.research_handoff)
         research_matrix = self._sample_matrix_contract_value(
             state.research_handoff
@@ -4122,6 +4630,8 @@ class SingleDeviceAgent:
         device_matrix = self._sample_matrix_contract_value(plan_result)
         device_sample_ids = self._extract_sample_ids(plan_result)
         protected = {
+            "certificate_version": FEASIBILITY_CERTIFICATE_VERSION,
+            "contract_version": self._contract_version,
             "research_plan_signature": self._plan_signature(state.research_handoff),
             "target_materials": self._extract_named_values(
                 state.research_handoff,
@@ -4140,21 +4650,60 @@ class SingleDeviceAgent:
             "accepted_device_sample_control_matrix": device_matrix,
             "device_sample_ids": device_sample_ids,
             "semantic_analysis": copy.deepcopy(self._active_semantic_analysis),
+            "accepted_device_plan_signature": self._stable_digest(
+                plan_result.get("device_plan", []), prefix="device_plan"
+            ),
+            "accepted_device_plan_contract_sha256": device_plan_contract_digest(
+                plan_result
+            ),
+            "plan_audit_record_digest": str(
+                (
+                    latest_clean_audit.get("audit_record_digest")
+                    if clean_audit_matches
+                    else ""
+                )
+                or ""
+            ),
+            "plan_audit_implementation_sha256": str(
+                (
+                    (latest_clean_audit.get("audit_version") or {}).get(
+                        "implementation_sha256"
+                    )
+                    if clean_audit_matches
+                    else ""
+                )
+                or ""
+            ),
+            "acceptance_scope": str(acceptance_scope or "accepted_device_plan"),
         }
         external_returns = self._external_return_contracts(state.research_handoff)
         if external_returns:
             protected["external_return_contracts"] = external_returns
+        # A successor is identified by the presence of lineage metadata, not
+        # only by a non-empty predecessor id.  This preserves a complete audit
+        # record for legacy predecessors whose historical certificate omitted
+        # ``certificate_id``.
+        if (
+            authorized_change_scope is not None
+            or supersedes_certificate_id
+            or repair_request_id
+            or repair_authority
+        ):
+            protected["supersedes_certificate_id"] = str(
+                supersedes_certificate_id
+            )
+            protected["repair_request_id"] = str(repair_request_id)
+            protected["repair_authority"] = str(repair_authority)
+            protected["authorized_change_scope"] = copy.deepcopy(
+                authorized_change_scope or {}
+            )
         protected_digest = self._stable_digest(protected)
         certificate = {
-            "certificate_version": FEASIBILITY_CERTIFICATE_VERSION,
             "accepted": True,
             "accepted_at": datetime.now().isoformat(),
             **protected,
             "device_snapshot_id": self._device_snapshot_id(),
             "device_truth_sha256": self._full_device_truth_digest(),
-            "accepted_device_plan_signature": self._stable_digest(
-                plan_result.get("device_plan", []), prefix="device_plan"
-            ),
             "protected_digest": protected_digest,
         }
         certificate["route_signature"] = protected[
@@ -4166,14 +4715,166 @@ class SingleDeviceAgent:
         certificate["device_snapshot_signature"] = certificate[
             "device_truth_sha256"
         ]
-        certificate["certificate_id"] = self._stable_digest(
-            {
-                "protected_digest": protected_digest,
-                "device_snapshot_id": certificate["device_snapshot_id"],
-                "device_truth_sha256": certificate["device_truth_sha256"],
-            },
-            prefix="feasibility",
+        certificate["certificate_id"] = feasibility_certificate_id(
+            protected_digest=protected_digest,
+            device_snapshot_id=certificate["device_snapshot_id"],
+            device_truth_sha256=certificate["device_truth_sha256"],
         )
+        return certificate
+
+    @staticmethod
+    def _device_plan_change_scope(
+        previous_plan: Dict[str, Any],
+        revised_plan: Dict[str, Any],
+        *,
+        declared_changes: Any = None,
+        declarations: Any = None,
+    ) -> Dict[str, Any]:
+        before = device_plan_contract_view(previous_plan)
+        after = device_plan_contract_view(revised_plan)
+        return {
+            "changed_contract_fields": [
+                key for key in before if before[key] != after[key]
+            ],
+            "declared_changes": copy.deepcopy(
+                declared_changes if isinstance(declared_changes, list) else []
+            ),
+            "declarations": copy.deepcopy(
+                declarations if isinstance(declarations, dict) else {}
+            ),
+        }
+
+    def _certificate_plan_binding_errors(
+        self,
+        certificate: Dict[str, Any],
+        plan_result: Dict[str, Any],
+        *,
+        label: str,
+    ) -> List[str]:
+        errors: List[str] = []
+        expected_contract_digest = str(
+            certificate.get("accepted_device_plan_contract_sha256") or ""
+        )
+        actual_contract_digest = device_plan_contract_digest(plan_result)
+        if expected_contract_digest and self._contract_version == "v2":
+            if expected_contract_digest != actual_contract_digest:
+                errors.append(
+                    f"{label} 与 feasibility_certificate 冻结的完整 Device Plan 合同不一致。"
+                )
+        elif self._contract_version == "v2":
+            errors.append(
+                "V2 feasibility_certificate 缺少完整 Device Plan 合同摘要。"
+            )
+
+        expected_step_digest = str(
+            certificate.get("accepted_device_plan_signature") or ""
+        )
+        if expected_step_digest and expected_step_digest != self._stable_digest(
+            plan_result.get("device_plan", []), prefix="device_plan"
+        ):
+            errors.append(
+                f"{label} 与 feasibility_certificate 冻结的 device_plan 步骤不一致。"
+            )
+        return errors
+
+    def _issue_successor_feasibility_certificate(
+        self,
+        state: SingleDeviceAgentState,
+        previous_plan: Dict[str, Any],
+        revised_plan: Dict[str, Any],
+        prior_certificate: Dict[str, Any],
+        *,
+        repair_request_id: str,
+        repair_authority: str,
+        declared_changes: Any = None,
+        declarations: Any = None,
+    ) -> Dict[str, Any]:
+        prepared_plan = self._ensure_material_relationships_compiled(
+            state,
+            copy.deepcopy(revised_plan),
+        )
+        prepared_plan = self._normalize_quantity_contract(
+            prepared_plan,
+            research_handoff=state.research_handoff,
+        )
+        prepared_plan["requires_scientific_review"] = (
+            self._scientific_review_required(
+                prepared_plan,
+                feasibility_progress=state.feasibility_progress,
+            )
+        )
+        final_findings = self._plan_level_findings(state, prepared_plan)
+        if final_findings:
+            self._persist_plan_audit_record(
+                state,
+                prepared_plan,
+                final_findings,
+                phase="pre_successor_certificate_failed",
+            )
+            raise ValueError(
+                "successor feasibility certificate blocked by final full Plan audit"
+            )
+        self._persist_plan_audit_record(
+            state,
+            prepared_plan,
+            [],
+            phase="pre_successor_certificate_clean",
+        )
+        scope = self._device_plan_change_scope(
+            previous_plan,
+            prepared_plan,
+            declared_changes=declared_changes,
+            declarations=declarations,
+        )
+        predecessor_id = str(prior_certificate.get("certificate_id") or "")
+        if not predecessor_id and prior_certificate.get("protected_digest"):
+            # V1 certificates issued before certificate_id became mandatory
+            # still contain enough immutable binding material to derive the
+            # same stable identity.  Do not silently drop their lineage when
+            # the first manual successor is issued.
+            predecessor_id = feasibility_certificate_id(
+                protected_digest=str(
+                    prior_certificate.get("protected_digest") or ""
+                ),
+                device_snapshot_id=str(
+                    prior_certificate.get("device_snapshot_id") or ""
+                ),
+                device_truth_sha256=str(
+                    prior_certificate.get("device_truth_sha256") or ""
+                ),
+            )
+        effective_request_id = str(repair_request_id or "").strip()
+        if not effective_request_id:
+            effective_request_id = self._stable_digest(
+                {
+                    "supersedes_certificate_id": predecessor_id,
+                    "repair_authority": repair_authority,
+                    "authorized_change_scope": scope,
+                    "revised_device_plan_contract": device_plan_contract_digest(
+                        prepared_plan
+                    ),
+                },
+                prefix="device_plan_repair",
+            )
+        certificate = self._build_feasibility_certificate(
+            state,
+            prepared_plan,
+            acceptance_scope="accepted_device_plan_revision",
+            supersedes_certificate_id=predecessor_id,
+            repair_request_id=effective_request_id,
+            repair_authority=repair_authority,
+            authorized_change_scope=scope,
+        )
+        accepted_contract = device_plan_contract_view(prepared_plan)
+        # Only publish the compiled, normalized object after its complete
+        # fixed-point audit and certificate construction both succeed.
+        revised_plan.clear()
+        revised_plan.update(copy.deepcopy(prepared_plan))
+        # Commit certificate authority only after every value needed by the
+        # terminal integrity guard has been materialized successfully.
+        state.accepted_device_plan_contract = accepted_contract
+        state.feasibility_certificate = copy.deepcopy(certificate)
+        state.feasibility_accepted = True
         return certificate
 
     @staticmethod
@@ -4203,35 +4904,133 @@ class SingleDeviceAgent:
         errors: List[str] = []
         if not isinstance(certificate, dict) or not certificate.get("accepted"):
             return ["缺少已接受的 feasibility_certificate。"]
+        certificate_contract = str(
+            certificate.get("contract_version") or ""
+        ).strip()
+        certificate_version = strict_feasibility_certificate_version(certificate)
+        if (
+            certificate_version in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            errors.append(
+                "feasibility_certificate 2.4 使用旧的完整 Device Plan 摘要范围；"
+                "当前 2.5 已将物料测量、消费事件和编译器清单纳入签发合同，"
+                "必须重新审计并签发，不能按 legacy 证书降级复用。"
+            )
+        elif (
+            self._contract_version == "v2"
+            and certificate_version != FEASIBILITY_CERTIFICATE_VERSION
+        ):
+            errors.append(
+                "V2 feasibility_certificate 版本不支持或缺失，必须重新执行可行性门。"
+            )
+        if certificate_contract:
+            if certificate_contract != self._contract_version:
+                errors.append(
+                    "feasibility_certificate 合同版本与当前 Device 运行版本不一致。"
+                )
+        elif self._contract_version == "v2":
+            errors.append(
+                "V2 feasibility_certificate 缺少冻结 contract_version。"
+            )
         expected_signature = self._plan_signature(state.research_handoff)
         if certificate.get("research_plan_signature") != expected_signature:
             errors.append(
                 "Research plan signature 与人工修订请求不一致；Device override 不得修改实验路线。"
             )
-        protected = {
-            key: copy.deepcopy(certificate.get(key, [] if key != "research_plan_signature" else ""))
-            for key in (
-                "research_plan_signature",
-                "target_materials",
-                "reaction_route",
-                "reagent_identity_and_order",
-                "observation_points",
-                "sample_control_matrix",
-                "accepted_device_sample_control_matrix",
-                "device_sample_ids",
-                "semantic_analysis",
-            )
-        }
-        if "external_return_contracts" in certificate:
-            protected["external_return_contracts"] = copy.deepcopy(
-                certificate["external_return_contracts"]
-            )
+        protected = feasibility_certificate_protected_payload(certificate)
         if certificate.get("external_return_contracts", []) != self._external_return_contracts(
             state.research_handoff
         ):
             errors.append("feasibility_certificate 的冻结外部返回等待合同发生变化或缺失。")
         if certificate.get("protected_digest") != self._stable_digest(protected):
             errors.append("feasibility_certificate protected_digest 校验失败。")
+        acceptance_scope = str(certificate.get("acceptance_scope") or "")
+        if acceptance_scope != "route_only_pending_device_plan_repair":
+            audit_digest = str(
+                certificate.get("plan_audit_record_digest") or ""
+            ).strip()
+            audit_implementation = str(
+                certificate.get("plan_audit_implementation_sha256") or ""
+            ).strip()
+            matching_audit = next(
+                (
+                    record
+                    for record in reversed(state.plan_audit_records)
+                    if isinstance(record, dict)
+                    and record.get("audit_record_digest") == audit_digest
+                ),
+                None,
+            )
+            if not audit_digest or not audit_implementation:
+                errors.append("完整 feasibility_certificate 缺少最终 clean Plan audit 绑定。")
+            elif not isinstance(matching_audit, dict):
+                errors.append("feasibility_certificate 绑定的 clean Plan audit 记录不存在。")
+            else:
+                digest_payload = copy.deepcopy(matching_audit)
+                recorded_digest = digest_payload.pop("audit_record_digest", "")
+                if recorded_digest != checkpoint_digest(digest_payload):
+                    errors.append("feasibility_certificate 绑定的 Plan audit 记录摘要校验失败。")
+                if (
+                    matching_audit.get("finding_count") != 0
+                    or matching_audit.get("run_layer_status") != "clean"
+                    or matching_audit.get("device_plan_contract_digest")
+                    != certificate.get("accepted_device_plan_contract_sha256")
+                    or (matching_audit.get("audit_version") or {}).get(
+                        "implementation_sha256"
+                    )
+                    != audit_implementation
+                ):
+                    errors.append("feasibility_certificate 未绑定到匹配的最终 clean Plan audit。")
+                if audit_implementation != implementation_digest():
+                    errors.append("Plan audit 实现已变化；旧 feasibility_certificate 必须重新审计。")
+            if state.accepted_device_plan_contract and (
+                device_plan_contract_digest(state.accepted_device_plan_contract)
+                != certificate.get("accepted_device_plan_contract_sha256")
+            ):
+                errors.append("已接受 Device Plan 快照与 feasibility_certificate 不一致。")
+        expected_route_signature = str(
+            certificate.get("research_plan_signature") or ""
+        )
+        if certificate.get("route_signature"):
+            if certificate.get("route_signature") != expected_route_signature:
+                errors.append("feasibility_certificate route_signature 校验失败。")
+        elif self._contract_version == "v2":
+            errors.append("V2 feasibility_certificate 缺少 route_signature。")
+        expected_matrix_signature = self._stable_digest(
+            certificate.get("sample_control_matrix", []),
+            prefix="sample_matrix",
+        )
+        if certificate.get("sample_matrix_signature"):
+            if certificate.get("sample_matrix_signature") != expected_matrix_signature:
+                errors.append(
+                    "feasibility_certificate sample_matrix_signature 校验失败。"
+                )
+        elif self._contract_version == "v2":
+            errors.append("V2 feasibility_certificate 缺少 sample_matrix_signature。")
+        expected_snapshot_signature = str(
+            certificate.get("device_truth_sha256") or ""
+        )
+        if certificate.get("device_snapshot_signature"):
+            if (
+                certificate.get("device_snapshot_signature")
+                != expected_snapshot_signature
+            ):
+                errors.append(
+                    "feasibility_certificate device_snapshot_signature 校验失败。"
+                )
+        elif self._contract_version == "v2":
+            errors.append("V2 feasibility_certificate 缺少 device_snapshot_signature。")
+        expected_certificate_id = feasibility_certificate_id(
+            protected_digest=str(certificate.get("protected_digest") or ""),
+            device_snapshot_id=str(certificate.get("device_snapshot_id") or ""),
+            device_truth_sha256=str(certificate.get("device_truth_sha256") or ""),
+        )
+        if certificate.get("certificate_id"):
+            if certificate.get("certificate_id") != expected_certificate_id:
+                errors.append("feasibility_certificate certificate_id 校验失败。")
+        elif self._contract_version == "v2":
+            errors.append("V2 feasibility_certificate 缺少 certificate_id。")
         if self._active_semantic_analysis and certificate.get(
             "semantic_analysis"
         ) != self._active_semantic_analysis:
@@ -4256,6 +5055,65 @@ class SingleDeviceAgent:
             )
         return errors
 
+    @classmethod
+    def _scientific_review_required(
+        cls,
+        plan_result: Dict[str, Any],
+        *,
+        feasibility_progress: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        """Return the canonical, sticky scientific-review obligation.
+
+        The value is signed as part of the Device Plan contract, so every
+        deterministic source must be folded in before certificate issuance.
+        A later run-layer failure may preserve an earlier candidate, but may
+        never clear the review obligation recorded by that candidate.
+        """
+
+        if not isinstance(plan_result, dict):
+            return False
+        if bool(plan_result.get("requires_scientific_review")):
+            return True
+
+        for audit_key in ("quantity_audit", "pending_quantity_human_review"):
+            audit = plan_result.get(audit_key)
+            if isinstance(audit, dict) and (
+                bool(audit.get("requires_scientific_review"))
+                or str(audit.get("status") or "").strip().lower()
+                == "human_review_required"
+            ):
+                return True
+
+        adjustments = plan_result.get("quantity_adjustments")
+        if isinstance(adjustments, list) and any(
+            isinstance(item, dict)
+            and bool(item.get("requires_scientific_review"))
+            for item in adjustments
+        ):
+            return True
+
+        temporal_sources: List[Any] = [plan_result.get("temporal_adaptations")]
+        workflow_json = plan_result.get("workflow_json")
+        if isinstance(workflow_json, dict):
+            temporal_sources.append(workflow_json.get("temporal_adaptations"))
+        for adaptations in temporal_sources:
+            if isinstance(adaptations, list) and any(
+                isinstance(item, dict)
+                and bool(item.get("requires_scientific_review"))
+                for item in adaptations
+            ):
+                return True
+
+        for progress_entry in feasibility_progress or []:
+            if not isinstance(progress_entry, dict):
+                continue
+            candidate = progress_entry.get("candidate")
+            if isinstance(candidate, dict) and cls._scientific_review_required(
+                candidate
+            ):
+                return True
+        return False
+
     def _accept_feasibility_plan(
         self,
         state: SingleDeviceAgentState,
@@ -4270,10 +5128,34 @@ class SingleDeviceAgent:
         wait_findings = self._external_return_wait_findings(state.research_handoff, plan_result)
         if wait_findings:
             return self._external_return_wait_result(state, plan_result, wait_findings)
-        accepted = self._normalize_quantity_contract(
+        accepted = self._ensure_material_relationships_compiled(
+            state,
             copy.deepcopy(plan_result),
+        )
+        accepted = self._normalize_quantity_contract(
+            accepted,
             research_handoff=state.research_handoff,
         )
+        accepted["requires_scientific_review"] = (
+            self._scientific_review_required(
+                accepted,
+                feasibility_progress=state.feasibility_progress,
+            )
+        )
+        final_plan_findings = self._plan_level_findings(state, accepted)
+        if final_plan_findings:
+            self._persist_plan_audit_record(
+                state,
+                accepted,
+                final_plan_findings,
+                phase="pre_certificate_final_candidate",
+            )
+            return self._controlled_plan_repair_stop(
+                state,
+                accepted,
+                final_plan_findings,
+                "pre_certificate_full_plan_audit_failed",
+            )
         matrix_errors = self._sample_matrix_drift_errors(
             state.research_handoff, accepted
         )
@@ -4292,41 +5174,70 @@ class SingleDeviceAgent:
         )
         acceptance_errors = list(dict.fromkeys(matrix_errors + invariant_errors))
         if acceptance_errors:
-            accepted.update(
+            acceptance_findings = [
                 {
-                    "status": "manual_required",
-                    "feedback_type": "human_review_required",
-                    "feedback_route": "human",
-                    "failure_scope": "device_plan",
-                    "feasibility_accepted": False,
-                    "feasibility_certificate": {},
-                    "workflow_txt": "",
-                    "workflow_json": {},
-                    "error_package": {
-                        "type": "stage1_frozen_invariant_violation",
-                        "blocking_constraints": acceptance_errors,
-                        "message": (
-                            "Stage-1 device_plan 未保持 Research 路线、试剂顺序或"
-                            "样品/对照/变量矩阵，"
-                            "不能签发可行性证书。"
-                        ),
+                    "type": "stage1_frozen_invariant_violation",
+                    "finding_id": f"stage1_frozen_invariant_violation:{index}",
+                    "message": message,
+                    "repair_route": {
+                        "status": "repair_strategy_unavailable",
+                        "reason": "frozen Research invariant requires explicit review",
                     },
                 }
+                for index, message in enumerate(acceptance_errors, start=1)
+            ]
+            self._persist_plan_audit_record(
+                state,
+                accepted,
+                acceptance_findings,
+                phase="pre_certificate_acceptance_invariant_failed",
             )
-            return accepted
-        state.feasibility_accepted = True
-        state.feasibility_certificate = self._build_feasibility_certificate(
-            state, accepted
+            return self._controlled_plan_repair_stop(
+                state,
+                accepted,
+                acceptance_findings,
+                "pre_certificate_frozen_invariant_failed",
+            )
+        self._persist_plan_audit_record(
+            state,
+            accepted,
+            [],
+            phase="pre_certificate_final_candidate_clean",
         )
+        certificate = self._build_feasibility_certificate(state, accepted)
+        accepted_contract = device_plan_contract_view(accepted)
+        # Certificate issuance is an atomic state transition: a builder or
+        # snapshot failure must never leave ``accepted=True`` without the
+        # complete evidence needed to prove what was accepted.
+        state.accepted_device_plan_contract = accepted_contract
+        state.feasibility_certificate = copy.deepcopy(certificate)
+        state.feasibility_accepted = True
         accepted["feasibility_accepted"] = True
         accepted["feasibility_certificate"] = copy.deepcopy(
-            state.feasibility_certificate
+            certificate
         )
         state.add_log(
             "route feasibility accepted; immutable certificate created "
             f"({state.feasibility_certificate.get('certificate_id', '')})"
         )
         return accepted
+
+    @staticmethod
+    def _repair_request_plan_package(
+        repair_request: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Recover the last certified plan package from a repair request."""
+
+        if not isinstance(repair_request, dict):
+            return {}
+        last_plan = repair_request.get("last_device_plan")
+        if isinstance(last_plan, dict):
+            return copy.deepcopy(last_plan)
+        package = repair_request.get("device_plan_package")
+        base = copy.deepcopy(package) if isinstance(package, dict) else {}
+        if isinstance(last_plan, list):
+            base["device_plan"] = copy.deepcopy(last_plan)
+        return base
 
     def _prepare_device_plan_override(
         self,
@@ -4348,18 +5259,65 @@ class SingleDeviceAgent:
             # Keep the original certificate available in a structured
             # rejection package even when the override itself is invalid.
             state.feasibility_certificate = copy.deepcopy(certificate)
-            state.feasibility_accepted = bool(certificate.get("accepted"))
-        errors = self._validate_feasibility_certificate(
+        # A caller-supplied ``accepted`` bit is not authority.  It is restored
+        # only after the certificate itself and its repair-request plan binding
+        # have both passed deterministic validation.
+        state.feasibility_accepted = False
+        certificate_errors = self._validate_feasibility_certificate(
             state, certificate, require_snapshot_match=True
         )
+        errors = list(certificate_errors)
+        request_contract = str(
+            repair_request.get("contract_version") or ""
+        ).strip()
+        override_contract = str(
+            override.get("contract_version") or ""
+        ).strip() if isinstance(override, dict) else ""
+        request_resolution = repair_request.get("contract_resolution")
+        request_resolution = (
+            request_resolution if isinstance(request_resolution, dict) else {}
+        )
+        contract_evidence_present = bool(
+            request_contract or override_contract or request_resolution
+        )
+        if self._contract_version == "v2" or contract_evidence_present:
+            if request_contract != self._contract_version:
+                errors.append(
+                    "repair request contract_version 与当前 Device 运行版本不一致。"
+                )
+            if override_contract != self._contract_version:
+                errors.append(
+                    "device_plan_override contract_version 与当前 Device 运行版本不一致。"
+                )
+            if (
+                str(request_resolution.get("requested") or "").strip()
+                != self._contract_version
+                or str(request_resolution.get("effective") or "").strip()
+                != self._contract_version
+                or request_resolution.get("requested_matches_effective") is not True
+            ):
+                errors.append(
+                    "repair request contract_resolution 未冻结当前 Device 合同版本。"
+                )
 
-        base = repair_request.get("last_device_plan")
-        if not isinstance(base, dict):
-            base = repair_request.get("device_plan_package")
-        base = copy.deepcopy(base) if isinstance(base, dict) else {}
-        if isinstance(repair_request.get("last_device_plan"), list):
-            base["device_plan"] = copy.deepcopy(repair_request["last_device_plan"])
+        base = self._repair_request_plan_package(repair_request)
         reference_plan = copy.deepcopy(base)
+        certificate_binding_errors = self._certificate_plan_binding_errors(
+            certificate,
+            reference_plan,
+            label="repair request last_device_plan",
+        )
+        errors.extend(certificate_binding_errors)
+        state.feasibility_accepted = bool(
+            certificate.get("accepted") is True
+            and not certificate_errors
+            and not certificate_binding_errors
+        )
+        state.accepted_device_plan_contract = (
+            device_plan_contract_view(reference_plan)
+            if state.feasibility_accepted
+            else {}
+        )
 
         untrusted_override_fields: Set[str] = set()
         if isinstance(override, dict):
@@ -4396,9 +5354,13 @@ class SingleDeviceAgent:
                 "material_ledger",
                 "reagent_slot_plan",
                 "container_plan",
+                "quantity_requirement_dispositions",
                 "temporal_adaptations",
                 "offline_handoffs",
                 "sample_control_matrix",
+                "requires_scientific_review",
+                "quantity_contract_required",
+                "pending_quantity_human_review",
             ):
                 if sidecar_key in override:
                     plan_result[sidecar_key] = copy.deepcopy(
@@ -4531,6 +5493,24 @@ class SingleDeviceAgent:
                     "人工 device_plan 的完整样品/对照/变量矩阵与可行性证书不一致。"
                 )
 
+        # Compile and normalize the exact object that every invariant audit and
+        # successor certificate below will inspect.  Caller-supplied compiler
+        # manifests are derived data, never authority.
+        plan_result = self._ensure_material_relationships_compiled(
+            state,
+            plan_result,
+        )
+        plan_result = self._normalize_quantity_contract(
+            plan_result,
+            research_handoff=state.research_handoff,
+        )
+        plan_result["requires_scientific_review"] = (
+            self._scientific_review_required(
+                plan_result,
+                feasibility_progress=state.feasibility_progress,
+            )
+        )
+
         forbidden = self._forbidden_plan_change_claims(plan_result)
         errors.extend(forbidden)
         errors.extend(self._declared_route_change_errors(plan_result))
@@ -4549,16 +5529,26 @@ class SingleDeviceAgent:
             for finding in self._plan_level_findings(state, plan_result)
         )
         if not errors:
-            state.feasibility_accepted = True
-            state.feasibility_certificate = certificate
-            plan_result = self._normalize_quantity_contract(
-                plan_result, research_handoff=state.research_handoff
+            successor = self._issue_successor_feasibility_certificate(
+                state,
+                reference_plan,
+                plan_result,
+                certificate,
+                repair_request_id=str(repair_request.get("request_id") or ""),
+                repair_authority="human_device_plan_override",
+                declared_changes=plan_result.get("plan_changes", []),
+                declarations=(
+                    override.get("declarations", {})
+                    if isinstance(override, dict)
+                    else {}
+                ),
             )
             plan_result["feasibility_accepted"] = True
-            plan_result["feasibility_certificate"] = copy.deepcopy(certificate)
+            plan_result["feasibility_certificate"] = copy.deepcopy(successor)
             state.add_log(
                 "manual device plan accepted; skipped Research bootstrap and "
-                "Stage-1 LLM feasibility planning"
+                "Stage-1 LLM feasibility planning; successor certificate created "
+                f"({successor.get('certificate_id', '')})"
             )
         return plan_result, errors
 
@@ -4826,6 +5816,22 @@ class SingleDeviceAgent:
         wait_findings = self._external_return_wait_findings(state.research_handoff, plan_result)
         if wait_findings:
             return self._external_return_wait_result(state, plan_result, wait_findings)
+        certificate_binding_errors = self._certificate_plan_binding_errors(
+            state.feasibility_certificate,
+            plan_result,
+            label="accepted Device Plan",
+        )
+        if certificate_binding_errors:
+            return self._build_manual_result(
+                state,
+                plan_result,
+                reason=(
+                    "accepted Device Plan no longer matches its feasibility "
+                    "certificate"
+                ),
+                error_type="device_plan_certificate_binding_invalid",
+                extra_errors=certificate_binding_errors,
+            )
         plan_result = self._normalize_quantity_contract(
             copy.deepcopy(plan_result),
             research_handoff=state.research_handoff,
@@ -4910,18 +5916,38 @@ class SingleDeviceAgent:
         if self._result_is_device_internal(first_result):
             return first_result
         if not allow_plan_rewrite:
+            validation = first_result.get("dispatch_validation")
+            stop_reason = (
+                str(validation.get("repair_stop_reason") or "")
+                if isinstance(validation, dict)
+                else ""
+            )
+            scope_requires_human = stop_reason in {
+                "invalid_v2_device_step_identity",
+                "unanchored_v2_validation_error",
+                "empty_v2_translation_chunk_requires_structural_addition",
+            }
             return self._build_manual_result(
                 state,
                 first_result,
                 reason=(
                     "manual override still fails deterministic quantity audit"
                     if quantity_failed_before_workflow
-                    else "manual override workflow repair cycle exhausted"
+                    else (
+                        "V2 workflow repair requires a broader or structural "
+                        "change that is outside the authorized Device step scope"
+                        if scope_requires_human
+                        else "manual override workflow repair cycle exhausted"
+                    )
                 ),
                 error_type=(
                     "device_quantity_human_review_required"
                     if quantity_failed_before_workflow
-                    else "device_workflow_repair_exhausted"
+                    else (
+                        "device_workflow_repair_scope_requires_human"
+                        if scope_requires_human
+                        else "device_workflow_repair_exhausted"
+                    )
                 ),
             )
 
@@ -4933,7 +5959,7 @@ class SingleDeviceAgent:
             # Keep the last certified plan executable for human resume even if
             # the repair LLM returns only an unknown-yield/pooling judgement.
             # Its unvalidated plan edits are never adopted on this branch.
-            human_plan = copy.deepcopy(plan_result)
+            diagnostic_plan = copy.deepcopy(plan_result)
             for key in (
                 "quantity_adjustments",
                 "batch_plan",
@@ -4942,7 +5968,7 @@ class SingleDeviceAgent:
                 "pending_quantity_human_review",
             ):
                 if key in repaired_plan:
-                    human_plan[key] = copy.deepcopy(repaired_plan[key])
+                    diagnostic_plan[key] = copy.deepcopy(repaired_plan[key])
             repaired_human_issues, _ = self._partition_quantity_audit_issues(
                 repaired_plan.get("pending_quantity_human_review")
                 if isinstance(
@@ -4950,14 +5976,19 @@ class SingleDeviceAgent:
                 )
                 else repaired_plan.get("quantity_audit")
             )
-            human_plan["pending_quantity_human_review"] = (
+            diagnostic_plan["pending_quantity_human_review"] = (
                 self._pending_quantity_human_review_audit(
                     initial_human_quantity_issues + repaired_human_issues
                 )
             )
-            human_plan = self._normalize_quantity_contract(
-                human_plan, research_handoff=state.research_handoff
+            diagnostic_plan = self._normalize_quantity_contract(
+                diagnostic_plan, research_handoff=state.research_handoff
             )
+            human_plan = copy.deepcopy(plan_result)
+            human_plan["rejected_plan_rewrite_diagnostics"] = {
+                "status": "human_review_required",
+                "candidate": diagnostic_plan,
+            }
             return self._build_manual_result(
                 state,
                 human_plan,
@@ -4979,6 +6010,11 @@ class SingleDeviceAgent:
                     "attempt_count": state.device_plan_rewrite_count,
                 }
             )
+            first_result["rejected_plan_rewrite_diagnostics"] = {
+                "status": "rejected",
+                "candidate": copy.deepcopy(repaired_plan),
+                "errors": copy.deepcopy(repair_errors),
+            }
             return self._build_manual_result(
                 state,
                 first_result,
@@ -5007,9 +6043,14 @@ class SingleDeviceAgent:
             "status"
         )
         if repaired_quantity_status in {"human_review_required", "failed"}:
+            certified_plan = copy.deepcopy(plan_result)
+            certified_plan["rejected_plan_rewrite_diagnostics"] = {
+                "status": repaired_quantity_status,
+                "candidate": copy.deepcopy(repaired_plan),
+            }
             return self._build_manual_result(
                 state,
-                repaired_plan,
+                certified_plan,
                 reason=(
                     "replanned quantities still require unknown-yield or pooling judgement"
                     if repaired_quantity_status == "human_review_required"
@@ -5018,6 +6059,23 @@ class SingleDeviceAgent:
                 error_type="device_quantity_human_review_required",
             )
 
+        prior_certificate = copy.deepcopy(state.feasibility_certificate)
+        successor = self._issue_successor_feasibility_certificate(
+            state,
+            plan_result,
+            repaired_plan,
+            prior_certificate,
+            repair_request_id="",
+            repair_authority="automatic_device_plan_rewrite",
+            declared_changes=repaired_plan.get("plan_changes", []),
+        )
+        repaired_plan["feasibility_accepted"] = True
+        repaired_plan["feasibility_certificate"] = copy.deepcopy(successor)
+        state.add_log(
+            "authorized plan-level Device rewrite accepted; successor "
+            "feasibility certificate created "
+            f"({successor.get('certificate_id', '')})"
+        )
         second_result = self._translate_and_verify(state, repaired_plan)
         second_result["plan_level_repair"] = {
             "status": "accepted",
@@ -5219,7 +6277,7 @@ class SingleDeviceAgent:
         result: Dict[str, Any],
         resumed_from_manual: bool,
     ) -> None:
-        result["feasibility_accepted"] = True
+        result["feasibility_accepted"] = bool(state.feasibility_accepted)
         result["feasibility_certificate"] = copy.deepcopy(
             state.feasibility_certificate
         )
@@ -5301,6 +6359,11 @@ class SingleDeviceAgent:
         structured_errors = self._manual_structured_errors(
             quantity_audit=quantity_audit,
             errors=errors,
+            structured_findings=(
+                report.get("structured_errors", [])
+                if isinstance(report, dict)
+                else []
+            ),
             workflow_json=(
                 manual.get("workflow_json")
                 if isinstance(manual.get("workflow_json"), dict)
@@ -5371,6 +6434,7 @@ class SingleDeviceAgent:
         *,
         quantity_audit: Any,
         errors: List[str],
+        structured_findings: Any = None,
         workflow_json: Dict[str, Any],
         default_scope: str,
     ) -> List[Dict[str, Any]]:
@@ -5387,6 +6451,7 @@ class SingleDeviceAgent:
         structured: List[Dict[str, Any]] = []
         seen_records: Set[str] = set()
         quantity_messages: Set[str] = set()
+        structured_messages: Set[str] = set()
         legacy_errors: List[str] = []
 
         def append_record(record: Dict[str, Any]) -> None:
@@ -5452,9 +6517,35 @@ class SingleDeviceAgent:
             quantity_messages.add(message)
             append_record(record)
 
+        for finding in (
+            structured_findings if isinstance(structured_findings, list) else []
+        ):
+            if not isinstance(finding, dict):
+                continue
+            record = copy.deepcopy(finding)
+            message = str(record.get("message", "")).strip()
+            if not message:
+                continue
+            code = str(
+                record.get("error_code")
+                or record.get("code")
+                or record.get("type")
+                or "unparsed"
+            ).strip() or "unparsed"
+            record["error_code"] = code
+            record.setdefault("code", code)
+            if default_scope and not record.get("scope"):
+                record["scope"] = default_scope
+            structured_messages.add(message)
+            append_record(record)
+
         for raw in errors:
             text = str(raw).strip()
-            if text and text not in quantity_messages:
+            if (
+                text
+                and text not in quantity_messages
+                and text not in structured_messages
+            ):
                 legacy_errors.append(text)
 
         for record in structure_validation_errors(
@@ -5470,9 +6561,18 @@ class SingleDeviceAgent:
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
         errors: List[str],
+        repair_request: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        state.feasibility_accepted = bool(state.feasibility_certificate)
-        rejected = copy.deepcopy(plan_result)
+        rejected_candidate = copy.deepcopy(plan_result)
+        prior_plan = self._repair_request_plan_package(repair_request or {})
+        # The rejected candidate is evidence only.  Keep every actionable plan
+        # field at the prior certified value so a subsequent repair request can
+        # never accidentally adopt an override that failed validation.
+        rejected = copy.deepcopy(prior_plan or plan_result)
+        rejected["rejected_override_diagnostics"] = {
+            "candidate": rejected_candidate,
+            "errors": list(errors),
+        }
         rejected["dispatch_validation"] = {
             "status": "failed",
             "errors": list(errors),
@@ -5561,17 +6661,6 @@ class SingleDeviceAgent:
         provisional["pending_device_local_constraints"] = copy.deepcopy(blocking)
         provisional.pop("recommendation_to_research_agent", None)
         provisional.pop("constraint_classification", None)
-        state.feasibility_accepted = True
-        state.feasibility_certificate = self._build_feasibility_certificate(
-            state, provisional
-        )
-        state.feasibility_certificate["acceptance_scope"] = (
-            "route_only_pending_device_plan_repair"
-        )
-        provisional["feasibility_accepted"] = True
-        provisional["feasibility_certificate"] = copy.deepcopy(
-            state.feasibility_certificate
-        )
         is_quantity = bool(
             re.search(
                 r"剂量|物质的量|质量不足|用量|料位|累计取液|重复消费|"
@@ -5607,7 +6696,27 @@ class SingleDeviceAgent:
             provisional["pending_quantity_human_review"] = copy.deepcopy(
                 provisional["quantity_audit"]
             )
+            provisional["quantity_contract_required"] = True
             provisional["requires_scientific_review"] = True
+        provisional["requires_scientific_review"] = (
+            self._scientific_review_required(
+                provisional,
+                feasibility_progress=state.feasibility_progress,
+            )
+        )
+        certificate = self._build_feasibility_certificate(
+            state,
+            provisional,
+            acceptance_scope="route_only_pending_device_plan_repair",
+        )
+        accepted_contract = device_plan_contract_view(provisional)
+        state.accepted_device_plan_contract = accepted_contract
+        state.feasibility_certificate = copy.deepcopy(certificate)
+        state.feasibility_accepted = True
+        provisional["feasibility_accepted"] = True
+        provisional["feasibility_certificate"] = copy.deepcopy(
+            certificate
+        )
         return self._build_manual_result(
             state,
             provisional,
@@ -6472,6 +7581,32 @@ class SingleDeviceAgent:
             raw_adjustments = []
         adjustments: List[Dict[str, Any]] = []
         issues: List[Dict[str, Any]] = []
+        quantity_normalization_events: List[Dict[str, Any]] = []
+        quantity_semantics_counters: Dict[str, int] = {}
+        # Re-auditing an already-normalized plan must be idempotent:
+        # provenance-repair counters are cumulative across rewrites.
+        declared_quantity_semantics = declared_quantity_audit.get(
+            "quantity_semantics"
+        )
+        if isinstance(declared_quantity_semantics, dict):
+            for counter_key in (
+                "placeholders_sanitized",
+                "unknown_quantities_marked",
+                "zero_flow_fields_omitted",
+                "duplicate_production_events_collapsed",
+                "legacy_source_kinds_migrated",
+                "unknown_quantity_unmarked",
+                "unknown_batch_quantities_marked",
+                "ledger_draws_derived_from_relation_graph",
+                "ledger_productions_derived_from_relation_graph",
+            ):
+                declared_counter = declared_quantity_semantics.get(counter_key)
+                if (
+                    isinstance(declared_counter, int)
+                    and not isinstance(declared_counter, bool)
+                    and declared_counter > 0
+                ):
+                    quantity_semantics_counters[counter_key] = declared_counter
         if quantity_contract_required and not had_adjustments:
             issues.append(
                 {
@@ -6695,70 +7830,197 @@ class SingleDeviceAgent:
         normalized_batches: List[Dict[str, Any]] = []
         seen_batches: Set[str] = set()
         whole_batch_batch_ids: Set[str] = set()
+        runtime_pending_batch_ids: Set[str] = set()
         device_plan_steps = [
             step
             for step in normalized.get("device_plan", []) or []
             if isinstance(step, dict)
         ]
-        plan_step_by_id = {
-            str(step.get("plan_step", "")).strip(): step
-            for step in device_plan_steps
-            if str(step.get("plan_step", "")).strip()
-        }
-        plan_step_ids = set(plan_step_by_id)
         research_steps = [
             step
             for step in (research_handoff or {}).get("macro_action_steps", []) or []
             if isinstance(step, dict)
         ]
-        adaptable_whole_batch_dispositions: Set[Tuple[str, int]] = set()
-        for disposition in normalized.get("quantity_requirement_dispositions", []) or []:
+        def audited_macro_key(value: Any, path: str) -> Optional[Tuple[str, Any]]:
+            try:
+                return macro_id_key(value, path)
+            except MacroIdentityError as exc:
+                issues.append(
+                    {
+                        "code": exc.code.lower(),
+                        "scope": "device_local_quantity",
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                return None
+
+        def audited_macro_keys(value: Any, path: str) -> Set[Tuple[str, Any]]:
+            if value is None:
+                return set()
+            if not isinstance(value, list):
+                issues.append(
+                    {
+                        "code": "invalid_macro_source",
+                        "scope": "device_local_quantity",
+                        "path": path,
+                        "message": f"{path}: expected an array of scalar macro identifiers",
+                    }
+                )
+                return set()
+            keys: Set[Tuple[str, Any]] = set()
+            for value_index, raw_value in enumerate(value):
+                key = audited_macro_key(raw_value, f"{path}[{value_index}]")
+                if key is not None:
+                    keys.add(key)
+            return keys
+
+        def audited_plan_key(value: Any, path: str) -> Optional[Tuple[str, Any]]:
+            try:
+                return macro_id_key(value, path)
+            except MacroIdentityError as exc:
+                issues.append(
+                    {
+                        "code": "invalid_plan_step_id",
+                        "scope": "device_local_quantity",
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                return None
+
+        def audited_plan_keys(value: Any, path: str) -> Set[Tuple[str, Any]]:
+            if value is None:
+                return set()
+            if not isinstance(value, list):
+                issues.append(
+                    {
+                        "code": "invalid_plan_step_refs",
+                        "scope": "device_local_quantity",
+                        "path": path,
+                        "message": f"{path}: expected an array of scalar plan identifiers",
+                    }
+                )
+                return set()
+            keys: Set[Tuple[str, Any]] = set()
+            for value_index, raw_value in enumerate(value):
+                key = audited_plan_key(raw_value, f"{path}[{value_index}]")
+                if key is not None:
+                    keys.add(key)
+            return keys
+
+        plan_step_by_id: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        plan_step_values: Dict[Tuple[str, Any], Any] = {}
+        ambiguous_plan_step_ids: Set[Tuple[str, Any]] = set()
+        for step_index, step in enumerate(device_plan_steps):
+            plan_key = audited_plan_key(
+                step.get("plan_step"), f"device_plan[{step_index}].plan_step"
+            )
+            if plan_key is None:
+                continue
+            if plan_key in plan_step_by_id:
+                ambiguous_plan_step_ids.add(plan_key)
+                continue
+            plan_step_by_id[plan_key] = step
+            plan_step_values[plan_key] = copy.deepcopy(step.get("plan_step"))
+        for plan_key in ambiguous_plan_step_ids:
+            plan_step_by_id.pop(plan_key, None)
+            plan_step_values.pop(plan_key, None)
+            issues.append(
+                {
+                    "code": "duplicate_plan_step_id",
+                    "scope": "device_local_quantity",
+                    "message": (
+                        "device_plan contains a duplicate typed plan_step identity; "
+                        "cross-references cannot be resolved safely."
+                    ),
+                }
+            )
+        plan_step_ids = set(plan_step_by_id)
+
+        adaptable_whole_batch_dispositions: Set[
+            Tuple[Tuple[str, Any], int]
+        ] = set()
+        for disposition_index, disposition in enumerate(
+            normalized.get("quantity_requirement_dispositions", []) or []
+        ):
             if not isinstance(disposition, dict):
                 continue
             if str(disposition.get("decision") or "").strip() != "replace_with_whole_batch":
                 continue
-            source_macro = str(
-                disposition.get("source_macro_step") or ""
-            ).strip()
+            source_macro = audited_macro_key(
+                disposition.get("source_macro_step"),
+                "quantity_requirement_dispositions"
+                f"[{disposition_index}].source_macro_step",
+            )
             requirement_index = disposition.get("requirement_index")
             if (
-                source_macro
+                source_macro is not None
                 and isinstance(requirement_index, int)
                 and not isinstance(requirement_index, bool)
             ):
                 adaptable_whole_batch_dispositions.add(
                     (source_macro, requirement_index)
                 )
-        research_macro_by_id = {
-            str(step.get("步骤序号", step.get("step", index))).strip(): step
-            for index, step in enumerate(research_steps, start=1)
-        }
+        research_macro_by_id: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        research_macro_values: Dict[Tuple[str, Any], Any] = {}
+        for research_index, step in enumerate(research_steps):
+            try:
+                macro_value = semantic_macro_id(
+                    step, f"research_handoff.macro_action_steps[{research_index}]"
+                )
+            except MacroIdentityError as exc:
+                issues.append(
+                    {
+                        "code": exc.code.lower(),
+                        "scope": "device_local_quantity",
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                continue
+            macro_key = macro_id_key(macro_value)
+            research_macro_by_id[macro_key] = step
+            research_macro_values[macro_key] = macro_value
         research_macro_ids = set(research_macro_by_id)
         nonroot_batch_requirements: Dict[str, Dict[str, Any]] = {}
         research_root_source_usage: Dict[Tuple[Any, ...], Set[str]] = {}
         allowed_transition_kinds = set(_ALLOWED_MATERIAL_EVENT_KINDS)
 
-        def source_ref_mentions_macro(source_ref: Any, macro_id: str) -> bool:
+        def source_ref_mentions_macro(
+            source_ref: Any, macro_id: Tuple[str, Any]
+        ) -> bool:
             if isinstance(source_ref, dict):
-                return str(source_ref.get("source_macro_step") or "").strip() == macro_id
+                try:
+                    return macro_id_key(
+                        source_ref.get("source_macro_step"),
+                        "quantity_adjustment.source_refs.source_macro_step",
+                    ) == macro_id
+                except MacroIdentityError:
+                    return False
             text = str(source_ref or "").strip()
-            if text == f"macro_step:{macro_id}":
+            macro_value = research_macro_values.get(macro_id)
+            if isinstance(macro_value, str) and text == f"macro_step:{macro_value}":
                 return True
             parsed = self._parse_research_source_path(text)
             if parsed is None or parsed[0] >= len(research_steps):
                 return False
             indexed_step = research_steps[parsed[0]]
-            indexed_id = str(
-                indexed_step.get("步骤序号", indexed_step.get("step", parsed[0] + 1))
-            ).strip()
-            return indexed_id == macro_id
+            try:
+                indexed_id = semantic_macro_id(
+                    indexed_step,
+                    f"research_handoff.macro_action_steps[{parsed[0]}]",
+                )
+            except MacroIdentityError:
+                return False
+            return macro_id_key(indexed_id) == macro_id
 
         def quantity_change_is_authorized(
             source_value: float,
             source_dimension: str,
             target_value: float,
             target_dimension: str,
-            macro_id: str,
+            macro_id: Tuple[str, Any],
         ) -> bool:
             for adjustment in adjustments:
                 if not isinstance(adjustment, dict):
@@ -6792,6 +8054,26 @@ class SingleDeviceAgent:
                     continue
                 return True
             return False
+        # R2 canonical graph pre-pass: parent/child lineage stated by
+        # material_transitions is the single source of truth for batch
+        # parentage; batches derive their parent_batch_ids from it.
+        graph_parent_ids_by_child: Dict[str, Set[str]] = {}
+        for raw_transition in normalized.get("material_transitions", []) or []:
+            if not isinstance(raw_transition, dict):
+                continue
+            raw_transition_parents = {
+                str(value).strip()
+                for value in (raw_transition.get("parent_batch_ids") or [])
+                if not _is_placeholder_id(value)
+            }
+            if not raw_transition_parents:
+                continue
+            for raw_child in (raw_transition.get("child_batch_ids") or []) or []:
+                raw_child_id = str(raw_child or "").strip()
+                if raw_child_id:
+                    graph_parent_ids_by_child.setdefault(
+                        raw_child_id, set()
+                    ).update(raw_transition_parents)
         for index, raw in enumerate(batch_plan, start=1):
             if not isinstance(raw, dict):
                 issues.append(
@@ -6812,30 +8094,156 @@ class SingleDeviceAgent:
             quantity_mode = str(
                 item.get("quantity_mode") or "numeric_inventory"
             ).strip()
-            if quantity_mode not in {"numeric_inventory", "whole_batch"}:
+            if quantity_mode not in {
+                "numeric_inventory",
+                "whole_batch",
+                "runtime_measurement_required",
+            }:
                 issues.append(
                     {
                         "code": "invalid_batch_quantity_mode",
                         "scope": "device_local_quantity",
                         "message": (
                             f"batch {batch_id} 的 quantity_mode 必须是 "
-                            "numeric_inventory 或 whole_batch。"
+                            "numeric_inventory、whole_batch 或 "
+                            "runtime_measurement_required。"
                         ),
                     }
                 )
                 quantity_mode = "numeric_inventory"
             item["quantity_mode"] = quantity_mode
             is_whole_batch = quantity_mode == "whole_batch"
+            is_runtime_pending = quantity_mode == "runtime_measurement_required"
+            is_symbolic_quantity = is_whole_batch or is_runtime_pending
             if is_whole_batch:
                 whole_batch_batch_ids.add(batch_id)
+            if is_runtime_pending:
+                runtime_pending_batch_ids.add(batch_id)
+            if str(item.get("construction_rule") or "") == (
+                "material-relationship-compiler/v1"
+            ) and (
+                str(item.get("record_phase") or "") != "planned"
+                or str(item.get("quantity_assertion") or "") != "planned_only"
+                or item.get("execution_fact") is not False
+            ):
+                issues.append(
+                    {
+                        "code": "compiler_quantity_record_not_planned",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"compiler-owned batch {batch_id} 必须明确标记为 "
+                            "record_phase=planned、quantity_assertion=planned_only，"
+                            "且 execution_fact=false。"
+                        ),
+                    }
+                )
             raw_source_kind = str(item.get("source_kind") or "").strip()
+            if raw_source_kind in _LEGACY_LEDGER_SOURCE_KINDS:
+                raw_source_kind = _LEGACY_LEDGER_SOURCE_KINDS[raw_source_kind]
+                item["source_kind"] = raw_source_kind
+                quantity_semantics_counters["legacy_source_kinds_migrated"] = (
+                    quantity_semantics_counters.get("legacy_source_kinds_migrated", 0) + 1
+                )
             raw_source_refs = item.get("source_refs")
             raw_calculation = str(
                 item.get("calculation", item.get("formula", "")) or ""
             ).strip()
-            item.setdefault("source_kind", "device_operational")
+            item.setdefault("source_kind", "unknown")
+            batch_removed_placeholders: Dict[str, Any] = {}
+            kept_source_refs, removed_source_refs = _sanitize_formal_id_list(
+                raw_source_refs
+            )
+            if removed_source_refs:
+                item["source_refs"] = kept_source_refs
+                raw_source_refs = kept_source_refs
+                batch_removed_placeholders["source_refs"] = removed_source_refs
+            kept_consumer_ids, removed_consumer_ids = _sanitize_formal_id_list(
+                item.get("consumer_ids")
+            )
+            if removed_consumer_ids:
+                item["consumer_ids"] = kept_consumer_ids
+                batch_removed_placeholders["consumer_ids"] = removed_consumer_ids
+            kept_parent_ids, removed_parent_ids = _sanitize_formal_id_list(
+                item.get("parent_batch_ids")
+            )
+            if removed_parent_ids:
+                item["parent_batch_ids"] = kept_parent_ids
+                batch_removed_placeholders["parent_batch_ids"] = removed_parent_ids
+            if "sample_id" in item and _is_placeholder_id(item.get("sample_id")):
+                batch_removed_placeholders["sample_id"] = item.pop("sample_id", None)
+            if batch_removed_placeholders:
+                quantity_semantics_counters["placeholders_sanitized"] = (
+                    quantity_semantics_counters.get("placeholders_sanitized", 0)
+                    + sum(
+                        len(value)
+                        if isinstance(value, list)
+                        else 1
+                        for value in batch_removed_placeholders.values()
+                    )
+                )
+                quantity_normalization_events.append(
+                    {
+                        "code": "batch_placeholder_ids_sanitized",
+                        "batch_id": batch_id,
+                        "fields": batch_removed_placeholders,
+                    }
+                )
             item.setdefault("source_refs", [])
             item.setdefault("calculation", item.get("formula", ""))
+            # R2: batch-level quantity provenance alignment (the batch
+            # analog of the ledger P2 rule).  Unprovenanced numeric batch
+            # facts become explicit unknowns; the declared planned values
+            # are preserved in declared_* fields instead of being dropped.
+            batch_numeric_fields = (
+                "total_quantity",
+                "parent_quantity",
+                "per_batch_quantity",
+                "allocation",
+                "multiplicity",
+            )
+            has_batch_numeric_quantity = (
+                not is_symbolic_quantity
+                and any(field_name in item for field_name in batch_numeric_fields)
+            )
+            batch_provenance_refs = [
+                value
+                for value in (item.get("source_refs") or [])
+                if not _is_placeholder_id(value)
+            ]
+            batch_provenance_complete = (
+                raw_source_kind in _LEDGER_QUANTITY_SOURCE_KINDS
+                and raw_source_kind != "unknown"
+                and bool(batch_provenance_refs)
+                and bool(raw_calculation)
+            )
+            if has_batch_numeric_quantity and not batch_provenance_complete:
+                item["quantity_status"] = "unknown"
+                declared_batch_fields: Dict[str, Any] = {}
+                for field_name in batch_numeric_fields:
+                    if field_name in item:
+                        declared_batch_fields[f"declared_{field_name}"] = item.pop(
+                            field_name
+                        )
+                item.update(declared_batch_fields)
+                quantity_semantics_counters["unknown_batch_quantities_marked"] = (
+                    quantity_semantics_counters.get(
+                        "unknown_batch_quantities_marked", 0
+                    )
+                    + 1
+                )
+                quantity_normalization_events.append(
+                    {
+                        "code": "batch_numeric_quantity_without_provenance_marked_unknown",
+                        "batch_id": batch_id,
+                        "fields": sorted(declared_batch_fields),
+                    }
+                )
+            elif has_batch_numeric_quantity:
+                item["quantity_status"] = "known"
+            elif is_runtime_pending:
+                item["quantity_status"] = "pending_measurement"
+            elif is_whole_batch:
+                item["quantity_status"] = "unknown"
             if batch_id in seen_batches:
                 issues.append(
                     {
@@ -6864,9 +8272,23 @@ class SingleDeviceAgent:
             if scalar_parent_id:
                 parent_ids.add(scalar_parent_id)
             if not parent_ids and item.get("is_root_batch") is not True:
-                issues.append(
-                    {
-                        "code": "missing_parent_batch_lineage",
+                graph_parent_candidates = graph_parent_ids_by_child.get(
+                    batch_id, set()
+                )
+                if graph_parent_candidates:
+                    parent_ids = set(graph_parent_candidates)
+                    item["parent_batch_ids"] = sorted(graph_parent_candidates)
+                    quantity_normalization_events.append(
+                        {
+                            "code": "batch_parent_lineage_derived_from_relation_graph",
+                            "batch_id": batch_id,
+                            "parent_batch_ids": sorted(graph_parent_candidates),
+                        }
+                    )
+                else:
+                    issues.append(
+                        {
+                            "code": "missing_parent_batch_lineage",
                         "scope": "device_local_quantity",
                         "message": (
                             f"batch {batch_id} 缺少 parent_batch_id(s)；根批次必须显式 "
@@ -6889,12 +8311,12 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                if raw_source_kind != "research":
+                if raw_source_kind != "research_explicit":
                     issues.append(
                         {
                             "code": (
                                 "derived_batch_cannot_be_root"
-                                if raw_source_kind in {"derived", "device_operational"}
+                                if raw_source_kind in {"derived_from_parent", "device_measurement"}
                                 else "research_root_requires_research_source"
                             ),
                             "scope": "device_local_quantity",
@@ -6939,15 +8361,158 @@ class SingleDeviceAgent:
                         )
                         continue
                     source_path = str(source_ref.get("source_path") or "").strip()
+                    v2_source_match = re.fullmatch(
+                        r"research_action_package_v2\.macro_steps\[(\d+)\]\."
+                        r"material_inputs\[(\d+)\]",
+                        source_path,
+                    )
+                    if v2_source_match:
+                        v2_package = (
+                            (research_handoff or {}).get("research_action_package_v2")
+                        )
+                        v2_macros = (
+                            v2_package.get("macro_steps")
+                            if isinstance(v2_package, dict)
+                            else None
+                        )
+                        macro_index = int(v2_source_match.group(1))
+                        port_index = int(v2_source_match.group(2))
+                        v2_macro = (
+                            v2_macros[macro_index]
+                            if isinstance(v2_macros, list)
+                            and macro_index < len(v2_macros)
+                            and isinstance(v2_macros[macro_index], dict)
+                            else None
+                        )
+                        v2_inputs = (
+                            v2_macro.get("material_inputs")
+                            if isinstance(v2_macro, dict)
+                            else None
+                        )
+                        v2_port = (
+                            v2_inputs[port_index]
+                            if isinstance(v2_inputs, list)
+                            and port_index < len(v2_inputs)
+                            and isinstance(v2_inputs[port_index], dict)
+                            else None
+                        )
+                        declared_macro_id = audited_macro_key(
+                            source_ref.get("source_macro_step"),
+                            f"batch_plan[{index - 1}].research_source_refs"
+                            f"[{ref_index - 1}].source_macro_step",
+                        )
+                        try:
+                            decoded_v2_macro = (
+                                decode_package_identity(
+                                    v2_macro.get("macro_step_id"),
+                                    v2_package.get("identity_encoding"),
+                                    f"{source_path}.macro_step_id",
+                                )
+                                if isinstance(v2_macro, dict)
+                                and isinstance(v2_package, dict)
+                                else None
+                            )
+                            actual_v2_macro_id = (
+                                macro_id_key(decoded_v2_macro)
+                                if decoded_v2_macro is not None
+                                else None
+                            )
+                        except Exception:
+                            actual_v2_macro_id = None
+                        referenced_identity = source_ref.get("material_identity")
+                        referenced_identity_id = str(
+                            source_ref.get("material_identity_id") or ""
+                        ).strip()
+                        if (
+                            v2_port is None
+                            or declared_macro_id is None
+                            or actual_v2_macro_id != declared_macro_id
+                            or str(source_ref.get("source_field") or "").strip()
+                            != "material_inputs"
+                            or source_path not in declared_source_paths
+                            or str(v2_port.get("material_instance_id") or "").strip()
+                            != str(
+                                source_ref.get("material_instance_id") or ""
+                            ).strip()
+                            or str(v2_port.get("material_id") or "").strip()
+                            != referenced_identity_id
+                        ):
+                            issues.append(
+                                {
+                                    "code": "invalid_v2_research_root_source_binding",
+                                    "scope": "device_local_quantity",
+                                    "message": (
+                                        f"batch {batch_id} 的 V2 material input source ref "
+                                        "未与冻结 macro/port/identity 精确一致。"
+                                    ),
+                                }
+                            )
+                            continue
+                        referenced_identities.append(referenced_identity)
+                        referenced_identity_ids.append(referenced_identity_id)
+                        v2_quantity = v2_port.get("quantity")
+                        v2_mode = (
+                            str(v2_quantity.get("mode") or "").strip()
+                            if isinstance(v2_quantity, dict)
+                            else ""
+                        )
+                        if is_whole_batch:
+                            whole_batch_authorized_by_research = (
+                                v2_mode == "all_available"
+                            )
+                            continue
+                        if is_runtime_pending:
+                            # A pending batch may carry a planned target in its
+                            # source ref, but it is deliberately not promoted to
+                            # available inventory by this audit.
+                            continue
+                        source_value, source_dimension, _ = self._canonical_quantity(
+                            v2_quantity
+                        )
+                        ref_value, ref_dimension, _ = self._canonical_quantity(
+                            source_ref.get("quantity")
+                        )
+                        if (
+                            v2_mode != "exact"
+                            or source_value is None
+                            or ref_value is None
+                            or not self._quantity_dimension_is_inventory(
+                                source_dimension
+                            )
+                            or not self._canonical_quantities_equal(
+                                source_value,
+                                source_dimension,
+                                ref_value,
+                                ref_dimension,
+                            )
+                        ):
+                            issues.append(
+                                {
+                                    "code": "invalid_v2_research_root_quantity_ref",
+                                    "scope": "device_local_quantity",
+                                    "message": (
+                                        f"batch {batch_id} 的 V2 planning quantity "
+                                        "未与结构化 source ref 精确一致。"
+                                    ),
+                                }
+                            )
+                            continue
+                        root_research_quantities.append(
+                            (source_value, source_dimension, declared_macro_id)
+                        )
+                        continue
                     parsed_path = self._parse_research_source_path(source_path)
-                    declared_macro_id = str(
-                        source_ref.get("source_macro_step") or ""
-                    ).strip()
+                    declared_macro_value = source_ref.get("source_macro_step")
+                    declared_macro_id = audited_macro_key(
+                        declared_macro_value,
+                        f"batch_plan[{index - 1}].research_source_refs"
+                        f"[{ref_index - 1}].source_macro_step",
+                    )
                     declared_field = str(source_ref.get("source_field") or "").strip()
                     if (
                         parsed_path is None
                         or parsed_path[0] >= len(research_steps)
-                        or not declared_macro_id
+                        or declared_macro_id is None
                         or not declared_field
                     ):
                         issues.append(
@@ -6963,11 +8528,22 @@ class SingleDeviceAgent:
                         continue
                     source_index, path_field = parsed_path
                     source_step = research_steps[source_index]
-                    actual_macro_id = str(
-                        source_step.get(
-                            "步骤序号", source_step.get("step", source_index + 1)
+                    try:
+                        actual_macro_value = semantic_macro_id(
+                            source_step,
+                            f"research_handoff.macro_action_steps[{source_index}]",
                         )
-                    ).strip()
+                        actual_macro_id = macro_id_key(actual_macro_value)
+                    except MacroIdentityError as exc:
+                        issues.append(
+                            {
+                                "code": exc.code.lower(),
+                                "scope": "device_local_quantity",
+                                "path": exc.path,
+                                "message": str(exc),
+                            }
+                        )
+                        continue
                     if (
                         declared_macro_id != actual_macro_id
                         or declared_field != path_field
@@ -6997,7 +8573,7 @@ class SingleDeviceAgent:
                     referenced_identity_ids.append(referenced_identity_id)
                     if self._active_semantic_analysis:
                         authorized_identity_ids = self._semantic_material_ids(
-                            actual_macro_id
+                            actual_macro_value
                         )
                         invalid_identity = (
                             not referenced_identity_id
@@ -7014,7 +8590,7 @@ class SingleDeviceAgent:
                                 "scope": "device_local_quantity",
                                 "message": (
                                     f"batch {batch_id} 的 research source ref 物料身份"
-                                    f"与 macro step {actual_macro_id} 的冻结 LLM identity_id 不一致。"
+                                    f"与 macro step {actual_macro_value!r} 的冻结 LLM identity_id 不一致。"
                                 ),
                             }
                         )
@@ -7044,7 +8620,7 @@ class SingleDeviceAgent:
                             whole_batch_authorized_by_research = (
                                 whole_batch_authorized_by_research
                                 or any(
-                                    (str(actual_macro_id), requirement_index)
+                                    (actual_macro_id, requirement_index)
                                     in adaptable_whole_batch_dispositions
                                     and isinstance(requirement, dict)
                                     and self._device_adaptable_target(requirement)
@@ -7578,16 +9154,13 @@ class SingleDeviceAgent:
                 transition_kind = str(item.get("transition_kind") or "").strip()
                 raw_plan_refs = item.get("source_plan_steps")
                 raw_macro_refs = item.get("source_macro_steps")
-                plan_refs = {
-                    str(value).strip()
-                    for value in raw_plan_refs or []
-                    if str(value).strip()
-                } if isinstance(raw_plan_refs, list) else set()
-                macro_refs = {
-                    str(value).strip()
-                    for value in raw_macro_refs or []
-                    if str(value).strip()
-                } if isinstance(raw_macro_refs, list) else set()
+                plan_refs = audited_plan_keys(
+                    raw_plan_refs,
+                    f"batch_plan[{index - 1}].source_plan_steps",
+                )
+                macro_refs = audited_macro_keys(
+                    raw_macro_refs, f"batch_plan[{index - 1}].source_macro_steps"
+                )
                 if transition_kind not in allowed_transition_kinds:
                     issues.append(
                         {
@@ -7613,7 +9186,7 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"non-root batch {batch_id} 引用了不存在 plan step："
-                                f"{sorted(plan_refs - plan_step_ids)}。"
+                                f"{sorted(plan_refs - plan_step_ids, key=repr)}。"
                             ),
                         }
                     )
@@ -7634,7 +9207,7 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"non-root batch {batch_id} 引用了不存在 macro step："
-                                f"{sorted(macro_refs - research_macro_ids)}。"
+                                f"{sorted((repr(value) for value in macro_refs - research_macro_ids))}。"
                             ),
                         }
                     )
@@ -7686,7 +9259,41 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-            elif not item.get("consumer_ids") and not item.get("allocation"):
+            elif is_runtime_pending:
+                if any(
+                    item.get(key) not in (None, "")
+                    for key in (
+                        "total_quantity",
+                        "parent_quantity",
+                        "per_batch_quantity",
+                        "allocation",
+                    )
+                ):
+                    issues.append(
+                        {
+                            "code": "runtime_pending_batch_must_not_claim_numeric_inventory",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"batch {batch_id} 等待运行时测量；不得提前声明 "
+                                "total/allocation 数值。"
+                            ),
+                        }
+                    )
+                if str(item.get("measurement_status") or "") != "pending":
+                    issues.append(
+                        {
+                            "code": "runtime_pending_batch_status_invalid",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"batch {batch_id} 必须明确 measurement_status=pending。"
+                            ),
+                        }
+                    )
+            elif (
+                not item.get("consumer_ids")
+                and not item.get("allocation")
+                and item.get("terminal_material") is not True
+            ):
                 issues.append(
                     {
                         "code": "missing_batch_consumer_allocation",
@@ -7714,7 +9321,7 @@ class SingleDeviceAgent:
                     per_batch_dim,
                 ),
             ):
-                if not is_whole_batch and raw_quantity not in (None, "") and (
+                if not is_symbolic_quantity and raw_quantity not in (None, "") and (
                     value is None
                     or not self._quantity_dimension_is_auditable(dimension)
                 ):
@@ -7727,7 +9334,7 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                elif not is_whole_batch and raw_quantity not in (None, "") and not self._quantity_dimension_is_inventory(
+                elif not is_symbolic_quantity and raw_quantity not in (None, "") and not self._quantity_dimension_is_inventory(
                     dimension
                 ):
                     issues.append(
@@ -7740,7 +9347,7 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                elif not is_whole_batch and raw_quantity not in (None, "") and value is not None and value <= 0:
+                elif not is_symbolic_quantity and raw_quantity not in (None, "") and value is not None and value <= 0:
                     issues.append(
                         {
                             "code": "nonpositive_batch_quantity",
@@ -7750,7 +9357,11 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-            if is_root_batch and not is_whole_batch:
+            if (
+                is_root_batch
+                and not is_symbolic_quantity
+                and item.get("quantity_status") != "unknown"
+            ):
                 if total is None or not self._quantity_dimension_is_auditable(total_dim):
                     issues.append(
                         {
@@ -7860,7 +9471,7 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-            has_batch_quantity = not is_whole_batch and any(
+            has_batch_quantity = not is_symbolic_quantity and any(
                 key in item
                 for key in (
                     "total_quantity",
@@ -7871,11 +9482,7 @@ class SingleDeviceAgent:
                 )
             )
             if has_batch_quantity:
-                if raw_source_kind not in {
-                    "research",
-                    "derived",
-                    "device_operational",
-                }:
+                if raw_source_kind not in _LEDGER_QUANTITY_SOURCE_KINDS:
                     issues.append(
                         {
                             "code": "missing_batch_quantity_source",
@@ -7952,10 +9559,23 @@ class SingleDeviceAgent:
         normalized_transitions: List[Dict[str, Any]] = []
         seen_transition_ids: Set[str] = set()
         child_transition_counts: Dict[str, int] = {}
-        transition_plan_refs_by_id: Dict[str, Set[str]] = {}
-        transition_macro_refs_by_id: Dict[str, Set[str]] = {}
+        transition_plan_refs_by_id: Dict[
+            str, Set[Tuple[str, Any]]
+        ] = {}
+        transition_macro_refs_by_id: Dict[
+            str, Set[Tuple[str, Any]]
+        ] = {}
         transition_kind_by_id: Dict[str, str] = {}
         child_transition_ids: Dict[str, Set[str]] = {}
+        # R2 canonical graph indexes: parent-side plan refs and raw step
+        # values, so ledger processing_step_refs derive from the same
+        # relation graph as everything else.
+        parent_transition_plan_refs: Dict[str, Set[Tuple[str, Any]]] = {}
+        parent_transition_ids_by_batch: Dict[str, Set[str]] = {}
+        transition_raw_plan_steps_by_id: Dict[str, List[Any]] = {}
+        # R2: transitions whose yield stays unknown must not be used to
+        # materialize a certain production into the ledger view.
+        unknown_yield_transition_ids: Set[str] = set()
         transition_edge_flows: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
         transition_human_issues: List[Dict[str, Any]] = []
         trusted_human_quantity_approvals = copy.deepcopy(
@@ -8001,16 +9621,14 @@ class SingleDeviceAgent:
                 for value in transition.get("child_batch_ids", []) or []
                 if str(value).strip()
             } if isinstance(transition.get("child_batch_ids"), list) else set()
-            transition_plan_refs = {
-                str(value).strip()
-                for value in transition.get("source_plan_steps", []) or []
-                if str(value).strip()
-            } if isinstance(transition.get("source_plan_steps"), list) else set()
-            transition_macro_refs = {
-                str(value).strip()
-                for value in transition.get("source_macro_steps", []) or []
-                if str(value).strip()
-            } if isinstance(transition.get("source_macro_steps"), list) else set()
+            transition_plan_refs = audited_plan_keys(
+                transition.get("source_plan_steps"),
+                f"material_transitions[{index - 1}].source_plan_steps",
+            )
+            transition_macro_refs = audited_macro_keys(
+                transition.get("source_macro_steps"),
+                f"material_transitions[{index - 1}].source_macro_steps",
+            )
             transition_plan_refs_by_id.setdefault(
                 transition_id, set(transition_plan_refs)
             )
@@ -8018,6 +9636,17 @@ class SingleDeviceAgent:
                 transition_id, set(transition_macro_refs)
             )
             transition_kind_by_id.setdefault(transition_id, transition_kind)
+            transition_raw_plan_steps_by_id[transition_id] = [
+                copy.deepcopy(value)
+                for value in (transition.get("source_plan_steps") or [])
+            ]
+            for parent_batch_id in parent_ids:
+                parent_transition_plan_refs.setdefault(
+                    parent_batch_id, set()
+                ).update(transition_plan_refs)
+                parent_transition_ids_by_batch.setdefault(
+                    parent_batch_id, set()
+                ).add(transition_id)
             if transition_kind not in allowed_transition_kinds:
                 issues.append(
                     {
@@ -8084,7 +9713,7 @@ class SingleDeviceAgent:
                         "scope": "device_local_quantity",
                         "message": (
                             f"material transition {transition_id} 引用了不存在 plan step："
-                            f"{sorted(transition_plan_refs - plan_step_ids)}。"
+                            f"{sorted(transition_plan_refs - plan_step_ids, key=repr)}。"
                         ),
                     }
                 )
@@ -8107,7 +9736,7 @@ class SingleDeviceAgent:
                         "scope": "device_local_quantity",
                         "message": (
                             f"material transition {transition_id} 引用了不存在 macro step："
-                            f"{sorted(transition_macro_refs - research_macro_ids)}。"
+                            f"{sorted((repr(value) for value in transition_macro_refs - research_macro_ids))}。"
                         ),
                     }
                 )
@@ -8118,14 +9747,37 @@ class SingleDeviceAgent:
                 after_state = str(
                     transition.get("after_material_state") or ""
                 ).strip()
-                if not before_state or not after_state or before_state == after_state:
+                raw_before_states = transition.get("before_material_states")
+                raw_after_states = transition.get("after_material_states")
+                before_states = (
+                    [str(value).strip() for value in raw_before_states]
+                    if isinstance(raw_before_states, list)
+                    and all(str(value).strip() for value in raw_before_states)
+                    else []
+                )
+                after_states = (
+                    [str(value).strip() for value in raw_after_states]
+                    if isinstance(raw_after_states, list)
+                    and all(str(value).strip() for value in raw_after_states)
+                    else []
+                )
+                scalar_state_change = bool(
+                    before_state and after_state and before_state != after_state
+                )
+                vector_state_change = bool(
+                    len(before_states) == len(parent_ids)
+                    and len(after_states) == len(child_ids)
+                    and before_states != after_states
+                )
+                if not scalar_state_change and not vector_state_change:
                     issues.append(
                         {
                             "code": "invalid_material_state_transition",
                             "scope": "device_local_quantity",
                             "message": (
                                 f"material transition {transition_id} 的 state_change "
-                                "必须给出不同的 before_material_state/after_material_state。"
+                                "必须给出不同的 scalar state，或与多输入/输出端点"
+                                "一一对应的 before_material_states/after_material_states。"
                             ),
                         }
                     )
@@ -8133,6 +9785,73 @@ class SingleDeviceAgent:
                 transition.get("quantity_basis") or ""
             ).strip()
             whole_batch_transition = quantity_basis == "whole_batch"
+            runtime_measurement_transition = (
+                quantity_basis == "runtime_measurement_required"
+            )
+            symbolic_transition = (
+                whole_batch_transition or runtime_measurement_transition
+            )
+            if str(transition.get("construction_rule") or "") == (
+                "material-relationship-compiler/v1"
+            ) and (
+                str(transition.get("record_phase") or "") != "planned"
+                or str(transition.get("quantity_assertion") or "")
+                != "planned_only"
+                or transition.get("execution_fact") is not False
+            ):
+                issues.append(
+                    {
+                        "code": "compiler_transition_record_not_planned",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"compiler-owned transition {transition_id} 必须明确"
+                            "标记为 planned-only，且不得冒充执行事实。"
+                        ),
+                    }
+                )
+            if runtime_measurement_transition:
+                obligation_id = str(
+                    transition.get("runtime_measurement_obligation_id") or ""
+                ).strip()
+                mismatched_batches = (
+                    parent_ids | child_ids
+                ) - runtime_pending_batch_ids
+                if not obligation_id:
+                    issues.append(
+                        {
+                            "code": "runtime_transition_obligation_missing",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime transition {transition_id} 缺少稳定的"
+                                " runtime_measurement_obligation_id。"
+                            ),
+                        }
+                    )
+                if mismatched_batches:
+                    issues.append(
+                        {
+                            "code": "runtime_transition_batch_mode_mismatch",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime transition {transition_id} 的端点必须保持"
+                                " measurement-pending；mismatch="
+                                f"{sorted(mismatched_batches)}。"
+                            ),
+                        }
+                    )
+                if str(transition.get("execution_status") or "") != (
+                    "awaiting_runtime_measurement"
+                ):
+                    issues.append(
+                        {
+                            "code": "runtime_transition_execution_status_invalid",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime transition {transition_id} 必须等待"
+                                "运行时测量，不得声明已执行。"
+                            ),
+                        }
+                    )
             if whole_batch_transition:
                 if transition_kind not in {"process_same_material", "state_change"}:
                     issues.append(
@@ -8156,7 +9875,9 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                non_whole_batches = (parent_ids | child_ids) - whole_batch_batch_ids
+                non_whole_batches = (parent_ids | child_ids) - (
+                    whole_batch_batch_ids | runtime_pending_batch_ids
+                )
                 if non_whole_batches:
                     issues.append(
                         {
@@ -8164,11 +9885,62 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"whole_batch transition {transition_id} 的 parent/child "
-                                f"必须都声明 quantity_mode=whole_batch；mismatch="
+                                "必须声明 whole_batch，或保留上游 runtime-pending "
+                                f"状态；mismatch="
                                 f"{sorted(non_whole_batches)}。"
                             ),
                         }
                     )
+                pending_batches = (parent_ids | child_ids) & runtime_pending_batch_ids
+                raw_dependencies = transition.get(
+                    "depends_on_runtime_measurement_obligation_ids"
+                )
+                if pending_batches and (
+                    not isinstance(raw_dependencies, list)
+                    or not raw_dependencies
+                    or any(
+                        not isinstance(value, str) or not value.strip()
+                        for value in raw_dependencies
+                    )
+                    or str(transition.get("execution_status") or "")
+                    != "blocked_pending_measurement"
+                ):
+                    issues.append(
+                        {
+                            "code": "whole_batch_runtime_gate_missing",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"whole_batch transition {transition_id} 引用待测 batch "
+                                "时必须保留明确的运行时测量依赖和阻断状态。"
+                            ),
+                        }
+                    )
+                # whole_batch suppresses numeric arithmetic only; it never
+                # suppresses consumption accounting.  Every explicit event,
+                # including process_same_material, consumes its sole parent
+                # through the stable transition consumer identity and creates
+                # a distinct child material-state instance.
+                transition_consumer_id = f"material_transition:{transition_id}"
+                for parent_id in parent_ids & set(batch_by_id):
+                    parent = batch_by_id[parent_id]
+                    declared_consumers = {
+                        str(value).strip()
+                        for value in parent.get("consumer_ids", []) or []
+                        if str(value).strip()
+                    } if isinstance(parent.get("consumer_ids"), list) else set()
+                    if declared_consumers != {transition_consumer_id}:
+                        issues.append(
+                            {
+                                "code": "whole_batch_transition_consumer_mismatch",
+                                "scope": "device_local_quantity",
+                                "message": (
+                                    f"whole_batch transition {transition_id} 的 parent "
+                                    f"batch {parent_id} 必须且只能声明 consumer_id="
+                                    f"{transition_consumer_id}；实际="
+                                    f"{sorted(declared_consumers)}。"
+                                ),
+                            }
+                        )
             parent_quantities: List[Tuple[str, float, str]] = []
             child_quantities: List[Tuple[str, float, str]] = []
             normalized_edge_flows: Dict[str, Dict[str, Dict[str, Any]]] = {
@@ -8180,23 +9952,23 @@ class SingleDeviceAgent:
                 ("output", "output_allocations", child_ids, child_quantities),
             ):
                 raw_edge_allocations = transition.get(field_name)
-                if whole_batch_transition and raw_edge_allocations not in (
+                if symbolic_transition and raw_edge_allocations not in (
                     None, "", [],
                 ):
                     issues.append(
                         {
-                            "code": "whole_batch_transition_must_not_declare_edge_quantity",
+                            "code": "symbolic_transition_must_not_declare_edge_quantity",
                             "scope": "device_local_quantity",
                             "message": (
-                                f"whole_batch transition {transition_id} 不得声明"
-                                f" {field_name} 数值；它只证明整批 1→1 谱系。"
+                                f"symbolic transition {transition_id} 不得声明"
+                                f" {field_name} 数值；待测量完成前不得造出库存。"
                             ),
                         }
                     )
                     raw_edge_allocations = []
                 if not isinstance(raw_edge_allocations, list):
                     raw_edge_allocations = []
-                    if not whole_batch_transition:
+                    if not symbolic_transition:
                         issues.append(
                             {
                                 "code": "missing_material_transition_edge_allocations",
@@ -8281,7 +10053,7 @@ class SingleDeviceAgent:
                     destination.append(
                         (transition_batch_id, edge_value, edge_dimension)
                     )
-                if not whole_batch_transition and seen_edge_batch_ids != batch_ids:
+                if not symbolic_transition and seen_edge_batch_ids != batch_ids:
                     issues.append(
                         {
                             "code": "material_transition_edge_batch_set_mismatch",
@@ -8295,9 +10067,13 @@ class SingleDeviceAgent:
                         }
                     )
                 for transition_batch_id in batch_ids & set(batch_by_id):
-                    if whole_batch_transition:
+                    if symbolic_transition:
                         continue
                     transition_batch = batch_by_id[transition_batch_id]
+                    # R2: an unknown-quantity batch cannot be numerically
+                    # reconciled against transition edges.
+                    if transition_batch.get("quantity_status") == "unknown":
+                        continue
                     batch_total, batch_dimension, _ = self._canonical_quantity(
                         transition_batch.get(
                             "total_quantity",
@@ -8380,7 +10156,7 @@ class SingleDeviceAgent:
                 len(parent_quantities) == len(parent_ids)
                 and len(child_quantities) == len(child_ids)
             )
-            if not whole_batch_transition and transition_kind in {
+            if not symbolic_transition and transition_kind in {
                 "split_same_material",
                 "replicate_same_material",
                 "process_same_material",
@@ -8431,7 +10207,7 @@ class SingleDeviceAgent:
                                     ),
                                 }
                             )
-            elif not whole_batch_transition and transition_kind == "state_change":
+            elif not symbolic_transition and transition_kind == "state_change":
                 measurement_valid = False
                 planning_yield_valid = False
                 human_observation_approval_valid = False
@@ -8730,6 +10506,7 @@ class SingleDeviceAgent:
                     or human_observation_approval_valid
                     or planning_yield_valid
                 ):
+                    unknown_yield_transition_ids.add(transition_id)
                     transition_human_issues.append(
                         {
                             "code": "unknown_yield",
@@ -8739,6 +10516,45 @@ class SingleDeviceAgent:
                                 f"state_change transition {transition_id} 没有与冻结"
                                 " observation 摘要匹配的 measurement_artifact；"
                                 "Device 不得用自由文本 measured/calculation 猜产率。"
+                            ),
+                        }
+                    )
+            if (
+                not symbolic_transition
+                and complete_transition_quantities
+                and len(quantity_dimensions) == 1
+                and transition_kind not in {
+                    "split_same_material",
+                    "replicate_same_material",
+                    "process_same_material",
+                }
+            ):
+                # R2 P4: merge/pooling/aliquot/yield relations must not
+                # increase mass: total output <= total input.  Checked
+                # only when every edge quantity is known; unknown edges
+                # keep downstream quantity_status=unknown instead.
+                relation_input_total = sum(
+                    value for _, value, _ in parent_quantities
+                )
+                relation_output_total = sum(
+                    value for _, value, _ in child_quantities
+                )
+                if relation_output_total > relation_input_total + max(
+                    1e-9, abs(relation_input_total) * 1e-6
+                ):
+                    issues.append(
+                        {
+                            "code": "material_relation_conservation_violation",
+                            "scope": "device_local_quantity",
+                            "transition_id": transition_id,
+                            "input_total": relation_input_total,
+                            "output_total": relation_output_total,
+                            "parent_batch_ids": sorted(parent_ids),
+                            "child_batch_ids": sorted(child_ids),
+                            "message": (
+                                f"transition {transition_id} 输出总量 "
+                                f"{relation_output_total:g} 超过输入总量 "
+                                f"{relation_input_total:g}；守恒违例不得静默截断。"
                             ),
                         }
                     )
@@ -8808,6 +10624,791 @@ class SingleDeviceAgent:
                         }
                     )
             normalized_transitions.append(transition)
+
+        transition_by_id = {
+            str(item.get("transition_id") or "").strip(): item
+            for item in normalized_transitions
+            if str(item.get("transition_id") or "").strip()
+        }
+        raw_runtime_obligations = normalized.get(
+            "material_runtime_measurement_obligations", []
+        )
+        if not isinstance(raw_runtime_obligations, list):
+            issues.append(
+                {
+                    "code": "invalid_runtime_measurement_obligations",
+                    "scope": "device_local_quantity",
+                    "message": (
+                        "material_runtime_measurement_obligations 必须是 array。"
+                    ),
+                }
+            )
+            raw_runtime_obligations = []
+        obligation_by_id: Dict[str, Dict[str, Any]] = {}
+        measurement_event_ids: Set[str] = set()
+        compiler_obligation_ids: Set[str] = set()
+        for obligation_index, raw_obligation in enumerate(
+            raw_runtime_obligations
+        ):
+            if not isinstance(raw_obligation, dict):
+                issues.append(
+                    {
+                        "code": "invalid_runtime_measurement_obligation",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            "material_runtime_measurement_obligations"
+                            f"[{obligation_index}] 必须是 object。"
+                        ),
+                    }
+                )
+                continue
+            obligation = copy.deepcopy(raw_obligation)
+            obligation_id = str(
+                obligation.get("obligation_id") or ""
+            ).strip()
+            if not obligation_id or obligation_id in obligation_by_id:
+                issues.append(
+                    {
+                        "code": "duplicate_or_missing_runtime_obligation_id",
+                        "scope": "device_local_quantity",
+                        "message": "运行时测量义务 ID 缺失或重复。",
+                    }
+                )
+                continue
+            obligation_by_id[obligation_id] = obligation
+            compiler_owned = str(obligation.get("construction_rule") or "") == (
+                "material-relationship-compiler/v1"
+            )
+            if compiler_owned:
+                compiler_obligation_ids.add(obligation_id)
+                if (
+                    obligation.get("schema")
+                    != "chem-runtime-material-measurement-obligation/1"
+                    or obligation.get("schema_version") != 1
+                    or str(obligation.get("status") or "") != "pending"
+                    or str(obligation.get("record_phase") or "") != "planned"
+                    or str(obligation.get("quantity_assertion") or "")
+                    != "planned_only"
+                    or obligation.get("execution_fact") is not False
+                    or obligation.get("actual_measurements") != []
+                ):
+                    issues.append(
+                        {
+                            "code": "runtime_obligation_claims_execution_fact",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime obligation {obligation_id} 必须保持 pending/"
+                                "planned-only，且 actual_measurements 必须为空。"
+                            ),
+                        }
+                    )
+            transition_id = str(
+                obligation.get("transition_id") or ""
+            ).strip()
+            transition = transition_by_id.get(transition_id)
+            if (
+                not isinstance(transition, dict)
+                or str(transition.get("quantity_basis") or "")
+                != "runtime_measurement_required"
+                or str(
+                    transition.get("runtime_measurement_obligation_id") or ""
+                ).strip()
+                != obligation_id
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_obligation_transition_mismatch",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 必须与一条待测量"
+                            " transition 双向绑定。"
+                        ),
+                    }
+                )
+                transition = {}
+            expected_input_batches = {
+                str(value).strip()
+                for value in transition.get("parent_batch_ids", []) or []
+                if str(value).strip()
+            }
+            expected_output_batches = {
+                str(value).strip()
+                for value in transition.get("child_batch_ids", []) or []
+                if str(value).strip()
+            }
+            declared_input_batches = {
+                str(value).strip()
+                for value in obligation.get("input_batch_ids", []) or []
+                if str(value).strip()
+            } if isinstance(obligation.get("input_batch_ids"), list) else set()
+            declared_output_batches = {
+                str(value).strip()
+                for value in obligation.get("output_batch_ids", []) or []
+                if str(value).strip()
+            } if isinstance(obligation.get("output_batch_ids"), list) else set()
+            if (
+                declared_input_batches != expected_input_batches
+                or declared_output_batches != expected_output_batches
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_obligation_batch_scope_mismatch",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 的 input/output "
+                            "batch 集必须与 transition 完全一致。"
+                        ),
+                    }
+                )
+            implementation_plan_steps = obligation.get("implementation_plan_steps")
+            if not isinstance(implementation_plan_steps, list) or not (
+                implementation_plan_steps
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_obligation_implementation_scope_missing",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 必须冻结完整的 "
+                            "implementation_plan_steps。"
+                        ),
+                    }
+                )
+                implementation_plan_steps = []
+            required_events_by_role: Dict[str, Set[str]] = {
+                "input": set(),
+                "output": set(),
+            }
+            measured_batches_by_role: Dict[str, Set[str]] = {
+                "input": set(),
+                "output": set(),
+            }
+            measurement_counts_by_role: Dict[str, int] = {
+                "input": 0,
+                "output": 0,
+            }
+            for role, field_name in (
+                ("input", "required_input_measurements"),
+                ("output", "required_output_measurements"),
+            ):
+                raw_measurements = obligation.get(field_name)
+                if not isinstance(raw_measurements, list):
+                    issues.append(
+                        {
+                            "code": "runtime_obligation_measurements_invalid",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime obligation {obligation_id}.{field_name} "
+                                "必须是 array。"
+                            ),
+                        }
+                    )
+                    continue
+                measurement_counts_by_role[role] = len(raw_measurements)
+                for measurement_index, measurement in enumerate(
+                    raw_measurements
+                ):
+                    if not isinstance(measurement, dict):
+                        issues.append(
+                            {
+                                "code": "runtime_measurement_event_invalid",
+                                "scope": "device_local_quantity",
+                                "message": (
+                                    f"runtime obligation {obligation_id}.{field_name}"
+                                    f"[{measurement_index}] 必须是 object。"
+                                ),
+                            }
+                        )
+                        continue
+                    event_id = str(
+                        measurement.get("measurement_event_id") or ""
+                    ).strip()
+                    batch_id = str(measurement.get("batch_id") or "").strip()
+                    forbidden_execution_values = {
+                        key: measurement.get(key)
+                        for key in (
+                            "actual_quantity",
+                            "reported_quantity",
+                            "observed_quantity",
+                            "artifact_digest",
+                            "observation_id",
+                        )
+                        if measurement.get(key) not in (None, "")
+                    }
+                    expected_dimension = str(
+                        measurement.get("expected_quantity_dimension") or ""
+                    ).strip()
+                    allowed_report_units = measurement.get("allowed_report_units")
+                    allowed_unit_dimensions: Set[str] = set()
+                    if isinstance(allowed_report_units, list):
+                        for allowed_unit in allowed_report_units:
+                            _, allowed_dimension, _ = self._canonical_quantity(
+                                {"value": 1.0, "unit": allowed_unit}
+                            )
+                            allowed_unit_dimensions.add(allowed_dimension)
+                    report_source = measurement.get("report_source_contract")
+                    observation_contract = measurement.get("observation_contract")
+                    reported_measurement_contract = (
+                        report_source.get("reported_measurement_contract")
+                        if isinstance(report_source, dict)
+                        else None
+                    )
+                    report_source_valid = bool(
+                        isinstance(report_source, dict)
+                        and isinstance(report_source.get("source_role_id"), str)
+                        and str(report_source.get("source_role_id") or "").strip()
+                        and report_source.get("source_plan_step")
+                        in implementation_plan_steps
+                        and isinstance(report_source.get("station_code"), str)
+                        and str(report_source.get("station_code") or "").strip()
+                        and isinstance(report_source.get("capability_id"), str)
+                        and str(report_source.get("capability_id") or "").strip()
+                        and isinstance(
+                            report_source.get("skill_operation_name"), str
+                        )
+                        and str(
+                            report_source.get("skill_operation_name") or ""
+                        ).strip()
+                        and report_source.get("skill_contract_digest_scope")
+                        == material_relationship_compiler.SKILL_OPERATION_CONTRACT_DIGEST_SCOPE
+                        and isinstance(
+                            report_source.get("skill_contract_sha256"), str
+                        )
+                        and re.fullmatch(
+                            r"[0-9a-f]{64}",
+                            report_source.get("skill_contract_sha256", ""),
+                        )
+                        is not None
+                        and isinstance(reported_measurement_contract, dict)
+                        and isinstance(
+                            reported_measurement_contract.get("field_name"), str
+                        )
+                        and str(
+                            reported_measurement_contract.get("field_name") or ""
+                        ).strip()
+                        and reported_measurement_contract.get("dimension")
+                        == expected_dimension
+                        and isinstance(
+                            reported_measurement_contract.get("allowed_units"), list
+                        )
+                        and set(allowed_report_units or []).issubset(
+                            {
+                                str(value).strip()
+                                for value in reported_measurement_contract.get(
+                                    "allowed_units", []
+                                )
+                                if isinstance(value, str) and value.strip()
+                            }
+                        )
+                    )
+                    observation_contract_valid = bool(
+                        isinstance(observation_contract, dict)
+                        and observation_contract.get("observation_id_required")
+                        is True
+                        and observation_contract.get(
+                            "observation_id_uniqueness_scope"
+                        )
+                        == "material_runtime_measurement_obligations"
+                        and observation_contract.get("artifact_digest_required")
+                        is True
+                        and observation_contract.get(
+                            "artifact_digest_algorithm"
+                        )
+                        == "sha256"
+                        and observation_contract.get(
+                            "report_source_match_required"
+                        )
+                        is True
+                    )
+                    if (
+                        not event_id
+                        or event_id in measurement_event_ids
+                        or measurement.get("role") != role
+                        or str(measurement.get("status") or "") != "pending"
+                        or str(measurement.get("record_phase") or "")
+                        != "planned"
+                        or str(measurement.get("quantity_assertion") or "")
+                        != "planned_only"
+                        or measurement.get("execution_fact") is not False
+                        or measurement.get("reported_quantity_field_required")
+                        is not True
+                        or measurement.get("reported_unit_field_required")
+                        is not True
+                        or measurement.get("observation_id_required") is not True
+                        or measurement.get("artifact_digest_required") is not True
+                        or expected_dimension not in {"amount", "mass", "volume"}
+                        or not isinstance(allowed_report_units, list)
+                        or len(allowed_report_units) != 1
+                        or any(
+                            not isinstance(value, str) or not value.strip()
+                            for value in allowed_report_units or []
+                        )
+                        or allowed_unit_dimensions != {expected_dimension}
+                        or measurement.get("unit_match_policy")
+                        != "exact_research_declared_unit"
+                        or not report_source_valid
+                        or not observation_contract_valid
+                        or forbidden_execution_values
+                    ):
+                        issues.append(
+                            {
+                                "code": "runtime_measurement_event_claim_invalid",
+                                "scope": "device_local_quantity",
+                                "message": (
+                                    f"runtime measurement event {event_id or '<missing>'} "
+                                    "必须是未满足且单位、来源、observation/digest "
+                                    "合同完整的计划义务，不能携带实际观测值。"
+                                ),
+                            }
+                        )
+                    if event_id:
+                        measurement_event_ids.add(event_id)
+                        required_events_by_role[role].add(event_id)
+                    if batch_id:
+                        measured_batches_by_role[role].add(batch_id)
+            if (
+                measured_batches_by_role["input"] != expected_input_batches
+                or measured_batches_by_role["output"] != expected_output_batches
+                or measurement_counts_by_role["input"]
+                != len(expected_input_batches)
+                or measurement_counts_by_role["output"]
+                != len(expected_output_batches)
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_measurement_endpoint_coverage_mismatch",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 必须为每个 input/output "
+                            "batch 建立且只建立一个测量事件。"
+                        ),
+                    }
+                )
+            pre_gate = obligation.get("pre_consumption_gate")
+            downstream_gate = obligation.get("downstream_consumption_gate")
+            pre_gate_ids = {
+                str(value).strip()
+                for value in (
+                    pre_gate.get("blocked_until_measurement_event_ids", [])
+                    if isinstance(pre_gate, dict)
+                    else []
+                )
+                if str(value).strip()
+            }
+            downstream_gate_ids = {
+                str(value).strip()
+                for value in (
+                    downstream_gate.get(
+                        "blocked_until_measurement_event_ids", []
+                    )
+                    if isinstance(downstream_gate, dict)
+                    else []
+                )
+                if str(value).strip()
+            }
+            stop_controller = (
+                pre_gate.get("stop_controller")
+                if isinstance(pre_gate, dict)
+                else None
+            )
+            stop_controller_valid = bool(
+                isinstance(stop_controller, dict)
+                and isinstance(stop_controller.get("source_role_id"), str)
+                and str(stop_controller.get("source_role_id") or "").strip()
+                and stop_controller.get("source_plan_step")
+                in implementation_plan_steps
+                and isinstance(stop_controller.get("station_code"), str)
+                and str(stop_controller.get("station_code") or "").strip()
+                and isinstance(stop_controller.get("capability_id"), str)
+                and str(stop_controller.get("capability_id") or "").strip()
+                and isinstance(stop_controller.get("skill_operation_name"), str)
+                and str(stop_controller.get("skill_operation_name") or "").strip()
+                and stop_controller.get("skill_contract_digest_scope")
+                == material_relationship_compiler.SKILL_OPERATION_CONTRACT_DIGEST_SCOPE
+                and isinstance(stop_controller.get("skill_contract_sha256"), str)
+                and re.fullmatch(
+                    r"[0-9a-f]{64}",
+                    stop_controller.get("skill_contract_sha256", ""),
+                )
+                is not None
+            )
+            if (
+                not isinstance(pre_gate, dict)
+                or pre_gate.get("policy")
+                != "all_measurements_verified_and_quantity_sufficient"
+                or not required_events_by_role["input"].issubset(pre_gate_ids)
+                or pre_gate.get("on_insufficient_quantity")
+                != "stop_before_material_consumption"
+                or not stop_controller_valid
+                or not isinstance(downstream_gate, dict)
+                or downstream_gate.get("policy")
+                != "all_output_measurements_verified"
+                or downstream_gate_ids != required_events_by_role["output"]
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_measurement_gate_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 缺少完整的"
+                            "测量前置门或下游消费门。"
+                        ),
+                    }
+                )
+
+        for obligation_id, obligation in obligation_by_id.items():
+            dependency_ids = obligation.get("depends_on_obligation_ids", [])
+            normalized_dependency_ids = (
+                {str(value).strip() for value in dependency_ids}
+                if isinstance(dependency_ids, list)
+                else set()
+            )
+            if (
+                not isinstance(dependency_ids, list)
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in dependency_ids
+                )
+                or not {
+                    str(value).strip() for value in dependency_ids
+                }.issubset(set(obligation_by_id))
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_obligation_dependency_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 引用了不存在或"
+                            "不合法的上游义务。"
+                        ),
+                    }
+                )
+            else:
+                own_input_event_ids = {
+                    str(item.get("measurement_event_id") or "").strip()
+                    for item in obligation.get(
+                        "required_input_measurements", []
+                    )
+                    if isinstance(item, dict)
+                    and str(item.get("measurement_event_id") or "").strip()
+                }
+                inherited_event_ids = {
+                    str(item.get("measurement_event_id") or "").strip()
+                    for dependency_id in normalized_dependency_ids
+                    for item in obligation_by_id[dependency_id].get(
+                        "required_output_measurements", []
+                    )
+                    if isinstance(item, dict)
+                    and str(item.get("measurement_event_id") or "").strip()
+                }
+                pre_gate = obligation.get("pre_consumption_gate")
+                actual_pre_gate_ids = {
+                    str(value).strip()
+                    for value in (
+                        pre_gate.get(
+                            "blocked_until_measurement_event_ids", []
+                        )
+                        if isinstance(pre_gate, dict)
+                        else []
+                    )
+                    if str(value).strip()
+                }
+                if actual_pre_gate_ids != (
+                    own_input_event_ids | inherited_event_ids
+                ):
+                    issues.append(
+                        {
+                            "code": "runtime_measurement_gate_scope_mismatch",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime obligation {obligation_id} 的前置门必须"
+                                "精确覆盖本次输入测量及全部上游依赖测量。"
+                            ),
+                        }
+                    )
+            obligation_plan_key = self._optional_typed_id_key(
+                obligation.get("plan_step"),
+                f"material_runtime_measurement_obligations[{obligation_id}].plan_step",
+            )
+            obligation_step = (
+                plan_step_by_id.get(obligation_plan_key)
+                if obligation_plan_key is not None
+                else None
+            )
+            step_obligation_ids = (
+                obligation_step.get("runtime_measurement_obligation_ids")
+                if isinstance(obligation_step, dict)
+                else None
+            )
+            if (
+                not isinstance(obligation_step, dict)
+                or not isinstance(step_obligation_ids, list)
+                or obligation_id
+                not in {
+                    str(value).strip()
+                    for value in step_obligation_ids
+                    if str(value).strip()
+                }
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_obligation_plan_step_backref_missing",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime obligation {obligation_id} 与 commit plan step "
+                            "之间缺少双向引用。"
+                        ),
+                    }
+                )
+        for plan_step_key, plan_step in plan_step_by_id.items():
+            raw_step_obligations = plan_step.get(
+                "runtime_measurement_obligation_ids", []
+            )
+            if raw_step_obligations in (None, []):
+                continue
+            if (
+                not isinstance(raw_step_obligations, list)
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in raw_step_obligations
+                )
+                or not {
+                    str(value).strip() for value in raw_step_obligations
+                }.issubset(set(obligation_by_id))
+            ):
+                issues.append(
+                    {
+                        "code": "plan_step_runtime_obligation_ref_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            "Device plan step "
+                            f"{plan_step_values.get(plan_step_key, plan_step_key)!r} "
+                            "引用了不存在或不合法的运行时测量义务。"
+                        ),
+                    }
+                )
+        for transition_id, transition in transition_by_id.items():
+            quantity_basis = str(transition.get("quantity_basis") or "")
+            if quantity_basis == "runtime_measurement_required":
+                obligation_id = str(
+                    transition.get("runtime_measurement_obligation_id") or ""
+                ).strip()
+                if obligation_id not in obligation_by_id:
+                    issues.append(
+                        {
+                            "code": "runtime_transition_obligation_unresolved",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"runtime transition {transition_id} 引用的测量义务"
+                                "不存在。"
+                            ),
+                        }
+                    )
+            raw_dependencies = transition.get(
+                "depends_on_runtime_measurement_obligation_ids", []
+            )
+            if raw_dependencies not in (None, []) and (
+                not isinstance(raw_dependencies, list)
+                or any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in raw_dependencies
+                )
+                or not {
+                    str(value).strip() for value in raw_dependencies
+                }.issubset(set(obligation_by_id))
+            ):
+                issues.append(
+                    {
+                        "code": "transition_runtime_dependency_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"transition {transition_id} 的运行时测量依赖无法解析。"
+                        ),
+                    }
+                )
+
+        raw_consumption_events = normalized.get("material_consumption_events", [])
+        if not isinstance(raw_consumption_events, list):
+            issues.append(
+                {
+                    "code": "invalid_material_consumption_events",
+                    "scope": "device_local_quantity",
+                    "message": "material_consumption_events 必须是 array。",
+                }
+            )
+            raw_consumption_events = []
+        compiler_consumption_event_ids: Set[str] = set()
+        seen_consumption_event_ids: Set[str] = set()
+        consumption_keys: Dict[Tuple[str, str], List[str]] = {}
+        for event_index, event in enumerate(raw_consumption_events):
+            if not isinstance(event, dict):
+                issues.append(
+                    {
+                        "code": "invalid_material_consumption_event",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"material_consumption_events[{event_index}] 必须是 object。"
+                        ),
+                    }
+                )
+                continue
+            event_id = str(event.get("consumption_event_id") or "").strip()
+            transition_id = str(event.get("transition_id") or "").strip()
+            batch_id = str(event.get("batch_id") or "").strip()
+            if not event_id or event_id in seen_consumption_event_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_or_missing_consumption_event_id",
+                        "scope": "device_local_quantity",
+                        "message": "物料消费事件 ID 缺失或重复。",
+                    }
+                )
+            if event_id:
+                seen_consumption_event_ids.add(event_id)
+            if str(event.get("construction_rule") or "") == (
+                "material-relationship-compiler/v1"
+            ):
+                compiler_consumption_event_ids.add(event_id)
+                if (
+                    str(event.get("status") or "") != "pending_execution"
+                    or str(event.get("record_phase") or "") != "planned"
+                    or str(event.get("quantity_assertion") or "")
+                    != "planned_only"
+                    or event.get("execution_fact") is not False
+                    or event.get("actual_quantity") is not None
+                    or event.get("consumer_id")
+                    != f"material_transition:{transition_id}"
+                    or transition_id not in transition_by_id
+                    or batch_id not in batch_by_id
+                ):
+                    issues.append(
+                        {
+                            "code": "planned_consumption_event_invalid",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"consumption event {event_id or '<missing>'} 必须"
+                                "保持 pending/planned-only，并绑定现有 transition/batch。"
+                            ),
+                        }
+                    )
+                planned_quantity = event.get("planned_quantity")
+                if planned_quantity not in (None, ""):
+                    planned_value, planned_dimension, _ = self._canonical_quantity(
+                        planned_quantity
+                    )
+                    if (
+                        planned_value is None
+                        or planned_value <= 0
+                        or not self._quantity_dimension_is_inventory(
+                            planned_dimension
+                        )
+                    ):
+                        issues.append(
+                            {
+                                "code": "planned_consumption_quantity_invalid",
+                                "scope": "device_local_quantity",
+                                "message": (
+                                    f"consumption event {event_id} 的 planned_quantity "
+                                    "必须是有限正数；它仍不构成实际扣料事实。"
+                                ),
+                            }
+                        )
+                consumption_keys.setdefault(
+                    (transition_id, batch_id), []
+                ).append(event_id)
+        for transition_id, transition in transition_by_id.items():
+            if str(transition.get("construction_rule") or "") != (
+                "material-relationship-compiler/v1"
+            ):
+                continue
+            for parent_batch_id in transition.get("parent_batch_ids", []) or []:
+                key = (transition_id, str(parent_batch_id).strip())
+                if len(consumption_keys.get(key, [])) != 1:
+                    issues.append(
+                        {
+                            "code": "planned_consumption_event_missing_or_ambiguous",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"transition {transition_id} 对 parent batch "
+                                f"{parent_batch_id} 必须有且只有一个稳定的计划消费事件。"
+                            ),
+                        }
+                    )
+
+        compiler_manifest = normalized.get("material_relationship_compiler")
+        if isinstance(compiler_manifest, dict) and str(
+            compiler_manifest.get("construction_rule") or ""
+        ) == "material-relationship-compiler/v1":
+            expected_managed_sets = {
+                "managed_runtime_measurement_obligation_ids": compiler_obligation_ids,
+                "managed_consumption_event_ids": compiler_consumption_event_ids,
+            }
+            for field_name, expected_ids in expected_managed_sets.items():
+                declared_ids = compiler_manifest.get(field_name)
+                if (
+                    not isinstance(declared_ids, list)
+                    or {str(value).strip() for value in declared_ids}
+                    != expected_ids
+                ):
+                    issues.append(
+                        {
+                            "code": "material_relationship_manifest_record_set_mismatch",
+                            "scope": "device_local_quantity",
+                            "message": (
+                                f"material_relationship_compiler.{field_name} "
+                                "必须精确列出本轮 compiler-owned 记录。"
+                            ),
+                        }
+                    )
+            raw_manifest_obligation_ids = compiler_manifest.get(
+                "runtime_measurement_obligation_ids"
+            )
+            manifest_obligation_ids = (
+                {
+                    str(value).strip()
+                    for value in raw_manifest_obligation_ids
+                    if str(value).strip()
+                }
+                if isinstance(raw_manifest_obligation_ids, list)
+                else set()
+            )
+            if (
+                compiler_manifest.get("pending_runtime_measurement")
+                != bool(compiler_obligation_ids)
+                or not isinstance(raw_manifest_obligation_ids, list)
+                or manifest_obligation_ids != compiler_obligation_ids
+            ):
+                issues.append(
+                    {
+                        "code": "material_relationship_manifest_runtime_state_mismatch",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            "material relationship manifest 的待测量状态与"
+                            "实际计划义务集合不一致。"
+                        ),
+                    }
+                )
+
+        for batch_id in runtime_pending_batch_ids:
+            batch = batch_by_id.get(batch_id, {})
+            raw_obligation_ids = batch.get(
+                "runtime_measurement_obligation_ids", []
+            )
+            if raw_obligation_ids not in (None, []) and (
+                not isinstance(raw_obligation_ids, list)
+                or not {
+                    str(value).strip() for value in raw_obligation_ids
+                }.issubset(set(obligation_by_id))
+            ):
+                issues.append(
+                    {
+                        "code": "runtime_pending_batch_obligation_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"runtime-pending batch {batch_id} 引用了不存在的测量义务。"
+                        ),
+                    }
+                )
         for batch_id in nonroot_batch_requirements:
             count = child_transition_counts.get(batch_id, 0)
             if count != 1:
@@ -8856,9 +11457,10 @@ class SingleDeviceAgent:
                 }
             )
 
-        plan_transition_refs: Dict[str, Set[str]] = {}
-        plan_material_event_kind: Dict[str, str] = {}
+        plan_transition_refs: Dict[Tuple[str, Any], Set[str]] = {}
+        plan_material_event_kind: Dict[Tuple[str, Any], str] = {}
         for plan_step_id, plan_step in plan_step_by_id.items():
+            plan_step_value = plan_step_values.get(plan_step_id, plan_step_id)
             workstation = str(plan_step.get("workstation") or "").strip()
             event_kind = str(plan_step.get("material_event_kind") or "").strip()
             raw_step_transition_refs = plan_step.get("material_transition_ids")
@@ -8874,12 +11476,12 @@ class SingleDeviceAgent:
             )
             mapped_macro_operations = [
                 str(
-                    research_macro_by_id[source_id].get(
-                        "操作", research_macro_by_id[source_id].get("operation", "")
+                    research_macro_by_id[source_key].get(
+                        "操作", research_macro_by_id[source_key].get("operation", "")
                     )
                 )
                 for source_id in self._source_macro_step_ids(plan_step)
-                if source_id in research_macro_by_id
+                if (source_key := macro_id_key(source_id)) in research_macro_by_id
             ]
             plan_step_intent_text = " ".join(
                 str(plan_step.get(field) or "")
@@ -8907,7 +11509,7 @@ class SingleDeviceAgent:
                         "code": "processing_step_missing_material_event",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"controlled processing workstation step {plan_step_id}/"
+                            f"controlled processing workstation step {plan_step_value!r}/"
                             f"{workstation} 必须显式声明非 none "
                             "material_event_kind。"
                         ),
@@ -8919,7 +11521,7 @@ class SingleDeviceAgent:
                         "code": "invalid_plan_material_event_kind",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"device plan step {plan_step_id} 的 material_event_kind="
+                            f"device plan step {plan_step_value!r} 的 material_event_kind="
                             f"{event_kind} 不在受控枚举中。"
                         ),
                     }
@@ -8930,7 +11532,7 @@ class SingleDeviceAgent:
                         "code": "processing_step_missing_transition_refs",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"material-processing device plan step {plan_step_id} "
+                            f"material-processing device plan step {plan_step_value!r} "
                             "缺少 material_transition_ids。"
                         ),
                     }
@@ -8944,7 +11546,7 @@ class SingleDeviceAgent:
                         "code": "invalid_plan_material_transition_ref",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"device plan step {plan_step_id} 引用了不存在 transition："
+                            f"device plan step {plan_step_value!r} 引用了不存在 transition："
                             f"{sorted(unknown_transition_refs)}。"
                         ),
                     }
@@ -8958,7 +11560,7 @@ class SingleDeviceAgent:
                             "code": "plan_step_transition_missing_reverse_ref",
                             "scope": "device_local_quantity",
                             "message": (
-                                f"device plan step {plan_step_id} 引用 transition "
+                                f"device plan step {plan_step_value!r} 引用 transition "
                                 f"{transition_id}，但 transition.source_plan_steps "
                                 "未反向包含该 step。"
                             ),
@@ -8973,7 +11575,7 @@ class SingleDeviceAgent:
                             "code": "plan_step_transition_kind_mismatch",
                             "scope": "device_local_quantity",
                             "message": (
-                                f"device plan step {plan_step_id} 的 material_event_kind "
+                                f"device plan step {plan_step_value!r} 的 material_event_kind "
                                 f"与 transition {transition_id} 不一致。"
                             ),
                         }
@@ -8991,7 +11593,8 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"material transition {transition_id} 声明 source plan step "
-                                f"{source_plan_step}，但该 step 未双向声明"
+                                f"{plan_step_values.get(source_plan_step, source_plan_step)!r}，"
+                                "但该 step 未双向声明"
                                 " material_event_kind/material_transition_ids。"
                             ),
                         }
@@ -9005,13 +11608,14 @@ class SingleDeviceAgent:
         # identity-preserving/none when another mapped step records the actual
         # reaction state change.
         for macro_id, research_macro in research_macro_by_id.items():
+            macro_value = research_macro_values[macro_id]
             frozen_operation = str(
                 research_macro.get(
                     "操作", research_macro.get("operation", "")
                 )
             )
             if self._active_semantic_analysis:
-                assessment = self._semantic_assessment(macro_id)
+                assessment = self._semantic_assessment(macro_value)
                 category_requirements = {
                     category: self._stations_for_semantic_category(category)
                     for category in {
@@ -9054,11 +11658,15 @@ class SingleDeviceAgent:
             mapped_material_steps = [
                 plan_step_id
                 for plan_step_id, plan_step in plan_step_by_id.items()
-                if macro_id in self._source_macro_step_ids(plan_step)
+                if macro_id
+                in {
+                    macro_id_key(source)
+                    for source in self._source_macro_step_ids(plan_step)
+                }
             ]
             if not mapped_material_steps:
                 continue
-            missing_categories = [
+            missing_categories = sorted(
                 category
                 for category, allowed_stations in category_requirements.items()
                 if not any(
@@ -9084,7 +11692,7 @@ class SingleDeviceAgent:
                     )
                     for plan_step_id in mapped_material_steps
                 )
-            ]
+            )
             if not missing_categories:
                 continue
             issues.append(
@@ -9093,14 +11701,14 @@ class SingleDeviceAgent:
                     "scope": "device_local_quantity",
                     "missing_processing_categories": missing_categories,
                     "message": (
-                        f"冻结物料状态变化 macro step {macro_id}（{frozen_operation}）的"
+                        f"冻结物料状态变化 macro step {macro_value!r}（{frozen_operation}）的"
                         "整个 Device 映射组没有逐类完成真源工作站的双向"
                         " state_change transition；不得遗漏复合处理类别。缺失="
                         f"{missing_categories}。"
                     ),
                 }
             )
-        child_transition_plan_refs: Dict[str, Set[str]] = {
+        child_transition_plan_refs: Dict[str, Set[Tuple[str, Any]]] = {
             child_id: set().union(
                 *(
                     transition_plan_refs_by_id.get(transition_id, set())
@@ -9136,6 +11744,7 @@ class SingleDeviceAgent:
         normalized_entries: List[Dict[str, Any]] = []
         seen_entry_ids: Set[str] = set()
         theoretical_human_issues: List[Dict[str, Any]] = []
+        ledger_status_counts: Dict[str, int] = {}
         for index, raw in enumerate(entries, start=1):
             if not isinstance(raw, dict):
                 issues.append(
@@ -9149,11 +11758,87 @@ class SingleDeviceAgent:
             item = copy.deepcopy(raw)
             entry_id = str(item.get("entry_id") or item.get("transaction_id") or f"ml_{index:03d}")
             item["entry_id"] = entry_id
+            removed_placeholder_fields: Dict[str, Any] = {}
+            if "consumer_id" in item and _is_placeholder_id(item.get("consumer_id")):
+                removed_placeholder_fields["consumer_id"] = item.pop("consumer_id", None)
+            kept_consumer_ids, removed_consumer_ids = _sanitize_formal_id_list(
+                item.get("consumer_ids")
+            )
+            if removed_consumer_ids:
+                item["consumer_ids"] = kept_consumer_ids
+                removed_placeholder_fields["consumer_ids"] = removed_consumer_ids
+            if "sample_id" in item and _is_placeholder_id(item.get("sample_id")):
+                removed_placeholder_fields["sample_id"] = item.pop("sample_id", None)
+            kept_sample_ids, removed_sample_ids = _sanitize_formal_id_list(
+                item.get("sample_ids")
+            )
+            if removed_sample_ids:
+                item["sample_ids"] = kept_sample_ids
+                removed_placeholder_fields["sample_ids"] = removed_sample_ids
+            kept_entry_source_refs, removed_entry_source_refs = _sanitize_formal_id_list(
+                item.get("source_refs")
+            )
+            if removed_entry_source_refs:
+                item["source_refs"] = kept_entry_source_refs
+                removed_placeholder_fields["source_refs"] = removed_entry_source_refs
+            kept_step_refs, removed_step_refs = _sanitize_formal_id_list(
+                item.get("processing_step_refs")
+            )
+            if removed_step_refs:
+                item["processing_step_refs"] = kept_step_refs
+                removed_placeholder_fields["processing_step_refs"] = removed_step_refs
+            if "production_event_id" in item and _is_placeholder_id(
+                item.get("production_event_id")
+            ):
+                removed_placeholder_fields["production_event_id"] = item.pop(
+                    "production_event_id", None
+                )
+            nested_consumers_raw = item.get("consumers")
+            if isinstance(nested_consumers_raw, list):
+                kept_consumers: List[Any] = []
+                removed_consumers: List[Any] = []
+                for consumer_row in nested_consumers_raw:
+                    if not isinstance(consumer_row, dict):
+                        kept_consumers.append(consumer_row)
+                        continue
+                    row_id = (
+                        consumer_row.get("consumer_id")
+                        or consumer_row.get("sample_id")
+                        or consumer_row.get("id")
+                    )
+                    if _is_placeholder_id(row_id):
+                        removed_consumers.append(consumer_row)
+                    else:
+                        kept_consumers.append(consumer_row)
+                if removed_consumers:
+                    item["consumers"] = kept_consumers
+                    removed_placeholder_fields["consumers"] = removed_consumers
+            if removed_placeholder_fields:
+                quantity_semantics_counters["placeholders_sanitized"] = (
+                    quantity_semantics_counters.get("placeholders_sanitized", 0)
+                    + sum(
+                        len(value)
+                        if isinstance(value, list)
+                        else 1
+                        for value in removed_placeholder_fields.values()
+                    )
+                )
+                quantity_normalization_events.append(
+                    {
+                        "code": "ledger_placeholder_ids_sanitized",
+                        "entry_id": entry_id,
+                        "fields": removed_placeholder_fields,
+                    }
+                )
             entry_batch_id = str(item.get("batch_id") or "").strip()
             expected_quantity_mode = (
                 "whole_batch"
                 if entry_batch_id in whole_batch_batch_ids
-                else "numeric_inventory"
+                else (
+                    "runtime_measurement_required"
+                    if entry_batch_id in runtime_pending_batch_ids
+                    else "numeric_inventory"
+                )
             )
             entry_quantity_mode = str(
                 item.get("quantity_mode") or expected_quantity_mode
@@ -9171,12 +11856,54 @@ class SingleDeviceAgent:
                     }
                 )
             is_whole_batch_entry = entry_quantity_mode == "whole_batch"
+            is_runtime_pending_entry = (
+                entry_quantity_mode == "runtime_measurement_required"
+            )
+            is_symbolic_entry = is_whole_batch_entry or is_runtime_pending_entry
+            if is_runtime_pending_entry and str(
+                item.get("measurement_status") or ""
+            ) != "pending":
+                issues.append(
+                    {
+                        "code": "runtime_pending_ledger_status_invalid",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"ledger entry {entry_id} 必须明确 measurement_status=pending。"
+                        ),
+                    }
+                )
+            compiler_planned_entry = str(
+                item.get("construction_rule") or ""
+            ) == "material-relationship-compiler/v1"
+            is_planned_entry = bool(
+                str(item.get("record_phase") or "") == "planned"
+                and str(item.get("quantity_assertion") or "")
+                == "planned_only"
+                and item.get("execution_fact") is False
+            )
+            if compiler_planned_entry and not is_planned_entry:
+                issues.append(
+                    {
+                        "code": "compiler_ledger_record_not_planned",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"compiler-owned ledger entry {entry_id} 必须明确"
+                            "标记为 planned-only，且不得冒充执行事实。"
+                        ),
+                    }
+                )
             raw_source_kind = str(item.get("source_kind") or "").strip()
+            if raw_source_kind in _LEGACY_LEDGER_SOURCE_KINDS:
+                raw_source_kind = _LEGACY_LEDGER_SOURCE_KINDS[raw_source_kind]
+                item["source_kind"] = raw_source_kind
+                quantity_semantics_counters["legacy_source_kinds_migrated"] = (
+                    quantity_semantics_counters.get("legacy_source_kinds_migrated", 0) + 1
+                )
             raw_source_refs = item.get("source_refs")
             raw_calculation = str(
                 item.get("calculation", item.get("formula", "")) or ""
             ).strip()
-            item.setdefault("source_kind", "device_operational")
+            item.setdefault("source_kind", "unknown")
             item.setdefault("source_refs", [])
             item.setdefault("calculation", item.get("formula", ""))
             transition_requirement = nonroot_batch_requirements.get(
@@ -9184,25 +11911,94 @@ class SingleDeviceAgent:
             )
             if transition_requirement is not None:
                 raw_processing_refs = item.get("processing_step_refs")
-                processing_refs = {
-                    str(value).strip()
-                    for value in raw_processing_refs or []
-                    if str(value).strip()
-                } if isinstance(raw_processing_refs, list) else set()
-                if not processing_refs:
-                    issues.append(
-                        {
-                            "code": "missing_ledger_processing_step_refs",
-                            "scope": "device_local_quantity",
-                            "message": (
-                                f"ledger entry {entry_id} 对应 non-root batch "
-                                f"{entry_batch_id}，但缺少 processing_step_refs。"
-                            ),
-                        }
-                    )
-                elif processing_refs != child_transition_plan_refs.get(
+                processing_refs = audited_plan_keys(
+                    raw_processing_refs,
+                    f"material_ledger.entries[{index - 1}].processing_step_refs",
+                )
+                # R2: processing_step_refs derive from the canonical
+                # relation graph, role-aware -- production rows cite the
+                # producing transition's plan steps, draw rows cite the
+                # consuming transitions' plan steps.
+                producing_refs = child_transition_plan_refs.get(
                     entry_batch_id, set()
-                ):
+                )
+                consuming_refs = parent_transition_plan_refs.get(
+                    entry_batch_id, set()
+                )
+                entry_has_draw_role = bool(
+                    str(item.get("consumer_id") or "").strip()
+                    or [
+                        value
+                        for value in (item.get("consumer_ids") or [])
+                        if str(value).strip()
+                    ]
+                    or [
+                        value
+                        for value in (item.get("consumers") or [])
+                        if isinstance(value, dict)
+                    ]
+                )
+                raw_role_produced = item.get(
+                    "produced", item.get("produced_quantity")
+                )
+                role_produced_value = (
+                    raw_role_produced.get("value")
+                    if isinstance(raw_role_produced, dict)
+                    else raw_role_produced
+                )
+                entry_has_production_role = bool(
+                    raw_role_produced not in (None, "")
+                    and (
+                        role_produced_value not in (None, "", 0, 0.0)
+                        or not entry_has_draw_role
+                    )
+                )
+                if entry_has_draw_role and entry_has_production_role:
+                    expected_processing_refs = producing_refs | consuming_refs
+                elif entry_has_draw_role:
+                    expected_processing_refs = consuming_refs or producing_refs
+                else:
+                    expected_processing_refs = producing_refs
+                if not processing_refs:
+                    derive_transition_ids = set()
+                    if entry_has_production_role or not entry_has_draw_role:
+                        derive_transition_ids.update(
+                            child_transition_ids.get(entry_batch_id, set())
+                        )
+                    if entry_has_draw_role:
+                        derive_transition_ids.update(
+                            parent_transition_ids_by_batch.get(
+                                entry_batch_id, set()
+                            )
+                        )
+                    derived_steps: List[Any] = []
+                    for derive_tid in sorted(derive_transition_ids):
+                        for raw_step in transition_raw_plan_steps_by_id.get(
+                            derive_tid, []
+                        ):
+                            if raw_step not in derived_steps:
+                                derived_steps.append(raw_step)
+                    if derived_steps:
+                        item["processing_step_refs"] = derived_steps
+                        quantity_normalization_events.append(
+                            {
+                                "code": "ledger_processing_step_refs_derived_from_relation_graph",
+                                "entry_id": entry_id,
+                                "processing_step_refs": copy.deepcopy(derived_steps),
+                            }
+                        )
+                    else:
+                        issues.append(
+                            {
+                                "code": "missing_ledger_processing_step_refs",
+                                "scope": "device_local_quantity",
+                                "message": (
+                                    f"ledger entry {entry_id} 对应 non-root batch "
+                                    f"{entry_batch_id}，但缺少 processing_step_refs。"
+                                ),
+                            }
+                        )
+                elif processing_refs != expected_processing_refs:
                     issues.append(
                         {
                             "code": "ledger_processing_step_refs_mismatch",
@@ -9255,7 +12051,7 @@ class SingleDeviceAgent:
                         item.pop(alias, None)
                 theoretical_record["provenance"] = "theoretical_quantity"
                 theoretical_record["source_kind"] = raw_source_kind or item.get(
-                    "source_kind", "derived"
+                    "source_kind", "unknown"
                 )
                 theoretical_record["source_refs"] = copy.deepcopy(
                     item.get("source_refs", [])
@@ -9280,33 +12076,97 @@ class SingleDeviceAgent:
                         ),
                     }
                 )
-            produced, produced_dim, produced_unit = self._canonical_quantity(
-                item.get("produced", item.get("produced_quantity"))
-            )
-            consumed, consumed_dim, _ = self._canonical_quantity(
-                item.get("consumed", item.get("consumed_quantity"))
-            )
-            reserved, reserved_dim, _ = self._canonical_quantity(
-                item.get("reserved", item.get("reserved_quantity"))
-            )
-            declared_balance, balance_dim, _ = self._canonical_quantity(
-                item.get("balance")
-            )
-            raw_ledger_quantities = {
+            actual_ledger_quantities = {
                 "produced": item.get("produced", item.get("produced_quantity")),
                 "consumed": item.get("consumed", item.get("consumed_quantity")),
                 "reserved": item.get("reserved", item.get("reserved_quantity")),
                 "balance": item.get("balance"),
             }
-            if is_whole_batch_entry and any(
+            planned_ledger_quantities = {
+                "produced": item.get("planned_total"),
+                "consumed": item.get("planned_allocated"),
+                "reserved": item.get("planned_reserved"),
+                "balance": item.get("planned_balance"),
+            }
+            if is_planned_entry and any(
+                value not in (None, "")
+                for value in actual_ledger_quantities.values()
+            ):
+                issues.append(
+                    {
+                        "code": "planned_ledger_uses_execution_quantity_fields",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"planned ledger entry {entry_id} 不得使用无前缀的 "
+                            "produced/consumed/balance；这些字段保留给执行事实。"
+                        ),
+                    }
+                )
+            if not is_planned_entry and any(
+                value not in (None, "")
+                for value in planned_ledger_quantities.values()
+            ):
+                issues.append(
+                    {
+                        "code": "planned_ledger_phase_missing",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"ledger entry {entry_id} 使用 planned_* 数量时必须"
+                            "明确 record_phase=planned/quantity_assertion=planned_only。"
+                        ),
+                    }
+                )
+            if is_planned_entry and item.get("consumers") not in (None, [], {}):
+                issues.append(
+                    {
+                        "code": "planned_ledger_uses_execution_consumer_field",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"planned ledger entry {entry_id} 必须使用 "
+                            "planned_consumer_allocations；consumers 保留给执行事实。"
+                        ),
+                    }
+                )
+            if (
+                not is_planned_entry
+                and item.get("planned_consumer_allocations") not in (None, [], {})
+            ):
+                issues.append(
+                    {
+                        "code": "planned_ledger_phase_missing",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"ledger entry {entry_id} 使用 "
+                            "planned_consumer_allocations 时必须明确为 planned-only。"
+                        ),
+                    }
+                )
+            raw_ledger_quantities = (
+                planned_ledger_quantities
+                if is_planned_entry
+                else actual_ledger_quantities
+            )
+            produced, produced_dim, produced_unit = self._canonical_quantity(
+                raw_ledger_quantities["produced"]
+            )
+            consumed, consumed_dim, _ = self._canonical_quantity(
+                raw_ledger_quantities["consumed"]
+            )
+            reserved, reserved_dim, _ = self._canonical_quantity(
+                raw_ledger_quantities["reserved"]
+            )
+            declared_balance, balance_dim, _ = self._canonical_quantity(
+                raw_ledger_quantities["balance"]
+            )
+            if is_symbolic_entry and any(
                 value not in (None, "") for value in raw_ledger_quantities.values()
             ):
                 issues.append(
                     {
-                        "code": "whole_batch_ledger_must_not_fake_numeric_inventory",
+                        "code": "symbolic_ledger_must_not_fake_numeric_inventory",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"ledger entry {entry_id} 是 whole_batch；不得声明"
+                            f"ledger entry {entry_id} 是 symbolic/pending；不得声明"
                             " produced/consumed/reserved/balance 数值。"
                         ),
                     }
@@ -9317,13 +12177,174 @@ class SingleDeviceAgent:
                 "reserved": reserved,
                 "balance": declared_balance,
             }
+            declared_quantity_status = str(
+                item.get("quantity_status") or ""
+            ).strip()
+            if (
+                declared_quantity_status
+                and declared_quantity_status not in _LEDGER_QUANTITY_STATUSES
+            ):
+                issues.append(
+                    {
+                        "code": "invalid_ledger_quantity_status",
+                        "scope": "device_local_quantity",
+                        "message": (
+                            f"ledger entry {entry_id} 的 quantity_status="
+                            f"{declared_quantity_status} 不合法；只允许 "
+                            "known/unknown/pending_measurement。"
+                        ),
+                    }
+                )
+                declared_quantity_status = ""
+                quantity_semantics_counters["unknown_quantity_unmarked"] = (
+                    quantity_semantics_counters.get("unknown_quantity_unmarked", 0) + 1
+                )
+            flow_field_aliases = {
+                "produced": ("produced", "produced_quantity"),
+                "consumed": ("consumed", "consumed_quantity"),
+                "reserved": ("reserved", "reserved_quantity"),
+                "balance": ("balance",),
+            }
+            zero_flow_event_linked: Set[str] = set()
+            if not is_planned_entry:
+                # P1: unknown != 0.  An explicit zero flow without any
+                # flow event is a falsified unknown; the field is omitted
+                # instead of being kept as a numeric 0.  A produced=0 on a
+                # consumption-draw row is filler for "this row adds no
+                # production", not a measured zero-yield event.
+                entry_consumption_lineage = bool(
+                    str(item.get("consumer_id") or "").strip()
+                    or [
+                        value
+                        for value in (item.get("consumer_ids") or [])
+                        if str(value).strip()
+                    ]
+                    or [
+                        value
+                        for value in (item.get("consumers") or [])
+                        if isinstance(value, dict)
+                    ]
+                )
+                for flow_field in ("produced", "consumed"):
+                    flow_value = parsed_ledger_quantities[flow_field]
+                    if flow_value is None or flow_value != 0:
+                        continue
+                    if flow_field == "consumed":
+                        has_flow_event = entry_consumption_lineage
+                    else:
+                        production_event_id = str(
+                            item.get("production_event_id") or ""
+                        ).strip()
+                        production_refs = [
+                            value
+                            for value in (item.get("source_refs") or [])
+                            if not _is_placeholder_id(value)
+                        ]
+                        has_flow_event = bool(production_event_id) or (
+                            bool(production_refs)
+                            and not entry_consumption_lineage
+                        )
+                    if has_flow_event:
+                        # 已知 0 是合法值：数量为 0 且流量事件存在。
+                        zero_flow_event_linked.add(flow_field)
+                        continue
+                    for alias in flow_field_aliases[flow_field]:
+                        item.pop(alias, None)
+                    raw_ledger_quantities[flow_field] = None
+                    parsed_ledger_quantities[flow_field] = None
+                    if flow_field == "produced":
+                        produced, produced_dim, produced_unit = None, "", ""
+                    else:
+                        consumed, consumed_dim = None, ""
+                    quantity_semantics_counters["zero_flow_fields_omitted"] = (
+                        quantity_semantics_counters.get("zero_flow_fields_omitted", 0) + 1
+                    )
+                    quantity_normalization_events.append(
+                        {
+                            "code": "ledger_zero_flow_without_event_omitted",
+                            "entry_id": entry_id,
+                            "field": flow_field,
+                        }
+                    )
+            provenance_source_refs = [
+                value
+                for value in (item.get("source_refs") or [])
+                if not _is_placeholder_id(value)
+            ]
+            provenance_complete = (
+                raw_source_kind in _LEDGER_QUANTITY_SOURCE_KINDS
+                and raw_source_kind != "unknown"
+                and bool(provenance_source_refs)
+                and bool(raw_calculation)
+            )
+            nested_consumer_rows = item.get("consumers")
+            if not isinstance(nested_consumer_rows, list):
+                nested_consumer_rows = []
+            has_numeric_quantity = any(
+                parsed_ledger_quantities[field_name] is not None
+                for field_name in ("produced", "consumed", "reserved", "balance")
+            ) or any(isinstance(row, dict) for row in nested_consumer_rows)
+            entry_quantity_status = declared_quantity_status
+            if not is_planned_entry:
+                if has_numeric_quantity and not provenance_complete:
+                    # P2: 无出处/推导的数量宁可标 unknown，也不建一条
+                    # 看起来完整的假账。
+                    for aliases in flow_field_aliases.values():
+                        for alias in aliases:
+                            item.pop(alias, None)
+                    item.pop("consumers", None)
+                    for field_name in parsed_ledger_quantities:
+                        parsed_ledger_quantities[field_name] = None
+                    for field_name in raw_ledger_quantities:
+                        raw_ledger_quantities[field_name] = None
+                    (
+                        produced,
+                        consumed,
+                        reserved,
+                        declared_balance,
+                    ) = (None, None, None, None)
+                    (
+                        produced_dim,
+                        consumed_dim,
+                        reserved_dim,
+                        balance_dim,
+                    ) = ("", "", "", "")
+                    produced_unit = ""
+                    has_numeric_quantity = False
+                    entry_quantity_status = "unknown"
+                    quantity_semantics_counters["unknown_quantities_marked"] = (
+                        quantity_semantics_counters.get("unknown_quantities_marked", 0) + 1
+                    )
+                    quantity_normalization_events.append(
+                        {
+                            "code": "ledger_numeric_quantity_without_provenance_marked_unknown",
+                            "entry_id": entry_id,
+                        }
+                    )
+                elif has_numeric_quantity:
+                    entry_quantity_status = "known"
+                elif not entry_quantity_status:
+                    entry_quantity_status = "unknown"
+            elif not entry_quantity_status:
+                entry_quantity_status = "known" if provenance_complete else "unknown"
+            if is_runtime_pending_entry:
+                entry_quantity_status = "pending_measurement"
+            if is_whole_batch_entry and not entry_quantity_status:
+                entry_quantity_status = "unknown"
+            if entry_quantity_status:
+                item["quantity_status"] = entry_quantity_status
+                ledger_status_counts[entry_quantity_status] = (
+                    ledger_status_counts.get(entry_quantity_status, 0) + 1
+                )
+            entry_quantity_known = entry_quantity_status == "known"
+            numeric_value_checks = is_planned_entry or entry_quantity_known
             invalid_finite_fields = [
                 field_name
                 for field_name, raw_quantity in raw_ledger_quantities.items()
                 if raw_quantity not in (None, "")
                 and parsed_ledger_quantities[field_name] is None
             ]
-            if invalid_finite_fields:
+            if invalid_finite_fields and numeric_value_checks:
                 issues.append(
                     {
                         "code": "ledger_quantity_not_finite_or_invalid",
@@ -9339,7 +12360,7 @@ class SingleDeviceAgent:
                 for field_name, parsed_quantity in parsed_ledger_quantities.items()
                 if parsed_quantity is not None and parsed_quantity < 0
             ]
-            if negative_fields:
+            if negative_fields and numeric_value_checks:
                 issues.append(
                     {
                         "code": "negative_ledger_quantity",
@@ -9355,6 +12376,10 @@ class SingleDeviceAgent:
                 for field_name in ("produced", "consumed")
                 if raw_ledger_quantities[field_name] not in (None, "")
                 and parsed_ledger_quantities[field_name] == 0
+                and (
+                    is_planned_entry
+                    or field_name not in zero_flow_event_linked
+                )
             ]
             if zero_flow_fields:
                 issues.append(
@@ -9383,11 +12408,7 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                if raw_source_kind not in {
-                    "research",
-                    "derived",
-                    "device_operational",
-                }:
+                if raw_source_kind not in _LEDGER_QUANTITY_SOURCE_KINDS:
                     issues.append(
                         {
                             "code": "missing_ledger_quantity_source",
@@ -9432,7 +12453,7 @@ class SingleDeviceAgent:
                 if value is not None
                 and not self._quantity_dimension_is_auditable(dimension)
             ]
-            if invalid_dimension_fields:
+            if invalid_dimension_fields and numeric_value_checks:
                 issues.append(
                     {
                         "code": "ledger_quantity_unit_missing_or_unknown",
@@ -9455,7 +12476,7 @@ class SingleDeviceAgent:
                 and self._quantity_dimension_is_auditable(dimension)
                 and not self._quantity_dimension_is_inventory(dimension)
             ]
-            if non_inventory_fields:
+            if non_inventory_fields and numeric_value_checks:
                 issues.append(
                     {
                         "code": "ledger_quantity_requires_extensive_dimension",
@@ -9466,7 +12487,7 @@ class SingleDeviceAgent:
                         ),
                     }
                 )
-            if len(active_dimensions) > 1:
+            if len(active_dimensions) > 1 and numeric_value_checks:
                 issues.append(
                     {
                         "code": "incompatible_quantity_units",
@@ -9477,7 +12498,11 @@ class SingleDeviceAgent:
                         ),
                     }
                 )
-            elif produced is not None and consumed is not None:
+            elif (
+                numeric_value_checks
+                and produced is not None
+                and consumed is not None
+            ):
                 expected_balance = produced - consumed - (reserved or 0.0)
                 if expected_balance < -max(1e-9, abs(produced) * 1e-6):
                     issues.append(
@@ -9506,6 +12531,397 @@ class SingleDeviceAgent:
                     )
             normalized_entries.append(item)
 
+        # R2: derive ledger rows from the canonical relation graph.
+        # Draw rows (consumer_id=material_transition:<id>) and production
+        # rows (source_refs 含 material_transition:<id>) that lost their
+        # quantities to the R1 provenance gate are restored from the graph
+        # edge they participate in; rows missing entirely are created with
+        # stable event ids so every view cites the same event identity.
+        graph_transition_by_id = {
+            str(transition.get("transition_id") or ""): transition
+            for transition in normalized_transitions
+            if isinstance(transition, dict)
+        }
+
+        def _graph_transition_ref(value: Any) -> str:
+            text = str(value or "").strip()
+            if text.startswith("material_transition:"):
+                return text.split(":", 1)[1]
+            return ""
+
+        graph_numeric_draws: Set[Tuple[str, str]] = set()
+        graph_numeric_productions: Set[Tuple[str, str]] = set()
+        for graph_entry in normalized_entries:
+            graph_batch = str(graph_entry.get("batch_id") or "").strip()
+            draw_tid = _graph_transition_ref(graph_entry.get("consumer_id"))
+            if graph_batch and draw_tid:
+                draw_value, _, _ = self._canonical_quantity(
+                    graph_entry.get("consumed", graph_entry.get("consumed_quantity"))
+                )
+                if draw_value is None:
+                    for graph_row in (graph_entry.get("consumers") or []):
+                        if not isinstance(graph_row, dict):
+                            continue
+                        if (
+                            _graph_transition_ref(graph_row.get("consumer_id"))
+                            != draw_tid
+                        ):
+                            continue
+                        draw_value, _, _ = self._canonical_quantity(
+                            graph_row.get("quantity", graph_row.get("allocation"))
+                        )
+                        if draw_value is not None:
+                            break
+                if draw_value is not None:
+                    graph_numeric_draws.add((graph_batch, draw_tid))
+            produced_value, _, _ = self._canonical_quantity(
+                graph_entry.get("produced", graph_entry.get("produced_quantity"))
+            )
+            if graph_batch and produced_value is not None:
+                for graph_ref in (graph_entry.get("source_refs") or []):
+                    production_tid = _graph_transition_ref(graph_ref)
+                    if production_tid:
+                        graph_numeric_productions.add((graph_batch, production_tid))
+
+        for graph_tid, graph_flows in transition_edge_flows.items():
+            graph_transition = graph_transition_by_id.get(graph_tid) or {}
+            graph_steps_raw = [
+                copy.deepcopy(value)
+                for value in transition_raw_plan_steps_by_id.get(graph_tid, [])
+            ]
+            graph_consumer = f"material_transition:{graph_tid}"
+            graph_children = [
+                str(value).strip()
+                for value in (graph_transition.get("child_batch_ids") or [])
+                if str(value).strip()
+            ]
+            for graph_parent_id, graph_input in graph_flows.get("input", {}).items():
+                if (graph_parent_id, graph_tid) in graph_numeric_draws:
+                    continue
+                parent_batch = batch_by_id.get(graph_parent_id) or {}
+                parent_allocation = parent_batch.get("allocation")
+                bound_consumers = (
+                    {str(key).strip() for key in parent_allocation}
+                    if isinstance(parent_allocation, dict)
+                    else set()
+                )
+                declared_parent_consumers = {
+                    str(value).strip()
+                    for value in (parent_batch.get("consumer_ids") or [])
+                    if str(value).strip()
+                } if isinstance(parent_batch.get("consumer_ids"), list) else set()
+                # Derive only when the batch view itself names this
+                # transition as its consumer (allocation key or consumer
+                # lineage); otherwise the unbacked edge is real drift and
+                # stays with the existing structured checks.
+                if (
+                    graph_consumer not in bound_consumers
+                    and graph_consumer not in declared_parent_consumers
+                ):
+                    continue
+                target_entry = None
+                for graph_candidate in normalized_entries:
+                    if (
+                        str(graph_candidate.get("batch_id") or "").strip()
+                        != graph_parent_id
+                    ):
+                        continue
+                    candidate_consumers = []
+                    candidate_scalar = str(
+                        graph_candidate.get("consumer_id") or ""
+                    ).strip()
+                    if candidate_scalar:
+                        candidate_consumers.append(candidate_scalar)
+                    candidate_consumers.extend(
+                        str(value).strip()
+                        for value in (graph_candidate.get("consumer_ids") or [])
+                    )
+                    if graph_consumer in candidate_consumers:
+                        target_entry = graph_candidate
+                        break
+                event_id = f"MLCE_{graph_tid}_{graph_parent_id}"
+                raw_draw = copy.deepcopy(graph_input.get("raw"))
+                if not isinstance(raw_draw, dict):
+                    raw_draw = {
+                        "value": graph_input.get("value"),
+                        "unit": graph_input.get("unit") or "",
+                    }
+                draw_calculation = (
+                    f"Derived from relation graph: batch_plan.allocation["
+                    f"{graph_parent_id}][{graph_consumer}] bound to "
+                    f"transition {graph_tid} input edge."
+                )
+                if isinstance(target_entry, dict):
+                    target_entry["consumed"] = copy.deepcopy(raw_draw)
+                    target_entry["consumers"] = [
+                        {
+                            "consumer_id": graph_consumer,
+                            "quantity": copy.deepcopy(raw_draw),
+                            "allocation_id": event_id,
+                        }
+                    ]
+                    target_refs = [
+                        str(ref).strip()
+                        for ref in (target_entry.get("source_refs") or [])
+                        if isinstance(ref, str) and str(ref).strip()
+                    ]
+                    if graph_consumer not in target_refs:
+                        target_refs.append(graph_consumer)
+                    target_entry["source_refs"] = target_refs
+                    target_entry["source_kind"] = "derived_from_parent"
+                    target_entry["calculation"] = draw_calculation
+                    target_entry["quantity_status"] = "known"
+                else:
+                    new_entry_id = (
+                        f"ml_graph_{graph_parent_id}_{graph_tid}_draw"
+                    )
+                    if new_entry_id in seen_entry_ids:
+                        continue
+                    seen_entry_ids.add(new_entry_id)
+                    sample_value = str(
+                        parent_batch.get("sample_id") or ""
+                    ).strip()
+                    if not sample_value:
+                        for child_id in graph_children:
+                            child_batch = batch_by_id.get(child_id) or {}
+                            sample_value = str(
+                                child_batch.get("sample_id") or ""
+                            ).strip()
+                            if sample_value:
+                                break
+                    derived_entry = {
+                        "entry_id": new_entry_id,
+                        "batch_id": graph_parent_id,
+                        "material_id": parent_batch.get("material_id") or "",
+                        "sample_id": sample_value,
+                        "consumer_id": graph_consumer,
+                        "consumed": copy.deepcopy(raw_draw),
+                        "consumers": [
+                            {
+                                "consumer_id": graph_consumer,
+                                "quantity": copy.deepcopy(raw_draw),
+                                "allocation_id": event_id,
+                            }
+                        ],
+                        "processing_step_refs": copy.deepcopy(graph_steps_raw),
+                        "source_kind": "derived_from_parent",
+                        "source_refs": [
+                            f"batch_plan.allocation:{graph_parent_id}",
+                            graph_consumer,
+                        ],
+                        "calculation": draw_calculation,
+                        "quantity_status": "known",
+                    }
+                    normalized_entries.append(derived_entry)
+                quantity_semantics_counters["ledger_draws_derived_from_relation_graph"] = (
+                    quantity_semantics_counters.get(
+                        "ledger_draws_derived_from_relation_graph", 0
+                    )
+                    + 1
+                )
+                quantity_normalization_events.append(
+                    {
+                        "code": "ledger_draw_derived_from_relation_graph",
+                        "batch_id": graph_parent_id,
+                        "transition_id": graph_tid,
+                        "quantity": copy.deepcopy(raw_draw),
+                    }
+                )
+            if graph_tid in unknown_yield_transition_ids:
+                # An unestablished yield must not fund a certain child
+                # production; the ledger row stays unknown/theoretical.
+                continue
+            for graph_child_id, graph_output in graph_flows.get("output", {}).items():
+                if (graph_child_id, graph_tid) in graph_numeric_productions:
+                    continue
+                child_batch = batch_by_id.get(graph_child_id) or {}
+                if child_batch.get("is_root_batch") is True:
+                    continue
+                already_known = any(
+                    str(graph_entry.get("batch_id") or "").strip()
+                    == graph_child_id
+                    and graph_entry.get("quantity_status") == "known"
+                    and self._canonical_quantity(
+                        graph_entry.get(
+                            "produced", graph_entry.get("produced_quantity")
+                        )
+                    )[0]
+                    is not None
+                    for graph_entry in normalized_entries
+                )
+                if already_known:
+                    continue
+                production_event_id = f"MLPE_{graph_tid}_{graph_child_id}"
+                raw_produced = copy.deepcopy(graph_output.get("raw"))
+                if not isinstance(raw_produced, dict):
+                    raw_produced = {
+                        "value": graph_output.get("value"),
+                        "unit": graph_output.get("unit") or "",
+                    }
+                production_calculation = (
+                    f"Derived from relation graph: transition {graph_tid} "
+                    "output edge."
+                )
+                target_entry = None
+                for graph_candidate in normalized_entries:
+                    if (
+                        str(graph_candidate.get("batch_id") or "").strip()
+                        != graph_child_id
+                    ):
+                        continue
+                    candidate_refs = [
+                        str(ref).strip()
+                        for ref in (graph_candidate.get("source_refs") or [])
+                        if isinstance(ref, str)
+                    ]
+                    if graph_consumer not in candidate_refs:
+                        continue
+                    candidate_produced, _, _ = self._canonical_quantity(
+                        graph_candidate.get(
+                            "produced", graph_candidate.get("produced_quantity")
+                        )
+                    )
+                    if candidate_produced is None:
+                        target_entry = graph_candidate
+                        break
+                if isinstance(target_entry, dict):
+                    target_entry["produced"] = copy.deepcopy(raw_produced)
+                    target_refs = [
+                        str(ref).strip()
+                        for ref in (target_entry.get("source_refs") or [])
+                        if isinstance(ref, str) and str(ref).strip()
+                    ]
+                    if graph_consumer not in target_refs:
+                        target_refs.append(graph_consumer)
+                    target_entry["source_refs"] = target_refs
+                    target_entry["source_kind"] = "derived_from_parent"
+                    target_entry["calculation"] = production_calculation
+                    target_entry["quantity_status"] = "known"
+                    target_entry["production_event_id"] = production_event_id
+                else:
+                    new_entry_id = (
+                        f"ml_graph_{graph_child_id}_{graph_tid}_production"
+                    )
+                    if new_entry_id in seen_entry_ids:
+                        continue
+                    seen_entry_ids.add(new_entry_id)
+                    sample_value = str(
+                        child_batch.get("sample_id") or ""
+                    ).strip()
+                    derived_entry = {
+                        "entry_id": new_entry_id,
+                        "batch_id": graph_child_id,
+                        "material_id": child_batch.get("material_id") or "",
+                        "sample_id": sample_value,
+                        "produced": copy.deepcopy(raw_produced),
+                        "processing_step_refs": copy.deepcopy(graph_steps_raw),
+                        "source_kind": "derived_from_parent",
+                        "source_refs": [graph_consumer],
+                        "calculation": production_calculation,
+                        "quantity_status": "known",
+                        "production_event_id": production_event_id,
+                    }
+                    normalized_entries.append(derived_entry)
+                quantity_semantics_counters["ledger_productions_derived_from_relation_graph"] = (
+                    quantity_semantics_counters.get(
+                        "ledger_productions_derived_from_relation_graph", 0
+                    )
+                    + 1
+                )
+                quantity_normalization_events.append(
+                    {
+                        "code": "ledger_production_derived_from_relation_graph",
+                        "batch_id": graph_child_id,
+                        "transition_id": graph_tid,
+                        "quantity": copy.deepcopy(raw_produced),
+                    }
+                )
+        # Root batches are produced by the Research source itself; when the
+        # ledger view lacks their production row, derive it from the same
+        # batch_plan fact (explicit provenance required).
+        for root_batch_id, root_batch in batch_by_id.items():
+            if root_batch.get("is_root_batch") is not True:
+                continue
+            root_value, _, _ = self._canonical_quantity(
+                root_batch.get("total_quantity")
+            )
+            if root_value is None:
+                continue
+            root_has_production = any(
+                str(graph_entry.get("batch_id") or "").strip() == root_batch_id
+                and self._canonical_quantity(
+                    graph_entry.get(
+                        "produced", graph_entry.get("produced_quantity")
+                    )
+                )[0]
+                is not None
+                for graph_entry in normalized_entries
+            )
+            if root_has_production:
+                continue
+            root_refs = [
+                str(ref).strip()
+                for ref in (root_batch.get("source_refs") or [])
+                if isinstance(ref, str) and str(ref).strip()
+            ]
+            root_calculation = str(root_batch.get("calculation") or "").strip()
+            if not root_refs or not root_calculation:
+                continue
+            new_entry_id = f"ml_graph_{root_batch_id}_root_production"
+            if new_entry_id in seen_entry_ids:
+                continue
+            seen_entry_ids.add(new_entry_id)
+            root_event_id = f"MLPE_root_{root_batch_id}"
+            root_calc_text = (
+                "Derived from relation graph: root batch_plan.total_quantity "
+                f"({root_calculation})."
+            )
+            normalized_entries.append(
+                {
+                    "entry_id": new_entry_id,
+                    "batch_id": root_batch_id,
+                    "material_id": root_batch.get("material_id") or "",
+                    "sample_id": str(
+                        root_batch.get("sample_id") or ""
+                    ).strip(),
+                    "produced": copy.deepcopy(
+                        root_batch.get("total_quantity")
+                    ),
+                    "source_kind": str(
+                        root_batch.get("source_kind") or "research_explicit"
+                    ),
+                    "source_refs": root_refs + [f"batch_plan:{root_batch_id}"],
+                    "calculation": root_calc_text,
+                    "quantity_status": "known",
+                    "production_event_id": root_event_id,
+                }
+            )
+            quantity_semantics_counters["ledger_productions_derived_from_relation_graph"] = (
+                quantity_semantics_counters.get(
+                    "ledger_productions_derived_from_relation_graph", 0
+                )
+                + 1
+            )
+            quantity_normalization_events.append(
+                {
+                    "code": "ledger_production_derived_from_relation_graph",
+                    "batch_id": root_batch_id,
+                    "transition_id": "",
+                    "quantity": copy.deepcopy(
+                        root_batch.get("total_quantity")
+                    ),
+                }
+            )
+        # Derived entries bypass the per-entry status accounting; recount
+        # authoritatively from the final ledger view (idempotent).
+        ledger_status_counts = {}
+        for status_entry in normalized_entries:
+            status_value = str(status_entry.get("quantity_status") or "").strip()
+            if status_value:
+                ledger_status_counts[status_value] = (
+                    ledger_status_counts.get(status_value, 0) + 1
+                )
+
         # Aggregate independently of entry_id.  A common failure mode is to
         # repeat the same 0.180 mmol production record for three consumers;
         # summing each row's `produced` would silently fabricate 0.540 mmol.
@@ -9526,14 +12942,25 @@ class SingleDeviceAgent:
                 or item.get("批次编号")
                 or ""
             ).strip()
+            item_is_planned = bool(
+                str(item.get("record_phase") or "") == "planned"
+                and str(item.get("quantity_assertion") or "") == "planned_only"
+                and item.get("execution_fact") is False
+            )
             produced, produced_dim, produced_unit = self._canonical_quantity(
-                item.get("produced", item.get("produced_quantity"))
+                item.get("planned_total")
+                if item_is_planned
+                else item.get("produced", item.get("produced_quantity"))
             )
             consumed, consumed_dim, consumed_unit = self._canonical_quantity(
-                item.get("consumed", item.get("consumed_quantity"))
+                item.get("planned_allocated")
+                if item_is_planned
+                else item.get("consumed", item.get("consumed_quantity"))
             )
             reserved, reserved_dim, reserved_unit = self._canonical_quantity(
-                item.get("reserved", item.get("reserved_quantity"))
+                item.get("planned_reserved")
+                if item_is_planned
+                else item.get("reserved", item.get("reserved_quantity"))
             )
             has_quantity = any(
                 value is not None for value in (produced, consumed, reserved)
@@ -9564,11 +12991,29 @@ class SingleDeviceAgent:
                     "consumer_draws": {},
                     "allocation_ids": set(),
                     "samples": set(),
+                    "quantity_statuses": set(),
                     "entry_ids": [],
+                    "record_phases": set(),
+                    "quantity_assertions": set(),
+                    "execution_facts": set(),
                 },
             )
             group["entry_ids"].append(str(item.get("entry_id", "")))
-            if str(item.get("quantity_mode") or "") == "whole_batch":
+            entry_status_value = str(item.get("quantity_status") or "").strip()
+            if entry_status_value:
+                group["quantity_statuses"].add(entry_status_value)
+            record_phase = str(item.get("record_phase") or "").strip()
+            if record_phase:
+                group["record_phases"].add(record_phase)
+            quantity_assertion = str(item.get("quantity_assertion") or "").strip()
+            if quantity_assertion:
+                group["quantity_assertions"].add(quantity_assertion)
+            if "execution_fact" in item:
+                group["execution_facts"].add(item.get("execution_fact"))
+            if str(item.get("quantity_mode") or "") in {
+                "whole_batch",
+                "runtime_measurement_required",
+            }:
                 group["consumers"].update(
                     str(value).strip()
                     for value in item.get("consumer_ids", []) or []
@@ -9590,7 +13035,11 @@ class SingleDeviceAgent:
                 or item.get("消费方")
                 or ""
             ).strip()
-            nested_consumers = item.get("consumers")
+            nested_consumers = (
+                item.get("planned_consumer_allocations")
+                if item_is_planned
+                else item.get("consumers")
+            )
             nested_ids: List[str] = []
             nested_draws: List[Tuple[str, float, str, str, str]] = []
             nested_total = 0.0
@@ -9607,7 +13056,9 @@ class SingleDeviceAgent:
                         or ""
                     ).strip()
                     amount, dimension, allocation_unit = self._canonical_quantity(
-                        consumer.get("quantity", consumer.get("allocation"))
+                        consumer.get("planned_quantity")
+                        if item_is_planned
+                        else consumer.get("quantity", consumer.get("allocation"))
                     )
                     if cid:
                         nested_ids.append(cid)
@@ -9827,9 +13278,55 @@ class SingleDeviceAgent:
                 # One material/batch owns one production total.  Separate
                 # physical productions must have separate batch ids; otherwise
                 # repeated rows (even with different transaction/source ids)
-                # would fabricate inventory, exactly the A01 0.180 mmol bug.
-                production_source = "unique_material_batch_production"
-                if production_source in group["productions"]:
+                # would fabricate inventory by counting one production twice.
+                # R1: a production event has a stable identity (explicit
+                # production_event_id or its source refs); materializing the
+                # same event twice collapses into one record.
+                production_event_id = str(
+                    item.get("production_event_id") or ""
+                ).strip()
+                production_refs = sorted(
+                    {
+                        str(value).strip()
+                        for value in (item.get("source_refs") or [])
+                        if isinstance(value, str)
+                        and str(value).strip()
+                        and not _is_placeholder_id(value)
+                    }
+                )
+                if production_event_id and not _is_placeholder_id(
+                    production_event_id
+                ):
+                    production_source = f"event:{production_event_id}"
+                elif production_refs:
+                    production_source = "source_refs:" + "|".join(production_refs)
+                else:
+                    production_source = "unique_material_batch_production"
+                existing_production = group["productions"].get(production_source)
+                if existing_production is None:
+                    group["productions"][production_source] = produced
+                elif production_source != (
+                    "unique_material_batch_production"
+                ) and (
+                    abs(existing_production - produced)
+                    <= max(1e-9, abs(produced) * 1e-6)
+                ):
+                    # 同一生产来源被重复写入：生产量只计一次。
+                    quantity_semantics_counters["duplicate_production_events_collapsed"] = (
+                        quantity_semantics_counters.get(
+                            "duplicate_production_events_collapsed", 0
+                        )
+                        + 1
+                    )
+                    quantity_normalization_events.append(
+                        {
+                            "code": "duplicate_production_event_collapsed",
+                            "material_id": key[0],
+                            "batch_id": key[1],
+                            "production_source": production_source,
+                        }
+                    )
+                else:
                     issues.append(
                         {
                             "code": "duplicate_production_record",
@@ -9840,8 +13337,6 @@ class SingleDeviceAgent:
                             ),
                         }
                     )
-                else:
-                    group["productions"][production_source] = produced
             if consumed is not None:
                 group["consumed"] += consumed
             if reserved is not None:
@@ -9949,7 +13444,26 @@ class SingleDeviceAgent:
             consumed_total = float(group["consumed"])
             reserved_total = float(group["reserved"])
             balance = produced_total - consumed_total - reserved_total
-            if balance < -max(1e-9, abs(produced_total) * 1e-6):
+            quantity_mode = (
+                "whole_batch"
+                if key[1] in whole_batch_batch_ids
+                else (
+                    "runtime_measurement_required"
+                    if key[1] in runtime_pending_batch_ids
+                    else "numeric_inventory"
+                )
+            )
+            group_is_planned = bool(
+                group["record_phases"] == {"planned"}
+                and group["quantity_assertions"] == {"planned_only"}
+                and group["execution_facts"] == {False}
+            )
+            # R2 P4: balance arithmetic requires a known production; a
+            # group without any production event has unknown inventory,
+            # and unknown must not be judged against numeric draws.
+            if group["productions"] and balance < -max(
+                1e-9, abs(produced_total) * 1e-6
+            ):
                 issues.append(
                     {
                         "code": "aggregate_material_quantity_insufficient",
@@ -9961,34 +13475,89 @@ class SingleDeviceAgent:
                         ),
                     }
                 )
-            aggregate_records.append(
-                {
-                    "material_id": group["material_id"],
-                    "batch_id": group["batch_id"],
-                    "sample_ids": sorted(group["samples"]),
-                    "consumer_ids": sorted(group["consumers"]),
-                    "consumer_allocations": {
-                        consumer_id: {
-                            "value": allocation["value"],
-                            "unit": allocation["unit"],
-                            "dimension": allocation["dimension"],
-                        }
-                        for consumer_id, allocation in sorted(
-                            group["consumer_draws"].items()
-                        )
-                    },
-                    "produced": {"value": produced_total, "unit": group["unit"]},
-                    "consumed": {"value": consumed_total, "unit": group["unit"]},
-                    "reserved": {"value": reserved_total, "unit": group["unit"]},
-                    "balance": {"value": balance, "unit": group["unit"]},
-                    "entry_ids": group["entry_ids"],
-                    "quantity_mode": (
-                        "whole_batch"
-                        if key[1] in whole_batch_batch_ids
-                        else "numeric_inventory"
-                    ),
+            aggregate_record: Dict[str, Any] = {
+                "material_id": group["material_id"],
+                "batch_id": group["batch_id"],
+                "sample_ids": sorted(group["samples"]),
+                "consumer_ids": sorted(group["consumers"]),
+                "entry_ids": group["entry_ids"],
+                "record_phase": "planned" if group_is_planned else "mixed_or_unspecified",
+                "quantity_assertion": (
+                    "planned_only" if group_is_planned else "unspecified"
+                ),
+                "execution_fact": False if group_is_planned else None,
+                "quantity_mode": quantity_mode,
+                "quantity_status": (
+                    "pending_measurement"
+                    if quantity_mode == "runtime_measurement_required"
+                    else ("known" if "known" in group["quantity_statuses"] else "unknown")
+                ),
+            }
+            allocation_summary = {
+                consumer_id: {
+                    "value": allocation["value"],
+                    "unit": allocation["unit"],
+                    "dimension": allocation["dimension"],
                 }
-            )
+                for consumer_id, allocation in sorted(
+                    group["consumer_draws"].items()
+                )
+            }
+            if quantity_mode == "numeric_inventory":
+                if group_is_planned:
+                    aggregate_record.update(
+                        {
+                            "planned_consumer_allocations": allocation_summary,
+                            "planned_total": {
+                                "value": produced_total,
+                                "unit": group["unit"],
+                            },
+                            "planned_allocated": {
+                                "value": consumed_total,
+                                "unit": group["unit"],
+                            },
+                            "planned_reserved": {
+                                "value": reserved_total,
+                                "unit": group["unit"],
+                            },
+                            "planned_balance": {
+                                "value": balance,
+                                "unit": group["unit"],
+                            },
+                        }
+                    )
+                else:
+                    # P1: a group without any known flow must not be
+                    # materialized as an all-zero inventory record.
+                    group_has_quantities = (
+                        bool(group["productions"])
+                        or consumed_total > 0
+                        or reserved_total > 0
+                        or bool(group["consumer_draws"])
+                    )
+                    if group_has_quantities:
+                        aggregate_record.update(
+                            {
+                                "consumer_allocations": allocation_summary,
+                                "produced": {
+                                    "value": produced_total,
+                                    "unit": group["unit"],
+                                },
+                                "consumed": {
+                                    "value": consumed_total,
+                                    "unit": group["unit"],
+                                },
+                                "reserved": {
+                                    "value": reserved_total,
+                                    "unit": group["unit"],
+                                },
+                                "balance": {
+                                    "value": balance,
+                                    "unit": group["unit"],
+                                },
+                            }
+                        )
+            aggregate_records.append(aggregate_record)
 
         # The batch plan and material ledger are one lineage contract.  Two
         # independently valid sidecars that disagree on batch/sample/consumer
@@ -10015,19 +13584,17 @@ class SingleDeviceAgent:
                         if str(record.get("material_id") or "").strip()
                         == parent_material_id
                     ]
-                transition_draws = [
-                    record.get("consumer_allocations", {}).get(
-                        transition_consumer_id
+                transition_draws = []
+                for record in parent_records:
+                    allocations = (
+                        record.get("planned_consumer_allocations")
+                        if record.get("record_phase") == "planned"
+                        else record.get("consumer_allocations")
                     )
-                    for record in parent_records
-                    if isinstance(record.get("consumer_allocations"), dict)
-                    and isinstance(
-                        record.get("consumer_allocations", {}).get(
-                            transition_consumer_id
-                        ),
-                        dict,
-                    )
-                ]
+                    if isinstance(allocations, dict) and isinstance(
+                        allocations.get(transition_consumer_id), dict
+                    ):
+                        transition_draws.append(allocations[transition_consumer_id])
                 if len(transition_draws) != 1:
                     issues.append(
                         {
@@ -10036,7 +13603,7 @@ class SingleDeviceAgent:
                             "message": (
                                 f"parent batch {parent_batch_id} 必须在 ledger 中"
                                 f"有且仅有一条 consumer_id={transition_consumer_id} "
-                                "的实际扣减。"
+                                "的同阶段数量分配。"
                             ),
                         }
                     )
@@ -10067,8 +13634,16 @@ class SingleDeviceAgent:
                 for entry in normalized_entries:
                     if str(entry.get("batch_id") or "").strip() != child_batch_id:
                         continue
+                    entry_is_planned = bool(
+                        str(entry.get("record_phase") or "") == "planned"
+                        and str(entry.get("quantity_assertion") or "")
+                        == "planned_only"
+                        and entry.get("execution_fact") is False
+                    )
                     produced_value, produced_dimension, _ = self._canonical_quantity(
-                        entry.get("produced", entry.get("produced_quantity"))
+                        entry.get("planned_total")
+                        if entry_is_planned
+                        else entry.get("produced", entry.get("produced_quantity"))
                     )
                     source_refs = entry.get("source_refs")
                     if (
@@ -10086,7 +13661,7 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"child batch {child_batch_id} 必须有且仅有一条"
-                                f" produced ledger entry，source_refs 含 {expected_source_ref}。"
+                                f" same-phase production ledger entry，source_refs 含 {expected_source_ref}。"
                             ),
                         }
                     )
@@ -10164,7 +13739,9 @@ class SingleDeviceAgent:
                 batch.get("total_quantity", batch.get("parent_quantity"))
             )
             ledger_produced, ledger_produced_dimension, _ = self._canonical_quantity(
-                ledger_record.get("produced")
+                ledger_record.get("planned_total")
+                if ledger_record.get("record_phase") == "planned"
+                else ledger_record.get("produced")
             )
             if (
                 planned_total is not None
@@ -10181,7 +13758,7 @@ class SingleDeviceAgent:
                         "code": "batch_ledger_produced_quantity_mismatch",
                         "scope": "device_local_quantity",
                         "message": (
-                            f"batch {batch_id} 的 ledger produced 与 "
+                            f"batch {batch_id} 的 ledger same-phase total 与 "
                             "batch_plan.total_quantity 不一致。"
                         ),
                     }
@@ -10204,8 +13781,19 @@ class SingleDeviceAgent:
                     }
                 )
 
-            batch_is_whole = str(batch.get("quantity_mode") or "") == "whole_batch"
-            if batch_is_whole:
+            batch_is_symbolic = str(batch.get("quantity_mode") or "") in {
+                "whole_batch",
+                "runtime_measurement_required",
+            }
+            if batch_is_symbolic:
+                planned_consumers = {
+                    str(value).strip()
+                    for value in batch.get("consumer_ids", []) or []
+                    if str(value).strip()
+                } if isinstance(batch.get("consumer_ids"), list) else set()
+                planned_allocations = {}
+                allocation_issues = []
+            elif batch.get("quantity_status") == "unknown":
                 planned_consumers = {
                     str(value).strip()
                     for value in batch.get("consumer_ids", []) or []
@@ -10235,7 +13823,11 @@ class SingleDeviceAgent:
                         ),
                     }
                 )
-            ledger_allocations = ledger_record.get("consumer_allocations", {})
+            ledger_allocations = (
+                ledger_record.get("planned_consumer_allocations", {})
+                if ledger_record.get("record_phase") == "planned"
+                else ledger_record.get("consumer_allocations", {})
+            )
             ledger_allocations = (
                 ledger_allocations if isinstance(ledger_allocations, dict) else {}
             )
@@ -10260,7 +13852,7 @@ class SingleDeviceAgent:
                             "scope": "device_local_quantity",
                             "message": (
                                 f"batch {batch_id} 对 consumer {consumer_id} 的计划分配"
-                                "与实际消费单位维度不一致。"
+                                "与 ledger 同阶段分配单位维度不一致。"
                             ),
                         }
                     )
@@ -10395,12 +13987,46 @@ class SingleDeviceAgent:
             audit_status = "failed"
         else:
             audit_status = "passed"
+        compiler_planned_numeric_batch_ids = {
+            str(batch.get("batch_id") or "")
+            for batch in normalized_batches
+            if str(batch.get("construction_rule") or "")
+            == "material-relationship-compiler/v1"
+            and str(batch.get("quantity_mode") or "") == "numeric_inventory"
+            and str(batch.get("record_phase") or "") == "planned"
+            and str(batch.get("quantity_assertion") or "") == "planned_only"
+            and batch.get("execution_fact") is False
+            and str(batch.get("batch_id") or "")
+        }
+        # This auditor validates a plan.  Compiler-owned planned quantities,
+        # including exact Research targets, are never execution inventory.  A
+        # future execution-ledger validator must independently bind measured
+        # observations before this readiness flag may become true.
+        execution_inventory_ready = False
+        inventory_readiness_status = (
+            "runtime_measurement_pending"
+            if runtime_pending_batch_ids or compiler_obligation_ids
+            else (
+                "planned_only"
+                if compiler_planned_numeric_batch_ids
+                else "execution_measurement_not_established"
+            )
+        )
         normalized["quantity_adjustments"] = adjustments
         normalized["batch_plan"] = normalized_batches
         normalized["material_ledger"] = ledger
         normalized["quantity_audit"] = {
             "status": audit_status,
             "assessment_source": "deterministic_quantity_auditor",
+            "record_phase": "planned",
+            "execution_inventory_ready": execution_inventory_ready,
+            "inventory_readiness_status": inventory_readiness_status,
+            "planned_numeric_batch_ids": sorted(
+                compiler_planned_numeric_batch_ids
+            ),
+            "pending_runtime_measurement_obligation_ids": sorted(
+                compiler_obligation_ids
+            ),
             "failure_scope": (
                 "human_review_required"
                 if human_issues
@@ -10408,6 +14034,58 @@ class SingleDeviceAgent:
             ),
             "issues": issues,
             "requires_scientific_review": requires_scientific_review,
+            "quantity_semantics": {
+                "known_quantity_violations": sum(
+                    1
+                    for item in issues
+                    if str(item.get("scope", "")).strip()
+                    != "human_review_required"
+                    and str(item.get("code", "")).strip()
+                    not in _UNKNOWN_QUANTITY_ISSUE_CODES
+                ),
+                "unknown_quantity_unmarked": sum(
+                    1
+                    for item in issues
+                    if str(item.get("code", "")).strip()
+                    in _UNKNOWN_QUANTITY_ISSUE_CODES
+                ),
+                "ledger_entries": len(normalized_entries),
+                "ledger_status_counts": dict(sorted(ledger_status_counts.items())),
+                "placeholders_sanitized": quantity_semantics_counters.get(
+                    "placeholders_sanitized", 0
+                ),
+                "unknown_quantities_marked": quantity_semantics_counters.get(
+                    "unknown_quantities_marked", 0
+                ),
+                "zero_flow_fields_omitted": quantity_semantics_counters.get(
+                    "zero_flow_fields_omitted", 0
+                ),
+                "duplicate_production_events_collapsed": quantity_semantics_counters.get(
+                    "duplicate_production_events_collapsed", 0
+                ),
+                "legacy_source_kinds_migrated": quantity_semantics_counters.get(
+                    "legacy_source_kinds_migrated", 0
+                ),
+                "unknown_batch_quantities_marked": quantity_semantics_counters.get(
+                    "unknown_batch_quantities_marked", 0
+                ),
+                "ledger_draws_derived_from_relation_graph": quantity_semantics_counters.get(
+                    "ledger_draws_derived_from_relation_graph", 0
+                ),
+                "ledger_productions_derived_from_relation_graph": quantity_semantics_counters.get(
+                    "ledger_productions_derived_from_relation_graph", 0
+                ),
+                "relation_conservation_violations": sum(
+                    1
+                    for item in issues
+                    if str(item.get("code", "")).strip()
+                    == "material_relation_conservation_violation"
+                ),
+            },
+            "normalization_events": _merge_quantity_normalization_events(
+                declared_quantity_audit.get("normalization_events"),
+                quantity_normalization_events,
+            ),
             "checks": {
                 "duplicate_transactions": not any(
                     item.get("code") == "duplicate_material_transaction" for item in issues
@@ -10486,6 +14164,9 @@ class SingleDeviceAgent:
                 )
             ),
         }
+        normalized["requires_scientific_review"] = (
+            self._scientific_review_required(normalized)
+        )
         return normalized
 
     def _invoke_device_plan_repair(
@@ -10514,14 +14195,14 @@ class SingleDeviceAgent:
             "声明的 consumer_ids 与显式 allocation consumer 集合必须完全相等。material_ledger "
             "必须逐 consumer 对账；不得把一个标量同时分配给多个 consumer，也不得将"
             "无 consumer_id 的 list 按位置/排序自动配对或猜测未知分配。"
-            "derived/device_operational batch 不得 is_root_batch=true；必须以真实存在的"
+            "derived_from_parent/device_measurement batch 不得 is_root_batch=true；必须以真实存在的"
             "parent_batch_id(s)、transition_kind、source_plan_steps、source_macro_steps 以及顶层 "
             "material_transitions 建立 parent→child DAG 谱系；parent 集必须与 child 声明"
             "完全相等且不得 self-loop。对应 material_ledger entry 必须有与子 transition "
             "完全一致的 processing_step_refs。改变物料状态的处理步必须双向声明"
             "material_event_kind/material_transition_ids 与 transition.source_plan_steps；纯化/洗涤/"
             "干燥/反应步不得从 sidecar 删除或把其产物伪装成 root batch。"
-            "research root 必须 source_kind=research，以 research_source_refs 绑定真实"
+            "research root 必须 source_kind=research_explicit，以 research_source_refs 绑定真实"
             "macro_action_steps[index].field、逐字 source_context 和 Research 试剂/对象身份子集；"
             "material_id/research_material_identity 必须与该身份相同。numeric_inventory root"
             "还必须绑定可审计 quantity 并给正数 total_quantity；whole_batch root 只绑定身份/"
@@ -10538,7 +14219,19 @@ class SingleDeviceAgent:
             " consumer-bound input_allocations[{batch_id,quantity}] / "
             "output_allocations[{batch_id,quantity}]；whole_batch 只允许 1→1 且不填数值 edge。"
             "parent ledger 必须用 consumer_id=material_transition:<id> 实际扣减 input，child "
-            "ledger produced 必须用 source_refs=[material_transition:<id>] 入账并逐 batch 对账。"
+            "ledger produced 必须用 source_refs=[material_transition:<id>] 入账并逐 batch 对账；"
+            "正式数值 entry 必须同时有合法 source_kind、非空 "
+            "source_refs 和 calculation，并标 quantity_status=known；"
+            "无流量事件时省略 produced/consumed 字段；未知量标 "
+            "quantity_status=unknown/pending_measurement 并省略数值 "
+            "字段，绝不写 0 兜底；占位符(none/空串)不得进入 "
+            "consumer_id/source_refs/processing_step_refs 等正式 ID "
+            "字段；同一 production event 必须有稳定 event_id 且只入账一次。"
+            "canonical material relation/event 图（transition 拓扑 + batch "
+            "allocation + production/consumption event）是 batch_plan、ledger、transition "
+            "三视图的唯一事实源；ledger draw/production 行由图派生，processing_step_refs "
+            "按 entry 角色从图派生（生产行=子 transition 计划步，扣减行=父 transition "
+            "计划步）；merge/pooling/aliquot 输出总量不得超过输入总量（守恒违例真报，不得静默截断）。"
             "conserved_inventory 的聚合输入输出严格守恒；state_change 只能使用经冻结 observation "
             "的 id/digest/sample/material/quantity field 验证的 measurement_artifact，或可验证的 "
             "planning_yield_lower_bound。所有库存/分配/edge 必须是有限正数。"
@@ -10689,6 +14382,13 @@ class SingleDeviceAgent:
             return {}, ["计划级 Device LLM 未返回 JSON object。"]
         repaired = copy.deepcopy(repaired_plan)
         repaired = self._normalize_plan_handoff_steps(state, repaired)
+        errors.extend(
+            self._certificate_plan_binding_errors(
+                state.feasibility_certificate,
+                previous_plan,
+                label="pre-rewrite Device Plan",
+            )
+        )
         source_binding_errors = self._repaired_plan_source_binding_errors(
             previous_plan, repaired
         )
@@ -10725,21 +14425,26 @@ class SingleDeviceAgent:
             errors.append("计划级 Device LLM 返回的证书与冻结证书不一致。")
 
         expected_macro_steps = {
-            source
+            macro_id_key(source): source
             for item in previous_plan.get("device_plan", []) or []
             if isinstance(item, dict)
             for source in self._source_macro_step_ids(item)
         }
         actual_macro_steps = {
-            source
+            macro_id_key(source)
             for item in repaired.get("device_plan", []) or []
             if isinstance(item, dict)
             for source in self._source_macro_step_ids(item)
         }
-        if expected_macro_steps and not expected_macro_steps.issubset(actual_macro_steps):
+        missing_macro_keys = set(expected_macro_steps) - actual_macro_steps
+        if missing_macro_keys:
+            missing_macro_steps = [
+                expected_macro_steps[key]
+                for key in sorted(missing_macro_keys, key=repr)
+            ]
             errors.append(
                 "计划级 Device LLM 删除了 macro step coverage："
-                f"missing={sorted(expected_macro_steps - actual_macro_steps)}。"
+                f"missing={sorted(missing_macro_steps, key=repr)}。"
             )
         expected_ids = sorted(
             str(item)
@@ -10798,6 +14503,24 @@ class SingleDeviceAgent:
         )
         return repaired, errors
 
+    @staticmethod
+    def _validate_v2_raw_canonical_handoff(
+        research_handoff: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Return the validated canonical Device view for one V2 handoff."""
+
+        from chem_agent_contracts.v2 import canonicalize_v2_device_handoff
+
+        raw_package = research_handoff.get("research_action_package_v2")
+        if not isinstance(raw_package, dict) or not raw_package:
+            raise ValueError(
+                "V2 Device entry requires an embedded canonical Research package"
+            )
+        return canonicalize_v2_device_handoff(
+            research_handoff,
+            package=raw_package,
+        )
+
     def run_state(
         self,
         research_handoff: Dict[str, Any],
@@ -10809,6 +14532,7 @@ class SingleDeviceAgent:
         resume_checkpoints: bool = True,
         device_plan_override: Optional[Dict[str, Any]] = None,
         prior_repair_request: Optional[Dict[str, Any]] = None,
+        relationship_binding_authority: Optional[Dict[str, Any]] = None,
         human_quantity_approval_bundle: Optional[
             ValidatedHumanQuantityApprovalBundle
         ] = None,
@@ -10821,6 +14545,41 @@ class SingleDeviceAgent:
         research_handoff, _ = self._strip_untrusted_approval_fields(
             research_handoff
         )
+        if relationship_binding_authority is not None and not isinstance(
+            relationship_binding_authority, dict
+        ):
+            raise ValueError("relationship_binding_authority must be an object")
+        frozen_relationship_binding_authority = copy.deepcopy(
+            relationship_binding_authority or {}
+        )
+        relationship_binding_authority_origin = (
+            "caller_frozen" if relationship_binding_authority is not None else ""
+        )
+        if (
+            relationship_binding_authority is not None
+            and self._contract_version != "v2"
+        ):
+            raise ValueError(
+                "relationship_binding_authority is supported only by the V2 contract"
+            )
+        if relationship_binding_authority is not None and (
+            relationship_binding_authority.get("authoring_mode")
+            != "manual_evidence_bound"
+            or relationship_binding_authority.get("automation_claim") is not False
+        ):
+            raise ValueError(
+                "caller-provided relationship_binding_authority must be "
+                "manual_evidence_bound with automation_claim=false; omit it "
+                "to use the internal current-truth automated resolver"
+            )
+        if self._contract_version == "v2":
+            # Rebuild the handoff from the signed canonical package before
+            # constructing state, restoring checkpoints, consulting a model,
+            # or loading workstation truth.  Unbound caller context is not a
+            # Device decision input.
+            research_handoff = self._validate_v2_raw_canonical_handoff(
+                research_handoff
+            )
         approval_bundle_payload: Optional[
             Tuple[Dict[str, Any], List[Dict[str, Any]]]
         ] = None
@@ -10838,13 +14597,23 @@ class SingleDeviceAgent:
         state = SingleDeviceAgentState(
             research_handoff=research_handoff,
             exp_id=exp_id,
+            contract_version=self._contract_version,
+            contract_resolution=self._contract_resolution(research_handoff),
             iteration_id=iteration_id,
             workflow_id=workflow_id,
+            relationship_binding_authority=frozen_relationship_binding_authority,
+            relationship_binding_authority_origin=(
+                relationship_binding_authority_origin
+            ),
             txt_format_reference=self._txt_format_reference,
             json_format_reference=self._json_format_reference,
         )
         state.add_log("SingleDeviceAgent started")
         try:
+            if self._contract_version == "v2":
+                state.add_log(
+                    "validated and canonicalized the V2 Research handoff"
+                )
             self._refresh_workstation_snapshot()
             skill_session = self._workstation_skill_session()
             state.workstation_descriptions = skill_session.discovery_context()
@@ -10914,10 +14683,20 @@ class SingleDeviceAgent:
                         lambda: self._invoke_semantic_analysis(state),
                     )
                 state.semantic_analysis = copy.deepcopy(self._active_semantic_analysis)
-                state.research_handoff = self._apply_semantic_analysis_to_handoff(
-                    state.research_handoff
-                )
-                research_handoff = state.research_handoff
+                if self._contract_version == "v2":
+                    # The canonical package binds the complete raw macro-step
+                    # objects.  Semantic analysis is a derived Device record;
+                    # overlaying it onto those authoritative objects would
+                    # silently change Device input after the entry digest gate.
+                    state.add_log(
+                        "kept V2 Research handoff immutable; semantic analysis "
+                        "is retained as a separate derived Device record"
+                    )
+                else:
+                    state.research_handoff = self._apply_semantic_analysis_to_handoff(
+                        state.research_handoff
+                    )
+                    research_handoff = state.research_handoff
             if resumed_from_manual:
                 plan_result, override_error = self._prepare_device_plan_override(
                     state,
@@ -10928,7 +14707,10 @@ class SingleDeviceAgent:
                 )
                 if override_error:
                     result = self._manual_override_rejected_result(
-                        state, plan_result, override_error
+                        state,
+                        plan_result,
+                        override_error,
+                        prior_repair_request or {},
                     )
                 else:
                     result = self._run_accepted_device_plan(
@@ -10973,9 +14755,40 @@ class SingleDeviceAgent:
                     plan_result = self._repair_plan_level_findings(
                         state, plan_result
                     )
+                    prior_audit_binding = plan_result.get("plan_audit_binding")
                     plan_result = self._normalize_plan_handoff_steps(
                         state, plan_result
                     )
+                    if (
+                        isinstance(prior_audit_binding, dict)
+                        and str(prior_audit_binding.get("digest") or "")
+                        != device_plan_contract_digest(plan_result)
+                    ):
+                        normalization_finding = {
+                            "type": "post_audit_plan_contract_mutation",
+                            "message": (
+                                "审计后的规范化改变了 Device Plan 合同对象；"
+                                "不得沿用旧 finding 集或继续签证/翻译。"
+                            ),
+                            "repair_route": {
+                                "status": "handler_input_incompatible",
+                                "reason": (
+                                    "post-audit normalization must be idempotent"
+                                ),
+                            },
+                        }
+                        self._persist_plan_audit_record(
+                            state,
+                            plan_result,
+                            [normalization_finding],
+                            phase="post_audit_normalization_guard",
+                        )
+                        plan_result = self._controlled_plan_repair_stop(
+                            state,
+                            plan_result,
+                            [normalization_finding],
+                            "post_audit_normalization_changed_contract",
+                        )
 
                 if self._plan_is_accepted(plan_result):
                     plan_result = self._accept_feasibility_plan(state, plan_result)
@@ -11002,8 +14815,16 @@ class SingleDeviceAgent:
             result["loaded_workstation_skills"] = state.loaded_workstation_skills
             result["skill_load_events"] = state.skill_load_events
             package = self._normalize_terminal_package(state, result)
+            package["contract_version"] = self._contract_version
+            package["contract_resolution"] = copy.deepcopy(
+                state.contract_resolution
+            )
             if self._contract_version == "v2":
                 package = self._attach_v2_contract(state, package)
+                package["contract_version"] = self._contract_version
+                package["contract_resolution"] = copy.deepcopy(
+                    state.contract_resolution
+                )
             self._assert_workstation_snapshot_current(state)
             state.terminal_package = package
             if package.get("feedback_type") == "device_internal_error" and result.get("llm_diagnostics"):
@@ -11047,6 +14868,52 @@ class SingleDeviceAgent:
                 self._sync_skill_load_state(state)
             state.add_error(f"SingleDeviceAgent failed: {error_text}")
             state.status = "failed"
+            signed_contract: Dict[str, Any] = {}
+            certificate = state.feasibility_certificate
+            full_contract_certificate = bool(
+                isinstance(certificate, dict)
+                and strict_feasibility_certificate_version(certificate)
+                in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            )
+            if state.feasibility_accepted:
+                if full_contract_certificate:
+                    snapshot = state.accepted_device_plan_contract
+                    expected_contract_digest = str(
+                        certificate.get("accepted_device_plan_contract_sha256") or ""
+                    )
+                    if (
+                        isinstance(snapshot, dict)
+                        and snapshot
+                        and expected_contract_digest
+                        and device_plan_contract_digest(snapshot)
+                        == expected_contract_digest
+                    ):
+                        signed_contract = copy.deepcopy(snapshot)
+                    else:
+                        # Do not emit an accepted full-contract certificate beside an
+                        # empty/default plan after a post-certificate exception.
+                        # If the immutable snapshot is unavailable or corrupt, the
+                        # only safe representation is to revoke terminal authority.
+                        state.feasibility_accepted = False
+                        state.feasibility_certificate = {}
+                        state.accepted_device_plan_contract = {}
+                        state.add_error(
+                            "accepted Device Plan snapshot unavailable after runtime failure; "
+                            "terminal certificate authority revoked"
+                        )
+                elif not (
+                    isinstance(certificate, dict)
+                    and certificate.get("accepted") is True
+                ):
+                    # A certificate builder can fail before returning an
+                    # object.  Never preserve a half-committed acceptance bit.
+                    state.feasibility_accepted = False
+                    state.feasibility_certificate = {}
+                    state.accepted_device_plan_contract = {}
+                    state.add_error(
+                        "feasibility certificate issuance did not complete; "
+                        "terminal certificate authority revoked"
+                    )
             state.terminal_package = {
                 "status": "failed",
                 "feedback_type": "device_configuration_error" if configuration_error else "device_internal_error",
@@ -11056,6 +14923,10 @@ class SingleDeviceAgent:
                 "exp_id": state.exp_id,
                 "iteration_id": state.iteration_id,
                 "workflow_id": state.workflow_id,
+                "contract_version": self._contract_version,
+                "contract_resolution": copy.deepcopy(
+                    state.contract_resolution
+                ),
                 "device_snapshot_id": self._device_snapshot_id(),
                 "loaded_workstation_skills": state.loaded_workstation_skills,
                 "skill_load_events": state.skill_load_events,
@@ -11064,9 +14935,12 @@ class SingleDeviceAgent:
                 "feasibility_certificate": copy.deepcopy(
                     state.feasibility_certificate
                 ),
+                **signed_contract,
                 "workflow_txt": "",
                 "workflow_json": {},
-                "requires_scientific_review": False,
+                "requires_scientific_review": bool(
+                    signed_contract.get("requires_scientific_review")
+                ),
                 "error_package": {
                     "type": "device_configuration_error" if configuration_error else "device_internal_error",
                     "assessment_source": "single_device_agent_runtime",
@@ -11106,6 +14980,9 @@ class SingleDeviceAgent:
                     "completed_chunks": len(progress.get("completed_chunks", [])),
                     "partial_candidate_dispatchable": False,
                 }
+            state.terminal_package = self._guard_terminal_plan_certificate_binding(
+                state, state.terminal_package
+            )
             # Runtime/model failures deliberately leave the run active.  A
             # retry with the same frozen binding can then restore the last
             # fully accepted fragment, while no partial candidate is granted
@@ -11130,6 +15007,7 @@ class SingleDeviceAgent:
             package.get("dispatchable") is True
             or status in {
                 "success",
+                "ready_for_dispatch",
                 "manual_required",
                 "feasibility_error",
                 "terminal_unmappable",
@@ -11147,7 +15025,8 @@ class SingleDeviceAgent:
             return
         status = str(package.get("status", "")).strip().lower()
         dispatchable = bool(
-            package.get("dispatchable") is True or status == "success"
+            package.get("dispatchable") is True
+            or status in {"success", "ready_for_dispatch"}
         )
         if self._checkpoint_terminal_outcome(package):
             store.complete(
@@ -11273,8 +15152,8 @@ class SingleDeviceAgent:
         return not (requested_off and test_only_authorized)
 
     @staticmethod
-    def _semantic_macro_id(step: Dict[str, Any], index: int) -> str:
-        return str(step.get("步骤序号", step.get("step", index))).strip()
+    def _semantic_macro_id(step: Dict[str, Any], index: int) -> Any:
+        return semantic_macro_id(step, f"macro_action_steps[{index - 1}]")
 
     @classmethod
     def _semantic_analysis_errors(
@@ -11296,24 +15175,39 @@ class SingleDeviceAgent:
             for item in research_handoff.get("macro_action_steps", []) or []
             if isinstance(item, dict)
         ]
-        expected_ids = [
-            cls._semantic_macro_id(item, index)
-            for index, item in enumerate(macros, start=1)
-        ]
-        records_by_id: Dict[str, List[Dict[str, Any]]] = {}
-        for raw in assessments:
+        expected: List[Tuple[Dict[str, Any], Any, Tuple[str, Any]]] = []
+        for index, item in enumerate(macros, start=1):
+            try:
+                macro_id = cls._semantic_macro_id(item, index)
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                continue
+            expected.append((item, macro_id, macro_id_key(macro_id)))
+        expected_ids = [macro_id for _, macro_id, _ in expected]
+        records_by_id: Dict[Tuple[str, Any], List[Dict[str, Any]]] = {}
+        actual_ids: List[Any] = []
+        for assessment_index, raw in enumerate(assessments):
             if not isinstance(raw, dict):
                 errors.append("macro_step_assessments entries must be objects")
                 continue
-            macro_id = str(raw.get("source_macro_step") or "").strip()
-            records_by_id.setdefault(macro_id, []).append(raw)
-        if set(records_by_id) != set(expected_ids):
+            try:
+                macro_id = normalize_macro_id(
+                    raw.get("source_macro_step"),
+                    f"macro_step_assessments[{assessment_index}].source_macro_step",
+                )
+            except MacroIdentityError as exc:
+                errors.append(str(exc))
+                continue
+            actual_ids.append(macro_id)
+            records_by_id.setdefault(macro_id_key(macro_id), []).append(raw)
+        expected_keys = [key for _, _, key in expected]
+        if set(records_by_id) != set(expected_keys):
             errors.append(
                 "semantic analysis macro ids must exactly cover frozen Research steps: "
-                f"expected={expected_ids}, actual={sorted(records_by_id)}"
+                f"expected={expected_ids!r}, actual={actual_ids!r}"
             )
-        for macro, macro_id in zip(macros, expected_ids):
-            matches = records_by_id.get(macro_id, [])
+        for macro, macro_id, macro_key in expected:
+            matches = records_by_id.get(macro_key, [])
             if len(matches) != 1:
                 errors.append(f"macro step {macro_id} must have exactly one semantic assessment")
                 continue
@@ -11442,15 +15336,21 @@ class SingleDeviceAgent:
             if isinstance(item, dict)
         ]
         macro_indices = {
-            cls._semantic_macro_id(item, index): index - 1
+            macro_id_key(cls._semantic_macro_id(item, index)): index - 1
             for index, item in enumerate(macros, start=1)
         }
         registry: Dict[str, Dict[str, Set[str]]] = {}
         for assessment in normalized.get("macro_step_assessments", []) or []:
             if not isinstance(assessment, dict):
                 continue
-            macro_id = str(assessment.get("source_macro_step") or "").strip()
-            macro_index = macro_indices.get(macro_id)
+            try:
+                macro_key = macro_id_key(
+                    assessment.get("source_macro_step"),
+                    "macro_step_assessments.source_macro_step",
+                )
+            except MacroIdentityError:
+                macro_key = None
+            macro_index = macro_indices.get(macro_key)
             explicit_refs = [
                 str(ref).strip()
                 for ref in assessment.get("evidence_refs", []) or []
@@ -11558,9 +15458,21 @@ class SingleDeviceAgent:
         return normalized
 
     def _semantic_assessment(self, macro_id: Any) -> Dict[str, Any]:
-        target = str(macro_id).strip()
+        try:
+            target = macro_id_key(macro_id)
+        except MacroIdentityError:
+            return {}
         for item in self._active_semantic_analysis.get("macro_step_assessments", []) or []:
-            if isinstance(item, dict) and str(item.get("source_macro_step") or "").strip() == target:
+            if not isinstance(item, dict):
+                continue
+            try:
+                candidate = macro_id_key(
+                    item.get("source_macro_step"),
+                    "macro_step_assessments.source_macro_step",
+                )
+            except MacroIdentityError:
+                continue
+            if candidate == target:
                 return item
         return {}
 
@@ -11877,9 +15789,23 @@ class SingleDeviceAgent:
             not isinstance(step, dict) for step in macros
         ):
             raise FeasibilityFragmentError("macro_action_steps must be a nonempty object array")
-        macro_ids = [self._semantic_macro_id(step, i) for i, step in enumerate(macros, 1)]
-        if any(not value for value in macro_ids) or len(set(macro_ids)) != len(macro_ids):
-            raise FeasibilityFragmentError("macro_action_steps must have unique nonempty source IDs")
+        macro_ids: List[Any] = []
+        try:
+            macro_ids = [
+                self._semantic_macro_id(step, i)
+                for i, step in enumerate(macros, 1)
+            ]
+            macro_keys = [macro_id_key(value) for value in macro_ids]
+        except MacroIdentityError as exc:
+            raise FeasibilityFragmentError(
+                str(exc), code=exc.code, path=exc.path
+            ) from exc
+        if len(set(macro_keys)) != len(macro_keys):
+            raise FeasibilityFragmentError(
+                "macro_action_steps must have unique typed source IDs",
+                code="DUPLICATE_MACRO_ID",
+                path="macro_action_steps",
+            )
         matrix = self._sample_matrix_contract_value(state.research_handoff)
         aggregate: Dict[str, Any] = {}
         progress: Dict[str, Any] = {
@@ -12940,13 +16866,31 @@ class SingleDeviceAgent:
                 "unsupported_external_operation",
             }
             semantic_findings: List[Dict[str, Any]] = []
-            known_macro_ids = {
-                str(item.get("source_macro_step") or "").strip()
-                for item in self._active_semantic_analysis.get(
+            known_macro_ids: Set[Tuple[str, Any]] = set()
+            for assessment_index, item in enumerate(
+                self._active_semantic_analysis.get(
                     "macro_step_assessments", []
                 ) or []
-                if isinstance(item, dict)
-            }
+            ):
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    known_macro_ids.add(
+                        macro_id_key(
+                            item.get("source_macro_step"),
+                            "semantic_analysis.macro_step_assessments"
+                            f"[{assessment_index}].source_macro_step",
+                        )
+                    )
+                except MacroIdentityError as exc:
+                    semantic_findings.append(
+                        {
+                            "type": "invalid_research_macro_identity",
+                            "error_code": exc.code.lower(),
+                            "path": exc.path,
+                            "message": str(exc),
+                        }
+                    )
             for index, handoff in enumerate(
                 plan_result.get("offline_handoffs", []) or [], start=1
             ):
@@ -12957,7 +16901,14 @@ class SingleDeviceAgent:
                 ).strip()
                 reason = str(handoff.get("semantic_reason") or "").strip()
                 evidence_refs = handoff.get("semantic_evidence_refs")
-                sources = self._source_macro_step_ids(handoff)
+                try:
+                    sources = extract_source_macro_ids(
+                        handoff,
+                        f"offline_handoffs[{index - 1}]",
+                        required=True,
+                    )
+                except MacroIdentityError:
+                    sources = []
                 if (
                     classification not in valid_classes
                     or not reason
@@ -12976,7 +16927,9 @@ class SingleDeviceAgent:
                         }
                     )
                     continue
-                if not sources or any(source not in known_macro_ids for source in sources):
+                if not sources or any(
+                    macro_id_key(source) not in known_macro_ids for source in sources
+                ):
                     semantic_findings.append(
                         {
                             "type": "invalid_llm_handoff_binding",
@@ -13002,14 +16955,19 @@ class SingleDeviceAgent:
                     )
             return semantic_findings
 
-        research_steps: Dict[str, Dict[str, Any]] = {}
+        research_steps: Dict[Tuple[str, Any], Dict[str, Any]] = {}
         for index, step in enumerate(
             state.research_handoff.get("macro_action_steps", []) or [], start=1
         ):
             if not isinstance(step, dict):
                 continue
-            source = str(step.get("步骤序号", step.get("step", index)))
-            research_steps[source] = step
+            try:
+                source = semantic_macro_id(
+                    step, f"research_handoff.macro_action_steps[{index - 1}]"
+                )
+            except MacroIdentityError:
+                continue
+            research_steps[macro_id_key(source)] = step
 
         findings: List[Dict[str, Any]] = []
         for index, handoff in enumerate(
@@ -13018,7 +16976,11 @@ class SingleDeviceAgent:
             if not isinstance(handoff, dict):
                 continue
             sources = self._source_macro_step_ids(handoff)
-            bound = [research_steps[source] for source in sources if source in research_steps]
+            bound = [
+                research_steps[source_key]
+                for source in sources
+                if (source_key := macro_id_key(source)) in research_steps
+            ]
             handoff_text = _json_text(handoff)
             handoff_executes_core = self._handoff_executes_core_chemistry(handoff)
             if not sources:
@@ -13119,11 +17081,13 @@ class SingleDeviceAgent:
         ):
             if not isinstance(macro, dict):
                 continue
-            source = str(
-                macro.get("macro_step_id")
-                or macro.get("logical_step_id")
-                or macro.get("步骤序号", macro.get("step", index))
-            )
+            try:
+                source = self._semantic_macro_id(macro, index)
+            except MacroIdentityError:
+                # Invalid Research identity is handled by the shared contract
+                # gate.  It must never be replaced with a positional identity
+                # merely to manufacture a route-gap proof.
+                continue
             if self._active_semantic_analysis:
                 assessment = self._semantic_assessment(source)
                 if (
@@ -13247,7 +17211,19 @@ class SingleDeviceAgent:
         ):
             if not isinstance(macro, dict):
                 continue
-            source = str(macro.get("步骤序号", macro.get("step", index)))
+            try:
+                source = self._semantic_macro_id(macro, index)
+                source_key = macro_id_key(source)
+            except MacroIdentityError as exc:
+                findings.append(
+                    {
+                        "type": "invalid_research_macro_identity",
+                        "error_code": exc.code.lower(),
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                continue
             if self._active_semantic_analysis:
                 assessment = self._semantic_assessment(source)
                 if (
@@ -13315,7 +17291,7 @@ class SingleDeviceAgent:
             mapped = [
                 step
                 for step in plan_steps
-                if source in self._source_macro_step_ids(step)
+                if source_key in self._source_macro_keys(step)
             ]
             mapped_stations = {
                 str(step.get("workstation", "")).strip()
@@ -13384,6 +17360,634 @@ class SingleDeviceAgent:
             return resolved_text
         return ""
 
+    def _explicit_material_relation_coverage_findings(
+        self,
+        *,
+        macro_id: Any,
+        macro_key: Tuple[str, Any],
+        frozen_operation: str,
+        v2_step: Dict[str, Any],
+        plan_steps: List[Dict[str, Any]],
+        transitions: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Audit explicit Research relations without inventing material edges.
+
+        A Research disposition controls applicability.  ``not_applicable`` is
+        a valid empty graph, ``unresolved`` is a hard evidence stop, and only
+        ``declared`` relations are required to bind to Device operations.  The
+        method deliberately never consults macro ordinals, operation words or
+        workstation categories to decide which relation ought to exist.
+        """
+
+        status = v2_step.get("material_contract_status")
+        status = status if isinstance(status, dict) else {}
+        expected_dimensions = (
+            "material_inputs",
+            "material_intermediates",
+            "material_outputs",
+            "logical_containers",
+            "material_relations",
+        )
+        dispositions = {"declared", "not_applicable", "unresolved"}
+        invalid_dimensions = [
+            field
+            for field in expected_dimensions
+            if str(status.get(field) or "") not in dispositions
+        ]
+        evidence = {
+            "research_macro_step_id": str(v2_step.get("macro_step_id") or ""),
+            "material_contract_status": copy.deepcopy(status),
+            "material_relation_ids": [
+                str(item.get("relation_id") or "")
+                for item in v2_step.get("material_relations", []) or []
+                if isinstance(item, dict) and str(item.get("relation_id") or "")
+            ],
+        }
+        if invalid_dimensions:
+            return [
+                {
+                    "type": "frozen_material_transition_coverage_missing",
+                    "blocker_class": "contract_invalid",
+                    "source_macro_steps": [copy.deepcopy(macro_id)],
+                    "missing_material_relation_ids": [],
+                    "material_episode_repair_evidence": evidence,
+                    "repair_route": {
+                        "status": "handler_input_incompatible",
+                        "handler_id": "deterministic.material_episode_evidence_gate",
+                        "reason": (
+                            "Research material contract has missing or invalid "
+                            "dispositions=" + ",".join(invalid_dimensions)
+                        ),
+                    },
+                    "message": (
+                        f"Research macro step {macro_id!r}（{frozen_operation}）"
+                        "的物料合同完整性声明不合法；Device 不得根据"
+                        "操作类别自行补物料边。"
+                    ),
+                }
+            ]
+
+        # Applicability is dimension-specific.  In particular,
+        # material_relations=not_applicable only suppresses transition-edge
+        # compilation; it must not hide a malformed or identity-free declared
+        # input contract.  Keep this check structural and source-bound: no
+        # operation prose, macro ordinal, workstation class, or container name
+        # participates in deciding what the contract should contain.
+        collection_violations: List[Dict[str, Any]] = []
+        collections: Dict[str, List[Any]] = {}
+        for field in expected_dimensions:
+            raw_collection = v2_step.get(field)
+            if not isinstance(raw_collection, list):
+                collection_violations.append(
+                    {"dimension": field, "reason": "collection_not_array"}
+                )
+                continue
+            collections[field] = raw_collection
+            disposition = str(status.get(field) or "")
+            if disposition == "declared" and not raw_collection:
+                collection_violations.append(
+                    {"dimension": field, "reason": "declared_collection_empty"}
+                )
+            elif disposition == "not_applicable" and raw_collection:
+                collection_violations.append(
+                    {
+                        "dimension": field,
+                        "reason": "not_applicable_collection_not_empty",
+                    }
+                )
+
+        seen_material_instances: Set[str] = set()
+        for field in (
+            "material_inputs",
+            "material_intermediates",
+            "material_outputs",
+        ):
+            if status.get(field) != "declared" or field not in collections:
+                continue
+            for item_index, item in enumerate(collections[field]):
+                if not isinstance(item, dict):
+                    collection_violations.append(
+                        {
+                            "dimension": field,
+                            "item_index": item_index,
+                            "reason": "material_record_not_object",
+                        }
+                    )
+                    continue
+                material_id = str(item.get("material_id") or "").strip()
+                instance_id = str(item.get("material_instance_id") or "").strip()
+                if not material_id or not instance_id:
+                    collection_violations.append(
+                        {
+                            "dimension": field,
+                            "item_index": item_index,
+                            "reason": "material_identity_missing",
+                        }
+                    )
+                elif instance_id in seen_material_instances:
+                    collection_violations.append(
+                        {
+                            "dimension": field,
+                            "item_index": item_index,
+                            "reason": "material_instance_id_not_unique",
+                            "material_instance_id": instance_id,
+                        }
+                    )
+                else:
+                    seen_material_instances.add(instance_id)
+                quantity = item.get("quantity")
+                mode = (
+                    str(quantity.get("mode") or "").strip()
+                    if isinstance(quantity, dict)
+                    else ""
+                )
+                semantic = (
+                    str(quantity.get("semantic") or "").strip()
+                    if isinstance(quantity, dict)
+                    else ""
+                )
+                expected_semantics = {
+                    "exact": {"planned_target", "planning_estimate"},
+                    "all_available": {"whole_batch_unspecified"},
+                    "runtime_measured": {"runtime_measurement_required"},
+                }
+                if mode not in expected_semantics or semantic not in (
+                    expected_semantics.get(mode) or set()
+                ):
+                    collection_violations.append(
+                        {
+                            "dimension": field,
+                            "item_index": item_index,
+                            "reason": "quantity_semantics_invalid",
+                            "quantity_mode": mode or "<missing>",
+                            "quantity_semantic": semantic or "<missing>",
+                        }
+                    )
+                elif isinstance(quantity, dict):
+                    value = quantity.get("value")
+                    unit = str(quantity.get("unit") or "").strip()
+                    exact_value_valid = (
+                        not isinstance(value, bool)
+                        and isinstance(value, (int, float))
+                        and math.isfinite(float(value))
+                        and float(value) >= 0
+                    )
+                    if (
+                        mode == "exact" and (not exact_value_valid or not unit)
+                    ) or (mode != "exact" and (value is not None or bool(unit))):
+                        collection_violations.append(
+                            {
+                                "dimension": field,
+                                "item_index": item_index,
+                                "reason": "quantity_shape_invalid",
+                                "quantity_mode": mode,
+                            }
+                        )
+                if field == "material_inputs":
+                    origin = str(item.get("material_origin") or "").strip()
+                    parent_refs = item.get("parent_output_refs")
+                    if parent_refs is None:
+                        parent_refs = []
+                    if origin not in {
+                        "external_inventory",
+                        "upstream_output",
+                        "same_step_relation",
+                    }:
+                        collection_violations.append(
+                            {
+                                "dimension": field,
+                                "item_index": item_index,
+                                "reason": "material_origin_invalid",
+                            }
+                        )
+                    if not isinstance(parent_refs, list) or (
+                        origin == "upstream_output" and not parent_refs
+                    ) or (origin != "upstream_output" and bool(parent_refs)):
+                        collection_violations.append(
+                            {
+                                "dimension": field,
+                                "item_index": item_index,
+                                "reason": "parent_output_refs_inconsistent",
+                            }
+                        )
+                    elif isinstance(parent_refs, list):
+                        seen_parent_refs: Set[Tuple[str, str]] = set()
+                        for parent_index, parent_ref in enumerate(parent_refs):
+                            parent_macro = (
+                                str(parent_ref.get("macro_step_id") or "").strip()
+                                if isinstance(parent_ref, dict)
+                                else ""
+                            )
+                            parent_instance = (
+                                str(
+                                    parent_ref.get("material_instance_id") or ""
+                                ).strip()
+                                if isinstance(parent_ref, dict)
+                                else ""
+                            )
+                            ref_key = (parent_macro, parent_instance)
+                            if not parent_macro or not parent_instance:
+                                collection_violations.append(
+                                    {
+                                        "dimension": field,
+                                        "item_index": item_index,
+                                        "parent_index": parent_index,
+                                        "reason": "parent_output_ref_identity_invalid",
+                                    }
+                                )
+                            elif ref_key in seen_parent_refs:
+                                collection_violations.append(
+                                    {
+                                        "dimension": field,
+                                        "item_index": item_index,
+                                        "parent_index": parent_index,
+                                        "reason": "parent_output_ref_duplicate",
+                                    }
+                                )
+                            else:
+                                seen_parent_refs.add(ref_key)
+                elif (
+                    field == "material_intermediates"
+                    and str(item.get("material_origin") or "").strip()
+                    != "same_step_relation"
+                ):
+                    collection_violations.append(
+                        {
+                            "dimension": field,
+                            "item_index": item_index,
+                            "reason": "intermediate_origin_invalid",
+                        }
+                    )
+
+        if collection_violations:
+            evidence["material_contract_violations"] = copy.deepcopy(
+                collection_violations
+            )
+            return [
+                {
+                    "type": "frozen_material_transition_coverage_missing",
+                    "blocker_class": "contract_invalid",
+                    "source_macro_steps": [copy.deepcopy(macro_id)],
+                    "missing_material_relation_ids": [],
+                    "material_episode_repair_evidence": evidence,
+                    "repair_route": {
+                        "status": "handler_input_incompatible",
+                        "handler_id": "deterministic.material_episode_evidence_gate",
+                        "reason": (
+                            "Research per-dimension material contract is inconsistent"
+                        ),
+                    },
+                    "message": (
+                        f"Research macro step {macro_id!r}（{frozen_operation}）"
+                        "的逐维物料状态、集合或物料实例身份不一致；"
+                        "material_relations 的不适用状态不能跳过输入合同审计。"
+                    ),
+                }
+            ]
+
+        unresolved = [
+            field
+            for field in expected_dimensions
+            if status.get(field) == "unresolved"
+        ]
+        if unresolved:
+            return [
+                {
+                    "type": "frozen_material_transition_coverage_missing",
+                    "blocker_class": "evidence_insufficient",
+                    "source_macro_steps": [copy.deepcopy(macro_id)],
+                    "missing_material_relation_ids": [],
+                    "material_episode_repair_evidence": evidence,
+                    "repair_route": {
+                        "status": "evidence_insufficient",
+                        "handler_id": "deterministic.material_episode_evidence_gate",
+                        "reason": (
+                            "Research material contract remains unresolved for="
+                            + ",".join(unresolved)
+                        ),
+                    },
+                    "message": (
+                        f"Research macro step {macro_id!r}（{frozen_operation}）"
+                        "的物料合同尚未解析；必须回到有来源的 Research "
+                        "修订，不得由 Device 猜测。"
+                    ),
+                }
+            ]
+
+        raw_relations = v2_step.get("material_relations")
+        if not isinstance(raw_relations, list):
+            raw_relations = []
+        relation_disposition = status.get("material_relations")
+        if relation_disposition == "not_applicable":
+            if not raw_relations:
+                return []
+            return [
+                {
+                    "type": "frozen_material_transition_coverage_missing",
+                    "blocker_class": "contract_invalid",
+                    "source_macro_steps": [copy.deepcopy(macro_id)],
+                    "missing_material_relation_ids": [],
+                    "material_episode_repair_evidence": evidence,
+                    "repair_route": {
+                        "status": "handler_input_incompatible",
+                        "handler_id": "deterministic.material_episode_evidence_gate",
+                        "reason": "not_applicable material_relations must be empty",
+                    },
+                    "message": (
+                        f"Research macro step {macro_id!r}（{frozen_operation}）同时声明"
+                        " material_relations=not_applicable 和非空关系，合同自相矛盾。"
+                    ),
+                }
+            ]
+
+        executable_relations: Dict[str, Dict[str, Any]] = {}
+        duplicate_ids: Set[str] = set()
+        for raw_relation in raw_relations:
+            if not isinstance(raw_relation, dict):
+                continue
+            relation_id = str(raw_relation.get("relation_id") or "").strip()
+            if not relation_id:
+                continue
+            if relation_id in executable_relations:
+                duplicate_ids.add(relation_id)
+            if str(raw_relation.get("event_kind") or "").strip() != "none":
+                executable_relations[relation_id] = raw_relation
+        if relation_disposition != "declared" or duplicate_ids or not raw_relations:
+            reason = (
+                "declared material relation contract is empty or contains duplicate IDs"
+                if relation_disposition == "declared"
+                else "unsupported material relation disposition"
+            )
+            return [
+                {
+                    "type": "frozen_material_transition_coverage_missing",
+                    "blocker_class": "contract_invalid",
+                    "source_macro_steps": [copy.deepcopy(macro_id)],
+                    "missing_material_relation_ids": sorted(executable_relations),
+                    "material_episode_repair_evidence": evidence,
+                    "repair_route": {
+                        "status": "handler_input_incompatible",
+                        "handler_id": "deterministic.material_episode_evidence_gate",
+                        "reason": reason,
+                    },
+                    "message": (
+                        f"Research macro step {macro_id!r}（{frozen_operation}）"
+                        "的显式物料关系合同不合法。"
+                    ),
+                }
+            ]
+
+        missing: List[str] = []
+        relation_diagnostics: Dict[str, List[str]] = {}
+        relation_blocker_classes: Dict[str, List[str]] = {}
+        mapped_plan_steps: Dict[str, List[Any]] = {}
+        # Same-macro truth-source steps are classification evidence only.  They
+        # show that Plan work exists which might receive an explicit relation
+        # binding, but they never count as coverage for any particular input,
+        # output, or relation ID.
+        macro_candidate_plan_steps: List[Any] = []
+        for step in plan_steps:
+            try:
+                source_keys = {
+                    macro_id_key(value)
+                    for value in self._source_macro_step_ids(step)
+                }
+            except MacroIdentityError:
+                continue
+            if macro_key not in source_keys or not self._truth_workstation_code(
+                str(step.get("workstation") or "").strip()
+            ):
+                continue
+            macro_candidate_plan_steps.append(
+                copy.deepcopy(step.get("plan_step"))
+            )
+        for relation_id, relation in executable_relations.items():
+            diagnostics: List[str] = []
+            blocker_classes: Set[str] = set()
+            bound_steps: List[Dict[str, Any]] = []
+            for step in plan_steps:
+                try:
+                    source_keys = {
+                        macro_id_key(value)
+                        for value in self._source_macro_step_ids(step)
+                    }
+                except MacroIdentityError:
+                    continue
+                relation_ids = step.get("research_material_relation_ids")
+                if (
+                    macro_key in source_keys
+                    and isinstance(relation_ids, list)
+                    and relation_id in relation_ids
+                ):
+                    bound_steps.append(step)
+            mapped_plan_steps[relation_id] = [
+                copy.deepcopy(step.get("plan_step")) for step in bound_steps
+            ]
+            if len(bound_steps) != 1:
+                diagnostics.append(
+                    "relation must bind to exactly one Device step"
+                )
+                if not bound_steps:
+                    blocker_classes.add(
+                        "plan_binding_missing"
+                        if macro_candidate_plan_steps
+                        else "plan_missing_operation"
+                    )
+                else:
+                    blocker_classes.add("plan_binding_ambiguous")
+            else:
+                step = bound_steps[0]
+                # First prove that the declared Research relation is bound to
+                # one actual Device operation.  Only then can the compiler's
+                # supported quantity/lineage subset be the blocker; otherwise
+                # an implementation gap would hide a missing plan operation.
+                event_kind = str(step.get("material_event_kind") or "").strip()
+                expected_kind = str(relation.get("event_kind") or "").strip()
+                if event_kind != expected_kind:
+                    diagnostics.append("Device event_kind differs from Research relation")
+                    blocker_classes.add("plan_binding_invalid")
+                if not self._truth_workstation_code(
+                    str(step.get("workstation") or "").strip()
+                ):
+                    diagnostics.append("bound step is not a truth-source workstation")
+                    blocker_classes.add("plan_missing_operation")
+                logical_ids = {
+                    str(value).strip()
+                    for value in relation.get("logical_container_ids", []) or []
+                    if str(value).strip()
+                }
+                logical_bindings = step.get("logical_container_bindings")
+                if not isinstance(logical_bindings, dict) or not logical_ids.issubset(
+                    {str(key) for key in logical_bindings}
+                ):
+                    diagnostics.append("logical container bindings are incomplete")
+                    blocker_classes.add("plan_binding_missing")
+
+                # Quantity/lineage support is a meaningful verdict only after
+                # the relation has one real operation, the expected event, and
+                # complete logical-container bindings.  Otherwise the missing
+                # or invalid Device binding is the earlier blocker.
+                binding_blockers = {
+                    "plan_missing_operation",
+                    "plan_binding_missing",
+                    "plan_binding_ambiguous",
+                    "plan_binding_invalid",
+                }
+                if not (blocker_classes & binding_blockers):
+                    input_ids = relation.get("input_material_instance_ids")
+                    output_ids = relation.get("output_material_instance_ids")
+                    input_count = (
+                        len(input_ids) if isinstance(input_ids, list) else 0
+                    )
+                    output_count = (
+                        len(output_ids) if isinstance(output_ids, list) else 0
+                    )
+                    quantity_basis = str(
+                        relation.get("quantity_basis") or ""
+                    ).strip()
+                    if (
+                        quantity_basis
+                        not in {
+                            "whole_batch",
+                            "conserved_inventory",
+                            "runtime_measurement_required",
+                        }
+                        or (
+                            quantity_basis == "whole_batch"
+                            and (
+                                str(
+                                    relation.get("event_kind") or ""
+                                ).strip()
+                                in {
+                                    "split_same_material",
+                                    "replicate_same_material",
+                                }
+                                or input_count != 1
+                                or output_count != 1
+                            )
+                        )
+                    ):
+                        blocker_classes.add("software_unsupported")
+                step_key = self._optional_typed_id_key(
+                    step.get("plan_step"), "device_plan.plan_step"
+                )
+                matching_transitions: List[Dict[str, Any]] = []
+                transition_ids = step.get("material_transition_ids")
+                for transition_id in (
+                    transition_ids if isinstance(transition_ids, list) else []
+                ):
+                    transition = transitions.get(str(transition_id).strip())
+                    if not isinstance(transition, dict):
+                        continue
+                    if str(
+                        transition.get("research_material_relationship_id") or ""
+                    ).strip() != relation_id:
+                        continue
+                    transition_plan_keys = {
+                        key
+                        for value in transition.get("source_plan_steps", []) or []
+                        if (
+                            key := self._optional_typed_id_key(
+                                value, "material_transitions.source_plan_steps"
+                            )
+                        )
+                        is not None
+                    }
+                    transition_macro_keys = {
+                        macro_id_key(value)
+                        for value in self._source_macro_step_ids(transition)
+                    }
+                    if (
+                        step_key in transition_plan_keys
+                        and macro_key in transition_macro_keys
+                        and str(transition.get("transition_kind") or "").strip()
+                        == expected_kind
+                        and str(transition.get("quantity_basis") or "").strip()
+                        == str(relation.get("quantity_basis") or "").strip()
+                    ):
+                        matching_transitions.append(transition)
+                if len(matching_transitions) != 1:
+                    diagnostics.append(
+                        "relation requires one bidirectionally bound material transition"
+                    )
+            if diagnostics:
+                missing.append(relation_id)
+                relation_diagnostics[relation_id] = diagnostics
+                if not blocker_classes:
+                    blocker_classes.add("plan_binding_invalid")
+                relation_blocker_classes[relation_id] = sorted(blocker_classes)
+
+        if not missing:
+            return []
+        evidence["mapped_plan_steps_by_relation"] = mapped_plan_steps
+        evidence["truth_source_macro_candidate_plan_steps"] = copy.deepcopy(
+            macro_candidate_plan_steps
+        )
+        evidence["relation_diagnostics"] = relation_diagnostics
+        evidence["relation_blocker_classes"] = relation_blocker_classes
+        blocker_classes = sorted(
+            {
+                blocker_class
+                for values in relation_blocker_classes.values()
+                for blocker_class in values
+            }
+        )
+        if "plan_missing_operation" in blocker_classes:
+            repair_status = "plan_missing_operation"
+            repair_reason = (
+                "Research relation is declared, but no truth-source Device operation "
+                "currently implements it"
+            )
+        elif any(
+            value in blocker_classes
+            for value in {
+                "plan_binding_missing",
+                "plan_binding_ambiguous",
+                "plan_binding_invalid",
+            }
+        ):
+            repair_status = "plan_binding_required"
+            repair_reason = (
+                "candidate operations exist, but an exact relation-to-step binding "
+                "is missing, ambiguous, or invalid and may not be guessed"
+            )
+        elif "software_unsupported" in blocker_classes:
+            repair_status = "software_unsupported"
+            repair_reason = (
+                "Research relation semantics are explicit and operation-bound, but "
+                "the current Device material compiler does not implement their "
+                "quantity/lineage form"
+            )
+        else:
+            repair_status = "deterministic_patch"
+            repair_reason = (
+                "explicit Research relations and exact Device bindings exist; "
+                "the derived graph must compile atomically"
+            )
+        return [
+            {
+                "type": "frozen_material_transition_coverage_missing",
+                "blocker_class": (
+                    blocker_classes[0]
+                    if len(blocker_classes) == 1
+                    else "mixed_material_blockers"
+                ),
+                "blocker_classes": blocker_classes,
+                "source_macro_steps": [copy.deepcopy(macro_id)],
+                "missing_material_relation_ids": sorted(missing),
+                "material_episode_repair_evidence": evidence,
+                "repair_route": {
+                    "status": repair_status,
+                    "handler_id": "deterministic.material_relationship_compiler",
+                    "reason": repair_reason,
+                },
+                "message": (
+                    f"Research macro step {macro_id!r}（{frozen_operation}）的显式物料"
+                    f"关系尚未双向绑定到 Device 操作：relations={sorted(missing)}。"
+                ),
+            }
+        ]
+
     def _frozen_material_transition_coverage_findings(
         self,
         research_handoff: Dict[str, Any],
@@ -13409,18 +18013,68 @@ class SingleDeviceAgent:
             if isinstance(item, dict)
             and str(item.get("transition_id") or "").strip()
         }
+        research_v2 = research_handoff.get("research_action_package_v2")
+        research_v2_steps = (
+            research_v2.get("macro_steps")
+            if isinstance(research_v2, dict)
+            else None
+        )
+        if not isinstance(research_v2_steps, list):
+            research_v2_steps = []
         findings: List[Dict[str, Any]] = []
         for index, macro in enumerate(
             research_handoff.get("macro_action_steps", []) or [], start=1
         ):
             if not isinstance(macro, dict):
                 continue
-            macro_id = str(
-                macro.get("步骤序号", macro.get("step", index))
-            ).strip()
+            try:
+                macro_id = semantic_macro_id(
+                    macro, f"research_handoff.macro_action_steps[{index - 1}]"
+                )
+                macro_key = macro_id_key(macro_id)
+            except MacroIdentityError as exc:
+                findings.append(
+                    {
+                        "type": "invalid_research_macro_identity",
+                        "error_code": exc.code.lower(),
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                continue
             frozen_operation = str(
                 macro.get("操作", macro.get("operation", ""))
             )
+            matching_v2_steps = [
+                item
+                for item in research_v2_steps
+                if isinstance(item, dict) and item.get("sequence") == index
+            ]
+            v2_step = matching_v2_steps[0] if len(matching_v2_steps) == 1 else {}
+            material_contract_status = (
+                v2_step.get("material_contract_status")
+                if isinstance(v2_step, dict)
+                and isinstance(v2_step.get("material_contract_status"), dict)
+                else None
+            )
+            # Once Research supplies the explicit material contract, it is the
+            # sole authority for material edges.  Capability categories remain
+            # useful for workstation feasibility elsewhere, but must never be
+            # converted into a state transition here.  This also makes an
+            # explicit not_applicable registration/observation step immune to
+            # a broad semantic classifier label such as ``liquid_handling``.
+            if material_contract_status is not None:
+                findings.extend(
+                    self._explicit_material_relation_coverage_findings(
+                        macro_id=macro_id,
+                        macro_key=macro_key,
+                        frozen_operation=frozen_operation,
+                        v2_step=v2_step,
+                        plan_steps=plan_steps,
+                        transitions=transitions,
+                    )
+                )
+                continue
             if self._active_semantic_analysis:
                 assessment = self._semantic_assessment(macro_id)
                 declared_categories = [
@@ -13476,10 +18130,32 @@ class SingleDeviceAgent:
                 **state_category_requirements,
                 **non_state_category_requirements,
             }
+            material_contract_status = {}
+            raw_material_relations = (
+                v2_step.get("material_relations")
+                if isinstance(v2_step, dict)
+                and isinstance(v2_step.get("material_relations"), list)
+                else []
+            )
+            explicit_material_relations = {
+                str(item.get("relation_id") or "").strip(): item
+                for item in raw_material_relations
+                if isinstance(item, dict)
+                and str(item.get("relation_id") or "").strip()
+                and str(item.get("event_kind") or "").strip() != "none"
+            }
+            uses_explicit_relation_contract = bool(
+                material_contract_status.get("material_relations") == "declared"
+                and explicit_material_relations
+            )
             mapped_steps = [
                 step
                 for step in plan_steps
-                if macro_id in self._source_macro_step_ids(step)
+                if macro_key
+                in {
+                    macro_id_key(source)
+                    for source in self._source_macro_step_ids(step)
+                }
             ]
             missing_categories: List[str] = []
             for category, allowed_stations in category_requirements.items():
@@ -13488,9 +18164,9 @@ class SingleDeviceAgent:
                 )
                 category_covered = False
                 for step in mapped_steps:
-                    plan_step_id = str(
-                        step.get("plan_step") or ""
-                    ).strip()
+                    plan_step_id = self._optional_typed_id_key(
+                        step.get("plan_step"), "device_plan.plan_step"
+                    )
                     event_kind = str(
                         step.get("material_event_kind") or ""
                     ).strip()
@@ -13516,37 +18192,79 @@ class SingleDeviceAgent:
                     if not requires_state_change:
                         category_covered = True
                         break
-                    if event_kind != "state_change" or not transition_ids:
+                    step_relation_ids = {
+                        str(value).strip()
+                        for value in step.get(
+                            "research_material_relation_ids", []
+                        ) or []
+                        if isinstance(value, str) and value.strip()
+                    } if isinstance(
+                        step.get("research_material_relation_ids"), list
+                    ) else set()
+                    if uses_explicit_relation_contract:
+                        authorized_relations = {
+                            relation_id: explicit_material_relations[relation_id]
+                            for relation_id in step_relation_ids
+                            if relation_id in explicit_material_relations
+                            and str(
+                                explicit_material_relations[relation_id].get(
+                                    "event_kind"
+                                )
+                                or ""
+                            ).strip()
+                            == event_kind
+                        }
+                        if event_kind in {"", "none"} or not authorized_relations:
+                            continue
+                    else:
+                        # Historical V1/V2 plans did not carry explicit Research
+                        # relations.  Retain their stricter legacy state-change
+                        # requirement; never infer a new event kind here.
+                        authorized_relations = {}
+                        if event_kind != "state_change":
+                            continue
+                    if not transition_ids:
                         continue
                     for transition_id in transition_ids:
                         transition = transitions.get(transition_id)
                         if not isinstance(transition, dict):
                             continue
-                        if str(
+                        transition_kind = str(
                             transition.get("transition_kind") or ""
-                        ).strip() != "state_change":
+                        ).strip()
+                        if transition_kind != event_kind:
                             continue
+                        if uses_explicit_relation_contract:
+                            relationship_id = str(
+                                transition.get(
+                                    "research_material_relationship_id"
+                                )
+                                or ""
+                            ).strip()
+                            if relationship_id not in authorized_relations:
+                                continue
                         transition_plan_refs = {
-                            str(value).strip()
+                            key
                             for value in transition.get(
                                 "source_plan_steps", []
                             ) or []
-                            if str(value).strip()
+                            if (
+                                key := self._optional_typed_id_key(
+                                    value,
+                                    "material_transitions.source_plan_steps",
+                                )
+                            )
+                            is not None
                         } if isinstance(
                             transition.get("source_plan_steps"), list
                         ) else set()
                         transition_macro_refs = {
-                            str(value).strip()
-                            for value in transition.get(
-                                "source_macro_steps", []
-                            ) or []
-                            if str(value).strip()
-                        } if isinstance(
-                            transition.get("source_macro_steps"), list
-                        ) else set()
+                            macro_id_key(value)
+                            for value in self._source_macro_step_ids(transition)
+                        }
                         if (
                             plan_step_id in transition_plan_refs
-                            and macro_id in transition_macro_refs
+                            and macro_key in transition_macro_refs
                         ):
                             category_covered = True
                             break
@@ -13555,16 +18273,144 @@ class SingleDeviceAgent:
                 if not category_covered:
                     missing_categories.append(category)
             if missing_categories:
+                def _structured_count(field: str) -> int:
+                    value = v2_step.get(field) if isinstance(v2_step, dict) else None
+                    return len(value) if isinstance(value, list) else -1
+
+                episode_evidence = {
+                    "research_macro_step_id": str(
+                        v2_step.get("macro_step_id") or ""
+                    ),
+                    "material_input_count": _structured_count(
+                        "material_inputs"
+                    ),
+                    "material_output_count": _structured_count(
+                        "material_outputs"
+                    ),
+                    "material_intermediate_count": _structured_count(
+                        "material_intermediates"
+                    ),
+                    "logical_container_count": _structured_count(
+                        "logical_containers"
+                    ),
+                    "material_relation_count": _structured_count(
+                        "material_relations"
+                    ),
+                    "material_contract_status": copy.deepcopy(
+                        material_contract_status
+                    ),
+                    "material_relation_ids": sorted(
+                        explicit_material_relations
+                    ),
+                    "mapped_plan_steps": [
+                        copy.deepcopy(step.get("plan_step"))
+                        for step in mapped_steps
+                    ],
+                }
+                evidence_counts = {
+                    key: episode_evidence[key]
+                    for key in (
+                        "material_input_count",
+                        "material_intermediate_count",
+                        "material_output_count",
+                        "logical_container_count",
+                        "material_relation_count",
+                    )
+                }
+                expected_status_fields = {
+                    "material_inputs",
+                    "material_intermediates",
+                    "material_outputs",
+                    "logical_containers",
+                    "material_relations",
+                }
+                status_values = {
+                    str(material_contract_status.get(field) or "")
+                    for field in expected_status_fields
+                }
+                if any(value < 0 for value in evidence_counts.values()) or (
+                    material_contract_status
+                    and not status_values.issubset(
+                        {"declared", "not_applicable", "unresolved"}
+                    )
+                ):
+                    episode_repair_route = {
+                        "status": "handler_input_incompatible",
+                        "handler_id": (
+                            "deterministic.material_episode_evidence_gate"
+                        ),
+                        "reason": "Research V2 material episode fields are malformed",
+                    }
+                elif not material_contract_status or any(
+                    str(material_contract_status.get(field) or "")
+                    == "unresolved"
+                    for field in expected_status_fields
+                ):
+                    unresolved_dimensions = [
+                        field
+                        for field in sorted(expected_status_fields)
+                        if not material_contract_status
+                        or str(material_contract_status.get(field) or "")
+                        == "unresolved"
+                    ]
+                    episode_repair_route = {
+                        "status": "evidence_insufficient",
+                        "handler_id": (
+                            "deterministic.material_episode_evidence_gate"
+                        ),
+                        "reason": (
+                            "Research material contract remains unresolved for="
+                            + ",".join(unresolved_dimensions)
+                        ),
+                    }
+                elif material_contract_status.get("material_relations") == (
+                    "not_applicable"
+                ):
+                    episode_repair_route = {
+                        "status": "repair_strategy_unavailable",
+                        "handler_id": (
+                            "deterministic.material_relationship_compiler"
+                        ),
+                        "reason": (
+                            "Research explicitly marks material relations not_applicable; "
+                            "a relationship patch cannot create the missing Device operation"
+                        ),
+                    }
+                elif not explicit_material_relations:
+                    episode_repair_route = {
+                        "status": "evidence_insufficient",
+                        "handler_id": (
+                            "deterministic.material_relationship_compiler"
+                        ),
+                        "reason": (
+                            "declared Research material relation set contains no "
+                            "non-none executable relationship"
+                        ),
+                    }
+                else:
+                    episode_repair_route = {
+                        "status": "deterministic_patch",
+                        "handler_id": (
+                            "deterministic.material_relationship_compiler"
+                        ),
+                        "reason": (
+                            "explicit Research material relations are available; "
+                            "repair still requires exact relation-to-step and logical-to-physical bindings"
+                        ),
+                    }
+
                 findings.append(
                     {
                         "type": "frozen_material_transition_coverage_missing",
                         "source_macro_steps": [macro_id],
                         "missing_processing_categories": missing_categories,
+                        "material_episode_repair_evidence": episode_evidence,
+                        "repair_route": episode_repair_route,
                         "message": (
-                            f"冻结物料状态变化 macro step {macro_id}（{frozen_operation}）"
+                            f"冻结物料状态变化 macro step {macro_id!r}（{frozen_operation}）"
                             "必须在签发 feasibility certificate 前逐类由真源支持"
-                            "的 Device workstation 覆盖；物料状态类别还必须有"
-                            " state_change transition 双向绑定。"
+                            "的 Device workstation 覆盖；物料处理类别还必须按"
+                            " Research 显式 relation.event_kind 双向绑定 transition。"
                             "不能只覆盖复合操作中的一类、只拿取原料或伪造"
                             " process_same_material。缺失类别="
                             f"{missing_categories}；逐类允许工作站="
@@ -13593,7 +18439,7 @@ class SingleDeviceAgent:
 
     def _semantically_classified_quantity_requirement(
         self,
-        macro_id: str,
+        macro_id: Any,
         requirement_index: int,
         requirement: Dict[str, Any],
     ) -> Dict[str, Any]:
@@ -13677,6 +18523,144 @@ class SingleDeviceAgent:
 
         return walk(payload)
 
+    def _current_workstation_capability_index(
+        self,
+        state: SingleDeviceAgentState,
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        """Load the complete capability projection for the frozen Skill tree.
+
+        The material-operation resolver needs the full index document, not a
+        station-name map.  Rebuild a stale projection in memory from the exact
+        truth root used by this Device run, then bind the resulting decisions
+        to ``state.device_truth_sha256``.  A changed or unreadable source fails
+        closed; it never falls back to operation names or prose matching.
+        """
+
+        try:
+            self._assert_workstation_snapshot_current(state)
+            from agent_skills.capabilities import load_current_capability_index
+
+            index_path = chem_resources_root() / "workstation_capability_index.json"
+            source_root = self._workstation_loader.truth_source_root()
+            document = load_current_capability_index(
+                index_path,
+                source=source_root,
+            )
+        except Exception as exc:
+            return {}, [
+                {
+                    "code": "workstation_capability_index_unavailable",
+                    "blocker_class": "software_unsupported",
+                    "message": (
+                        "complete workstation capability truth could not be "
+                        f"loaded for material-operation binding: {type(exc).__name__}: {exc}"
+                    ),
+                    "context": {},
+                }
+            ]
+        if not isinstance(document, dict) or not isinstance(
+            document.get("workstations"), list
+        ):
+            return {}, [
+                {
+                    "code": "workstation_capability_index_invalid",
+                    "blocker_class": "contract_invalid",
+                    "message": (
+                        "material-operation binding requires the complete "
+                        "workstation capability index object"
+                    ),
+                    "context": {},
+                }
+            ]
+        return copy.deepcopy(document), []
+
+    def _relationship_binding_authority_for_candidate(
+        self,
+        state: SingleDeviceAgentState,
+        candidate: Dict[str, Any],
+        *,
+        explicit_authority: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        """Return caller-frozen authority or resolve a fresh evidence binding.
+
+        Caller-provided authority is immutable input and is revalidated by the
+        compiler.  Normal V2 production runs instead resolve a candidate-bound
+        authority from the canonical Research package, structured Device
+        capability claims, and the complete frozen Skill projection.  Repairs
+        therefore receive a newly sealed authority for their new candidate;
+        they never reuse a stale candidate digest.
+        """
+
+        if explicit_authority is not None:
+            return copy.deepcopy(explicit_authority), []
+        if state.relationship_binding_authority_origin == "caller_frozen":
+            return copy.deepcopy(state.relationship_binding_authority), []
+
+        capability_index, index_issues = (
+            self._current_workstation_capability_index(state)
+        )
+        if index_issues:
+            state.relationship_binding_authority = {}
+            state.relationship_binding_authority_origin = "automated_resolver"
+            return {}, index_issues
+
+        package = state.research_handoff.get("research_action_package_v2")
+        index_path = (
+            chem_resources_root() / "workstation_capability_index.json"
+        ).resolve()
+        source_root = self._workstation_loader.truth_source_root().resolve()
+        evidence_sources = {
+            "research_authority": (
+                "runtime_state.research_handoff.research_action_package_v2"
+                f"#sha256={checkpoint_digest(package)}"
+            ),
+            "device_candidate": (
+                "runtime_state.device_plan_candidate"
+                "#sha256="
+                + material_relationship_compiler.candidate_binding_sha256(
+                    candidate
+                )
+            ),
+            "workstation_truth": (
+                f"{source_root}#capability_index={index_path};"
+                f"source_sha256={capability_index.get('source_digest_sha256', '')}"
+            ),
+        }
+        try:
+            authority, raw_issues = (
+                material_operation_binding.resolve_and_seal_material_operation_binding_authority(
+                    candidate,
+                    state.research_handoff,
+                    capability_index,
+                    evidence_sources=evidence_sources,
+                    workstation_truth_digest=state.device_truth_sha256,
+                    resolve_workstation=lambda name: (
+                        self._truth_workstation_code(name) or ""
+                    ),
+                )
+            )
+        except Exception as exc:
+            authority = {}
+            raw_issues = [
+                {
+                    "code": "material_operation_binding_internal_error",
+                    "blocker_class": "software_internal_error",
+                    "message": f"{type(exc).__name__}: {exc}",
+                    "context": {},
+                }
+            ]
+        issues = [
+            copy.deepcopy(dict(issue))
+            for issue in raw_issues
+            if isinstance(issue, dict)
+        ]
+        state.relationship_binding_authority_origin = "automated_resolver"
+        if issues:
+            state.relationship_binding_authority = {}
+            return {}, issues
+        state.relationship_binding_authority = copy.deepcopy(authority)
+        return copy.deepcopy(authority), []
+
     @staticmethod
     def _capability_index_workstations() -> Dict[str, Dict[str, Any]]:
         try:
@@ -13708,26 +18692,46 @@ class SingleDeviceAgent:
 
         raw_dispositions = plan_result.get("quantity_requirement_dispositions")
         dispositions = raw_dispositions if isinstance(raw_dispositions, list) else []
-        disposition_by_key: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+        disposition_by_key: Dict[
+            Tuple[Tuple[str, Any], int], List[Dict[str, Any]]
+        ] = {}
         for item in dispositions:
             if not isinstance(item, dict):
                 continue
-            macro_id = str(item.get("source_macro_step") or "").strip()
+            try:
+                disposition_macro_key = macro_id_key(
+                    item.get("source_macro_step"),
+                    "quantity_requirement_dispositions.source_macro_step",
+                )
+            except MacroIdentityError:
+                continue
             index_value = item.get("requirement_index")
             if isinstance(index_value, bool) or not isinstance(index_value, int):
                 continue
-            disposition_by_key.setdefault((macro_id, index_value), []).append(item)
+            disposition_by_key.setdefault(
+                (disposition_macro_key, index_value), []
+            ).append(item)
 
         plan_steps = [
             item
             for item in plan_result.get("device_plan", []) or []
             if isinstance(item, dict)
         ]
-        plan_by_id = {
-            str(item.get("plan_step") or "").strip(): item
-            for item in plan_steps
-            if str(item.get("plan_step") or "").strip()
-        }
+        plan_by_id: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        duplicate_plan_ids: Set[Tuple[str, Any]] = set()
+        for plan_index, item in enumerate(plan_steps):
+            plan_key = self._optional_typed_id_key(
+                item.get("plan_step"),
+                f"device_plan[{plan_index}].plan_step",
+            )
+            if plan_key is None:
+                continue
+            if plan_key in plan_by_id:
+                duplicate_plan_ids.add(plan_key)
+            else:
+                plan_by_id[plan_key] = item
+        for plan_key in duplicate_plan_ids:
+            plan_by_id.pop(plan_key, None)
         truth = self._capability_index_workstations()
         findings: List[Dict[str, Any]] = []
 
@@ -13736,16 +18740,24 @@ class SingleDeviceAgent:
         ):
             if not isinstance(macro, dict):
                 continue
-            macro_id = str(
-                macro.get("步骤序号", macro.get("step", fallback_macro_id))
-            ).strip()
+            try:
+                macro_id = self._semantic_macro_id(macro, fallback_macro_id)
+                research_macro_key = macro_id_key(macro_id)
+            except MacroIdentityError as exc:
+                findings.append(
+                    {
+                        "type": "invalid_macro_id",
+                        "message": f"[{exc.code.lower()}] {exc}",
+                    }
+                )
+                continue
             requirements = macro.get("quantity_requirements")
             if not isinstance(requirements, list):
                 continue
             mapped_steps = [
                 step
                 for step in plan_steps
-                if macro_id in self._source_macro_step_ids(step)
+                if research_macro_key in self._source_macro_keys(step)
             ]
             for requirement_index, requirement in enumerate(requirements):
                 if not isinstance(requirement, dict):
@@ -13755,7 +18767,9 @@ class SingleDeviceAgent:
                 )
                 if not self._device_adaptable_target(requirement):
                     continue
-                matches = disposition_by_key.get((macro_id, requirement_index), [])
+                matches = disposition_by_key.get(
+                    (research_macro_key, requirement_index), []
+                )
                 if len(matches) != 1:
                     findings.append(
                         {
@@ -13789,8 +18803,15 @@ class SingleDeviceAgent:
                     )
                     continue
                 if decision == "bind_skill_setpoint":
-                    plan_step_id = str(disposition.get("plan_step") or "").strip()
-                    plan_step = plan_by_id.get(plan_step_id)
+                    plan_step_id = self._optional_typed_id_key(
+                        disposition.get("plan_step"),
+                        "quantity_requirement_dispositions.plan_step",
+                    )
+                    plan_step = (
+                        plan_by_id.get(plan_step_id)
+                        if plan_step_id is not None
+                        else None
+                    )
                     if plan_step is None or plan_step not in mapped_steps:
                         findings.append(
                             {
@@ -13911,11 +18932,7 @@ class SingleDeviceAgent:
                     if decision == "replace_with_whole_batch":
                         whole_batch_bound = any(
                             str(batch.get("quantity_mode") or "") == "whole_batch"
-                            and macro_id
-                            in {
-                                str(value).strip()
-                                for value in batch.get("source_macro_steps", []) or []
-                            }
+                            and research_macro_key in self._source_macro_keys(batch)
                             for batch in plan_result.get("batch_plan", []) or []
                             if isinstance(batch, dict)
                         )
@@ -13963,8 +18980,15 @@ class SingleDeviceAgent:
                             }
                         )
                 elif decision == "request_runtime_measurement":
-                    plan_step_id = str(disposition.get("plan_step") or "").strip()
-                    plan_step = plan_by_id.get(plan_step_id)
+                    plan_step_id = self._optional_typed_id_key(
+                        disposition.get("plan_step"),
+                        "quantity_requirement_dispositions.plan_step",
+                    )
+                    plan_step = (
+                        plan_by_id.get(plan_step_id)
+                        if plan_step_id is not None
+                        else None
+                    )
                     station_code = self._truth_workstation_code(
                         plan_step.get("workstation") if plan_step else ""
                     )
@@ -13978,15 +19002,31 @@ class SingleDeviceAgent:
                         for report in operation.get("reported_measurements", []) or []
                         if str(report).strip()
                     ]
-                    if plan_step not in mapped_steps or not reports:
+                    if plan_step not in mapped_steps:
                         findings.append(
                             {
                                 "type": "invalid_execution_quantity_runtime_measurement",
+                                "blocker_class": "plan_missing_operation",
                                 "source_macro_steps": [macro_id],
                                 "requirement_index": requirement_index,
                                 "message": (
                                     f"执行目标 {macro_id}[{requirement_index}] 请求运行时测量，"
-                                    "但绑定 operation 的 Skill 未声明 Report 数值反馈。"
+                                    "但没有绑定到实现该要求的 Device operation。"
+                                ),
+                            }
+                        )
+                    elif not reports:
+                        findings.append(
+                            {
+                                "type": "invalid_execution_quantity_runtime_measurement",
+                                "blocker_class": "runtime_guard_missing",
+                                "source_macro_steps": [macro_id],
+                                "requirement_index": requirement_index,
+                                "plan_step": copy.deepcopy(plan_step.get("plan_step")),
+                                "message": (
+                                    f"执行目标 {macro_id}[{requirement_index}] 请求运行时测量，"
+                                    "但绑定 operation 的 Skill 未声明 Report 数值反馈，"
+                                    "不能把待测量当成已具备运行时保障。"
                                 ),
                             }
                         )
@@ -14009,6 +19049,9 @@ class SingleDeviceAgent:
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
+        *,
+        relationship_binding_authority: Optional[Dict[str, Any]] = None,
+        workstation_truth_digest: str = "",
     ) -> List[Dict[str, Any]]:
         """Return the complete, de-duplicated audit for the latest candidate."""
         plan_view = {
@@ -14016,7 +19059,120 @@ class SingleDeviceAgent:
             "steps": plan_result.get("device_plan", []),
             "quantity_adjustments": plan_result.get("quantity_adjustments", []),
         }
-        findings = audit_offline_handoffs(plan_view)
+        package = state.research_handoff.get("research_action_package_v2")
+        package_steps = package.get("macro_steps") if isinstance(package, dict) else None
+        uses_explicit_material_contract = bool(
+            isinstance(package_steps, list)
+            and any(
+                isinstance(step, dict)
+                and isinstance(step.get("material_contract_status"), dict)
+                for step in package_steps
+            )
+        )
+        # Compiler diagnostics are candidate-specific.  Do not let issues from
+        # a prior draft remain sticky after a repair has changed the graph.
+        # Legacy binding-ledger findings remain state-backed because that
+        # constructor is disabled whenever an explicit Research contract exists.
+        current_binding_issues = copy.deepcopy(state.binding_ledger_issues)
+        if uses_explicit_material_contract:
+            active_binding_authority, resolver_issues = (
+                self._relationship_binding_authority_for_candidate(
+                    state,
+                    plan_result,
+                    explicit_authority=relationship_binding_authority,
+                )
+            )
+            if resolver_issues:
+                current_binding_issues = copy.deepcopy(resolver_issues)
+            else:
+                capability_index: Optional[Dict[str, Any]] = None
+                capability_index_issues: List[Dict[str, Any]] = []
+                if (
+                    active_binding_authority.get("authoring_mode")
+                    == "automated_evidence_bound"
+                ):
+                    capability_index, capability_index_issues = (
+                        self._current_workstation_capability_index(state)
+                    )
+                if capability_index_issues:
+                    current_binding_issues = copy.deepcopy(
+                        capability_index_issues
+                    )
+                else:
+                    try:
+                        compiled_candidate, compile_issues, compile_applied = (
+                            material_relationship_compiler.compile_material_relationships(
+                                plan_result,
+                                state.research_handoff,
+                                relationship_bindings=active_binding_authority,
+                                resolve_workstation=lambda name: (
+                                    self._truth_workstation_code(name) or ""
+                                ),
+                                workstation_truth_digest=(
+                                    str(workstation_truth_digest or "").strip()
+                                    or str(state.device_truth_sha256 or "").strip()
+                                ),
+                                workstation_capability_index=capability_index,
+                            )
+                        )
+                        current_binding_issues = [
+                            dict(issue) for issue in compile_issues
+                        ]
+                        if (
+                            not current_binding_issues
+                            and (
+                                compiled_candidate != plan_result
+                                or bool(compile_applied)
+                            )
+                        ):
+                            current_binding_issues = [
+                                {
+                                    "code": (
+                                        "material_relationship_compiler_not_at_fixed_point"
+                                    ),
+                                    "blocker_class": "plan_binding_invalid",
+                                    "message": (
+                                        "the audited Device Plan is not the exact "
+                                        "fixed-point output of the material relationship "
+                                        "compiler"
+                                    ),
+                                    "context": {
+                                        "applied": copy.deepcopy(compile_applied),
+                                        "candidate_sha256": checkpoint_digest(
+                                            plan_result
+                                        ),
+                                        "compiled_sha256": checkpoint_digest(
+                                            compiled_candidate
+                                        ),
+                                    },
+                                }
+                            ]
+                    except Exception as exc:
+                        current_binding_issues = [
+                            {
+                                "code": "material_relationship_compiler_internal_error",
+                                "blocker_class": "software_internal_error",
+                                "message": f"{type(exc).__name__}: {exc}",
+                                "context": {},
+                            }
+                        ]
+            if relationship_binding_authority is None:
+                state.binding_ledger_issues = copy.deepcopy(
+                    current_binding_issues
+                )
+        findings = [
+            {
+                "type": "binding_ledger_unresolved",
+                "blocker_class": str(
+                    issue.get("blocker_class") or "contract_invalid"
+                ),
+                "message": str(issue.get("message") or issue.get("code") or issue),
+                "details": copy.deepcopy(issue),
+            }
+            for issue in current_binding_issues
+            if isinstance(issue, dict)
+        ]
+        findings += audit_offline_handoffs(plan_view)
         findings += self._external_return_wait_findings(state.research_handoff, plan_result)
         findings += audit_connected_sample_container_chain(plan_view)
         findings += scan_manual_material_operations(plan_view, "")
@@ -14062,13 +19218,23 @@ class SingleDeviceAgent:
             for message in self._forbidden_plan_change_claims(plan_result)
         ]
         unique: List[Dict[str, Any]] = []
-        seen: Set[Tuple[str, str]] = set()
+        seen: Set[Tuple[str, ...]] = set()
         for finding in findings:
             if not isinstance(finding, dict):
                 continue
             normalized = copy.deepcopy(finding)
             message = str(normalized.get("message", normalized))
-            key = (str(normalized.get("type", "plan_level_finding")), message)
+            finding_type = str(normalized.get("type", "plan_level_finding"))
+            finding_id = str(normalized.get("finding_id", "") or "").strip()
+            # Transfer findings can share prose and sample_id while referring
+            # to different source/destination step pairs.  Prefer the
+            # auditor's structured identity so deduplication never erases an
+            # independently actionable pair.
+            key = (
+                (finding_type, "finding_id", finding_id)
+                if finding_id
+                else (finding_type, "message", message)
+            )
             if key in seen:
                 continue
             seen.add(key)
@@ -14078,20 +19244,24 @@ class SingleDeviceAgent:
 
     @staticmethod
     def _repair_findings_are_patchable(findings: List[Dict[str, Any]]) -> bool:
-        """Only recipe-contract findings with field-level details go patch-first.
+        """Return whether any finding can enter deterministic repair routing.
 
-        Anything else (route gaps, matrix drift, omissions, ...) needs
-        judgement and stays on the controlled regeneration path.
+        This is only an eligibility check.  The plan-repair dispatcher still
+        verifies each item's handler, evidence and write scope before emitting
+        a patch.  Unrelated findings remain open and continue to block Plan
+        acceptance.
         """
-        if not findings:
-            return False
         for finding in findings:
-            if finding.get("type") != "missing_concrete_recipe_evidence":
-                return False
-            details = finding.get("details") or {}
-            if not details.get("checks"):
-                return False
-        return True
+            if finding.get("type") == "missing_concrete_recipe_evidence":
+                return True
+            if finding.get("type") == "frozen_material_transition_coverage_missing":
+                route = finding.get("repair_route")
+                if (
+                    isinstance(route, dict)
+                    and route.get("status") == "deterministic_patch"
+                ):
+                    return True
+        return False
 
     def _run_patch_first_repair(
         self,
@@ -14101,14 +19271,17 @@ class SingleDeviceAgent:
         """Try the persistent, permission-constrained local patch repair.
 
         The repair case (contracts, baseline, draft, append-only log) is
-        program-owned and never model-writable.  On success the promoted
-        draft is returned; on any controlled stop this returns None and the
-        caller falls back to the full regeneration loop.
+        program-owned and never model-writable.  The complete result is
+        returned even after a partial promotion so the caller can preserve
+        verified local progress while keeping the Plan blocked.
         """
         try:
-            import plan_repair
-        except ImportError:  # pragma: no cover - packaging fallback
-            return None
+            from . import plan_repair
+        except ImportError:  # script/top-level-module fallback
+            try:
+                import plan_repair
+            except ImportError:  # pragma: no cover - optional packaging boundary
+                return None
         case_dir = None
         checkpoint_store = getattr(self, "_checkpoint_store", None)
         if checkpoint_store is not None:
@@ -14117,37 +19290,1078 @@ class SingleDeviceAgent:
                 / "device_repair_cases"
                 / str(state.exp_id)
             )
-        auditor = lambda candidate: self._plan_level_findings(state, candidate)
+        frozen_auditor_authority = (
+            state.relationship_binding_authority
+            if state.relationship_binding_authority_origin == "caller_frozen"
+            else None
+        )
+        auditor = lambda candidate: self._plan_level_findings(
+            state,
+            candidate,
+            relationship_binding_authority=frozen_auditor_authority,
+            workstation_truth_digest=state.device_truth_sha256,
+        )
+        audit_context_digest = plan_repair.full_plan_audit_context_digest(
+            state.to_dict(),
+            contract_version=state.contract_version,
+            active_semantic_analysis=copy.deepcopy(
+                self._active_semantic_analysis
+            ),
+        )
+        repair_capability_index: Optional[Dict[str, Any]] = None
+        if (
+            state.relationship_binding_authority.get("authoring_mode")
+            == "automated_evidence_bound"
+        ):
+            repair_capability_index, repair_capability_index_issues = (
+                self._current_workstation_capability_index(state)
+            )
+            if repair_capability_index_issues:
+                repair_capability_index = None
         result = plan_repair.run_repair_loop(
             plan_result,
             auditor,
             case_dir=case_dir,
             patch_limit=DEFAULT_STAGE1_PATCH_REPAIR_LIMIT,
+            research_authority=(
+                state.research_handoff
+                if isinstance(
+                    state.research_handoff.get("research_action_package_v2"),
+                    dict,
+                )
+                else None
+            ),
+            relationship_bindings=state.relationship_binding_authority,
+            resolve_workstation=self._truth_workstation_code,
+            workstation_truth_digest=state.device_truth_sha256,
+            workstation_capability_index=repair_capability_index,
+            full_plan_audit_context_digest=audit_context_digest,
         )
+        patches_used = int(result["case"]["budgets"].get("patches_used", 0))
+        draft_version = int(
+            (result["case"].get("draft") or {}).get("version", 1) or 1
+        )
+        promoted_changes = draft_version > 1
         if result["status"] == "accepted":
             state.add_log(
                 "Stage-1 patch-first repair accepted the candidate after "
-                f"{result['case']['budgets']['patches_used']} patch(es); "
+                f"{patches_used} patch attempt(s); "
                 f"case_id={result['case']['case_id']}"
             )
-            return result["final_candidate"]
-        state.add_log(
-            "Stage-1 patch-first repair stopped "
-            f"({result['stop_reason']}); falling back to full regeneration; "
-            f"case_id={result['case']['case_id']}"
+        else:
+            state.add_log(
+                "Stage-1 patch-first repair stopped "
+                f"({result['stop_reason']}); patch_attempts={patches_used}; "
+                f"promoted_changes={promoted_changes}; "
+                "full regeneration requires explicit authorization; "
+                f"case_id={result['case']['case_id']}"
+            )
+        return result
+
+    @staticmethod
+    def _plan_regen_authorized() -> bool:
+        """Full-candidate regeneration is an explicit escalation, never a default.
+
+        A rejected plan-level audit no longer implies "rebuild from chunk 1".
+        Set CHEM_DEVICE_ALLOW_PLAN_REGEN=1 to authorize the legacy
+        whole-candidate regeneration loop for a controlled comparison run.
+        """
+        return os.getenv("CHEM_DEVICE_ALLOW_PLAN_REGEN", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
+    def _missing_operation_repair_scope(
+        self,
+        state: "SingleDeviceAgentState",
+        findings: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Authorize exact missing roles or exact-step container assignments.
+
+        Error location is not repair authority.  The only writable scopes are
+        deterministic resolver diagnostics backed by the accepted Research
+        contract: either one missing ``source_operation_ref + role_id +
+        capability_id`` claim, or named logical containers on the exact Device
+        implementation steps identified by the resolver.  Ambiguous claims,
+        invalid Skill truth, quantities and unrelated findings remain blocked.
+        """
+
+        package = state.research_handoff.get("research_action_package_v2")
+        raw_macros = package.get("macro_steps") if isinstance(package, dict) else None
+        if not isinstance(raw_macros, list):
+            return None
+
+        relation_context: Dict[str, Dict[str, Any]] = {}
+        for macro_index, macro in enumerate(raw_macros):
+            if not isinstance(macro, dict):
+                continue
+            try:
+                macro_id = semantic_macro_id(
+                    macro,
+                    f"research_action_package_v2.macro_steps[{macro_index}]",
+                    required=True,
+                )
+                macro_key = macro_id_key(macro_id)
+            except MacroIdentityError:
+                return None
+            segments = {
+                str(segment.get("segment_id") or "").strip(): segment
+                for segment in macro.get("operation_segments") or []
+                if isinstance(segment, dict)
+                and str(segment.get("segment_id") or "").strip()
+            }
+            for relation in macro.get("material_relations") or []:
+                if not isinstance(relation, dict):
+                    continue
+                relationship_id = str(relation.get("relation_id") or "").strip()
+                if not relationship_id or relationship_id in relation_context:
+                    return None
+                source_operation_ref = str(
+                    relation.get("source_operation_ref") or ""
+                ).strip()
+                segment = segments.get(source_operation_ref)
+                implementation = (
+                    segment.get("device_implementation")
+                    if isinstance(segment, dict)
+                    else None
+                )
+                role_capabilities = {
+                    str(role.get("role_id") or "").strip(): str(
+                        role.get("capability_id") or ""
+                    ).strip()
+                    for role in (
+                        implementation.get("ordered_steps")
+                        if isinstance(implementation, dict)
+                        and isinstance(implementation.get("ordered_steps"), list)
+                        else []
+                    )
+                    if isinstance(role, dict)
+                    and str(role.get("role_id") or "").strip()
+                    and str(role.get("capability_id") or "").strip()
+                }
+                relation_context[relationship_id] = {
+                    "macro_id": copy.deepcopy(macro_id),
+                    "macro_key": macro_key,
+                    "logical_container_ids": sorted(
+                        {
+                            str(value).strip()
+                            for value in relation.get("logical_container_ids", []) or []
+                            if isinstance(value, str) and value.strip()
+                        }
+                    ),
+                    "source_operation_ref": source_operation_ref,
+                    "role_capabilities": role_capabilities,
+                }
+
+        operation_obligations: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        container_obligations: Dict[
+            Tuple[str, Tuple[str, Any], str], Dict[str, Any]
+        ] = {}
+        coverage_findings: List[Dict[str, Any]] = []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                return None
+            if finding.get("type") == "binding_ledger_unresolved":
+                details = finding.get("details")
+                context = details.get("context") if isinstance(details, dict) else None
+                if not isinstance(details, dict) or not isinstance(context, dict):
+                    return None
+                code = str(details.get("code") or "").strip()
+                relationship_id = str(
+                    context.get("relationship_id") or ""
+                ).strip()
+                relation = relation_context.get(relationship_id)
+                if not relationship_id or relation is None:
+                    return None
+
+                if code == "relationship_operation_role_unresolved":
+                    role_id = str(context.get("role_id") or "").strip()
+                    capability_id = str(
+                        context.get("capability_id") or ""
+                    ).strip()
+                    if not (
+                        details.get("blocker_class") == "plan_missing_operation"
+                        and context.get("repair_authority")
+                        == "research_device_implementation"
+                        and context.get("candidate_count") == 0
+                        and context.get("verified_count") == 0
+                        and not str(
+                            context.get("skill_operation_name") or ""
+                        ).strip()
+                        and role_id
+                        and capability_id
+                        and str(
+                            context.get("source_operation_ref") or ""
+                        ).strip()
+                        == relation["source_operation_ref"]
+                        and relation["role_capabilities"].get(role_id)
+                        == capability_id
+                    ):
+                        return None
+                    key = (
+                        relationship_id,
+                        relation["source_operation_ref"],
+                        role_id,
+                    )
+                    obligation = {
+                        **{
+                            field: copy.deepcopy(value)
+                            for field, value in relation.items()
+                            if field != "role_capabilities"
+                        },
+                        "repair_kind": "missing_operation",
+                        "relationship_id": relationship_id,
+                        "role_id": role_id,
+                        "capability_id": capability_id,
+                    }
+                    previous = operation_obligations.get(key)
+                    if previous is not None and previous != obligation:
+                        return None
+                    operation_obligations[key] = obligation
+                    continue
+
+                if code == "relationship_logical_container_binding_missing":
+                    missing_logical_ids = context.get("logical_container_ids")
+                    implementation_steps = context.get("implementation_steps")
+                    if not (
+                        details.get("blocker_class") == "plan_binding_missing"
+                        and context.get("repair_authority")
+                        == "research_logical_container_assignment"
+                        and str(
+                            context.get("source_operation_ref") or ""
+                        ).strip()
+                        == relation["source_operation_ref"]
+                        and isinstance(missing_logical_ids, list)
+                        and bool(missing_logical_ids)
+                        and all(
+                            isinstance(value, str) and value.strip()
+                            for value in missing_logical_ids
+                        )
+                        and set(missing_logical_ids).issubset(
+                            set(relation["logical_container_ids"])
+                        )
+                        and isinstance(implementation_steps, list)
+                        and bool(implementation_steps)
+                    ):
+                        return None
+                    for plan_step in implementation_steps:
+                        try:
+                            plan_step_key = macro_id_key(
+                                plan_step,
+                                "relationship_logical_container_binding_missing.implementation_steps",
+                            )
+                        except MacroIdentityError:
+                            return None
+                        for logical_id in sorted(set(missing_logical_ids)):
+                            key = (
+                                relationship_id,
+                                plan_step_key,
+                                logical_id,
+                            )
+                            obligation = {
+                                "repair_kind": "logical_container_assignment",
+                                "relationship_id": relationship_id,
+                                "macro_id": copy.deepcopy(relation["macro_id"]),
+                                "macro_key": relation["macro_key"],
+                                "source_operation_ref": relation[
+                                    "source_operation_ref"
+                                ],
+                                "plan_step": copy.deepcopy(plan_step),
+                                "plan_step_key": plan_step_key,
+                                "logical_container_ids": [logical_id],
+                            }
+                            previous = container_obligations.get(key)
+                            if previous is not None and previous != obligation:
+                                return None
+                            container_obligations[key] = obligation
+                    continue
+
+                return None
+            if finding.get("type") == "frozen_material_transition_coverage_missing":
+                coverage_findings.append(finding)
+                continue
+            return None
+
+        if not operation_obligations and not container_obligations:
+            return None
+        authorized_relationships = {
+            *(
+                relationship_id
+                for relationship_id, _, _ in operation_obligations
+            ),
+            *(
+                relationship_id
+                for relationship_id, _, _ in container_obligations
+            ),
+        }
+        for finding in coverage_findings:
+            missing = finding.get("missing_material_relation_ids")
+            route = finding.get("repair_route")
+            blocker_classes = set(finding.get("blocker_classes") or [])
+            if not isinstance(missing, list) or not missing or not isinstance(route, dict):
+                return None
+            # The resolver is atomic: one missing role withholds the whole
+            # authority, so the downstream coverage audit may list otherwise
+            # resolvable Research relations too.  They are safe consequences
+            # only while every resolver diagnostic above is an authorized
+            # missing-role/container record; any ambiguous/invalid truth issue would
+            # already have made this scope return ``None``.
+            if not {str(value) for value in missing}.issubset(
+                set(relation_context)
+            ):
+                return None
+            if route.get("status") not in {
+                "plan_missing_operation",
+                "plan_binding_required",
+            }:
+                return None
+            if blocker_classes and not blocker_classes.issubset(
+                {"plan_missing_operation", "plan_binding_missing"}
+            ):
+                return None
+
+        ordered_operations = sorted(
+            operation_obligations.values(),
+            key=lambda item: (
+                str(item["macro_key"]),
+                item["relationship_id"],
+                item["source_operation_ref"],
+                item["role_id"],
+            ),
         )
-        return None
+        ordered_containers = sorted(
+            container_obligations.values(),
+            key=lambda item: (
+                str(item["macro_key"]),
+                item["relationship_id"],
+                str(item["plan_step_key"]),
+                item["logical_container_ids"][0],
+            ),
+        )
+        return {
+            "repair_authority": (
+                "research_device_implementation_and_logical_container_assignment"
+            ),
+            "obligations": ordered_operations + ordered_containers,
+            "operation_obligations": ordered_operations,
+            "logical_container_obligations": ordered_containers,
+            "relationship_ids": sorted(authorized_relationships),
+        }
+
+    @staticmethod
+    def _operation_claim_key(
+        claim: Any,
+    ) -> Optional[Tuple[str, str, str, str]]:
+        if not isinstance(claim, dict):
+            return None
+        source_operation_ref = str(
+            claim.get("source_operation_ref") or ""
+        ).strip()
+        role_id = str(claim.get("role_id") or "").strip()
+        capability_id = str(claim.get("capability_id") or "").strip()
+        operation_name = str(claim.get("skill_operation_name") or "").strip()
+        if (
+            not source_operation_ref
+            or not role_id
+            or not capability_id
+            or not operation_name
+        ):
+            return None
+        return source_operation_ref, role_id, capability_id, operation_name
+
+    def _apply_missing_operation_repair_candidate(
+        self,
+        state: "SingleDeviceAgentState",
+        current: Dict[str, Any],
+        proposed: Dict[str, Any],
+        scope: Dict[str, Any],
+    ) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+        """Project a model proposal into the authorized Device-Plan write set.
+
+        Existing steps are immutable except for adding exact structured
+        capability claims and logical-container assignments.  New steps must
+        belong only to an authorized Research macro and may claim only its
+        missing roles.  Every other top-level field remains byte-for-byte from
+        ``current``; resolver + full Plan audit decide whether the projected
+        candidate is actually acceptable.
+        """
+
+        current_steps = current.get("device_plan")
+        proposed_steps = proposed.get("device_plan")
+        if not isinstance(current_steps, list) or not isinstance(proposed_steps, list):
+            return None, ["current and proposed device_plan must both be arrays"]
+        if any(not isinstance(step, dict) for step in current_steps + proposed_steps):
+            return None, ["device_plan contains a non-object step"]
+
+        allowed_by_macro: Dict[
+            Tuple[str, Any], Set[Tuple[str, str, str]]
+        ] = {}
+        allowed_logical_by_step: Dict[Tuple[str, Any], Set[str]] = {}
+        for obligation in scope.get("operation_obligations") or []:
+            macro_key = obligation.get("macro_key")
+            if not isinstance(macro_key, tuple):
+                return None, ["repair scope contains an invalid macro identity"]
+            allowed_by_macro.setdefault(macro_key, set()).add(
+                (
+                    obligation["source_operation_ref"],
+                    obligation["role_id"],
+                    obligation["capability_id"],
+                )
+            )
+        for obligation in scope.get("logical_container_obligations") or []:
+            plan_step_key = obligation.get("plan_step_key")
+            if not isinstance(plan_step_key, tuple):
+                return None, ["repair scope contains an invalid plan-step identity"]
+            allowed_logical_by_step.setdefault(plan_step_key, set()).update(
+                obligation.get("logical_container_ids") or []
+            )
+
+        def index_steps(
+            steps: List[Dict[str, Any]], label: str
+        ) -> Tuple[Dict[Tuple[str, Any], Dict[str, Any]], List[Tuple[str, Any]], List[str]]:
+            indexed: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+            order: List[Tuple[str, Any]] = []
+            errors: List[str] = []
+            for index, step in enumerate(steps):
+                key = self._optional_typed_id_key(
+                    step.get("plan_step"), f"{label}[{index}].plan_step"
+                )
+                if key is None:
+                    errors.append(f"{label}[{index}] has an invalid plan_step")
+                    continue
+                if key in indexed:
+                    errors.append(f"{label} repeats plan_step={step.get('plan_step')!r}")
+                    continue
+                indexed[key] = step
+                order.append(key)
+            return indexed, order, errors
+
+        current_by_key, current_order, errors = index_steps(
+            current_steps, "current.device_plan"
+        )
+        proposed_by_key, proposed_order, proposed_errors = index_steps(
+            proposed_steps, "proposed.device_plan"
+        )
+        errors.extend(proposed_errors)
+        if errors:
+            return None, errors
+        if any(key not in proposed_by_key for key in current_order):
+            return None, ["missing-operation repair may not delete an existing plan step"]
+        if [key for key in proposed_order if key in current_by_key] != current_order:
+            return None, [
+                "missing-operation repair may insert steps but may not reorder existing plan steps"
+            ]
+
+        changed = False
+        projected_steps: List[Dict[str, Any]] = []
+        compiler_fields = {
+            "research_material_relation_ids",
+            "logical_container_bindings",
+            "material_event_kind",
+            "material_transition_ids",
+            "runtime_measurement_obligation_ids",
+        }
+        for key in proposed_order:
+            proposal = proposed_by_key[key]
+            try:
+                proposal_sources = extract_source_macro_ids(
+                    proposal, "proposed.device_plan", required=True
+                )
+                proposal_source_keys = {
+                    macro_id_key(value, "proposed.device_plan.source_macro_steps")
+                    for value in proposal_sources
+                }
+            except MacroIdentityError as exc:
+                return None, [str(exc)]
+            allowed_claims = {
+                item
+                for source_key in proposal_source_keys
+                for item in allowed_by_macro.get(source_key, set())
+            }
+            allowed_logical_ids = allowed_logical_by_step.get(key, set())
+
+            raw_claims = proposal.get("operation_capabilities")
+            proposed_claims = raw_claims if isinstance(raw_claims, list) else []
+            claim_keys = [self._operation_claim_key(claim) for claim in proposed_claims]
+            if any(claim is None for claim in claim_keys):
+                return None, [
+                    f"plan_step={proposal.get('plan_step')!r} has an incomplete operation_capabilities claim"
+                ]
+
+            raw_assignments = proposal.get("logical_container_assignments")
+            proposed_assignments = (
+                raw_assignments if isinstance(raw_assignments, list) else []
+            )
+            if raw_assignments is not None and not isinstance(raw_assignments, list):
+                return None, [
+                    f"plan_step={proposal.get('plan_step')!r} logical_container_assignments must be an array"
+                ]
+
+            if key in current_by_key:
+                base = copy.deepcopy(current_by_key[key])
+                try:
+                    current_source_keys = {
+                        macro_id_key(value, "current.device_plan.source_macro_steps")
+                        for value in extract_source_macro_ids(
+                            base, "current.device_plan", required=True
+                        )
+                    }
+                except MacroIdentityError as exc:
+                    return None, [str(exc)]
+                if proposal_source_keys != current_source_keys:
+                    return None, [
+                        f"plan_step={proposal.get('plan_step')!r} changed its frozen Research source"
+                    ]
+
+                old_claims = base.get("operation_capabilities")
+                old_claim_list = old_claims if isinstance(old_claims, list) else []
+                old_claim_keys = [
+                    self._operation_claim_key(claim) for claim in old_claim_list
+                ]
+                if any(claim is None for claim in old_claim_keys):
+                    return None, [
+                        f"plan_step={proposal.get('plan_step')!r} has invalid pre-existing capability claims"
+                    ]
+                if not set(old_claim_keys).issubset(set(claim_keys)):
+                    return None, [
+                        f"plan_step={proposal.get('plan_step')!r} may not delete or rewrite an existing capability claim"
+                    ]
+                added_claims = set(claim_keys) - set(old_claim_keys)
+                if any(
+                    (source_ref, role, capability) not in allowed_claims
+                    for source_ref, role, capability, _ in added_claims
+                ):
+                    return None, [
+                        f"plan_step={proposal.get('plan_step')!r} adds a capability outside the Research repair scope"
+                    ]
+
+                old_assignments = base.get("logical_container_assignments")
+                old_assignment_list = (
+                    old_assignments if isinstance(old_assignments, list) else []
+                )
+                old_by_logical = {
+                    str(item.get("logical_container_id") or "").strip(): item
+                    for item in old_assignment_list
+                    if isinstance(item, dict)
+                    and str(item.get("logical_container_id") or "").strip()
+                }
+                proposed_by_logical = {
+                    str(item.get("logical_container_id") or "").strip(): item
+                    for item in proposed_assignments
+                    if isinstance(item, dict)
+                    and str(item.get("logical_container_id") or "").strip()
+                }
+                if raw_assignments is not None and any(
+                    logical_id not in proposed_by_logical
+                    for logical_id in old_by_logical
+                ):
+                    return None, [
+                        f"plan_step={proposal.get('plan_step')!r} may not delete an existing logical-container assignment"
+                    ]
+                for assignment in proposed_assignments:
+                    if not isinstance(assignment, dict):
+                        return None, [
+                            f"plan_step={proposal.get('plan_step')!r} has an invalid logical-container assignment"
+                        ]
+                    logical_id = str(
+                        assignment.get("logical_container_id") or ""
+                    ).strip()
+                    if logical_id in old_by_logical:
+                        if assignment != old_by_logical[logical_id]:
+                            return None, [
+                                f"plan_step={proposal.get('plan_step')!r} rewrites an existing logical-container assignment"
+                            ]
+                    elif logical_id not in allowed_logical_ids:
+                        return None, [
+                            f"plan_step={proposal.get('plan_step')!r} adds a logical container outside the Research repair scope"
+                        ]
+                if added_claims:
+                    base["operation_capabilities"] = copy.deepcopy(
+                        proposed_claims
+                    )
+                    changed = True
+                if (
+                    raw_assignments is not None
+                    and proposed_assignments != old_assignment_list
+                ):
+                    base["logical_container_assignments"] = copy.deepcopy(
+                        proposed_assignments
+                    )
+                    changed = True
+                projected_steps.append(base)
+                continue
+
+            if not proposal_source_keys or not proposal_source_keys.issubset(
+                set(allowed_by_macro)
+            ):
+                return None, [
+                    f"new plan_step={proposal.get('plan_step')!r} is outside the authorized Research macros"
+                ]
+            if not claim_keys or any(
+                (source_ref, role, capability) not in allowed_claims
+                for source_ref, role, capability, _ in claim_keys
+            ):
+                return None, [
+                    f"new plan_step={proposal.get('plan_step')!r} does not implement only authorized capability roles"
+                ]
+            if not self._truth_workstation_code(
+                proposal.get("station_code") or proposal.get("workstation")
+            ):
+                return None, [
+                    f"new plan_step={proposal.get('plan_step')!r} does not name a truth-source workstation"
+                ]
+            for assignment in proposed_assignments:
+                logical_id = (
+                    str(assignment.get("logical_container_id") or "").strip()
+                    if isinstance(assignment, dict)
+                    else ""
+                )
+                if not logical_id or logical_id not in allowed_logical_ids:
+                    return None, [
+                        f"new plan_step={proposal.get('plan_step')!r} has a logical container outside the Research repair scope"
+                    ]
+            new_step = {
+                field: copy.deepcopy(value)
+                for field, value in proposal.items()
+                if field not in compiler_fields
+            }
+            projected_steps.append(new_step)
+            changed = True
+
+        if not changed:
+            return None, ["repair proposal made no authorized structured change"]
+        projected = copy.deepcopy(current)
+        projected["device_plan"] = projected_steps
+        return projected, []
+
+    def _plan_audit_storage_dir(
+        self, state: "SingleDeviceAgentState"
+    ) -> Optional[Path]:
+        checkpoint_store = getattr(self, "_checkpoint_store", None)
+        if checkpoint_store is None:
+            return None
+        return (
+            Path(checkpoint_store.root).parent
+            / "device_plan_audits"
+            / str(state.exp_id)
+        )
+
+    @staticmethod
+    def _plan_audit_signature(findings: List[Dict[str, Any]]) -> str:
+        # The complete structured finding is part of the audit verdict.
+        # Evidence, repair routing and severity changes must invalidate the
+        # signature even when type/message remain unchanged.
+        return checkpoint_digest(findings)
+
+    def _persist_plan_audit_record(
+        self,
+        state: "SingleDeviceAgentState",
+        candidate: Dict[str, Any],
+        findings: List[Dict[str, Any]],
+        *,
+        phase: str,
+    ) -> None:
+        """Persist the complete finding set BEFORE any repair is dispatched.
+
+        A prior quota-stop regression lost the original findings; diagnosis
+        must survive quota stops and process kills, so the record lands both
+        in runtime state and on disk
+        (atomically) at audit time.  This is a fresh audit record of the
+        current code version, never a reconstruction of historical findings.
+        """
+        normalized: List[Dict[str, Any]] = []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            item = copy.deepcopy(finding)
+            item.setdefault("rule", item.get("type", "plan_level_finding"))
+            item.setdefault("severity", "error")
+            details = item.get("details")
+            if isinstance(details, dict):
+                for key in ("path", "step_ref", "object_id", "evidence"):
+                    if key in details and key not in item:
+                        item[key] = details[key]
+            normalized.append(item)
+        signature = self._plan_audit_signature(normalized)
+        candidate_digest = checkpoint_digest(candidate)
+        plan_contract_digest = device_plan_contract_digest(candidate)
+        audit_implementation_digest = implementation_digest()
+        for existing in state.plan_audit_records:
+            if (
+                existing.get("finding_signature") == signature
+                and existing.get("candidate_digest") == candidate_digest
+                and existing.get("device_plan_contract_digest")
+                == plan_contract_digest
+                and existing.get("phase") == phase
+                and (existing.get("audit_version") or {}).get(
+                    "implementation_sha256"
+                )
+                == audit_implementation_digest
+            ):
+                return
+        checks = [
+            "material_operation_binding_resolver",
+            "binding_ledger_unresolved",
+            "audit_offline_handoffs",
+            "external_return_wait_findings",
+            "audit_connected_sample_container_chain",
+            "scan_manual_material_operations",
+            "core_chemistry_offline_handoffs",
+            "research_core_joint_capability_mapping",
+            "plan_recipe_evidence",
+            "plan_sample_matrix",
+            "quantity_requirement_disposition",
+            "frozen_material_transition_coverage",
+            "device_plan_research_alignment",
+            "declared_route_change",
+            "forbidden_plan_change_claims",
+        ]
+        if not self._active_semantic_analysis:
+            checks.append("plan_semantic_omissions")
+        record = {
+            "schema_version": 1,
+            "created_at": datetime.now().isoformat(),
+            "exp_id": state.exp_id,
+            "phase": phase,
+            "candidate_digest": candidate_digest,
+            "candidate_digest_algorithm": "sha256",
+            "candidate_digest_scope": "canonical_json_utf8_sorted_compact/v1",
+            "device_plan_contract_digest": plan_contract_digest,
+            "device_plan_contract_digest_scope": "device_plan_contract/v1",
+            "finding_signature": signature,
+            "finding_count": len(normalized),
+            "findings": normalized,
+            "checks_executed": checks,
+            "audit_version": {
+                "implementation_sha256": audit_implementation_digest,
+                "contract_version": self._contract_version,
+            },
+            "run_layer_status": "blocked" if normalized else "clean",
+        }
+        record["audit_record_digest"] = checkpoint_digest(record)
+        state.plan_audit_records.append(record)
+        state.add_log(
+            f"plan audit persisted: {len(normalized)} finding(s), "
+            f"phase={phase}, signature={signature[:12]}"
+        )
+        storage_dir = self._plan_audit_storage_dir(state)
+        if storage_dir is None:
+            return
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        sequence = len(state.plan_audit_records)
+        target = storage_dir / f"audit_{sequence:02d}_{signature[:12]}.json"
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                json.dump(record, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+    def _controlled_plan_repair_stop(
+        self,
+        state: "SingleDeviceAgentState",
+        candidate: Dict[str, Any],
+        findings: List[Dict[str, Any]],
+        reason: str,
+    ) -> Dict[str, Any]:
+        """Stop with the candidate and findings preserved; no silent rebuild.
+
+        The complete candidate stays available for the import/patch path and
+        the finding set has already been persisted by the caller.  Scientific
+        review flags are carried over from the candidate, never cleared by a
+        run-layer stop.
+        """
+        package = copy.deepcopy(candidate)
+        state.feasibility_accepted = False
+        state.feasibility_certificate = {}
+        state.accepted_device_plan_contract = {}
+        latest_audit = (
+            copy.deepcopy(state.plan_audit_records[-1])
+            if state.plan_audit_records
+            else {}
+        )
+        state.add_log(
+            f"plan-level audit blocked the candidate ({len(findings)} finding(s), "
+            f"reason={reason}); full regeneration withheld pending authorization"
+        )
+        package.update(
+            {
+                "status": "manual_required",
+                "feedback_type": "device_plan_local_repair_required",
+                "feedback_route": "device_local_patch",
+                "failure_scope": "device_plan",
+                "failure_stage": "plan_level_audit",
+                "exp_id": state.exp_id,
+                "iteration_id": state.iteration_id,
+                "workflow_id": state.workflow_id,
+                "feasibility_accepted": False,
+                "feasibility_certificate": {},
+                "workflow_txt": "",
+                "workflow_json": {},
+                "requires_scientific_review": bool(
+                    candidate.get("requires_scientific_review")
+                ),
+                "agent_mode": "single_device_agent",
+                "plan_audit_record": latest_audit,
+                "plan_audit_binding": {
+                    "scope": "device_plan_contract/v1",
+                    "digest": device_plan_contract_digest(candidate),
+                    "finding_signature": str(
+                        latest_audit.get("finding_signature") or ""
+                    ),
+                    "phase": str(latest_audit.get("phase") or ""),
+                },
+                "error_package": {
+                    "type": "device_plan_audit_blocked",
+                    "assessment_source": (
+                        "deterministic_complete_workstation_joint_capability_audit"
+                    ),
+                    "feedback_route": "device_local_patch",
+                    "failure_scope": "device_plan",
+                    "stop_reason": reason,
+                    "blocking_constraints": [
+                        str(finding.get("message", finding)) for finding in findings
+                    ],
+                    "structured_errors": copy.deepcopy(findings),
+                    "regen_authorization": "CHEM_DEVICE_ALLOW_PLAN_REGEN=1",
+                    "message": (
+                        "计划级审计未通过；候选与完整 findings 已持久化。默认不再"
+                        "全量重建：补丁类 finding 走局部补丁通道，语义/路线类保持"
+                        "阻塞，待授权后处理。"
+                    ),
+                },
+            }
+        )
+        return package
+
+    def _ensure_binding_ledger_filled(
+        self,
+        state: SingleDeviceAgentState,
+        candidate: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """binding-ledger/v1 generation-path hook (identity-contract L5).
+
+        Conservatively fill the batch/transition layer from the candidate's
+        own frozen evidence (steps, containers, identity references) before
+        the plan audit.  Fill-only and all-or-nothing: any constructor issue
+        or exception leaves the candidate untouched (no half-built ledger);
+        an already-ledgered candidate is returned unchanged (idempotent).
+        """
+        package = state.research_handoff.get("research_action_package_v2")
+        package_steps = (
+            package.get("macro_steps") if isinstance(package, dict) else None
+        )
+        # An explicit Research material contract is authoritative even when a
+        # dimension is unresolved.  Never fall back to the legacy category/
+        # name-driven ledger builder in that case: unresolved must remain a
+        # visible stop, not become an inferred graph.
+        if isinstance(package_steps, list) and any(
+            isinstance(step, dict)
+            and isinstance(step.get("material_contract_status"), dict)
+            for step in package_steps
+        ):
+            return candidate
+        state.binding_ledger_issues = []
+        if not self._active_semantic_analysis:
+            return candidate
+        if not isinstance(candidate.get("device_plan"), list) or not candidate[
+            "device_plan"
+        ]:
+            return candidate
+        frozen_sample_id, frozen_group_id, binding_issues = (
+            binding_ledger.resolve_frozen_sample_binding(state.research_handoff)
+        )
+        if binding_issues or frozen_sample_id is None:
+            state.binding_ledger_issues = copy.deepcopy(
+                [dict(issue) for issue in binding_issues]
+            )
+            state.add_log(
+                "binding ledger fill blocked by structured sample/group binding: "
+                f"{len(state.binding_ledger_issues)} issue(s)"
+            )
+            return candidate
+
+        def _category(station_name: str) -> Optional[str]:
+            code = self._truth_workstation_code(station_name)
+            if not code:
+                return None
+            for category in (
+                "reaction",
+                "drying",
+                "calcination",
+                "purification",
+                "liquid_handling",
+                "stirring",
+                "liquid_pouring",
+                "ultrasonic_liquid_handling",
+                "ultrasonic_dispersion",
+            ):
+                if code in self._stations_for_semantic_category(category):
+                    return category
+            return None
+
+        try:
+            updated, issues, applied = binding_ledger.ensure_binding_ledger(
+                candidate,
+                state.research_handoff,
+                self._active_semantic_analysis,
+                category_of_workstation=_category,
+                frozen_sample_id=frozen_sample_id,
+                frozen_group_id=frozen_group_id,
+            )
+        except Exception as exc:  # conservative: the hook never breaks generation
+            state.binding_ledger_issues = [
+                {
+                    "code": "binding_ledger_internal_error",
+                    "message": (
+                        "binding ledger construction failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                }
+            ]
+            return candidate
+        apply_failures = [
+            item
+            for item in applied
+            if item.startswith("conflict:") or item.startswith("error:")
+        ]
+        if issues or apply_failures:
+            state.binding_ledger_issues = copy.deepcopy(
+                [dict(issue) for issue in issues]
+            )
+            if apply_failures and not any(
+                issue.get("code") == "binding_ledger_apply_conflict"
+                for issue in state.binding_ledger_issues
+            ):
+                state.binding_ledger_issues.append(
+                    {
+                        "code": "binding_ledger_apply_conflict",
+                        "message": "binding ledger guarded apply detected conflicting state",
+                        "context": {"failures": apply_failures},
+                    }
+                )
+            state.add_log(
+                "binding ledger fill blocked: "
+                f"{len(state.binding_ledger_issues)} issue(s); candidate unchanged"
+            )
+            return candidate
+        return updated
+
+    def _ensure_material_relationships_compiled(
+        self,
+        state: SingleDeviceAgentState,
+        candidate: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Compile only Research-declared material edges before Plan audit.
+
+        The compiler is atomic and idempotent.  Candidate relation IDs are
+        untrusted claims and cannot authorize a binding; this normal production
+        entry therefore compiles only when an independently evidence-bound
+        authority has either been supplied by its caller or resolved from
+        Research capability roles plus exact Device/Skill claims.  It never
+        derives bindings from operation text, station category, macro sequence
+        or material names.
+        A failed compile leaves the candidate untouched so the full audit can
+        report the unresolved contract.
+        """
+
+        package = state.research_handoff.get("research_action_package_v2")
+        package_steps = (
+            package.get("macro_steps") if isinstance(package, dict) else None
+        )
+        if not isinstance(package_steps, list) or not any(
+            isinstance(step, dict)
+            and isinstance(step.get("material_contract_status"), dict)
+            for step in package_steps
+        ):
+            return candidate
+        state.binding_ledger_issues = []
+
+        active_binding_authority, resolver_issues = (
+            self._relationship_binding_authority_for_candidate(
+                state,
+                candidate,
+            )
+        )
+        if resolver_issues:
+            state.binding_ledger_issues = copy.deepcopy(resolver_issues)
+            state.add_log(
+                "material-operation binding resolution blocked: "
+                f"{len(resolver_issues)} issue(s); candidate unchanged"
+            )
+            return candidate
+
+        capability_index: Optional[Dict[str, Any]] = None
+        if (
+            active_binding_authority.get("authoring_mode")
+            == "automated_evidence_bound"
+        ):
+            capability_index, capability_index_issues = (
+                self._current_workstation_capability_index(state)
+            )
+            if capability_index_issues:
+                state.binding_ledger_issues = copy.deepcopy(
+                    capability_index_issues
+                )
+                state.add_log(
+                    "material relationship compilation blocked because the "
+                    "current capability index could not be verified"
+                )
+                return candidate
+
+        def resolve_workstation(name: str) -> str:
+            return self._truth_workstation_code(name) or ""
+
+        try:
+            updated, issues, applied = (
+                material_relationship_compiler.compile_material_relationships(
+                    candidate,
+                    state.research_handoff,
+                    relationship_bindings=active_binding_authority,
+                    resolve_workstation=resolve_workstation,
+                    workstation_truth_digest=state.device_truth_sha256,
+                    workstation_capability_index=capability_index,
+                )
+            )
+        except Exception as exc:  # fail closed without breaking diagnosis
+            state.binding_ledger_issues = [
+                {
+                    "code": "material_relationship_compiler_internal_error",
+                    "message": f"{type(exc).__name__}: {exc}",
+                }
+            ]
+            return candidate
+        if issues:
+            state.binding_ledger_issues = [copy.deepcopy(dict(issue)) for issue in issues]
+            state.add_log(
+                "explicit material relationship compilation blocked: "
+                f"{len(issues)} issue(s); candidate unchanged"
+            )
+            return candidate
+        if applied:
+            state.add_log(
+                "compiled explicit Research material relationships: "
+                f"{len(applied) - 1} relation binding(s)"
+            )
+        return updated
 
     def _repair_plan_level_findings(
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Generate at most three new Stage-1 Device-plan candidates.
+        """Repair and re-audit one Stage-1 Device-plan candidate.
 
-        Every candidate is audited from scratch and the next prompt contains
-        the *complete latest* finding set plus that complete candidate.  This
-        stays entirely inside Device and never spends a Research iteration.
+        Authorized deterministic patches run first and may preserve verified
+        partial progress while the whole Plan remains blocked.  Legacy
+        whole-candidate regeneration is considered only when its independent
+        authorization gate is enabled.  Every candidate is audited from
+        scratch and no path spends a Research iteration.
         """
         current = copy.deepcopy(plan_result)
         if str(current.get("status", "")).strip().lower() not in {
@@ -14156,25 +20370,269 @@ class SingleDeviceAgent:
         }:
             return current
 
+        # The frozen external-return wait gate outranks every repair route:
+        # never audit-dispatch, patch or regenerate across a pending wait.
+        initial_wait = self._external_return_wait_findings(
+            state.research_handoff, current
+        )
+        if initial_wait:
+            return self._external_return_wait_result(state, current, initial_wait)
+
+        # binding-ledger/v1 (identity-contract L5): fill the batch/transition
+        # layer from the candidate's own frozen evidence before the first
+        # audit; all-or-nothing and idempotent, so a ledgered candidate is
+        # untouched and a failed fill leaves the audit to report as before.
+        current = self._ensure_material_relationships_compiled(state, current)
+        current = self._ensure_binding_ledger_filled(state, current)
         initial_findings = self._plan_level_findings(state, current)
+        if initial_findings:
+            self._persist_plan_audit_record(
+                state, current, initial_findings, phase="pre_repair"
+            )
+        missing_operation_scope = self._missing_operation_repair_scope(
+            state, initial_findings
+        )
+        plan_regen_authorized = bool(
+            self._plan_regen_authorized() or missing_operation_scope is not None
+        )
         if initial_findings and self._repair_findings_are_patchable(initial_findings):
-            patched = self._run_patch_first_repair(state, current)
-            if patched is not None:
-                return patched
+            patch_result = self._run_patch_first_repair(state, current)
+            if patch_result is not None:
+                case = patch_result.get("case") or {}
+                budgets = case.get("budgets") or {}
+                patches_used = int(budgets.get("patches_used", 0) or 0)
+                draft_version = int(
+                    (case.get("draft") or {}).get("version", 1) or 1
+                )
+                promoted_changes = draft_version > 1
+                final_candidate = patch_result.get("final_candidate")
+                if promoted_changes and isinstance(final_candidate, dict):
+                    current = copy.deepcopy(final_candidate)
+                # Complete every deterministic normalization before binding
+                # findings to the candidate.  A later representation rewrite
+                # must never inherit an earlier audit verdict.
+                current = self._normalize_plan_handoff_steps(state, current)
+                remaining_before_metadata = self._plan_level_findings(state, current)
+                repair_result_candidate_digest = str(
+                    patch_result.get("final_candidate_digest") or ""
+                )
+                repaired_plan_content_digest = checkpoint_digest(current)
+                baseline_steps = (
+                    (case.get("baseline") or {}).get("candidate") or {}
+                ).get("device_plan") or []
+                current_steps = current.get("device_plan") or []
+                changed_plan_step_count = sum(
+                    1
+                    for before_step, after_step in zip(
+                        baseline_steps, current_steps
+                    )
+                    if before_step != after_step
+                ) + abs(len(baseline_steps) - len(current_steps))
+                current["deterministic_plan_repair"] = {
+                    "case_id": str(case.get("case_id") or ""),
+                    "status": str(patch_result.get("status") or ""),
+                    "stop_reason": str(patch_result.get("stop_reason") or ""),
+                    "patches_used": patches_used,
+                    "patch_attempts": patches_used,
+                    "promoted_patch_count": max(draft_version - 1, 0),
+                    "changed_plan_step_count": changed_plan_step_count,
+                    "draft_version": draft_version,
+                    "promoted_changes": promoted_changes,
+                    "baseline_candidate_digest": (
+                        case.get("baseline") or {}
+                    ).get("candidate_digest"),
+                    "baseline_candidate_digest_algorithm": (
+                        case.get("baseline") or {}
+                    ).get("candidate_digest_algorithm", "sha256"),
+                    "baseline_candidate_digest_scope": (
+                        case.get("baseline") or {}
+                    ).get(
+                        "candidate_digest_scope",
+                        "canonical_json_utf8_sorted_compact/v1",
+                    ),
+                    # Digest only the repaired Plan content.  This is computed
+                    # before adding this run-layer summary, so it never claims
+                    # to hash the enclosing terminal package.
+                    "repaired_plan_content_digest": repaired_plan_content_digest,
+                    "repair_result_candidate_digest": (
+                        repair_result_candidate_digest
+                    ),
+                    "repair_result_digest_matches_normalized_candidate": bool(
+                        repair_result_candidate_digest
+                        and repair_result_candidate_digest
+                        == repaired_plan_content_digest
+                    ),
+                    "repaired_plan_content_digest_algorithm": str(
+                        patch_result.get("digest_algorithm") or "sha256"
+                    ),
+                    "repaired_plan_content_digest_scope": (
+                        "repair_draft_candidate_before_run_metadata/"
+                        "canonical_json_utf8_sorted_compact/v1"
+                    ),
+                    "remaining_finding_count": len(remaining_before_metadata),
+                    "full_plan_reaudit_performed": True,
+                    "post_metadata_full_plan_reaudit_performed": False,
+                    "accepted": False,
+                }
+                # Audit once with conservative metadata, then materialize the
+                # audit outcome and audit that final object again.  Metadata is
+                # not allowed to alter the finding set; if it ever does, the
+                # exact mismatch verdict is persisted before stopping.
+                probe_remaining = self._plan_level_findings(state, current)
+                repair_metadata = current["deterministic_plan_repair"]
+                repair_metadata["post_metadata_full_plan_reaudit_performed"] = True
+                repair_metadata["accepted"] = not probe_remaining
+                repair_metadata["remaining_finding_count"] = len(probe_remaining)
+                remaining = self._plan_level_findings(state, current)
+                expected_signature = self._plan_audit_signature(
+                    remaining_before_metadata
+                )
+                if (
+                    self._plan_audit_signature(probe_remaining)
+                    != expected_signature
+                    or self._plan_audit_signature(remaining) != expected_signature
+                ):
+                    probe_signature = self._plan_audit_signature(probe_remaining)
+                    final_signature = self._plan_audit_signature(remaining)
+                    mismatch_finding = {
+                        "type": "post_metadata_plan_audit_mismatch",
+                        "finding_id": "post_metadata_plan_audit_mismatch",
+                        "message": (
+                            "repair metadata changed the complete Plan audit verdict; "
+                            "the candidate cannot inherit the prior finding set"
+                        ),
+                        "details": {
+                            "pre_metadata_signature": expected_signature,
+                            "probe_signature": probe_signature,
+                            "final_metadata_signature": final_signature,
+                            "pre_metadata_findings": copy.deepcopy(
+                                remaining_before_metadata
+                            ),
+                            "probe_findings": copy.deepcopy(probe_remaining),
+                            "final_metadata_findings": copy.deepcopy(remaining),
+                        },
+                        "repair_route": {
+                            "status": "handler_input_incompatible",
+                            "reason": "repair metadata must be audit-neutral",
+                        },
+                    }
+                    repair_metadata["accepted"] = False
+                    remaining = self._plan_level_findings(state, current)
+                    repair_metadata["remaining_finding_count"] = len(remaining)
+                    mismatch_findings = [mismatch_finding, *remaining]
+                    state.add_log(
+                        "post-metadata full Plan re-audit changed the finding set; "
+                        "candidate remains blocked"
+                    )
+                    self._persist_plan_audit_record(
+                        state,
+                        current,
+                        mismatch_findings,
+                        phase="post_metadata_reaudit_mismatch",
+                    )
+                    return self._controlled_plan_repair_stop(
+                        state,
+                        current,
+                        mismatch_findings,
+                        "deterministic_patch_metadata_reaudit_changed_findings",
+                    )
+                if promoted_changes and remaining:
+                    self._persist_plan_audit_record(
+                        state, current, remaining, phase="post_deterministic_patch"
+                    )
+                if not remaining:
+                    return current
+                initial_findings = remaining
+                missing_operation_scope = self._missing_operation_repair_scope(
+                    state, remaining
+                )
+                plan_regen_authorized = bool(
+                    self._plan_regen_authorized()
+                    or missing_operation_scope is not None
+                )
+                if not plan_regen_authorized:
+                    reason = (
+                        "deterministic_patch_partial_remaining_findings"
+                        if promoted_changes
+                        else "deterministic_patch_"
+                        + str(patch_result.get("stop_reason") or "unavailable")
+                    )
+                    return self._controlled_plan_repair_stop(
+                        state, current, remaining, reason
+                    )
+            elif not plan_regen_authorized:
+                return self._controlled_plan_repair_stop(
+                    state,
+                    current,
+                    initial_findings,
+                    "deterministic_patch_engine_unavailable",
+                )
+        elif initial_findings and not plan_regen_authorized:
+            return self._controlled_plan_repair_stop(
+                state, current, initial_findings, "plan_findings_require_judgement"
+            )
 
         for candidate_number in range(1, DEFAULT_STAGE1_PLAN_REPAIR_LIMIT + 1):
             current = self._normalize_plan_handoff_steps(state, current)
+            current = self._ensure_material_relationships_compiled(state, current)
+            current = self._ensure_binding_ledger_filled(state, current)
             wait_findings = self._external_return_wait_findings(state.research_handoff, current)
             if wait_findings:
                 return self._external_return_wait_result(state, current, wait_findings)
             findings = self._plan_level_findings(state, current)
             if not findings:
                 return current
+            active_missing_operation_scope = self._missing_operation_repair_scope(
+                state, findings
+            )
+            legacy_regen_authorized = self._plan_regen_authorized()
+            self._persist_plan_audit_record(
+                state, current, findings, phase=f"regen_candidate_{candidate_number}"
+            )
+            if not legacy_regen_authorized and active_missing_operation_scope is None:
+                return self._controlled_plan_repair_stop(
+                    state,
+                    current,
+                    findings,
+                    "missing_operation_repair_scope_closed",
+                )
             state.add_log(
                 f"plan-level capability audit flagged {len(findings)} finding(s); "
                 f"requesting Stage-1 local repair candidate "
                 f"{candidate_number}/{DEFAULT_STAGE1_PLAN_REPAIR_LIMIT}"
             )
+            obligation_instruction = ""
+            if active_missing_operation_scope is not None:
+                obligation_payload = [
+                    {
+                        key: copy.deepcopy(value)
+                        for key, value in obligation.items()
+                        if key not in {"macro_key", "plan_step_key"}
+                    }
+                    for obligation in active_missing_operation_scope.get(
+                        "obligations", []
+                    )
+                ]
+                obligation_instruction = (
+                    "\n\n## 本轮受限物料绑定权限\n"
+                    "本轮不是完整计划重写。只允许为下列 Research 明确授权的"
+                    " source_operation_ref + role_id + capability_id 补一个真实 Device 操作，"
+                    "或只在清单点名的 exact plan_step 上补 logical_container_assignments；"
+                    "不得删除、重排或改写任何已有步骤的工作站、"
+                    "参数、容器、科学语义及来源。新步骤必须保持同一 Research macro，"
+                    "从已加载 Skill 真源选择精确 station_code/workstation 与"
+                    " skill_operation_name，并输出 operation_capabilities 中完全一致的"
+                    " source_operation_ref、role_id、capability_id、skill_operation_name。"
+                    "逻辑容器只能通过 logical_container_assignments 绑定到清单指定步骤"
+                    " containers 中真实存在的"
+                    "物理容器。Research/Skill 不能证明时返回阻断，不得猜测。程序只会投影"
+                    "这个白名单写集，其他输出变化会被丢弃或拒绝。\n"
+                    + json.dumps(
+                        obligation_payload,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
             instruction = (
                 "## 计划级能力审计未通过\n"
                 f"这是 Device 同层候选 {candidate_number}/"
@@ -14189,6 +20647,7 @@ class SingleDeviceAgent:
                 + json.dumps(current, ensure_ascii=False, indent=2)
                 + "\n\n"
                 + SOLID_WEIGHING_ROUTE_NOTE
+                + obligation_instruction
                 + "\n请重新输出完整 JSON：被标记的人工/离线物料操作改写为对应"
                 "工作站步骤；文件传参称量补齐逐瓶确定质量(g)与料罐号。disallowed "
                 "的人工物料操作和运行时未知配方均不得保留。macro plan 已要求的预混、"
@@ -14235,12 +20694,10 @@ class SingleDeviceAgent:
                 raise
             if not isinstance(retried, dict):
                 continue
-            candidate = self._promote_feasible_quantity_human_plan(retried)
-            candidate = self._remove_implicit_connectivity_blockers(
-                state, candidate
+            proposed_candidate = self._promote_feasible_quantity_human_plan(
+                retried
             )
-            candidate = self._normalize_plan_handoff_steps(state, candidate)
-            if not self._plan_is_accepted(candidate):
+            if not self._plan_is_accepted(proposed_candidate):
                 # Promote a repair candidate's hard verdict only when the
                 # current, bound plan independently proves that same core gap
                 # from the complete truth source. Mixed dose/container errors
@@ -14250,7 +20707,7 @@ class SingleDeviceAgent:
                 )
                 if (
                     proved_gap is not None
-                    and self._candidate_claims_same_core_gap(candidate)
+                    and self._candidate_claims_same_core_gap(proposed_candidate)
                 ):
                     state.add_log(
                         "Stage-1 repair candidate reported the same core route "
@@ -14263,8 +20720,34 @@ class SingleDeviceAgent:
                     "device_plan; retaining Device scope and continuing"
                 )
                 continue
+            if (
+                not legacy_regen_authorized
+                and active_missing_operation_scope is not None
+            ):
+                candidate, scope_violations = (
+                    self._apply_missing_operation_repair_candidate(
+                        state,
+                        current,
+                        proposed_candidate,
+                        active_missing_operation_scope,
+                    )
+                )
+                if candidate is None:
+                    state.add_log(
+                        "Stage-1 missing-operation proposal was outside its "
+                        "authorized write set: " + "; ".join(scope_violations)
+                    )
+                    continue
+            else:
+                candidate = self._remove_implicit_connectivity_blockers(
+                    state, proposed_candidate
+                )
+            candidate = self._normalize_plan_handoff_steps(state, candidate)
             current = candidate
 
+        current = self._normalize_plan_handoff_steps(state, current)
+        current = self._ensure_material_relationships_compiled(state, current)
+        current = self._ensure_binding_ledger_filled(state, current)
         remaining = self._plan_level_findings(state, current)
         if self._plan_is_accepted(current) and not remaining:
             state.add_log(
@@ -14465,8 +20948,15 @@ class SingleDeviceAgent:
                     if not isinstance(existing_handoff, dict):
                         continue
                     if objective.lower() in _json_text(existing_handoff).lower():
-                        existing_handoff.setdefault("source_macro_step", step.get("source_macro_step"))
-                        existing_handoff.setdefault("source_macro_steps", step.get("source_macro_steps", []))
+                        for field in (
+                            "source_macro_step_id",
+                            "source_macro_step",
+                            "source_macro_steps",
+                        ):
+                            if field in step:
+                                existing_handoff.setdefault(
+                                    field, copy.deepcopy(step.get(field))
+                                )
                         existing_handoff.setdefault(
                             "source_reagent_identity",
                             step.get("source_reagent_identity", ""),
@@ -14488,47 +20978,88 @@ class SingleDeviceAgent:
                 )
             if notes:
                 return_data.append(notes)
-            handoffs.append(
-                {
-                    "name": objective or "设备流程离线边界",
-                    "sample": notes or objective or "样品状态由离线边界建立",
-                    "required_return_data": return_data,
-                    "source_macro_step": step.get("source_macro_step"),
-                    "source_macro_steps": step.get("source_macro_steps", []),
-                    "source_reagent_identity": step.get(
-                        "source_reagent_identity", ""
-                    ),
-                    "source_material_identity_ids": step.get(
-                        "source_material_identity_ids", []
-                    ),
-                    "operation_intent": step.get("operation_intent", ""),
-                }
-            )
+            normalized_handoff = {
+                "name": objective or "设备流程离线边界",
+                "sample": notes or objective or "样品状态由离线边界建立",
+                "required_return_data": return_data,
+                "source_reagent_identity": step.get(
+                    "source_reagent_identity", ""
+                ),
+                "source_material_identity_ids": step.get(
+                    "source_material_identity_ids", []
+                ),
+                "operation_intent": step.get("operation_intent", ""),
+            }
+            for field in (
+                "source_macro_step_id",
+                "source_macro_step",
+                "source_macro_steps",
+            ):
+                if field in step:
+                    normalized_handoff[field] = copy.deepcopy(step.get(field))
+            handoffs.append(normalized_handoff)
 
         research_steps = [
             step
             for step in state.research_handoff.get("macro_action_steps", []) or []
             if isinstance(step, dict)
         ]
+        typed_research_steps: List[
+            Tuple[Any, Tuple[str, Any], Dict[str, Any]]
+        ] = []
+        research_ids_valid = True
+        seen_research_ids: Set[Tuple[str, Any]] = set()
+        for index, research_step in enumerate(research_steps, start=1):
+            try:
+                source = self._semantic_macro_id(research_step, index)
+                source_key = macro_id_key(source)
+            except MacroIdentityError:
+                research_ids_valid = False
+                continue
+            if source_key in seen_research_ids:
+                research_ids_valid = False
+                continue
+            seen_research_ids.add(source_key)
+            typed_research_steps.append((source, source_key, research_step))
         inferred_handoff_sources = 0
         for handoff in handoffs:
             if not isinstance(handoff, dict):
                 continue
             if self._normalize_source_macro_fields(handoff):
                 normalized_source_fields += 1
-            if self._source_macro_step_ids(handoff):
+            has_declared_source = any(
+                field in handoff
+                for field in (
+                    "source_macro_step_id",
+                    "source_macro_step",
+                    "source_macro_steps",
+                )
+            )
+            if has_declared_source:
+                try:
+                    extract_source_macro_ids(
+                        handoff,
+                        "offline_handoff",
+                        required=True,
+                    )
+                except MacroIdentityError:
+                    # Explicit malformed provenance is never replaced by a
+                    # heuristic source guess.
+                    continue
                 continue
             if self._active_semantic_analysis:
                 # Production requires the planning LLM to bind every handoff
                 # explicitly.  Do not guess a macro source from overlapping
                 # chemical-name fragments.
                 continue
+            if not research_ids_valid:
+                # Heuristic source inference is allowed only over a complete,
+                # unique typed identity set.  Invalid or duplicate Research IDs
+                # remain unresolved for the deterministic contract gate.
+                continue
             handoff_text = self._identity_text(_json_text(handoff))
-            scores: Dict[str, int] = {}
-            for index, research_step in enumerate(research_steps, start=1):
-                source = str(
-                    research_step.get("步骤序号", research_step.get("step", index))
-                )
+            scores: Dict[Tuple[str, Any], Tuple[Any, int]] = {}
+            for source, source_key, research_step in typed_research_steps:
                 operation = str(
                     research_step.get("操作", research_step.get("operation", ""))
                 )
@@ -14546,12 +21077,14 @@ class SingleDeviceAgent:
                     2 for token in expected_tokens if token and token in handoff_text
                 )
                 if score:
-                    scores[source] = score
+                    scores[source_key] = (source, score)
             if scores:
-                best = max(scores.values())
-                winners = [source for source, score in scores.items() if score == best]
+                best = max(score for _, score in scores.values())
+                winners = [
+                    source for source, score in scores.values() if score == best
+                ]
                 if len(winners) == 1:
-                    primary = self._source_macro_scalar(winners[0])
+                    primary = winners[0]
                     handoff["source_macro_step"] = primary
                     handoff["source_macro_steps"] = [primary]
                     inferred_handoff_sources += 1
@@ -14620,7 +21153,30 @@ class SingleDeviceAgent:
         for workflow_step in workflow_steps:
             if not isinstance(workflow_step, dict):
                 continue
-            workflow_sources = self._source_macro_step_ids(workflow_step)
+            has_workflow_sources = any(
+                field in workflow_step
+                for field in (
+                    "source_macro_step_id",
+                    "source_macro_step",
+                    "source_macro_steps",
+                )
+            )
+            if has_workflow_sources:
+                try:
+                    workflow_sources = extract_source_macro_ids(
+                        workflow_step,
+                        "workflow.source_macro",
+                        required=True,
+                    )
+                except MacroIdentityError:
+                    # Do not repair an explicit malformed identity by guessing
+                    # from workstation or plan position.
+                    continue
+            else:
+                workflow_sources = []
+            workflow_primary_key = (
+                macro_id_key(workflow_sources[0]) if workflow_sources else None
+            )
             workstation = str(workflow_step.get("workstation", "")).strip()
             workflow_truth_station = self._truth_workstation_code(workstation)
             candidates = [
@@ -14639,39 +21195,65 @@ class SingleDeviceAgent:
                     )
                 )
                 and (
-                    not workflow_sources
-                    or workflow_sources[0]
-                    in self._source_macro_step_ids(plan_step)
+                    workflow_primary_key is None
+                    or workflow_primary_key in self._source_macro_keys(plan_step)
                 )
             ]
             explicit_plan_source = workflow_step.get("source_plan_step")
+            # Presence, not truthiness, owns resolution.  An explicitly empty
+            # or null reference is malformed provenance for the strict gate to
+            # report; it must never be replaced by a heuristic candidate.
+            has_explicit_plan_source = "source_plan_step" in workflow_step
+            explicit_plan_key: Optional[Tuple[str, Any]] = None
+            if has_explicit_plan_source:
+                try:
+                    explicit_plan_key = macro_id_key(
+                        explicit_plan_source, "workflow.source_plan_step"
+                    )
+                except MacroIdentityError:
+                    explicit_plan_key = None
             explicit_candidates = [
                 plan_step
                 for plan_step in plan_steps
                 if isinstance(plan_step, dict)
-                and str(plan_step.get("plan_step") or "").strip()
-                == str(explicit_plan_source or "").strip()
+                and explicit_plan_key is not None
+                and self._optional_typed_id_key(
+                    plan_step.get("plan_step"), "device_plan.plan_step"
+                )
+                == explicit_plan_key
             ]
-            if explicit_plan_source not in (None, "") and len(
-                explicit_candidates
-            ) == 1:
-                candidates = explicit_candidates
-            if explicit_plan_source in (None, "") and len(candidates) == 1:
+            if has_explicit_plan_source:
+                # An explicit reference owns resolution.  Invalid, unknown or
+                # duplicate identities must not fall back to station/macro
+                # heuristics and inherit unrelated provenance.
+                candidates = (
+                    explicit_candidates
+                    if explicit_plan_key is not None
+                    and len(explicit_candidates) == 1
+                    else []
+                )
+            if not has_explicit_plan_source and len(candidates) == 1:
                 candidate_plan_step = candidates[0].get("plan_step")
-                if candidate_plan_step not in (None, ""):
-                    workflow_step["source_plan_step"] = self._source_macro_scalar(
-                        str(candidate_plan_step)
+                try:
+                    workflow_step["source_plan_step"] = normalize_macro_id(
+                        candidate_plan_step, "device_plan.plan_step"
                     )
-            source_shapes = {
-                tuple(self._source_macro_step_ids(candidate))
-                for candidate in candidates
-                if self._source_macro_step_ids(candidate)
-            }
+                except MacroIdentityError:
+                    pass
+            source_shapes: Dict[
+                Tuple[Tuple[str, Any], ...], List[Any]
+            ] = {}
+            for candidate in candidates:
+                candidate_sources = self._source_macro_step_ids(candidate)
+                if candidate_sources:
+                    source_shapes.setdefault(
+                        tuple(macro_id_key(value) for value in candidate_sources),
+                        candidate_sources,
+                    )
             if len(source_shapes) == 1:
-                sources = list(next(iter(source_shapes)))
-                typed = [self._source_macro_scalar(source) for source in sources]
-                workflow_step["source_macro_step"] = typed[0]
-                workflow_step["source_macro_steps"] = typed
+                sources = copy.deepcopy(next(iter(source_shapes.values())))
+                workflow_step["source_macro_step"] = sources[0]
+                workflow_step["source_macro_steps"] = sources
             else:
                 self._normalize_source_macro_fields(workflow_step)
 
@@ -14771,6 +21353,7 @@ class SingleDeviceAgent:
         plan_result: Dict[str, Any],
         chunk_cache: Dict[int, Dict[str, Any]],
         *,
+        plan_chunks_override: Optional[List[List[Dict[str, Any]]]] = None,
         only_chunks: Optional[Set[int]] = None,
         feedback_by_chunk: Optional[Dict[int, str]] = None,
         previous_steps_by_chunk: Optional[Dict[int, List[Dict[str, Any]]]] = None,
@@ -14789,11 +21372,30 @@ class SingleDeviceAgent:
             step for step in (plan_result.get("device_plan", []) or [])
             if isinstance(step, dict)
         ]
-        chunk_size = self._translation_chunk_size()
-        chunks = [
-            device_plan[i : i + chunk_size]
-            for i in range(0, len(device_plan), chunk_size)
-        ] or [[]]
+        if plan_chunks_override is None:
+            chunk_size = self._translation_chunk_size()
+            chunks = [
+                device_plan[i : i + chunk_size]
+                for i in range(0, len(device_plan), chunk_size)
+            ] or [[]]
+        else:
+            # Only an explicit offline diagnostic caller may reuse a saved
+            # ordered translation.  Its chunk boundaries must partition the
+            # *same* frozen Plan without omission or reordering.  Production
+            # V2 callers continue to use one Plan step per chunk above.
+            if (
+                not isinstance(plan_chunks_override, list)
+                or not plan_chunks_override
+                or any(
+                    not isinstance(group, list) or not group
+                    or any(not isinstance(step, dict) for step in group)
+                    for group in plan_chunks_override
+                )
+            ):
+                raise ValueError("diagnostic plan chunks must be nonempty Plan-step arrays")
+            chunks = copy.deepcopy(plan_chunks_override)
+            if [step for group in chunks for step in group] != device_plan:
+                raise ValueError("diagnostic plan chunks do not partition the frozen Device Plan")
         total = len(chunks)
         feedback_by_chunk = feedback_by_chunk or {}
         previous_steps_by_chunk = previous_steps_by_chunk or {}
@@ -14918,6 +21520,10 @@ class SingleDeviceAgent:
         self,
         state: SingleDeviceAgentState,
         plan_result: Dict[str, Any],
+        *,
+        initial_chunk_cache: Optional[Dict[int, Dict[str, Any]]] = None,
+        plan_chunks_override: Optional[List[List[Dict[str, Any]]]] = None,
+        materialize_recipes: bool = True,
     ) -> Dict[str, Any]:
         """Stage 2 with chunked translation + bounded targeted repair.
 
@@ -14931,10 +21537,35 @@ class SingleDeviceAgent:
 
         max_modifications = self._workflow_repair_limit()
         max_rounds = 1 + max_modifications
-        chunk_cache: Dict[int, Dict[str, Any]] = {}
+        chunk_cache: Dict[int, Dict[str, Any]] = copy.deepcopy(
+            initial_chunk_cache or {}
+        )
+        if initial_chunk_cache is not None:
+            device_plan = [
+                step for step in (plan_result.get("device_plan", []) or [])
+                if isinstance(step, dict)
+            ]
+            expected_chunk_count = (
+                len(plan_chunks_override)
+                if plan_chunks_override is not None
+                else max(
+                    1,
+                    (len(device_plan) + self._translation_chunk_size() - 1)
+                    // self._translation_chunk_size(),
+                )
+            )
+            if set(chunk_cache) != set(range(expected_chunk_count)) or any(
+                not isinstance(chunk_cache[index], dict)
+                or not isinstance(chunk_cache[index].get("steps"), list)
+                or not isinstance(chunk_cache[index].get("txt"), str)
+                for index in range(expected_chunk_count)
+            ):
+                raise ValueError("diagnostic translation cache is incomplete or malformed")
         report: Dict[str, Any] = {"status": "failed", "errors": [], "warnings": []}
         result: Dict[str, Any] = {}
-        only_chunks: Optional[Set[int]] = None
+        only_chunks: Optional[Set[int]] = (
+            set() if initial_chunk_cache is not None else None
+        )
         feedback_by_chunk: Dict[int, str] = {}
         repair_rounds: List[Dict[str, Any]] = []
         expected_locked_hashes: Dict[str, str] = {}
@@ -14945,6 +21576,7 @@ class SingleDeviceAgent:
             workflow_json, workflow_txt, step_map, chunk_groups = (
                 self._translate_plan_in_chunks(
                     state, plan_result, chunk_cache,
+                    plan_chunks_override=plan_chunks_override,
                     only_chunks=only_chunks,
                     feedback_by_chunk=feedback_by_chunk,
                     previous_steps_by_chunk=previous_steps_by_chunk,
@@ -14952,11 +21584,64 @@ class SingleDeviceAgent:
                 )
             )
             current_chunk_hashes = chunk_hashes(chunk_cache)
-            current_lock_hashes = dict(current_chunk_hashes)
-            for cached in chunk_cache.values():
-                current_lock_hashes.update(
-                    device_step_hashes(cached.get("steps", []))
-                )
+            current_device_step_hashes: Dict[str, str] = {}
+            if self._contract_version == "v2":
+                # V1 is intentionally compatible with legacy workflow nodes
+                # that predate device_step_id.  V2 uses one global namespace:
+                # flatten before hashing so cross-chunk duplicates cannot be
+                # hidden by dict.update(last-write-wins).
+                try:
+                    current_device_step_hashes = device_step_hashes_for_chunks(
+                        chunk_cache
+                    )
+                except ValueError as exc:
+                    identity_error = str(exc)
+                    report = {
+                        "status": "failed",
+                        "errors": [identity_error],
+                        "warnings": [],
+                        "assessment_source": "v2_device_step_identity_guard",
+                        "repair_stop_reason": "invalid_v2_device_step_identity",
+                        "authorized_device_step_ids": [],
+                        "structured_errors": [
+                            {
+                                "error_code": "v2_device_step_identity_invalid",
+                                "code": "v2_device_step_identity_invalid",
+                                "message": identity_error,
+                                "authorized_device_step_ids": [],
+                            }
+                        ],
+                    }
+                    result = self._merge_plan_and_translation(
+                        plan_result,
+                        {
+                            "workflow_txt": workflow_txt,
+                            "workflow_json": workflow_json,
+                        },
+                    )
+                    result["dispatch_validation"] = report
+                    repair_rounds.append(
+                        {
+                            "round": round_index,
+                            "candidate_kind": (
+                                "initial"
+                                if round_index == 1
+                                else "llm_modification"
+                            ),
+                            "status": "failed",
+                            "errors": [identity_error],
+                            "issues": build_validation_issues_v2(
+                                report["structured_errors"], workflow_json
+                            ),
+                            "repair_stop_reason": report["repair_stop_reason"],
+                            "authorized_device_step_ids": [],
+                        }
+                    )
+                    break
+            current_lock_hashes = namespaced_lock_hashes(
+                chunk_digests=current_chunk_hashes,
+                device_step_digests=current_device_step_hashes,
+            )
             lock_violations = locked_chunk_violations(
                 expected_locked_hashes, current_lock_hashes
             )
@@ -14982,7 +21667,7 @@ class SingleDeviceAgent:
                 workflow_json, state.research_handoff
             )
             self._apply_deterministic_completion(state, result)
-            if not self._materialize_recipe_files(state, result):
+            if materialize_recipes and not self._materialize_recipe_files(state, result):
                 materialization = result.get("recipe_materialization", {})
                 report = {
                     "status": "failed",
@@ -15029,7 +21714,9 @@ class SingleDeviceAgent:
                     "errors": list(report.get("errors", [])),
                     "issues": (
                         build_validation_issues_v2(
-                            report.get("errors", []), result.get("workflow_json")
+                            report.get("structured_errors")
+                            or report.get("errors", []),
+                            result.get("workflow_json"),
                         )
                         if self._contract_version == "v2"
                         else []
@@ -15067,10 +21754,18 @@ class SingleDeviceAgent:
                 return result
 
             # map failures back to chunks and re-translate only those
-            structured = structure_validation_errors(
-                report.get("errors", []), result.get("workflow_json")
+            structured_value = report.get("structured_errors")
+            structured = (
+                copy.deepcopy(structured_value)
+                if isinstance(structured_value, list)
+                and structured_value
+                and all(isinstance(item, dict) for item in structured_value)
+                else structure_validation_errors(
+                    report.get("errors", []), result.get("workflow_json")
+                )
             )
             erroring_chunks: Set[int] = set()
+            unanchored_records: List[Dict[str, Any]] = []
             mutable_device_ids_by_chunk = {}
             workflow_steps = {
                 step.get("step_number"): step
@@ -15081,16 +21776,59 @@ class SingleDeviceAgent:
                 step_no = record.get("step_number")
                 if isinstance(step_no, int) and step_no in step_map:
                     chunk_index = step_map[step_no]
-                    erroring_chunks.add(chunk_index)
                     step = workflow_steps.get(step_no, {})
-                    device_step_id = str(step.get("device_step_id") or "")
-                    if device_step_id:
+                    device_step_id = step.get("device_step_id")
+                    if isinstance(device_step_id, str) and device_step_id.strip():
+                        erroring_chunks.add(chunk_index)
                         mutable_device_ids_by_chunk.setdefault(
                             chunk_index, set()
                         ).add(device_step_id)
+                    else:
+                        unanchored_records.append(record)
+                else:
+                    unanchored_records.append(record)
             empty_chunks = {
                 idx for idx, group in enumerate(chunk_groups) if not group
             }
+            if self._contract_version == "v2" and (
+                empty_chunks or unanchored_records
+            ):
+                if empty_chunks:
+                    empty_message = (
+                        "V2 workflow translation produced empty plan chunk(s) "
+                        f"{sorted(empty_chunks)}; repair would require adding new "
+                        "Device nodes without an existing authorized device_step_id."
+                    )
+                    if empty_message not in report.get("errors", []):
+                        report.setdefault("errors", []).append(empty_message)
+                    structured.append(
+                        {
+                            "error_code": (
+                                "empty_translation_chunk_requires_structural_addition"
+                            ),
+                            "code": (
+                                "empty_translation_chunk_requires_structural_addition"
+                            ),
+                            "message": empty_message,
+                            "chunk_indices": sorted(empty_chunks),
+                            "authorized_device_step_ids": [],
+                        }
+                    )
+                    stop_reason = (
+                        "empty_v2_translation_chunk_requires_structural_addition"
+                    )
+                else:
+                    stop_reason = "unanchored_v2_validation_error"
+                report["structured_errors"] = structured
+                report["repair_stop_reason"] = stop_reason
+                report["authorized_device_step_ids"] = []
+                repair_rounds[-1]["issues"] = build_validation_issues_v2(
+                    structured, result.get("workflow_json")
+                )
+                repair_rounds[-1]["repair_stop_reason"] = stop_reason
+                repair_rounds[-1]["authorized_device_step_ids"] = []
+                break
+
             erroring_chunks |= empty_chunks
             if not erroring_chunks:
                 if self._contract_version == "v2":
@@ -15106,18 +21844,23 @@ class SingleDeviceAgent:
                     for idx in erroring_chunks
                     if idx in chunk_cache
                 }
-                expected_locked_hashes = {
+                expected_locked_chunk_hashes = {
                     key: digest
                     for key, digest in current_chunk_hashes.items()
                     if int(key.rsplit("_", 1)[1]) not in erroring_chunks
                 }
+                expected_locked_device_step_hashes: Dict[str, str] = {}
                 for idx, steps in previous_steps_by_chunk.items():
-                    expected_locked_hashes.update(
+                    expected_locked_device_step_hashes.update(
                         device_step_hashes(
                             steps,
                             exclude=mutable_device_ids_by_chunk.get(idx, set()),
                         )
                     )
+                expected_locked_hashes = namespaced_lock_hashes(
+                    chunk_digests=expected_locked_chunk_hashes,
+                    device_step_digests=expected_locked_device_step_hashes,
+                )
 
             state.add_log(
                 f"deterministic checks failed ({len(report['errors'])} errors); "
@@ -15602,6 +22345,14 @@ class SingleDeviceAgent:
             "errors": [] if accepted else errors,
             "warnings": list(deterministic_report.get("warnings", [])),
             "checked_steps": len((result.get("workflow_json") or {}).get("steps", [])),
+            "validated_workflow_sha256": deterministic_report.get(
+                "validated_workflow_sha256", ""
+            ),
+            "validated_dispatch_payload_binding_sha256": (
+                deterministic_report.get(
+                    "validated_dispatch_payload_binding_sha256", ""
+                )
+            ),
             "assessment_source": (
                 "deterministic_recipe_materializer"
                 if materialization_failed
@@ -15706,6 +22457,27 @@ class SingleDeviceAgent:
         }
         for placeholder, value in replacements.items():
             prompt = prompt.replace(placeholder, value)
+        materialization = result.get("recipe_materialization")
+        artifacts = (
+            materialization.get("artifacts", [])
+            if isinstance(materialization, dict)
+            else []
+        )
+        recipe_paths = [
+            str(path)
+            for artifact in artifacts
+            if isinstance(artifact, dict)
+            for path in (artifact.get("file_path", artifact.get("file")),)
+            if isinstance(path, str) and path.strip()
+        ]
+        if recipe_paths:
+            # Keep concrete local paths visible as literal evidence as well as
+            # inside JSON.  JSON escaping doubles Windows separators, which can
+            # obscure the exact task-scoped file the reviewer must validate.
+            prompt += (
+                "\n\n# 已物化的任务配方文件（逐字路径）\n"
+                + "\n".join(dict.fromkeys(recipe_paths))
+            )
         messages = [
             SystemMessage(content=WORKFLOW_SKILL_REVIEW_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
@@ -15773,11 +22545,21 @@ class SingleDeviceAgent:
         for index, step in enumerate(workflow_json.get("steps", []) or [], start=1):
             if not isinstance(step, dict):
                 continue
-            step["step_number"] = index
+            # Rendering must never repair or otherwise mutate the JSON source of
+            # truth.  Invalid/missing step numbers remain validator findings; the
+            # array position is only a readable fallback for this text view.
+            step_number = step.get("step_number")
+            display_number = (
+                step_number
+                if isinstance(step_number, int)
+                and not isinstance(step_number, bool)
+                and step_number > 0
+                else index
+            )
             workstation = str(step.get("workstation", "")).strip()
             operation = str(step.get("operation", "")).strip()
             parameters = step.get("parameters")
-            lines.append(f"第{index}步 {workstation}：{operation}")
+            lines.append(f"第{display_number}步 {workstation}：{operation}")
             if isinstance(parameters, dict):
                 lines.append(
                     "参数：" + json.dumps(parameters, ensure_ascii=False, sort_keys=True)
@@ -15825,6 +22607,11 @@ class SingleDeviceAgent:
         )
         merged = {
             "status": "success",
+            # Copy the complete signed Device Plan contract as one unit.  The
+            # explicit legacy keys below remain for compatibility, while this
+            # projection prevents newly signed sidecars from being lost at the
+            # plan -> workflow boundary.
+            **device_plan_contract_view(plan_result),
             "feasibility_accepted": bool(
                 plan_result.get("feasibility_accepted", False)
             ),
@@ -15833,6 +22620,9 @@ class SingleDeviceAgent:
             ),
             "feasibility": plan_result.get("feasibility", {}),
             "macro_plan_summary": plan_result.get("macro_plan_summary", ""),
+            "sample_control_matrix": copy.deepcopy(
+                plan_result.get("sample_control_matrix", [])
+            ),
             "device_self_check": plan_result.get("device_self_check", {}),
             "reagent_slot_plan": plan_result.get("reagent_slot_plan", []),
             "container_plan": plan_result.get("container_plan", []),
@@ -15840,9 +22630,21 @@ class SingleDeviceAgent:
             "quantity_adjustments": copy.deepcopy(
                 plan_result.get("quantity_adjustments", [])
             ),
+            "quantity_requirement_dispositions": copy.deepcopy(
+                plan_result.get("quantity_requirement_dispositions", [])
+            ),
             "batch_plan": copy.deepcopy(plan_result.get("batch_plan", [])),
+            "material_transitions": copy.deepcopy(
+                plan_result.get("material_transitions", [])
+            ),
             "material_ledger": copy.deepcopy(
                 plan_result.get("material_ledger", {})
+            ),
+            "temporal_adaptations": copy.deepcopy(
+                plan_result.get("temporal_adaptations", [])
+            ),
+            "offline_handoffs": copy.deepcopy(
+                plan_result.get("offline_handoffs", [])
             ),
             "quantity_audit": copy.deepcopy(
                 plan_result.get("quantity_audit", {})
@@ -15864,6 +22666,350 @@ class SingleDeviceAgent:
             return False
         raw = os.getenv("CHEM_DEVICE_CONTRACT_AUDIT", "").strip().lower()
         return raw not in {"0", "off", "false", "no"}
+
+    @staticmethod
+    def _normalization_digest(value: Any) -> str:
+        return hashlib.sha256(
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+
+    @classmethod
+    def _dispatch_payload_binding_digest(cls, payload: Any) -> str:
+        """Bind checked dispatch content while allowing its runtime run name."""
+
+        if not isinstance(payload, dict):
+            raise ValueError("dispatch payload must be an object")
+        plan_name = payload.get("plan_name")
+        if not isinstance(plan_name, str) or not plan_name.strip():
+            raise ValueError("dispatch payload plan_name must be a nonempty string")
+        normalized = copy.deepcopy(payload)
+        # Preview uses the formatter default; finalization supplies exp_id.
+        # Only that expected metadata difference is excluded from the binding.
+        normalized["plan_name"] = "__RUNTIME_PLAN_NAME__"
+        return cls._normalization_digest(normalized)
+
+    @staticmethod
+    def _normalization_pointer_value(
+        workflow_json: Dict[str, Any],
+        reagent_slot_plan: Any,
+        pointer: str,
+    ) -> Tuple[bool, Any]:
+        """Resolve a normalization event pointer against the current result.
+
+        Normalization events address either the workflow root (``/steps``) or
+        the terminal package's reagent-slot plan.  Resolving the pointer makes
+        retained audit history checkable against the value it claims to have
+        produced, rather than trusting a caller-supplied event list.
+        """
+        if not isinstance(pointer, str) or not pointer.startswith("/"):
+            return False, None
+        root: Any = {
+            "steps": workflow_json.get("steps"),
+            "reagent_slot_plan": reagent_slot_plan,
+        }
+        current = root
+        for raw_token in pointer.split("/")[1:]:
+            token = raw_token.replace("~1", "/").replace("~0", "~")
+            if isinstance(current, dict) and token in current:
+                current = current[token]
+                continue
+            if isinstance(current, list) and token.isdigit():
+                index = int(token)
+                if 0 <= index < len(current):
+                    current = current[index]
+                    continue
+            return False, None
+        return True, current
+
+    @staticmethod
+    def _rollback_normalization_pointer(
+        workflow_json: Dict[str, Any],
+        reagent_slot_plan: Any,
+        pointer: str,
+        original_value: Any,
+    ) -> bool:
+        """Reverse one field-level normalization event on copied inputs.
+
+        A ``None`` original is treated as an absent injected field.  That is
+        how the current normalizers record station ids and legacy identity
+        fields.  If a historical caller had an explicit JSON null instead,
+        the reconstructed source hash will differ and the audit is discarded
+        conservatively.
+        """
+        if not isinstance(pointer, str) or not pointer.startswith("/"):
+            return False
+        root: Any = {
+            "steps": workflow_json.get("steps"),
+            "reagent_slot_plan": reagent_slot_plan,
+        }
+        tokens = [
+            token.replace("~1", "/").replace("~0", "~")
+            for token in pointer.split("/")[1:]
+        ]
+        if not tokens:
+            return False
+        parent = root
+        for token in tokens[:-1]:
+            if isinstance(parent, dict) and token in parent:
+                parent = parent[token]
+                continue
+            if isinstance(parent, list) and token.isdigit():
+                index = int(token)
+                if 0 <= index < len(parent):
+                    parent = parent[index]
+                    continue
+            return False
+        leaf = tokens[-1]
+        if isinstance(parent, dict):
+            if leaf not in parent:
+                return False
+            if original_value is None:
+                parent.pop(leaf, None)
+            else:
+                parent[leaf] = copy.deepcopy(original_value)
+            return True
+        if isinstance(parent, list) and leaf.isdigit():
+            index = int(leaf)
+            if 0 <= index < len(parent) and original_value is not None:
+                parent[index] = copy.deepcopy(original_value)
+                return True
+        return False
+
+    def _reproduce_normalization_evidence(
+        self,
+        result: Dict[str, Any],
+        source_workflow: Dict[str, Any],
+        source_reagent_slot_plan: Any,
+    ) -> Tuple[Dict[str, Any], Any, List[Dict[str, Any]], List[str]]:
+        """Run the real deterministic normalizers on a reconstructed source."""
+        if self._contract_engine is None:
+            raise RuntimeError("normalization contract engine is unavailable")
+        events: List[Dict[str, Any]] = []
+        issues: List[Dict[str, Any]] = []
+        effective_slot_plan = copy.deepcopy(source_reagent_slot_plan)
+        slot_plan_for_projection = effective_slot_plan
+        needs_legacy_enrichment = isinstance(effective_slot_plan, list) and any(
+            isinstance(record, dict)
+            and (
+                not isinstance(record.get("material_identity_id"), str)
+                or not record.get("material_identity_id", "").strip()
+                or not isinstance(record.get("canonical_name"), str)
+                or not record.get("canonical_name", "").strip()
+            )
+            for record in effective_slot_plan
+        )
+        if needs_legacy_enrichment:
+            enrichment = enrich_legacy_reagent_slot_plan(
+                effective_slot_plan,
+                station_resolver=self._contract_engine.resolve_station,
+                batch_plan=result.get("batch_plan"),
+                device_plan=result.get("device_plan"),
+            )
+            if enrichment.errors:
+                issues.extend(copy.deepcopy(list(enrichment.errors)))
+                slot_plan_for_projection = None
+            else:
+                effective_slot_plan = copy.deepcopy(enrichment.reagent_slot_plan)
+                slot_plan_for_projection = effective_slot_plan
+                for raw_event in enrichment.events:
+                    event = dict(raw_event)
+                    if "old" in event:
+                        event["original_value"] = event.pop("old")
+                    if "new" in event:
+                        event["new_value"] = event.pop("new")
+                    events.append(event)
+
+        normalized_workflow = copy.deepcopy(source_workflow)
+        notes = self._contract_engine.normalize_workflow(
+            normalized_workflow,
+            reagent_slot_plan=slot_plan_for_projection,
+            plan_steps=result.get("device_plan"),
+            batch_plan=result.get("batch_plan"),
+            material_ledger=result.get("material_ledger"),
+            material_identity_registry=(
+                collect_material_identity_registry_evidence(result)
+            ),
+            normalization_events=events,
+            normalization_issues=issues,
+        )
+        return normalized_workflow, effective_slot_plan, events, notes
+
+    def _verified_normalization_evidence(
+        self,
+        result: Dict[str, Any],
+        workflow_json: Dict[str, Any],
+        reagent_slot_plan: Any,
+    ) -> Dict[str, Any]:
+        """Return only prior normalization evidence verifiable on this input.
+
+        A repeated full check commonly sees the already-normalized candidate
+        and therefore emits no new events.  In that one case preserving the
+        prior audit is useful, but only when its hashes, counts, rule set, event
+        chain, and final pointer values all match the current candidate.
+        """
+        events = result.get("normalization_events")
+        audit = result.get("normalization_audit")
+        if not isinstance(events, list) or not events or not isinstance(audit, dict):
+            return {}
+        if any(not isinstance(event, dict) for event in events):
+            return {}
+        try:
+            workflow_hash = self._normalization_digest(workflow_json)
+            slot_plan_hash = self._normalization_digest(reagent_slot_plan)
+        except (TypeError, ValueError):
+            return {}
+        if audit.get("normalized_workflow_sha256") != workflow_hash:
+            return {}
+        if audit.get("normalized_reagent_slot_plan_sha256") != slot_plan_hash:
+            return {}
+        event_count = audit.get("event_count")
+        if isinstance(event_count, bool) or event_count != len(events):
+            return {}
+
+        source_hashes = (
+            audit.get("source_workflow_sha256"),
+            audit.get("source_reagent_slot_plan_sha256"),
+        )
+        if any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in source_hashes
+        ):
+            return {}
+
+        rule_ids: List[str] = []
+        final_values: Dict[str, Any] = {}
+        for event in events:
+            rule_id = event.get("rule_id")
+            pointer = event.get("json_pointer")
+            if (
+                not isinstance(rule_id, str)
+                or not rule_id.strip()
+                or rule_id not in self._NORMALIZATION_RULE_IDS
+                or not isinstance(pointer, str)
+                or not pointer.startswith("/")
+                or "original_value" not in event
+                or "new_value" not in event
+                or "old" in event
+                or "new" in event
+            ):
+                return {}
+            if pointer in final_values:
+                try:
+                    if self._normalization_digest(event["original_value"]) != self._normalization_digest(
+                        final_values[pointer]
+                    ):
+                        return {}
+                except (TypeError, ValueError):
+                    return {}
+            final_values[pointer] = event["new_value"]
+            rule_ids.append(rule_id)
+
+        for pointer, expected in final_values.items():
+            found, actual = self._normalization_pointer_value(
+                workflow_json, reagent_slot_plan, pointer
+            )
+            if not found:
+                return {}
+            try:
+                if self._normalization_digest(actual) != self._normalization_digest(expected):
+                    return {}
+            except (TypeError, ValueError):
+                return {}
+
+        expected_rule_ids = sorted(set(rule_ids))
+        if audit.get("rule_ids") != expected_rule_ids:
+            return {}
+
+        replay_workflow = copy.deepcopy(workflow_json)
+        replay_slot_plan = copy.deepcopy(reagent_slot_plan)
+        for event in reversed(events):
+            pointer = str(event["json_pointer"])
+            found, actual = self._normalization_pointer_value(
+                replay_workflow, replay_slot_plan, pointer
+            )
+            if not found:
+                return {}
+            try:
+                if self._normalization_digest(actual) != self._normalization_digest(
+                    event["new_value"]
+                ):
+                    return {}
+            except (TypeError, ValueError):
+                return {}
+            if not self._rollback_normalization_pointer(
+                replay_workflow,
+                replay_slot_plan,
+                pointer,
+                event["original_value"],
+            ):
+                return {}
+        try:
+            if self._normalization_digest(replay_workflow) != audit.get(
+                "source_workflow_sha256"
+            ):
+                return {}
+            if self._normalization_digest(replay_slot_plan) != audit.get(
+                "source_reagent_slot_plan_sha256"
+            ):
+                return {}
+        except (TypeError, ValueError):
+            return {}
+
+        try:
+            (
+                reproduced_workflow,
+                reproduced_slot_plan,
+                reproduced_events,
+                reproduced_notes,
+            ) = self._reproduce_normalization_evidence(
+                result,
+                replay_workflow,
+                replay_slot_plan,
+            )
+            if self._normalization_digest(reproduced_workflow) != workflow_hash:
+                return {}
+            if self._normalization_digest(reproduced_slot_plan) != slot_plan_hash:
+                return {}
+        except (RuntimeError, TypeError, ValueError):
+            return {}
+        if reproduced_events != events:
+            return {}
+        prior_notes = result.get("normalization_notes")
+        if prior_notes is None:
+            prior_notes = []
+        if prior_notes != reproduced_notes:
+            return {}
+        evidence = {
+            "normalization_events": copy.deepcopy(events),
+            "normalization_audit": copy.deepcopy(audit),
+        }
+        if reproduced_notes:
+            evidence["normalization_notes"] = copy.deepcopy(reproduced_notes)
+        return evidence
+
+    def _current_normalization_fields(
+        self, result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Select current normalization evidence for a terminal package."""
+        workflow_json = result.get("workflow_json")
+        if not isinstance(workflow_json, dict):
+            workflow_json = {}
+        fields = self._verified_normalization_evidence(
+            result,
+            workflow_json,
+            result.get("reagent_slot_plan"),
+        )
+        issues = result.get("normalization_issues")
+        if isinstance(issues, list) and all(isinstance(issue, dict) for issue in issues):
+            fields["normalization_issues"] = copy.deepcopy(issues)
+        return fields
 
     def _run_full_checks(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Schema validation + txt↔json consistency + capability audit, merged
@@ -15892,18 +23038,164 @@ class SingleDeviceAgent:
         if self._contract_gate_enabled() and isinstance(workflow_json, dict):
             # Deterministic normalization first: inject Skill station ids and
             # coerce declared scalar types/enum labels. Never changes chemistry.
+            prior_normalization = self._verified_normalization_evidence(
+                result,
+                workflow_json,
+                result.get("reagent_slot_plan"),
+            )
+            for field_name in (
+                "normalization_events",
+                "normalization_audit",
+                "normalization_notes",
+                "normalization_issues",
+            ):
+                result.pop(field_name, None)
+            normalization_events: List[Dict[str, Any]] = []
+            normalization_issues: List[Dict[str, Any]] = []
             try:
-                notes = self._contract_engine.normalize_workflow(workflow_json)
+                slot_plan_before = copy.deepcopy(result.get("reagent_slot_plan"))
+                normalization_before_sha256 = self._normalization_digest(
+                    workflow_json
+                )
+                slot_plan_before_sha256 = self._normalization_digest(
+                    slot_plan_before
+                )
+
+                effective_slot_plan = result.get("reagent_slot_plan")
+                slot_plan_for_projection = effective_slot_plan
+                needs_legacy_enrichment = (
+                    self._contract_version == "v1"
+                    and isinstance(effective_slot_plan, list)
+                    and any(
+                    isinstance(record, dict)
+                    and (
+                        not isinstance(record.get("material_identity_id"), str)
+                        or not record.get("material_identity_id", "").strip()
+                        or not isinstance(record.get("canonical_name"), str)
+                        or not record.get("canonical_name", "").strip()
+                    )
+                    for record in effective_slot_plan
+                    )
+                )
+                if needs_legacy_enrichment:
+                    enrichment = enrich_legacy_reagent_slot_plan(
+                        effective_slot_plan,
+                        station_resolver=self._contract_engine.resolve_station,
+                        batch_plan=result.get("batch_plan"),
+                        device_plan=result.get("device_plan"),
+                    )
+                    if enrichment.errors:
+                        normalization_issues.extend(
+                            copy.deepcopy(list(enrichment.errors))
+                        )
+                        # Scalar/station normalization is independent.  Do not
+                        # feed a known-invalid legacy registry into projection,
+                        # which would merely duplicate migration errors.
+                        slot_plan_for_projection = None
+                    else:
+                        effective_slot_plan = copy.deepcopy(
+                            enrichment.reagent_slot_plan
+                        )
+                        result["reagent_slot_plan"] = effective_slot_plan
+                        slot_plan_for_projection = effective_slot_plan
+                        for event in enrichment.events:
+                            normalized_event = dict(event)
+                            if "old" in normalized_event:
+                                normalized_event["original_value"] = (
+                                    normalized_event.pop("old")
+                                )
+                            if "new" in normalized_event:
+                                normalized_event["new_value"] = (
+                                    normalized_event.pop("new")
+                                )
+                            normalization_events.append(normalized_event)
+
+                normalized_workflow = copy.deepcopy(workflow_json)
+                notes = self._contract_engine.normalize_workflow(
+                    normalized_workflow,
+                    reagent_slot_plan=slot_plan_for_projection,
+                    plan_steps=result.get("device_plan"),
+                    batch_plan=result.get("batch_plan"),
+                    material_ledger=result.get("material_ledger"),
+                    material_identity_registry=(
+                        collect_material_identity_registry_evidence(result)
+                    ),
+                    normalization_events=normalization_events,
+                    normalization_issues=normalization_issues,
+                )
+                # Identity projection is atomic inside normalize_workflow.  Its
+                # errors must not roll back independent scalar, enum, or station
+                # representation repairs that have already succeeded.
+                workflow_json.clear()
+                workflow_json.update(normalized_workflow)
+                if normalization_issues:
+                    result["normalization_issues"] = copy.deepcopy(
+                        normalization_issues
+                    )
+                if notes:
+                    result["normalization_notes"] = copy.deepcopy(notes)
+                if normalization_events:
+                    normalization_after_sha256 = self._normalization_digest(
+                        workflow_json
+                    )
+                    slot_plan_after_sha256 = self._normalization_digest(
+                        result.get("reagent_slot_plan")
+                    )
+                    result["normalization_events"] = copy.deepcopy(
+                        normalization_events
+                    )
+                    result["normalization_audit"] = {
+                        "rule_ids": sorted(
+                            {
+                                str(event.get("rule_id"))
+                                for event in normalization_events
+                                if event.get("rule_id")
+                            }
+                        ),
+                        "source_workflow_sha256": normalization_before_sha256,
+                        "normalized_workflow_sha256": normalization_after_sha256,
+                        "source_reagent_slot_plan_sha256": slot_plan_before_sha256,
+                        "normalized_reagent_slot_plan_sha256": slot_plan_after_sha256,
+                        "event_count": len(normalization_events),
+                    }
+                    result["workflow_txt"] = self._workflow_txt_from_json(workflow_json)
+                elif prior_normalization:
+                    # The candidate was already normalized and the previous
+                    # audit was proven to describe this exact workflow/slot
+                    # state. Preserve it without appending, mixing, or
+                    # rewriting any event history.
+                    result.update(prior_normalization)
             except Exception as exc:  # pragma: no cover - injected in tests
                 return internal_report("contract_normalization", exc)
-            if notes:
-                result.setdefault("normalization_notes", []).extend(notes)
         try:
             report = self._workflow_validator.validate(workflow_json)
         except Exception as exc:  # pragma: no cover - injected in tests
             return internal_report("workflow_validator", exc)
         errors = list(report.get("errors", []))
         warnings = list(report.get("warnings", []))
+        for issue in result.get("normalization_issues", []) or []:
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "workflow_normalization_error")
+            pointer = str(issue.get("json_pointer") or "/")
+            message = str(issue.get("message") or code)
+            step_match = re.match(r"^/steps/(\d+)(?:/|$)", pointer)
+            if step_match and isinstance(workflow_json, dict):
+                step_index = int(step_match.group(1))
+                steps = workflow_json.get("steps")
+                step = (
+                    steps[step_index]
+                    if isinstance(steps, list)
+                    and step_index < len(steps)
+                    and isinstance(steps[step_index], dict)
+                    else {}
+                )
+                step_number = step.get("step_number", step_index + 1)
+                errors.append(
+                    f"第 {step_number} 步：{message}；位置={pointer}（{code}）。"
+                )
+            else:
+                errors.append(f"{message}；位置={pointer}（{code}）。")
         errors.extend(self._workflow_plan_step_trace_errors(result))
         quantity_audit = result.get("quantity_audit")
         if (
@@ -15950,10 +23242,29 @@ class SingleDeviceAgent:
         # Issue #4 hard gate: every step must map into the platform's exact
         # dispatch form — an unmapped step means the workflow cannot actually
         # be dispatched, so it is an error, not an FYI.
+        material_guard_findings: List[Dict[str, Any]] = []
         try:
             dispatch_preview = format_dispatch_payload(
-                workflow_json, self._dispatch_catalog
+                workflow_json,
+                self._dispatch_catalog,
+                material_contract=result,
             )
+            material_guard_findings = [
+                copy.deepcopy(item)
+                for item in (
+                    dispatch_preview.get("material_guard_findings", []) or []
+                )
+                if isinstance(item, dict)
+            ]
+            for finding in material_guard_findings:
+                code = str(
+                    finding.get("code") or "material_execution_dispatch_blocked"
+                )
+                message = str(finding.get("message") or code)
+                pointer = str(finding.get("json_pointer") or "/")
+                errors.append(
+                    f"物料执行门阻断：{message}；位置={pointer}（{code}）。"
+                )
             unmapped = int(dispatch_preview.get("unmapped_steps", 0) or 0)
             if unmapped > 0:
                 preview_warnings = dispatch_preview.get("warnings", []) or []
@@ -15988,10 +23299,24 @@ class SingleDeviceAgent:
                     errors.append(
                         "下发参数被省略（dispatch_parameter_dropped）：" + warning
                     )
-            if checked_steps and not dispatch_preview.get("payload"):
+            if (
+                checked_steps
+                and not dispatch_preview.get("payload")
+                and not material_guard_findings
+            ):
                 return internal_report(
                     "dispatch_formatter_empty_payload",
                     RuntimeError("formatter returned an empty payload for non-empty workflow"),
+                )
+            validated_dispatch_payload_binding_sha256 = ""
+            if (
+                self._contract_version == "v2"
+                and dispatch_preview.get("payload")
+            ):
+                validated_dispatch_payload_binding_sha256 = (
+                    self._dispatch_payload_binding_digest(
+                        dispatch_preview.get("payload")
+                    )
                 )
         except Exception as exc:  # pragma: no cover - injected in tests
             return internal_report("dispatch_formatter", exc)
@@ -16009,11 +23334,76 @@ class SingleDeviceAgent:
             known = set(errors)
             errors.extend(e for e in contract_errors if e not in known)
 
+        structured_errors = structure_validation_errors(errors, workflow_json)
+        if material_guard_findings:
+            guard_codes = {
+                str(
+                    finding.get("code")
+                    or "material_execution_dispatch_blocked"
+                )
+                for finding in material_guard_findings
+            }
+            structured_errors = [
+                record
+                for record in structured_errors
+                if str(record.get("error_code") or record.get("code") or "")
+                not in guard_codes
+            ] + [
+                {
+                    "error_code": str(
+                        finding.get("code")
+                        or "material_execution_dispatch_blocked"
+                    ),
+                    "code": str(
+                        finding.get("code")
+                        or "material_execution_dispatch_blocked"
+                    ),
+                    "message": str(
+                        finding.get("message") or finding.get("code") or ""
+                    ),
+                    "json_pointer": str(
+                        finding.get("json_pointer") or "/"
+                    ),
+                    "stage": str(
+                        finding.get("stage") or "dispatch_payload"
+                    ),
+                }
+                for finding in material_guard_findings
+            ]
+        if audit_findings:
+            # The legacy ``errors`` list remains string-compatible, but keep
+            # the audit's structured endpoints alongside it.  They describe
+            # where a cross-step violation was observed; they do not grant
+            # mutation authority to either endpoint.
+            audit_structured = structure_validation_errors(
+                audit_findings, workflow_json
+            )
+            audit_messages = {
+                str(record.get("message", "")) for record in audit_structured
+            }
+            structured_errors = [
+                record
+                for record in structured_errors
+                if str(record.get("message", "")) not in audit_messages
+            ] + audit_structured
+
         return {
             "status": "failed" if errors else "passed",
             "errors": errors,
             "warnings": warnings,
             "checked_steps": report.get("checked_steps", 0),
+            "structured_errors": structured_errors,
+            "validated_workflow_sha256": self._normalization_digest(
+                workflow_json
+            ),
+            "validated_dispatch_payload_binding_sha256": (
+                validated_dispatch_payload_binding_sha256
+            ),
+            "assessment_source": (
+                "deterministic_material_execution_dispatch_guard"
+                if material_guard_findings
+                else "deterministic_workstation_validator"
+            ),
         }
 
     def _workflow_plan_step_trace_errors(
@@ -16030,19 +23420,38 @@ class SingleDeviceAgent:
         """
 
         plan_steps = result.get("device_plan")
-        if not isinstance(plan_steps, list) or not plan_steps:
-            return []
         errors: List[str] = []
-        plan_ids: List[str] = []
-        plan_by_id: Dict[str, Dict[str, Any]] = {}
+        workflow_json = result.get("workflow_json")
+        trace_stamping_issues = (
+            workflow_json.get("trace_stamping_issues", [])
+            if isinstance(workflow_json, dict)
+            else []
+        )
+        if isinstance(trace_stamping_issues, list):
+            errors.extend(
+                "workflow trace stamping rejected explicit provenance: "
+                + str(issue.get("message") or issue)
+                + "（workflow_trace_identity_conflict）。"
+                for issue in trace_stamping_issues
+                if isinstance(issue, dict)
+            )
+        if not isinstance(plan_steps, list) or not plan_steps:
+            return errors
+        plan_ids: List[Tuple[str, Any]] = []
+        plan_by_id: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        plan_values: Dict[Tuple[str, Any], Any] = {}
         for index, step in enumerate(plan_steps, start=1):
             if not isinstance(step, dict):
                 errors.append(
                     f"device_plan[{index}] 不是 object（invalid_device_plan_step）。"
                 )
                 continue
-            plan_id = str(step.get("plan_step") or "").strip()
-            if not plan_id:
+            try:
+                plan_value = normalize_macro_id(
+                    step.get("plan_step"), f"device_plan[{index - 1}].plan_step"
+                )
+                plan_id = macro_id_key(plan_value)
+            except MacroIdentityError:
                 errors.append(
                     f"device_plan[{index}] 缺少稳定 plan_step "
                     "（missing_device_plan_step_id）。"
@@ -16050,16 +23459,19 @@ class SingleDeviceAgent:
                 continue
             plan_ids.append(plan_id)
             plan_by_id.setdefault(plan_id, step)
-        duplicate_plan_ids = sorted(
-            {plan_id for plan_id in plan_ids if plan_ids.count(plan_id) > 1}
-        )
+            plan_values.setdefault(plan_id, plan_value)
+        duplicate_plan_keys = {
+            plan_id for plan_id in plan_ids if plan_ids.count(plan_id) > 1
+        }
+        duplicate_plan_ids = [
+            plan_values[key] for key in sorted(duplicate_plan_keys, key=repr)
+        ]
         if duplicate_plan_ids:
             errors.append(
                 "device_plan 含重复 plan_step，workflow 无法唯一追踪 "
                 f"（duplicate_device_plan_step_id）：{duplicate_plan_ids}。"
             )
         expected = set(plan_ids)
-        workflow_json = result.get("workflow_json")
         workflow_steps = (
             workflow_json.get("steps", [])
             if isinstance(workflow_json, dict)
@@ -16067,30 +23479,39 @@ class SingleDeviceAgent:
         )
         if not isinstance(workflow_steps, list):
             workflow_steps = []
-        covered: Set[str] = set()
-        valid_workflow_refs: Dict[str, List[Dict[str, Any]]] = {}
+        covered: Set[Tuple[str, Any]] = set()
+        valid_workflow_refs: Dict[
+            Tuple[str, Any], List[Dict[str, Any]]
+        ] = {}
         for index, step in enumerate(workflow_steps, start=1):
             if not isinstance(step, dict):
                 continue
             step_number = step.get("step_number", index)
             raw_source = step.get("source_plan_step")
-            if isinstance(raw_source, (list, dict, tuple, set)):
-                errors.append(
-                    f"workflow 步骤 {step_number} 的 source_plan_step 必须是"
-                    " scalar（invalid_workflow_plan_step_trace）。"
-                )
-                continue
-            source = str(raw_source or "").strip()
-            if not source:
+            if raw_source is None or (
+                isinstance(raw_source, str) and not raw_source.strip()
+            ):
                 errors.append(
                     f"workflow 步骤 {step_number} 缺少 source_plan_step "
                     "（missing_workflow_plan_step_trace）。"
                 )
                 continue
+            try:
+                source_value = normalize_macro_id(
+                    raw_source,
+                    f"workflow_json.steps[{index - 1}].source_plan_step",
+                )
+                source = macro_id_key(source_value)
+            except MacroIdentityError:
+                errors.append(
+                    f"workflow 步骤 {step_number} 的 source_plan_step 必须是"
+                    " scalar（invalid_workflow_plan_step_trace）。"
+                )
+                continue
             if source not in expected:
                 errors.append(
                     f"workflow 步骤 {step_number} 引用了不存在的 plan_step="
-                    f"{source}（unknown_workflow_plan_step_trace）。"
+                    f"{source_value!r}（unknown_workflow_plan_step_trace）。"
                 )
                 continue
             source_plan = plan_by_id[source]
@@ -16113,31 +23534,72 @@ class SingleDeviceAgent:
                 errors.append(
                     f"workflow 步骤 {step_number} 的 workstation="
                     f"{workflow_station or '<missing>'} 与 source_plan_step="
-                    f"{source} 冻结工作站 {plan_station or '<missing>'} 不一致"
+                    f"{source_value!r} 冻结工作站 {plan_station or '<missing>'} 不一致"
                     "（workflow_plan_step_workstation_mismatch）。"
                 )
                 continue
-            expected_macro_sources = set(
-                self._source_macro_step_ids(source_plan)
-            )
-            actual_macro_sources = set(
-                self._source_macro_step_ids(step)
-            )
+            try:
+                expected_macro_values = extract_source_macro_ids(
+                    source_plan,
+                    "device_plan.source_macro",
+                    required=True,
+                )
+            except MacroIdentityError as exc:
+                errors.append(
+                    f"source_plan_step={source_value!r} 的冻结 macro trace 非法："
+                    f"{exc}（invalid_device_plan_macro_trace）。"
+                )
+                continue
+            try:
+                actual_macro_values = extract_source_macro_ids(
+                    step,
+                    "workflow.source_macro",
+                    required=True,
+                )
+            except MacroIdentityError as exc:
+                errors.append(
+                    f"workflow 步骤 {step_number} 的 macro trace 非法："
+                    f"{exc}（invalid_workflow_macro_trace）。"
+                )
+                continue
+            if step.get("source_macro_step_id") is not None:
+                try:
+                    stable_macro_id = normalize_macro_id(
+                        step.get("source_macro_step_id"),
+                        f"workflow_json.steps[{index - 1}].source_macro_step_id",
+                    )
+                except MacroIdentityError as exc:
+                    errors.append(
+                        f"workflow 步骤 {step_number} 的 source_macro_step_id 非法："
+                        f"{exc}（invalid_workflow_stable_macro_id）。"
+                    )
+                    continue
+                if macro_id_key(stable_macro_id) != macro_id_key(
+                    actual_macro_values[0]
+                ):
+                    errors.append(
+                        f"workflow 步骤 {step_number} 的 source_macro_step_id="
+                        f"{stable_macro_id!r} 与 primary source_macro_step="
+                        f"{actual_macro_values[0]!r} 冲突"
+                        "（workflow_stable_macro_id_mismatch）。"
+                    )
+                    continue
+            expected_macro_sources = {
+                macro_id_key(value) for value in expected_macro_values
+            }
+            actual_macro_sources = {
+                macro_id_key(value) for value in actual_macro_values
+            }
             if expected_macro_sources != actual_macro_sources:
                 errors.append(
                     f"workflow 步骤 {step_number} 的 source_macro_steps="
-                    f"{sorted(actual_macro_sources)} 与 source_plan_step="
-                    f"{source} 的冻结来源 {sorted(expected_macro_sources)} 不一致"
+                    f"{sorted(actual_macro_values, key=repr)} 与 source_plan_step="
+                    f"{source_value!r} 的冻结来源 "
+                    f"{sorted(expected_macro_values, key=repr)} 不一致"
                     "（workflow_plan_step_macro_trace_mismatch）。"
                 )
                 continue
             valid_workflow_refs.setdefault(source, []).append(step)
-        auxiliary_operation_pattern = re.compile(
-            r"^(?:开盖|关盖|物料拿取|物料放置|容器(?:拿取|放置|转移|中转)|"
-            r"运输|transfer\s+container)$",
-            re.I,
-        )
-
         def exact_or_curated_operation(
             platform_station: Optional[str], operation: str
         ) -> Optional[str]:
@@ -16169,7 +23631,69 @@ class SingleDeviceAgent:
                     return candidate
             return None
 
-        for plan_id in sorted(expected):
+        def single_trailing_annotation_operation(
+            text: str,
+        ) -> Optional[Tuple[str, str]]:
+            """Return the prefix and body of one balanced trailing annotation."""
+
+            pairs = {"(": ")", "（": "）"}
+            stack: List[str] = []
+            top_level_groups: List[Tuple[int, int]] = []
+            group_start: Optional[int] = None
+            for index, character in enumerate(text):
+                if character in pairs:
+                    if not stack:
+                        group_start = index
+                    stack.append(character)
+                    continue
+                if character not in pairs.values():
+                    continue
+                if not stack or pairs[stack[-1]] != character:
+                    return None
+                stack.pop()
+                if not stack:
+                    if group_start is None:
+                        return None
+                    top_level_groups.append((group_start, index))
+                    group_start = None
+            if stack or len(top_level_groups) != 1:
+                return None
+            start, end = top_level_groups[0]
+            if text[end + 1 :].strip():
+                return None
+            prefix = text[:start].strip()
+            if not prefix:
+                return None
+            return prefix, text[start + 1 : end]
+
+        coverage_semantic_operations = {
+            "分批加液": "加液_物料绑定",
+        }
+
+        def frozen_capability_operation_names(
+            source_plan: Dict[str, Any]
+        ) -> List[str]:
+            """Return the frozen structured operation identity of a plan step.
+
+            ``operation_capabilities[].skill_operation_name`` is copied
+            verbatim from the workstation Skill into the handoff contract,
+            so it is the authoritative statement of which operation the
+            step must perform.  Free-text ``operation_intent`` is consulted
+            only when the structured identity is absent.
+            """
+            claims = source_plan.get("operation_capabilities")
+            if not isinstance(claims, list):
+                return []
+            names: List[str] = []
+            for claim in claims:
+                if not isinstance(claim, dict):
+                    continue
+                name = str(claim.get("skill_operation_name") or "").strip()
+                if name and name not in names:
+                    names.append(name)
+            return names
+
+        for plan_id in sorted(expected, key=repr):
             traced_steps = valid_workflow_refs.get(plan_id, [])
             if not traced_steps:
                 continue
@@ -16181,36 +23705,127 @@ class SingleDeviceAgent:
             dispatch_station = self._dispatch_catalog.resolve_station(
                 plan_station
             )
-            resolved_plan_operation = exact_or_curated_operation(
-                dispatch_station, plan_intent
-            )
-            if resolved_plan_operation:
-                operation_covered = any(
-                    exact_or_curated_operation(
-                        dispatch_station,
-                        str(step.get("operation") or "").strip(),
+            obligation_operations: List[str] = []
+            minimum_matching_nodes = 1
+            ambiguous_repeat_count = False
+            obligation_unverifiable_reason: Optional[str] = None
+            structured_names = frozen_capability_operation_names(source_plan)
+            if structured_names:
+                for structured_name in structured_names:
+                    resolved_name = exact_or_curated_operation(
+                        dispatch_station, structured_name
                     )
-                    == resolved_plan_operation
-                    for step in traced_steps
-                )
+                    if not resolved_name:
+                        obligation_unverifiable_reason = (
+                            "冻结结构化操作身份 "
+                            f"skill_operation_name={structured_name!r} "
+                            "无法在该工作站真源目录中解析"
+                        )
+                        obligation_operations = []
+                        break
+                    obligation_operations.append(resolved_name)
             else:
-                operation_covered = any(
-                    str(step.get("operation") or "").strip()
-                    and not auxiliary_operation_pattern.fullmatch(
-                        str(step.get("operation") or "").strip()
-                    )
-                    for step in traced_steps
+                resolved_plan_operation = exact_or_curated_operation(
+                    dispatch_station, plan_intent
                 )
-            if not operation_covered:
+                if not resolved_plan_operation:
+                    # The Plan may append a parenthesized process note to an
+                    # otherwise exact Skill operation (for example, lid-state
+                    # instructions or chemical formulae).  Only the operation
+                    # name before one balanced trailing top-level note may be
+                    # tried; nested paired parentheses are allowed inside
+                    # that note.  The prefix must still resolve on this same
+                    # workstation through the truth catalog or a curated
+                    # alias.
+                    annotated_intent = single_trailing_annotation_operation(
+                        plan_intent
+                    )
+                    semantic_operation = (
+                        annotated_intent[0] if annotated_intent else plan_intent
+                    )
+                    mapped_operation = coverage_semantic_operations.get(
+                        semantic_operation
+                    )
+                    if mapped_operation:
+                        resolved_plan_operation = exact_or_curated_operation(
+                            dispatch_station,
+                            mapped_operation,
+                        )
+                        if annotated_intent:
+                            repeat_counts = {
+                                int(value)
+                                for value in re.findall(
+                                    r"重复\s*([1-9]\d*)\s*次",
+                                    annotated_intent[1],
+                                )
+                            }
+                            if len(repeat_counts) == 1:
+                                minimum_matching_nodes = next(
+                                    iter(repeat_counts)
+                                )
+                            elif "重复" in annotated_intent[1]:
+                                # An unparsed or conflicting repeat obligation
+                                # must not collapse to a single covered node.
+                                ambiguous_repeat_count = True
+                        if not resolved_plan_operation:
+                            obligation_unverifiable_reason = (
+                                f"显式覆盖语义 {semantic_operation!r} 要求的"
+                                f"工作站操作 {mapped_operation!r} "
+                                "在该工作站真源目录中不可用"
+                            )
+                    elif annotated_intent:
+                        resolved_plan_operation = exact_or_curated_operation(
+                            dispatch_station,
+                            annotated_intent[0],
+                        )
+                if resolved_plan_operation:
+                    obligation_operations = [resolved_plan_operation]
+                elif obligation_unverifiable_reason is None:
+                    obligation_unverifiable_reason = (
+                        "operation_intent 无法经工作站真源目录或"
+                        "经验证映射独立确定操作义务"
+                    )
+            if obligation_unverifiable_reason:
                 errors.append(
-                    f"workflow 对 plan_step={plan_id} 只有开关盖/容器中转"
-                    "辅助步骤，或遗漏了可由真源解析的 operation_intent="
-                    f"{plan_intent or '<missing>'}"
+                    f"workflow 无法独立确定 plan_step={plan_values[plan_id]!r} "
+                    f"的操作义务：{obligation_unverifiable_reason}"
+                    f"（operation_intent={plan_intent or '<missing>'}）"
+                    "（workflow_plan_step_operation_obligation_unresolved）。"
+                )
+                continue
+            if ambiguous_repeat_count:
+                errors.append(
+                    f"workflow 对 plan_step={plan_values[plan_id]!r} "
+                    "的重复次数义务无法唯一解析"
+                    f"（operation_intent={plan_intent or '<missing>'}）"
+                    "（workflow_plan_step_operation_missing）。"
+                )
+                continue
+            resolved_node_operations = [
+                exact_or_curated_operation(
+                    dispatch_station,
+                    str(step.get("operation") or "").strip(),
+                )
+                for step in traced_steps
+            ]
+            uncovered_operations = [
+                operation
+                for operation in obligation_operations
+                if resolved_node_operations.count(operation)
+                < minimum_matching_nodes
+            ]
+            if uncovered_operations:
+                errors.append(
+                    f"workflow 对 plan_step={plan_values[plan_id]!r} 未提供"
+                    f"匹配操作义务 {uncovered_operations!r} 的节点"
+                    f"（operation_intent={plan_intent or '<missing>'}）"
                     "（workflow_plan_step_operation_missing）。"
                 )
                 continue
             covered.add(plan_id)
-        missing = sorted(expected - covered)
+        missing = [
+            plan_values[key] for key in sorted(expected - covered, key=repr)
+        ]
         if missing:
             errors.append(
                 "workflow 未覆盖完整 device_plan "
@@ -16456,9 +24071,7 @@ class SingleDeviceAgent:
                 continue
 
             station = str(step.get("workstation", "")).strip()
-            source_macros = set(
-                SingleDeviceAgent._source_macro_step_ids(step)
-            )
+            source_macros = set(SingleDeviceAgent._source_macro_keys(step))
             container_ids = _containers(step)
             matches = [
                 (index, item)
@@ -16467,7 +24080,7 @@ class SingleDeviceAgent:
                 and str(item.get("workstation", "")).strip() == station
                 and bool(
                     source_macros
-                    & set(SingleDeviceAgent._source_macro_step_ids(item))
+                    & set(SingleDeviceAgent._source_macro_keys(item))
                 )
                 and (not container_ids or not _containers(item) or _containers(item) == container_ids)
             ]
@@ -16552,6 +24165,90 @@ class SingleDeviceAgent:
             )
         return True
 
+    def _guard_terminal_plan_certificate_binding(
+        self,
+        state: SingleDeviceAgentState,
+        package: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Fail closed if final packaging drifts from the signed V2 plan."""
+
+        certificate = state.feasibility_certificate
+        full_contract_certificate = bool(
+            self._contract_version == "v2"
+            or (
+                isinstance(certificate, dict)
+                and strict_feasibility_certificate_version(certificate)
+                in FULL_PLAN_CONTRACT_CERTIFICATE_VERSIONS
+            )
+        )
+        # Historical V1 2.3 certificates did not bind the complete plan and
+        # remain compatible.  Every 2.4/2.5 full-contract certificate,
+        # including V1 certificates, must pass the same terminal binding guard
+        # as V2.  A 2.4 digest cannot match the expanded 2.5 projection and is
+        # therefore forced through re-audit rather than downgraded to legacy.
+        if not full_contract_certificate or not state.feasibility_accepted:
+            return package
+        expected = (
+            str(certificate.get("accepted_device_plan_contract_sha256") or "")
+            if isinstance(certificate, dict)
+            else ""
+        )
+        actual = device_plan_contract_digest(package)
+        if expected and actual == expected:
+            return package
+
+        guarded = copy.deepcopy(package)
+        message = (
+            "terminal Device Plan contract does not match the accepted "
+            "feasibility certificate"
+        )
+        guarded.update(
+            {
+                "status": "failed",
+                "feedback_type": "device_internal_error",
+                "feedback_route": "device",
+                "failure_scope": "device_internal",
+                "failure_stage": "device_internal_error",
+                "dispatch_payload": {},
+                "dispatch_formatting": {},
+            }
+        )
+        guarded["dispatch_validation"] = {
+            "status": "failed",
+            "errors": [message],
+            "warnings": [],
+            "checked_steps": len(
+                (guarded.get("workflow_json") or {}).get("steps", [])
+            )
+            if isinstance(guarded.get("workflow_json"), dict)
+            else 0,
+            "assessment_source": "terminal_plan_certificate_guard_internal",
+            "_device_internal_error": True,
+            "expected_device_plan_contract_sha256": expected,
+            "actual_device_plan_contract_sha256": actual,
+            "structured_errors": [
+                {
+                    "error_code": "terminal_plan_certificate_mismatch",
+                    "code": "terminal_plan_certificate_mismatch",
+                    "message": message,
+                }
+            ],
+        }
+        guarded["error_package"] = {
+            "type": "device_internal_error",
+            "assessment_source": "terminal_plan_certificate_guard_internal",
+            "blocking_constraints": [message],
+            "structured_errors": copy.deepcopy(
+                guarded["dispatch_validation"]["structured_errors"]
+            ),
+            "device_snapshot_id": self._device_snapshot_id(),
+            "message": message,
+        }
+        state.feasibility_accepted = False
+        state.feasibility_certificate = {}
+        state.accepted_device_plan_contract = {}
+        return guarded
+
     def _normalize_terminal_package(
         self,
         state: SingleDeviceAgentState,
@@ -16610,7 +24307,7 @@ class SingleDeviceAgent:
             package.setdefault("workflow_txt", "")
             package.setdefault("workflow_json", {})
             package.setdefault("agent_mode", "single_device_agent")
-            return package
+            return self._guard_terminal_plan_certificate_binding(state, package)
 
         if (
             result.get("status") in {"feasibility_error", "unsupported", "not_feasible"}
@@ -16938,7 +24635,7 @@ class SingleDeviceAgent:
                 )
             )
         ):
-            return self._build_manual_result(
+            package = self._build_manual_result(
                 state,
                 result,
                 reason=(
@@ -16947,6 +24644,7 @@ class SingleDeviceAgent:
                 ),
                 error_type="device_quantity_human_review_required",
             )
+            return self._guard_terminal_plan_certificate_binding(state, package)
 
         workflow_txt = str(result.get("workflow_txt", "")).strip()
         workflow_json = result.get("workflow_json")
@@ -16966,11 +24664,30 @@ class SingleDeviceAgent:
 
         if not isinstance(workflow_json, dict):
             workflow_json = {}
+        normalization_fields = self._current_normalization_fields(result)
+        plan_contract = device_plan_contract_view(result)
+        # Transport/quota/runtime failures may carry only the failed workflow
+        # envelope while the latest planning candidate holds the sticky review
+        # obligation.  Recompute it from all authoritative sources instead of
+        # letting the terminal formatter silently fall back to ``False``.
+        plan_contract["requires_scientific_review"] = (
+            self._scientific_review_required(
+                result,
+                feasibility_progress=state.feasibility_progress,
+            )
+        )
         if dispatch_validation.get("status") == "failed":
             # Never let an unvalidated dispatch payload leave as success.  Once
             # feasibility is accepted, this branch is Device-local by contract.
             raw_errors = dispatch_validation.get("errors", []) or []
-            structured = structure_validation_errors(raw_errors, workflow_json)
+            structured_value = dispatch_validation.get("structured_errors")
+            structured = (
+                copy.deepcopy(structured_value)
+                if isinstance(structured_value, list)
+                and structured_value
+                and all(isinstance(item, dict) for item in structured_value)
+                else structure_validation_errors(raw_errors, workflow_json)
+            )
             macro_action_view = state.research_handoff.get("macro_action")
             macro_action_view = (
                 macro_action_view if isinstance(macro_action_view, dict) else {}
@@ -16999,7 +24716,7 @@ class SingleDeviceAgent:
                 isinstance(quantity_audit, dict)
                 and quantity_audit.get("status") == "failed"
             )
-            return {
+            package = {
                 "status": "failed",
                 "feedback_type": (
                     "device_internal_error"
@@ -17037,6 +24754,7 @@ class SingleDeviceAgent:
                 "feasibility_certificate": copy.deepcopy(
                     state.feasibility_certificate
                 ),
+                **copy.deepcopy(plan_contract),
                 "macro_plan": state.research_handoff,
                 "macro_plan_summary": result.get("macro_plan_summary", ""),
                 "dispatch_validation": dispatch_validation,
@@ -17053,6 +24771,12 @@ class SingleDeviceAgent:
                 "material_ledger": result.get("material_ledger", {}),
                 "quantity_audit": result.get("quantity_audit", {}),
                 "workflow_repair": result.get("workflow_repair", {}),
+                # Run-layer stops never clear the scientific-review obligation
+                # recorded on preserved candidates (a prior quota-stop path
+                # flipped it to false; keep the pending review visible).
+                "requires_scientific_review": bool(
+                    plan_contract.get("requires_scientific_review")
+                ),
                 "error_package": {
                     "type": (
                         "workflow_skill_review_failed"
@@ -17071,8 +24795,10 @@ class SingleDeviceAgent:
                     "blocking_constraints": blocking,
                     "structured_errors": structured,
                     "device_snapshot_id": self._device_snapshot_id(),
-                    "macro_action_id": str(macro_action_view.get("macro_action_id", "")),
-                    "observation_point_id": str(
+                    "macro_action_id": copy.deepcopy(
+                        macro_action_view.get("macro_action_id", "")
+                    ),
+                    "observation_point_id": copy.deepcopy(
                         macro_action_view.get("observation_point_id", "")
                     ),
                     "failed_plan_signature": self._plan_signature(state.research_handoff),
@@ -17104,25 +24830,58 @@ class SingleDeviceAgent:
                 ),
                 "workflow_txt": workflow_txt,
                 "workflow_json": workflow_json,
+                **normalization_fields,
                 "agent_mode": "single_device_agent",
             }
+            return self._guard_terminal_plan_certificate_binding(state, package)
 
-        temporal_adaptations = workflow_json.get("temporal_adaptations", [])
-        requires_review = any(
-            isinstance(item, dict) and item.get("requires_scientific_review")
-            for item in temporal_adaptations
-            if isinstance(temporal_adaptations, list)
+        requires_review = bool(
+            plan_contract.get("requires_scientific_review")
         )
-        quantity_audit = result.get("quantity_audit")
-        if isinstance(quantity_audit, dict):
-            requires_review = bool(
-                requires_review
-                or quantity_audit.get("requires_scientific_review")
-            )
 
         macro_action = self._stamp_device_steps_with_macro_action(
             workflow_json, state.research_handoff
         )
+        # The macro trace stamper is idempotent in the normal pipeline, but a
+        # direct caller may provide an unstamped candidate. Re-evaluate the
+        # audit after this final semantic mutation so terminal evidence can
+        # never claim a hash for an earlier workflow state.
+        normalization_fields = self._current_normalization_fields(result)
+        dispatch_validation = copy.deepcopy(dispatch_validation)
+        final_workflow_sha256 = self._normalization_digest(workflow_json)
+        validated_workflow_sha256 = str(
+            dispatch_validation.get("validated_workflow_sha256") or ""
+        ).strip()
+        if self._contract_version == "v2" and (
+            not validated_workflow_sha256
+            or validated_workflow_sha256 != final_workflow_sha256
+        ):
+            message = (
+                "final workflow digest does not match the workflow that passed "
+                "deterministic validation"
+            )
+            internal = copy.deepcopy(result)
+            internal["feedback_type"] = "device_internal_error"
+            internal["feedback_route"] = "device"
+            internal["failure_scope"] = "device_internal"
+            internal["dispatch_validation"] = {
+                "status": "failed",
+                "errors": [message],
+                "warnings": [],
+                "checked_steps": len(workflow_json.get("steps", [])),
+                "assessment_source": "final_workflow_digest_guard_internal",
+                "_device_internal_error": True,
+                "validated_workflow_sha256": validated_workflow_sha256,
+                "final_workflow_sha256": final_workflow_sha256,
+                "structured_errors": [
+                    {
+                        "error_code": "final_workflow_digest_mismatch",
+                        "code": "final_workflow_digest_mismatch",
+                        "message": message,
+                    }
+                ],
+            }
+            return self._normalize_terminal_package(state, internal)
 
         # Harness output → the platform's EXACT parameter form (station names,
         # operation names, per-version parameter keys, declared types, station
@@ -17132,7 +24891,63 @@ class SingleDeviceAgent:
                 workflow_json,
                 self._dispatch_catalog,
                 plan_name=state.exp_id,
+                material_contract=result,
             )
+            material_guard_findings = [
+                copy.deepcopy(item)
+                for item in (dispatch.get("material_guard_findings", []) or [])
+                if isinstance(item, dict)
+            ]
+            if material_guard_findings:
+                blocked = copy.deepcopy(result)
+                blocked["dispatch_validation"] = {
+                    "status": "failed",
+                    "errors": [
+                        "物料执行门阻断：{message}（{code}）。".format(
+                            message=str(
+                                finding.get("message")
+                                or finding.get("code")
+                                or "material execution is not dispatch-ready"
+                            ),
+                            code=str(
+                                finding.get("code")
+                                or "material_execution_dispatch_blocked"
+                            ),
+                        )
+                        for finding in material_guard_findings
+                    ],
+                    "warnings": [],
+                    "checked_steps": len(workflow_json.get("steps", [])),
+                    "assessment_source": (
+                        "deterministic_material_execution_dispatch_guard"
+                    ),
+                    "validated_workflow_sha256": final_workflow_sha256,
+                    "structured_errors": [
+                        {
+                            "error_code": str(
+                                finding.get("code")
+                                or "material_execution_dispatch_blocked"
+                            ),
+                            "code": str(
+                                finding.get("code")
+                                or "material_execution_dispatch_blocked"
+                            ),
+                            "message": str(
+                                finding.get("message")
+                                or finding.get("code")
+                                or "material execution is not dispatch-ready"
+                            ),
+                            "json_pointer": str(
+                                finding.get("json_pointer") or "/"
+                            ),
+                            "stage": str(
+                                finding.get("stage") or "dispatch_payload"
+                            ),
+                        }
+                        for finding in material_guard_findings
+                    ],
+                }
+                return self._normalize_terminal_package(state, blocked)
             if workflow_json.get("steps") and not dispatch.get("payload"):
                 raise RuntimeError(
                     "formatter returned an empty payload for a non-empty workflow"
@@ -17158,7 +24973,89 @@ class SingleDeviceAgent:
             }
             return self._normalize_terminal_package(state, internal)
 
-        return {
+        final_payload = dispatch.get("payload", {})
+        if self._contract_version == "v2":
+            expected_plan_name = state.exp_id or "chemagent_workflow"
+            actual_plan_name = (
+                final_payload.get("plan_name")
+                if isinstance(final_payload, dict)
+                else None
+            )
+            expected_dispatch_binding = str(
+                dispatch_validation.get(
+                    "validated_dispatch_payload_binding_sha256"
+                )
+                or ""
+            ).strip()
+            try:
+                final_dispatch_binding = self._dispatch_payload_binding_digest(
+                    final_payload
+                )
+            except (TypeError, ValueError) as exc:
+                final_dispatch_binding = ""
+                dispatch_guard_code = "final_dispatch_payload_invalid"
+                dispatch_guard_message = str(exc)
+            else:
+                dispatch_guard_code = ""
+                dispatch_guard_message = ""
+            if actual_plan_name != expected_plan_name:
+                dispatch_guard_code = "final_dispatch_plan_name_mismatch"
+                dispatch_guard_message = (
+                    "final dispatch payload plan_name does not match the "
+                    "requested experiment identifier"
+                )
+            elif (
+                not expected_dispatch_binding
+                or final_dispatch_binding != expected_dispatch_binding
+            ):
+                dispatch_guard_code = "final_dispatch_payload_mismatch"
+                dispatch_guard_message = (
+                    "final dispatch payload does not match the payload projection "
+                    "that passed deterministic validation"
+                )
+            if dispatch_guard_code:
+                internal = copy.deepcopy(result)
+                internal["feedback_type"] = "device_internal_error"
+                internal["feedback_route"] = "device"
+                internal["failure_scope"] = "device_internal"
+                internal["dispatch_validation"] = {
+                    "status": "failed",
+                    "errors": [dispatch_guard_message],
+                    "warnings": [],
+                    "checked_steps": len(workflow_json.get("steps", [])),
+                    "assessment_source": (
+                        "final_dispatch_payload_digest_guard_internal"
+                    ),
+                    "_device_internal_error": True,
+                    "validated_dispatch_payload_binding_sha256": (
+                        expected_dispatch_binding
+                    ),
+                    "final_dispatch_payload_binding_sha256": (
+                        final_dispatch_binding
+                    ),
+                    "structured_errors": [
+                        {
+                            "error_code": dispatch_guard_code,
+                            "code": dispatch_guard_code,
+                            "message": dispatch_guard_message,
+                        }
+                    ],
+                }
+                return self._normalize_terminal_package(state, internal)
+        else:
+            final_dispatch_binding = ""
+
+        dispatch_validation["final_workflow_sha256"] = final_workflow_sha256
+        dispatch_validation["dispatch_payload_sha256"] = (
+            self._normalization_digest(final_payload)
+        )
+        dispatch_validation["device_truth_sha256"] = state.device_truth_sha256
+        if self._contract_version == "v2":
+            dispatch_validation["final_dispatch_payload_binding_sha256"] = (
+                final_dispatch_binding
+            )
+
+        package = {
             "status": "success",
             "feedback_route": "none",
             "failure_scope": "none",
@@ -17170,6 +25067,7 @@ class SingleDeviceAgent:
             "feasibility_certificate": copy.deepcopy(
                 state.feasibility_certificate
             ),
+            **copy.deepcopy(plan_contract),
             "macro_plan": state.research_handoff,
             "macro_plan_summary": result.get("macro_plan_summary", ""),
             "macro_action": macro_action,
@@ -17206,11 +25104,15 @@ class SingleDeviceAgent:
             "quantity_audit": result.get("quantity_audit", {}),
             "workflow_repair": result.get("workflow_repair", {}),
             "plan_level_repair": result.get("plan_level_repair", {}),
-            "temporal_adaptations": temporal_adaptations,
+            "temporal_adaptations": copy.deepcopy(
+                plan_contract.get("temporal_adaptations", [])
+            ),
             "workflow_txt": workflow_txt,
             "workflow_json": workflow_json,
+            **normalization_fields,
             "agent_mode": "single_device_agent",
         }
+        return self._guard_terminal_plan_certificate_binding(state, package)
 
     def _attach_v2_contract(
         self,
@@ -17263,71 +25165,206 @@ class SingleDeviceAgent:
             if isinstance(research_handoff.get("macro_action"), dict)
             else {}
         )
-        step_id_map: Dict[Any, Dict[str, str]] = {}
-        for macro_step in research_handoff.get("macro_action_steps", []) or []:
+        step_id_map: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+        ambiguous_step_ids: Set[Tuple[str, Any]] = set()
+        for index, macro_step in enumerate(
+            research_handoff.get("macro_action_steps", []) or [], start=1
+        ):
             if not isinstance(macro_step, dict):
                 continue
-            number = macro_step.get("步骤序号")
-            ids = {}
-            if macro_step.get("macro_action_id"):
-                ids["macro_action_id"] = macro_step["macro_action_id"]
-            if macro_step.get("observation_point_id"):
-                ids["observation_point_id"] = macro_step["observation_point_id"]
-            macro_step_id = str(
-                macro_step.get("macro_step_id")
-                or macro_step.get("logical_step_id")
-                or ""
-            ).strip()
-            if macro_step_id:
-                ids["source_macro_step_id"] = macro_step_id
-            if number is not None and ids:
-                step_id_map[number] = ids
-                step_id_map[str(number)] = ids
-            if macro_step_id:
-                step_id_map[macro_step_id] = ids
+            try:
+                macro_step_id = self._semantic_macro_id(macro_step, index)
+                macro_step_key = macro_id_key(macro_step_id)
+            except MacroIdentityError:
+                continue
+            ids: Dict[str, Any] = {
+                "source_macro_step_id": copy.deepcopy(macro_step_id)
+            }
+            for field in ("macro_action_id", "observation_point_id"):
+                value = macro_step.get(field)
+                if value is not None and not (
+                    isinstance(value, str) and not value.strip()
+                ):
+                    ids[field] = copy.deepcopy(value)
+            if macro_step_key in step_id_map:
+                ambiguous_step_ids.add(macro_step_key)
+            else:
+                step_id_map[macro_step_key] = ids
+        for key in ambiguous_step_ids:
+            step_id_map.pop(key, None)
 
-        default_ids = {}
-        if macro_action.get("macro_action_id"):
-            default_ids["macro_action_id"] = macro_action["macro_action_id"]
-        if macro_action.get("observation_point_id"):
-            default_ids["observation_point_id"] = macro_action["observation_point_id"]
+        default_ids: Dict[str, Any] = {}
+        for field in ("macro_action_id", "observation_point_id"):
+            value = macro_action.get(field)
+            if value is not None and not (
+                isinstance(value, str) and not value.strip()
+            ):
+                default_ids[field] = copy.deepcopy(value)
 
-        try:
-            device_id_ordinals: Dict[Tuple[str, str], int] = {}
-            for position, step in enumerate(workflow_json.get("steps", []) or [], start=1):
-                if not isinstance(step, dict):
-                    continue
-                self._normalize_source_macro_fields(step)
-                source = step.get("source_macro_step_id") or step.get("source_macro_step")
-                ids = step_id_map.get(source, default_ids)
+        device_id_ordinals: Dict[
+            Tuple[Tuple[str, Any], Optional[Tuple[str, Any]]], int
+        ] = {}
+        stamping_issues: List[Dict[str, Any]] = []
+        for position, step in enumerate(workflow_json.get("steps", []) or [], start=1):
+            if not isinstance(step, dict):
+                continue
+            staged = copy.deepcopy(step)
+            try:
+                self._normalize_source_macro_fields(staged)
+                declared_sources = extract_source_macro_ids(
+                    staged,
+                    f"workflow_json.steps[{position - 1}]",
+                    required=staged.get("source_macro_step_id") is None,
+                )
+                source: Any = None
+                if staged.get("source_macro_step_id") is not None:
+                    source = normalize_macro_id(
+                        staged.get("source_macro_step_id"),
+                        f"workflow_json.steps[{position - 1}].source_macro_step_id",
+                    )
+                    if declared_sources and macro_id_key(source) != macro_id_key(
+                        declared_sources[0]
+                    ):
+                        raise MacroIdentityError(
+                            "CONFLICTING_MACRO_ID",
+                            f"workflow_json.steps[{position - 1}]",
+                            "source_macro_step_id conflicts with primary source_macro_step",
+                        )
+                else:
+                    if declared_sources:
+                        source = declared_sources[0]
+                source_key = (
+                    macro_id_key(source) if source is not None else None
+                )
+                if source_key in ambiguous_step_ids:
+                    raise MacroIdentityError(
+                        "AMBIGUOUS_MACRO_ID",
+                        f"workflow_json.steps[{position - 1}]",
+                        "source macro identifier is duplicated in Research",
+                    )
+                elif source_key not in step_id_map:
+                    raise MacroIdentityError(
+                        "UNKNOWN_MACRO_ID",
+                        f"workflow_json.steps[{position - 1}]",
+                        "source macro identifier does not resolve in Research",
+                    )
+                else:
+                    # The action-level identifiers are authoritative defaults
+                    # for every known macro step; a step-specific identifier,
+                    # when present, is more specific and overrides it.
+                    ids = {
+                        **copy.deepcopy(default_ids),
+                        **copy.deepcopy(step_id_map[source_key]),
+                    }
+                for key in ("macro_action_id", "observation_point_id"):
+                    if (
+                        key in staged
+                        and staged.get(key) is not None
+                        and key not in ids
+                    ):
+                        raise MacroIdentityError(
+                            "UNVERIFIED_TRACE_ID",
+                            f"workflow_json.steps[{position - 1}].{key}",
+                            f"explicit {key} has no authoritative Research value",
+                        )
                 for key, value in ids.items():
-                    step.setdefault(key, value)
-                stable_macro_id = str(step.get("source_macro_step_id") or "").strip()
-                if stable_macro_id:
-                    source_plan = str(step.get("source_plan_step") or "P").strip()
-                    ordinal_key = (stable_macro_id, source_plan)
+                    if key in staged and staged.get(key) is not None:
+                        if macro_id_key(
+                            staged.get(key),
+                            f"workflow_json.steps[{position - 1}].{key}",
+                        ) != macro_id_key(
+                            value,
+                            f"research_handoff.macro_action_steps.{key}",
+                        ):
+                            raise MacroIdentityError(
+                                "CONFLICTING_TRACE_ID",
+                                f"workflow_json.steps[{position - 1}].{key}",
+                                f"explicit {key} conflicts with the typed Research source",
+                            )
+                    else:
+                        staged[key] = copy.deepcopy(value)
+                stable_macro_value = staged.get("source_macro_step_id")
+                if stable_macro_value is not None:
+                    stable_macro_key = macro_id_key(
+                        stable_macro_value,
+                        f"workflow_json.steps[{position - 1}].source_macro_step_id",
+                    )
+                    raw_source_plan = staged.get("source_plan_step")
+                    source_plan_key = (
+                        macro_id_key(
+                            raw_source_plan,
+                            f"workflow_json.steps[{position - 1}].source_plan_step",
+                        )
+                        if raw_source_plan is not None
+                        else None
+                    )
+                    ordinal_key = (stable_macro_key, source_plan_key)
                     device_id_ordinals[ordinal_key] = (
                         device_id_ordinals.get(ordinal_key, 0) + 1
                     )
-                    safe_macro = re.sub(r"[^A-Za-z0-9_-]+", "_", stable_macro_id)
-                    safe_plan = re.sub(r"[^A-Za-z0-9_-]+", "_", source_plan)
+                    safe_macro = self._typed_id_token(
+                        stable_macro_value,
+                        f"workflow_json.steps[{position - 1}].source_macro_step_id",
+                    )
+                    safe_plan = (
+                        self._typed_id_token(
+                            raw_source_plan,
+                            f"workflow_json.steps[{position - 1}].source_plan_step",
+                        )
+                        if raw_source_plan is not None
+                        else "missing_plan"
+                    )
                     generated_id = (
                         f"DS_{safe_macro}_{safe_plan}_"
                         f"{device_id_ordinals[ordinal_key]:03d}"
                     )
                     if self._contract_version == "v2":
-                        step["device_step_id"] = generated_id
+                        staged["device_step_id"] = generated_id
                     else:
-                        step.setdefault("device_step_id", generated_id)
-                station = str(step.get("station_code") or step.get("workstation") or "").strip()
-                station_code = self._workstation_skill_session().resolve(station)
-                if station_code:
-                    step.setdefault("station_code", station_code)
-                    platform = self._dispatch_catalog.resolve_station(station_code)
-                    if platform:
-                        step.setdefault("platform_name", platform)
-        except Exception:  # pragma: no cover - stamping must not break success
-            pass
+                        staged.setdefault("device_step_id", generated_id)
+            except MacroIdentityError as exc:
+                # Leave the record byte-for-byte untouched.  The strict trace
+                # contract reports the malformed ID; stamping must neither
+                # coerce it nor leave a partially mutated record behind.
+                stamping_issues.append(
+                    {
+                        "step_number": step.get("step_number", position),
+                        "error_code": exc.code.lower(),
+                        "path": exc.path,
+                        "message": str(exc),
+                    }
+                )
+                continue
+            station = str(
+                staged.get("station_code") or staged.get("workstation") or ""
+            ).strip()
+            if station:
+                has_station_context = all(
+                    hasattr(self, field)
+                    for field in (
+                        "_workstation_loader",
+                        "_workflow_validator",
+                        "_dispatch_catalog",
+                    )
+                )
+                if not has_station_context:
+                    if self._contract_version == "v2":
+                        raise DeviceConfigurationError(
+                            "V2 trace stamping requires a loaded workstation context"
+                        )
+                else:
+                    station_code = self._workstation_skill_session().resolve(station)
+                    if station_code:
+                        staged.setdefault("station_code", station_code)
+                        platform = self._dispatch_catalog.resolve_station(station_code)
+                        if platform:
+                            staged.setdefault("platform_name", platform)
+            step.clear()
+            step.update(staged)
+        if stamping_issues:
+            workflow_json["trace_stamping_issues"] = stamping_issues
+        else:
+            workflow_json.pop("trace_stamping_issues", None)
         return macro_action
 
     @staticmethod

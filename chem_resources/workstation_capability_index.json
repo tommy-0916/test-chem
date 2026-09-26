@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "projection_version": "1.0",
-  "semantic_mapping_digest": "d55d0f704614b453a9909944b24f024e066d32e2cbf03c61611a95e822334870",
+  "semantic_mapping_digest": "3e1db3ba76dfb16e1c990a14dc5851c3d8a8603da7d38829d88b4eaaedc97900",
   "source_kind": "lab-design-all",
   "source": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
   "source_digest_sha256": "b55ab0c9003db0056619dcb619f0286a41ff173b0159e3268baf76820ad0e976",
@@ -140,7 +140,7 @@
       "sha256": "f8a83fb917c9519e87d3e6e67726a2b78c3b91ef4d11022edb03110a30ed17d9"
     }
   ],
-  "generation_policy": "Generated from all per-workstation SKILL.md files. Explicit operation input/output constraints take precedence over broader container parameter examples. Skill parameter structures are immutable; this index is a read-only planning projection. Setpoints, material output effects, and reported numeric measurements are separate axes.",
+  "generation_policy": "Generated from all per-workstation SKILL.md files. Explicit operation input/output constraints take precedence over broader container parameter examples. Skill parameter structures are immutable; this index is a read-only planning projection. Setpoints, material output effects, and reported numeric measurements are separate axes. Capability-to-operation authorization comes only from the reviewed exact station/capability map; missing or stale map entries stop generation. Reviewed description/operation truth gaps remain explicitly unsupported and never authorize Device operations.",
   "workstation_count": 45,
   "operation_count": 61,
   "container_count": 13,
@@ -572,9 +572,18 @@
             "section": "description",
             "quote": "固液分离",
             "sha256": "dd7eabbeb736249e8212c4a1f422187e0e909f873576060912c91440d5aaabfb"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "离心-复位机制"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-liquid-separation": [
+          "离心-复位机制"
+        ]
+      },
       "research_summary": "离心机_V1[Centrifuge_V1]；离心-复位机制{I=进样瓶/必须有盖且数量为1-10之间的偶数/纯液态或悬浊液/数量进样瓶:2..10;O=同输入/必须有盖/上层上清液和下层固体沉淀;CReq=I;Ctl=离心时间min/转速[1000,8000]r/min;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -1101,9 +1110,18 @@
             "section": "description",
             "quote": "加入指定液体",
             "sha256": "d4d3b04c415ccc844289c920431fea33250a0a5f2e3acb304e88245d869f4227"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "批量加液流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "批量加液流程"
+        ]
+      },
       "research_summary": "批量加液工作站_V1[Cleaning_and_Dispensing_Workstation_V1]；批量加液流程{I=进样瓶/50ml耐热瓶/无盖/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入/有盖;CReq=I;Ctl=原液用量mL/原液用量mL/原液用量mL/配料名称;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -1720,9 +1738,20 @@
             "section": "description",
             "quote": "样品暂存与周转",
             "sha256": "78a648687f363a73f771575d55474415d34671e4d8d20d22a2ecdf6926a0ce5e"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "静置",
+            "物料放置"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "sample-storage": [
+          "静置",
+          "物料放置"
+        ]
+      },
       "research_summary": "容器置放平台_V1[Container_storaging_Station_V1]；静置{I=进样瓶/50ml耐热瓶/西林瓶/数量进样瓶:0..10,50ml耐热瓶:0..10,西林瓶:0..10;O=同输入;CReq=I;Ctl=静置时间min;Qout=整批处理;不要求预知总量;Report=未声明}/物料放置{I=进样瓶/50ml耐热瓶/西林瓶/数量进样瓶:0..10,50ml耐热瓶:0..10,西林瓶:0..10;O=同输入;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -2105,9 +2134,18 @@
             "section": "description",
             "quote": "利用风扇加快容器降温",
             "sha256": "033501a66d87c7735104d909c0c4f2a6a6cf5429fb7599de00fa28270521f3c7"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "冷却流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "cooling": [
+          "冷却流程"
+        ]
+      },
       "research_summary": "冷却工作站_V1[Cooling_Workstation_V1]；冷却流程{I=96位石英孔板/无盖/数量96位石英孔板:0..1;O=同输入/无盖;CReq=I;Ctl=冷却温度[40,60]℃;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -2465,9 +2503,18 @@
             "section": "description",
             "quote": "干燥处理及合成过程中的老化",
             "sha256": "cc14da7d4494e7409199b6f9e4ccc778d52ba95f86f32e672de642f97701848c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "烘干主流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "drying-aging": [
+          "烘干主流程"
+        ]
+      },
       "research_summary": "烘干机_V1[Drying_Oven_V1]；烘干主流程{I=进样瓶/50ml耐热瓶/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入;CReq=I;Ctl=恒温温度[26,210]℃/烘干时间[1,14400]min;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -2808,9 +2855,18 @@
             "section": "description",
             "quote": "拿取",
             "sha256": "649d939f6a7f3e9ae5fc8105c06a06c9b7053c117bd50474792b14b38a8ba04e"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "物料拿取"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "container-supply": [
+          "物料拿取"
+        ]
+      },
       "research_summary": "常规物料站[General_Material_Station_V1]；物料拿取{I=进样瓶/西林瓶/有盖/必须无样品状态/数量进样瓶:0..60,西林瓶:0..10;O=同输入/必须无样品状态;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}；Hard=输出容器为进样瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。。",
       "dependencies": [
         {
@@ -3185,9 +3241,18 @@
             "section": "description",
             "quote": "供取放",
             "sha256": "e08ae9865b441af98b7f775ff4b6fe381b42c8088604f213a56278183a7550db"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "容器拿取"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "container-supply": [
+          "容器拿取"
+        ]
+      },
       "research_summary": "耐热瓶物料站[Heat_Resistant_Material_Station]；容器拿取{I=50ml耐热瓶/有盖/必须无样品状态/数量50ml耐热瓶:1..50;O=同输入/必须无样品状态;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}；Hard=输出容器为耐热瓶时，后续必须接移液平台或多通道固体称量或单通道固体称量工作站。。",
       "dependencies": [
         {
@@ -3589,9 +3654,18 @@
             "section": "description",
             "quote": "搅拌与加热处理",
             "sha256": "14fbb6543fa0f40cc3536396ac4ebb6270f449a68ea2212724d1b7b2bcb654d1"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "加热磁力搅拌全流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "heated-stirring": [
+          "加热磁力搅拌全流程"
+        ]
+      },
       "research_summary": "加热磁力搅拌工作站_V1[Heating_Magnetic_Stirring_Workstation_V1]；加热磁力搅拌全流程{I=进样瓶/50ml耐热瓶/有盖/纯液态或悬浊液/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=加热温度[0,320]℃/搅拌时间min/搅拌速度[100,1500]rpm;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -4437,9 +4511,22 @@
             "section": "description",
             "quote": "样品容器临时放置与中转",
             "sha256": "19f2a2e492558ac77ffb6fa4281955c0ab8f626fefffe154fb84600247cc5019"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "光催化压膜转运至中转位_96位孔板",
+            "平台联动孔板拿取_96位孔板",
+            "平台联动孔板放置_96位孔板"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "sample-routing": [
+          "光催化压膜转运至中转位_96位孔板",
+          "平台联动孔板拿取_96位孔板",
+          "平台联动孔板放置_96位孔板"
+        ]
+      },
       "research_summary": "智能光催容器中转平台_V1[Intelligent_Photocatalysis_Container_Transfer_Station_V1]；光催化压膜转运至中转位_96位孔板{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/平台联动孔板拿取_96位孔板{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/平台联动孔板放置_96位孔板{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -5856,9 +5943,20 @@
             "section": "description",
             "quote": "加液",
             "sha256": "fac27c8f6c6648d634e66865121c51cced7d3f46601f15d114888bdc7fd2a584"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "移液到96位孔板",
+            "加液_物料绑定"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "移液到96位孔板",
+          "加液_物料绑定"
+        ]
+      },
       "research_summary": "移液平台_1ml_V1[Liquid_Handling_Station_1ml_V1]；开盖{I=进样瓶/50ml耐热瓶/必须有盖/数量进样瓶:0..10,96位塑料孔板:0..1,西林瓶:0..10,50ml耐热瓶:0..10,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=保留瓶盖;Qout=整批处理;不要求预知总量;Report=未声明}/移液到96位孔板{I=96位塑料孔板/96位石英孔板/必须无盖/数量进样瓶:0..10,96位塑料孔板:0..1,西林瓶:0..10,50ml耐热瓶:0..10,96位石英孔板:0..1;O=同输入/必须有盖;CReq=I;Ctl=加液量(ml);Qout=整批处理;不要求预知总量;Report=未声明}/关盖{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10,96位塑料孔板:0..1,西林瓶:0..10,50ml耐热瓶:0..10,96位石英孔板:0..1;O=同输入/必须有盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/加液_物料绑定{I=进样瓶/西林瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10,96位塑料孔板:0..1,西林瓶:0..10,50ml耐热瓶:0..10,96位石英孔板:0..1;O=同输入/必须无盖/纯液态或悬浊液;CReq=I;Ctl=原液用量mL/配料名称;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -6875,9 +6973,18 @@
             "section": "description",
             "quote": "加液",
             "sha256": "a0cc35ad2c85a2001679872206da07263e2fbd4baf3f204afaa7771564b21428"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "加液_物料绑定"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "加液_物料绑定"
+        ]
+      },
       "research_summary": "移液平台_1ml_V2[Liquid_Handling_Station_1ml_V2]；开盖{I=进样瓶/50ml耐热瓶/必须有盖/数量进样瓶:0..10;O=同输入/必须无盖;CReq=I;Ctl=保留瓶盖;Qout=整批处理;不要求预知总量;Report=未声明}/关盖{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10;O=同输入/必须有盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/加液_物料绑定{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10;O=同输入/必须无盖/纯液态或悬浊液;CReq=I;Ctl=原液用量mL/配料名称;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -7286,9 +7393,18 @@
             "section": "description",
             "quote": "液体加入",
             "sha256": "483026a4e563066661871d7b0a9aa18b55d2495162e183f8a0d02f25f9c31baf"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "液体加样"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "液体加样"
+        ]
+      },
       "research_summary": "移液平台四通道_V1[Liquid_Handling_Station_4Channel_V1]；液体加样{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖/纯液态或悬浊液;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -7703,9 +7819,18 @@
             "section": "description",
             "quote": "加液",
             "sha256": "7b031bea3096981b8e03985e7e6549ca2606366fd5158c38812c6464650dc208"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "加液_物料绑定"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "加液_物料绑定"
+        ]
+      },
       "research_summary": "移液平台_5ml_V1[Liquid_Handling_Station_5ml_V1]；加液_物料绑定{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入/必须无盖/纯液态或悬浊液;CReq=I;Ctl=原液用量/配料名称;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -8688,9 +8813,18 @@
             "section": "description",
             "quote": "移液:将溶液",
             "sha256": "d361a16779e54025fd366776067d2c58722f12859d7314e3b6118798f9e053a5"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "纯移液"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-transfer": [
+          "纯移液"
+        ]
+      },
       "research_summary": "移液平台_5ml_V2[Liquid_Handling_Station_5ml_V2]；开盖{I=进样瓶/50ml耐热瓶/必须有盖/数量进样瓶:0..10;O=同输入/无盖;CReq=I;Ctl=保留瓶盖;Qout=整批处理;不要求预知总量;Report=未声明}/关盖{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10;O=同输入/有盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/纯移液{I=进样瓶/50ml耐热瓶/必须无盖/数量进样瓶:0..10;O=同输入/无盖/纯液态或悬浊液;CReq=I;Ctl=移液体积mL;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -9528,9 +9662,18 @@
             "section": "description",
             "quote": "加入指定液体",
             "sha256": "da1e74cd5ba615d52b5b3154513a1f0c03771950728e158c7221b2ffc771fd24"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "反应管加样"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-dosing": [
+          "反应管加样"
+        ]
+      },
       "research_summary": "移液平台_5ml_V3[Liquid_Handling_Station_5ml_V3]；反应管加样{I=10ml耐压反应管/无盖/数量10ml耐压反应管:0..4;O=同输入/无盖/纯液态或悬浊液;CReq=I;Ctl=原液用量mL/原液用量mL/原液用量mL/原液用量mL;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -10535,9 +10678,18 @@
             "section": "description",
             "quote": "上清液倾倒处理",
             "sha256": "bdb8acec4eca6e510997bfcd6b9adf847528a21f21e8a726ae6743b32df1b942"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "液体倾倒"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "supernatant-removal": [
+          "液体倾倒"
+        ]
+      },
       "research_summary": "液体倾倒工作站_V1[Liquid_Pouring_Workstation_V1]；开盖{I=进样瓶/有盖/数量进样瓶:0..10;O=同输入/无盖;CReq=I;Ctl=保留瓶盖;Qout=整批处理;不要求预知总量;Report=未声明}/关盖{I=进样瓶/无盖/数量进样瓶:0..10;O=同输入/有盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/液体倾倒{I=进样瓶/无盖/上层上清液和下层固体沉淀/数量进样瓶:0..10;O=同输入/无盖/固体;CReq=I;Ctl=停留时间s/目标角度偏移°/转动速度;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -10920,9 +11072,18 @@
             "section": "description",
             "quote": "程序高温煅烧",
             "sha256": "77a0365af3cb7205b2ba89cf9d96bcf8615e8f75272c75f384201f0476174d49"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "马弗炉加热流程_96石英孔板"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "calcination": [
+          "马弗炉加热流程_96石英孔板"
+        ]
+      },
       "research_summary": "马弗炉_V1[Muffle_Furnace_V1]；马弗炉加热流程_96石英孔板{I=96位石英孔板/无盖/数量96位石英孔板:0..1;O=同输入/无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -11279,9 +11440,18 @@
             "section": "description",
             "quote": "定量称量与进样",
             "sha256": "7c521b64f0e180c7f6f3a5f0a97f0c49898eca5caa1c4dc7cc81bbcdc61fc4f8"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "固体进样-文件传参-机器人"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-dosing": [
+          "固体进样-文件传参-机器人"
+        ]
+      },
       "research_summary": "多通道固体称量工作站_V1[Multi_Channel_Solid_Weighing_Workstation_V1]；固体进样-文件传参-机器人{I=进样瓶/西林瓶/50ml耐热瓶/必须无盖/必须无溶液/数量进样瓶:0..20,西林瓶:0..10,50ml耐热瓶:0..10;O=同输入/必须无盖/粉末;CReq=I;Ctl=无;Qout=按配方文件目标量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -11720,9 +11890,18 @@
             "section": "description",
             "quote": "定量称量与进样",
             "sha256": "c662af6b675ba36c572d81e64aaa1ac83934f35e6bb7e411956522ad7fa9a042"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "固体称量"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-dosing": [
+          "固体称量"
+        ]
+      },
       "research_summary": "多通道固体称量工作站_V2[Multi_Channel_Solid_Weighing_Workstation_V2]；固体称量{I=料斗/无盖/固体/数量10ml耐压反应管:0..4;O=10ml耐压反应管/无盖/固体;CReq=op;Ctl=加料样(0,40]g/反应管;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -12307,9 +12486,20 @@
             "section": "description",
             "quote": "样品暂存与周转",
             "sha256": "a94fa5832b50212eee975c4e0941f8807809d6e7d50758fc0c00320b9a7ae5a6"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "回收96孔板和氢气膜",
+            "回收96孔板"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "sample-storage": [
+          "回收96孔板和氢气膜",
+          "回收96孔板"
+        ]
+      },
       "research_summary": "孔板置放平台_V1[Plate_storaging_Station_V1]；回收96孔板和氢气膜{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..20,96位石英孔板:0..10;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/回收96孔板{I=96位塑料孔板/96位石英孔板/必须无盖/数量96位塑料孔板:0..20,96位石英孔板:0..10;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -12843,7 +13033,11 @@
             "section": "description",
             "quote": "固液分离",
             "sha256": "a444143b6d9d8a5861595c55017f9e417f478dc491ae66acfef51ec63a171a9c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "纯化离心"
+          ]
         },
         {
           "id": "washing-purification",
@@ -12855,9 +13049,21 @@
             "section": "description",
             "quote": "沉淀清洗",
             "sha256": "a444143b6d9d8a5861595c55017f9e417f478dc491ae66acfef51ec63a171a9c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "纯化离心"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-liquid-separation": [
+          "纯化离心"
+        ],
+        "washing-purification": [
+          "纯化离心"
+        ]
+      },
       "research_summary": "纯化工作站_V1[Purification_Workstation_V1]；纯化离心{I=进样瓶/留样瓶/必须有盖且数量为1-10之间的偶数/纯液态或悬浊液/数量进样瓶:0..20,留样瓶:0..20;O=同输入/必须有盖/悬浊液或纯液态或固体;CReq=I;Ctl=方案/时间[1,99]分钟/是否保留清洗液/清洗次数[1,10];Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -13213,9 +13419,18 @@
             "section": "description",
             "quote": "样品混合、溶液均一化",
             "sha256": "6649ff79ec3e734cbea882046ce586c3c63b3f33df23be93f122be22d457ead2"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "开始搅拌"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "ambient-mixing": [
+          "开始搅拌"
+        ]
+      },
       "research_summary": "常温磁力搅拌工作站_V1[Room_Temperture_Magnetic_Stirrer_Workstation_V1]；开始搅拌{I=进样瓶/50ml耐热瓶/纯液态或悬浊液/数量进样瓶:0..10;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=搅拌时间min/搅拌速度[500,1500]r/min;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -13596,9 +13811,18 @@
             "section": "description",
             "quote": "定量称量与进样",
             "sha256": "fd3f99db09257e155805a3b35aa6f19fbdaad3cebb8041c286451f1369ccafbf"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "固体进样"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-dosing": [
+          "固体进样"
+        ]
+      },
       "research_summary": "单通道固体称量工作站_V1[Single_Channel_Solid_Weighing_Workstation_V1]；固体进样{I=进样瓶/50ml耐热瓶/必须无盖/必须无溶液/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入/无盖/固体;CReq=I;Ctl=进样质量(0,200)g;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -13963,9 +14187,18 @@
             "section": "description",
             "quote": "固体样品转移",
             "sha256": "420fc52464c97e79274cae463102ca00ee9a0fcec95577bd722ca22f5e80f6da"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "固体样品转移"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "solid-transfer": [
+          "固体样品转移"
+        ]
+      },
       "research_summary": "固体样品转移工作站_V1[Solid_Sample_Transfer_Workstation_V1]；固体样品转移{I=96位塑料孔板/50ml耐热瓶/西林瓶/进样瓶/无盖/固体/数量料斗:0..10,96位塑料孔板:0..1,50ml耐热瓶:0..10,西林瓶:0..10,进样瓶:0..10;O=料斗/无盖/固体;CReq=op;Ctl=无;Qout=未声明;Report=未声明}。",
       "dependencies": []
     },
@@ -14282,16 +14515,23 @@
         {
           "id": "spectroscopy-preparation",
           "name": "谱学测试前搅拌均一化",
-          "support_status": "supported",
+          "support_status": "unsupported",
           "evidence": {
             "path": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation/references-Synthesis-Module/Spectroscopy_Magnetic_Stirrer_Workstation_V1/SKILL.md",
             "line": 6,
             "section": "description",
             "quote": "并行磁力搅拌",
             "sha256": "cdb44d6a0e76ba291e3ebd4e6ed5a3ac5e61f03fdb35f020160e07dc55956631"
+          },
+          "declared_support_status": "supported",
+          "operation_mapping_status": "truth_gap",
+          "operation_mapping_gap": {
+            "code": "no_executable_operation_contract",
+            "reason": "the station description declares parallel magnetic stirring, but the only executable operation, 样品架放置-夹具识别, contains no stirring operation or stirring-control contract"
           }
         }
       ],
+      "capability_operation_bindings": {},
       "research_summary": "谱学磁力搅拌工作站_V1[Spectroscopy_Magnetic_Stirrer_Workstation_V1]；样品架放置-夹具识别{I=进样瓶/50ml耐热瓶/必须无盖/纯液态或悬浊液/数量进样瓶:0..20,50ml耐热瓶:0..10;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -14630,9 +14870,18 @@
             "section": "description",
             "quote": "通过超声对样品进行物理分散、乳化混合",
             "sha256": "3584c56bf4528209db50a540d936f3c0dcb58ebd57aabd6ae248b9beae826e3c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "超声清洗"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "ultrasonic-treatment": [
+          "超声清洗"
+        ]
+      },
       "research_summary": "超声分散仪_V1[Ultrasonic_Disperser_V1]；超声清洗{I=进样瓶/50ml耐热瓶/纯液态或悬浊液/数量进样瓶:1..10;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=清洗时间秒;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -14982,9 +15231,18 @@
             "section": "description",
             "quote": "通过超声对样品进行分散、混合",
             "sha256": "7e5a152dffb42285eccdf8df81df44305c8a246a88ffb77734ee219139324ab3"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "超声清洗"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "ultrasonic-treatment": [
+          "超声清洗"
+        ]
+      },
       "research_summary": "超声分散仪_V2[Ultrasonic_Disperser_V2]；超声清洗{I=进样瓶/50ml耐热瓶/西林瓶/纯液态或悬浊液/数量进样瓶:0..10,50ml耐热瓶:0..10,西林瓶:0..10;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=清洗时间秒;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -15705,9 +15963,20 @@
             "section": "description",
             "quote": "通过超声对样品进行物理分散、乳化混合",
             "sha256": "4bbcfc2e7cfcebe160ba829b2985cb5d5f6a05851b2ab298858ea15f161cee9c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "超声加液流程",
+            "开启超声"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "ultrasonic-treatment": [
+          "超声加液流程",
+          "开启超声"
+        ]
+      },
       "research_summary": "超声移液平台_V1[Ultrasonic_Liquid_Handling_Workstation_V1]；超声加液流程{I=96位塑料孔板/96位石英孔板/数量96位塑料孔板:0..2,96位石英孔板:0..2;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}/开启超声{I=96位塑料孔板/96位石英孔板/数量96位塑料孔板:0..2,96位石英孔板:0..2;O=同输入/分散均匀的悬浊液或纯液态;CReq=I;Ctl=超声时间min;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -17052,9 +17321,18 @@
             "section": "description",
             "quote": "循环伏安法、计时电流法、交流阻抗法",
             "sha256": "1e78a5352c9217ec28e67bfbbe83c04a296c856ea5dadae6b3c63e3c2f1e961c"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "电化学检测"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "electrochemistry": [
+          "电化学检测"
+        ]
+      },
       "research_summary": "双工位电化学工作站_V2[Dual_Station_Electrochemical_Workstation_V2]；电化学检测{I=进样瓶/必须无盖/大于4ml的纯液态或悬浊液/数量进样瓶:0..10;O=进样瓶/西林瓶/色谱进样瓶/无盖/纯液态;CReq=op;Ctl=催化剂滴液量(29,100]μL/吸取原液瓶N号液体体积(-1,10000]μL/吸取废液体积(0,10000]μL/反应槽清洗次数(0,5];Qout=按目标设定量输出;Report=未声明}/制备并转移碳纸样品{I=进样瓶/必须无盖/纯液态或悬浊液/数量进样瓶:0..10;O=碳纸架/必须无盖/负载于碳纸的固体;CReq=op;Ctl=催化剂滴液量(29,100]μL/碳纸晾干时间(0,480]分钟/碳纸晾干温度(0,80]摄氏度/碳纸晾干设置;Qout=按目标设定量输出;Report=未声明}。",
       "dependencies": []
     },
@@ -17604,9 +17882,18 @@
             "section": "description",
             "quote": "高温高压条件下热催化反应",
             "sha256": "7b92c17d1682509235d79568d33b7ec8e66d467c086eaabec9ee8e398e5389c8"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "反应釜微反应"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "thermal-catalysis": [
+          "反应釜微反应"
+        ]
+      },
       "research_summary": "高温高压微反应平台_V1[High_Temperature_High_Pressure_Microreaction_Platform_V1]；反应釜微反应{I=10ml耐压反应管/无盖/数量10ml耐压反应管:0..4;O=同输入/无盖;CReq=I;Ctl=压力MPa/压力值MPa/反应压力MPa/开盖温度℃;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -18093,9 +18380,18 @@
             "section": "description",
             "quote": "光催化反应的并行控温测试",
             "sha256": "27a4764c04ca5c9ae4ebc3e0394042d60b35dfb7fbfd9cefa17fcc8ffaf0f352"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "光催化流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "photocatalysis": [
+          "光催化流程"
+        ]
+      },
       "research_summary": "光催化工作站_V1[Photocatalysis_Workstation_V1]；光催化流程{I=西林瓶/必须无盖/数量西林瓶:1..20;O=西林瓶/必须无盖;CReq=op;Ctl=时间[1,2880]min;Qout=未声明;Report=未声明}。",
       "dependencies": []
     },
@@ -18453,7 +18749,11 @@
             "section": "description",
             "quote": "光催化反应测试",
             "sha256": "d5d8c82bc18871f7167e5978b8e3164b99a8dafd684e7f6387c4a03dc0fee872"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "光催化流程"
+          ]
         },
         {
           "id": "photodeposition",
@@ -18465,9 +18765,21 @@
             "section": "description",
             "quote": "光沉积法负载助催化剂",
             "sha256": "d5d8c82bc18871f7167e5978b8e3164b99a8dafd684e7f6387c4a03dc0fee872"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "光催化流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "photocatalysis": [
+          "光催化流程"
+        ],
+        "photodeposition": [
+          "光催化流程"
+        ]
+      },
       "research_summary": "光催化工作站_V2[Photocatalysis_Workstation_V2]；光催化流程{I=96位塑料孔板/96位石英孔板/必须无盖/纯液态或悬浊液/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -18830,9 +19142,18 @@
             "section": "description",
             "quote": "正压过滤，实现固液分离，去除固体催化剂并保留液相样品；同时可将反应液按设定比例与稀释液混合",
             "sha256": "087b656fa12c964aab16d8297bac7c434875b1d8a58788d57f229afd19e346e2"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "后处理"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "reaction-workup": [
+          "后处理"
+        ]
+      },
       "research_summary": "反应后处理平台_V1[Post_Reaction_Processing_Platform_V1]；后处理{I=10ml耐压反应管/无盖/悬浊液/数量10ml耐压反应管:0..4;O=液相54孔板/96位塑料孔板/气相54孔板/纯液态;CReq=op;Ctl=无;Qout=未声明;Report=未声明}。",
       "dependencies": []
     },
@@ -19292,9 +19613,18 @@
             "section": "description",
             "quote": "彩色图像照片收集；可实现样品的荧光发光图片采集",
             "sha256": "97eb594f869f72835d567b6ac724bb13a73001e16a9864e0e14442e5ee946a58"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "暗箱光照流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "darkbox-imaging": [
+          "暗箱光照流程"
+        ]
+      },
       "research_summary": "暗箱拍摄工作站_V1[Darkbox_Imaging_Workstation_V1]；暗箱光照流程{I=96位塑料孔板/96位石英孔板/无盖/纯液态或悬浊液/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/无盖;CReq=I;Ctl=关闭荧光多久拍照s/关闭荧光多久拍照s;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -19736,9 +20066,18 @@
             "section": "description",
             "quote": "荧光发射特性",
             "sha256": "eb9455793dd65d903ff26250af6de3a2c9f95b031c98a118f9e6e394b358bb63"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "荧光光谱进样绘图"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "fluorescence": [
+          "荧光光谱进样绘图"
+        ]
+      },
       "research_summary": "荧光光谱仪_V1[Fluorescence_Spectrometer_V1]；荧光光谱进样绘图{I=进样瓶/50ml耐热瓶/必须无盖/纯液态或悬浊液/数量进样瓶:1..10,50ml耐热瓶:0..10;O=同输入/必须无盖;CReq=I;Ctl=光谱测定参数/发射波开始波长[200,900]nm/发射波结束波长[200,900]nm/扫描速度nm/min;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": [
         {
@@ -20188,9 +20527,18 @@
             "section": "description",
             "quote": "挥发性或半挥发性组分进行分离分析",
             "sha256": "3804aa86910621014f8b9b46e3cc8af4845723e502550b8c0e94cd4c6e3ccdc9"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "气相分析"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "gas-chromatography": [
+          "气相分析"
+        ]
+      },
       "research_summary": "气相色谱仪_V1[Gas_Chromatograph_V1]；气相分析{I=气相54孔板/无盖/纯液态/数量气相54孔板:0..1;O=气相54孔板/无盖;CReq=op;Ctl=无;Qout=未声明;Report=未声明}。",
       "dependencies": [
         {
@@ -20719,9 +21067,18 @@
             "section": "description",
             "quote": "气泡的成核、生长和脱离过程",
             "sha256": "88f0bb5802958f7aa4a2eba676d43d3d56af950c06d205ccf3c4109089d0c745"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "多样品测试-无活化"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "high-speed-imaging": [
+          "多样品测试-无活化"
+        ]
+      },
       "research_summary": "气液传质_高速摄像_V1[Gas_Liquid_Mass_Transfer_High_Speed_Camera_V1]；多样品测试-无活化{I=测试架/负载于碳纸的固体/数量测试架:1..10;O=同输入;CReq=I;Ctl=前后多少帧/帧率FPS/拍照时间s/曝光时间s;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -21119,9 +21476,18 @@
             "section": "description",
             "quote": "分散于乙醇中的样品进行滴加制样并开展红外吸收光谱测试",
             "sha256": "3970c3e020082bf1ba5296110f1b4679e0d31d2744069c300ddea4784a4db4d9"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "谱学红外流程-夹具识别"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "infrared": [
+          "谱学红外流程-夹具识别"
+        ]
+      },
       "research_summary": "红外光谱仪_V1[Infrared_Spectrometer_V1]；谱学红外流程-夹具识别{I=进样瓶/50ml耐热瓶/必须无盖/纯液态或悬浊液/数量进样瓶:1..10,50ml耐热瓶:1..10;O=同输入/必须无盖;CReq=I;Ctl=滴液体积μL/静置晾干时间s;Qout=按目标设定量输出;Report=未声明}；Hard=测试溶液不得少于4ml。。",
       "dependencies": [
         {
@@ -21571,9 +21937,18 @@
             "section": "description",
             "quote": "液滴接触角、气泡粘附力测试",
             "sha256": "40f97c48c121c5e2572e8823d96f3d4f031982affe0530aaf6dd2dee051ef783"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "接触角-张力仪实验-迭代"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "wettability": [
+          "接触角-张力仪实验-迭代"
+        ]
+      },
       "research_summary": "接触角_张力仪_V1[Interfacial_Wettability_and_Mass_Transfer_Characterization_Workstation]；接触角-张力仪实验-迭代{I=测试架/负载于碳纸的固体/数量测试架:1..10;O=同输入/必须无盖;CReq=I;Ctl=液体体积mL;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -22227,9 +22602,18 @@
             "section": "description",
             "quote": "光催化材料的产氢性能评估",
             "sha256": "a7b5ec3a8057600cb1e240c1fadca78408b58dc4b7e9a535eb31d4748b1088b6"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "氢气检测膜压膜后光照流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "photocatalytic-hydrogen": [
+          "氢气检测膜压膜后光照流程"
+        ]
+      },
       "research_summary": "光照压膜工作站_V1[LED_Illumination_and_Membrane_Clamping_Workstation_V1]；氢气检测膜压膜后光照流程{I=96位塑料孔板/96位石英孔板/必须无盖/纯液态或悬浊液/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=96位塑料孔板/必须无盖;CReq=op;Ctl=无;Qout=未声明;Report=未声明}/不压膜仅光照{I=96位塑料孔板/96位石英孔板/必须无盖/纯液态或悬浊液/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=96位塑料孔板/必须无盖;CReq=op;Ctl=无;Qout=未声明;Report=未声明}。",
       "dependencies": []
     },
@@ -22613,9 +22997,18 @@
             "section": "description",
             "quote": "分离、定性与定量分析",
             "sha256": "9f72c5244dc0965a75fa0df569c31af8bbb6466db69ea8d34c8a35ce07610d4b"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "液相分析"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "liquid-chromatography": [
+          "液相分析"
+        ]
+      },
       "research_summary": "液相色谱仪_V1[Liquid_Chromatograph_V1]；液相分析{I=液相54孔板/无盖/纯液态/数量液相54孔板:1..100;O=液相54孔板/无盖;CReq=op;Ctl=无;Qout=未声明;Report=未声明}。",
       "dependencies": [
         {
@@ -23021,9 +23414,18 @@
             "section": "description",
             "quote": "吸光度、荧光或化学发光等高通量检测",
             "sha256": "f86931db6ec84023cdb10712967751cec637204c4ad2a83875542bf8622ddc15"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "酶标仪303谱学流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "microplate-assay": [
+          "酶标仪303谱学流程"
+        ]
+      },
       "research_summary": "酶标仪_V1[Microplate_Reader_V1]；酶标仪303谱学流程{I=96位塑料孔板/96位石英孔板/必须无盖/纯液态/数量96位塑料孔板:0..1,96位石英孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -23388,9 +23790,18 @@
             "section": "description",
             "quote": "样品容器临时放置与中转",
             "sha256": "3798d25738fb3a4d932ff90ba4ce2bae0680ee48dd3caf35ea42a3009ddafb0b"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "容器中转"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "sample-routing": [
+          "容器中转"
+        ]
+      },
       "research_summary": "谱学容器中转平台_V1[Spectroscopy_Container_Transfer_Station_V1]；容器中转{I=进样瓶/液相54孔板/50ml耐热瓶/西林瓶/96位石英孔板/96位塑料孔板/气相54孔板/必须无盖/纯液态或悬浊液/数量进样瓶:0..10,液相54孔板:0..1,50ml耐热瓶:0..10,西林瓶:0..10,96位石英孔板:0..1,96位塑料孔板:0..1;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": []
     },
@@ -23731,9 +24142,18 @@
             "section": "description",
             "quote": "吸收光谱测试",
             "sha256": "07bc27dfb470041d8069139c1bde6d3876c8fc69427853f680d4b61e53daf0be"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "紫外光谱进样绘图"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "uv-vis": [
+          "紫外光谱进样绘图"
+        ]
+      },
       "research_summary": "紫外可见光谱仪_V1[UV_Vis_Spectrometer_V1]；紫外光谱进样绘图{I=进样瓶/50ml耐热瓶/必须无盖/纯液态/数量进样瓶:0..10,50ml耐热瓶:0..10;O=同输入/必须无盖;CReq=I;Ctl=无;Qout=整批处理;不要求预知总量;Report=未声明}。",
       "dependencies": [
         {
@@ -24368,9 +24788,18 @@
             "section": "description",
             "quote": "分散于乙醇中的固体样品进行滴加制样并开展XRD测试",
             "sha256": "2888fc79939faf350821ca9d16a4cb32dd31ba62c5e22e6f79f0b96162a1dfc2"
-          }
+          },
+          "operation_mapping_status": "mapped",
+          "operation_names": [
+            "XRD滴液检测全流程"
+          ]
         }
       ],
+      "capability_operation_bindings": {
+        "xrd": [
+          "XRD滴液检测全流程"
+        ]
+      },
       "research_summary": "X射线衍射仪_V1[XRD_V1]；XRD滴液检测全流程{I=进样瓶/50ml耐热瓶/必须无盖/纯液态或悬浊液/数量进样瓶:1..40,50ml耐热瓶:1..10,XRD基底片:1..40/载体=XRD基底片;O=同输入/必须无盖;CReq=I;Ctl=滴液体积μL/扫描速度(0,20]°/min/步长(0,0.2]°/静置晾干时间s;Qout=按目标设定量输出;Report=未声明}；Hard=**[强约束] 测试溶液体积校验**：进入该工作站前，容器内样品总液量（Total Liquid Volume）必须…|策略：**必须**在进入XRD站之前，增加移液平台的加液步骤，加入 **4.0 mL 无水乙醇**，并配合“磁力搅拌”…。",
       "dependencies": [
         {

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from agent_skills.capabilities import (
     DEFAULT_INDEX,
     load_capability_tier_skill,
     load_current_capability_index,
 )
+from chem_agent_contracts.v2 import canonical_digest
 from reaserch_agent.state import ResearchAgentState, ResearchEvent, SearchHit
 from reaserch_agent.tools.device_context import apply_device_status
 from reaserch_agent.workflow import ResearchAgent
@@ -27,6 +30,96 @@ class _OnlineService:
 
 
 class ResearchV2ContractTest(unittest.TestCase):
+    def test_v2_generated_user_provenance_is_stamped_before_quality_gate(self):
+        query = "Prepare a catalyst with 4.0 mL ethanol"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query=query)
+        )
+        state.current_stage = "sample preparation"
+        state.current_evidence_bundle = {"query": query, "results": []}
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        agent._use_llm = True
+        agent._step_macro_action_design = lambda _state, _mode: None
+        agent._device_context_macro_step_markers = lambda _state, _plan: []
+        raw_step = {
+            "步骤序号": 1,
+            "操作": "加入乙醇",
+            "试剂/对象": "ethanol",
+            "参数": "4.0 mL ethanol",
+            "provenance": {
+                "kind": "user",
+                "reference": "current_query",
+                "source_path": "evidence_bundle.query",
+                "excerpt": "4.0 mL ethanol",
+            },
+        }
+        agent._invoke_state_json = lambda *_args, **_kwargs: {
+            "current_stage_plan": "Prepare the sample for observation",
+            "macro_plan": [raw_step],
+        }
+        observed_digests = []
+        original_quality_gate = agent._macro_plan_quality_issues
+
+        def quality_gate(macro_plan, _query, state=None):
+            # Keep the real provenance stamping/validation path while this
+            # focused generator test ignores unrelated material fields.
+            original_quality_gate(macro_plan, _query, state=state)
+            observed_digests.append(macro_plan[0]["provenance"].get("source_digest"))
+            return []
+
+        agent._macro_plan_quality_issues = quality_gate
+
+        result = agent._step_macro_plan_design(state)
+
+        expected = canonical_digest(query)
+        self.assertEqual(observed_digests, [expected])
+        self.assertEqual(result["macro_plan"][0]["provenance"]["source_digest"], expected)
+        self.assertNotIn("source_digest", raw_step["provenance"])
+
+    def test_v2_query_stamp_never_repairs_wrong_excerpt_or_forged_digest(self):
+        query = "Prepare a catalyst with 4.0 mL ethanol"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query=query)
+        )
+        state.current_evidence_bundle = {"query": query, "results": []}
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        candidates = [
+            {
+                "provenance": {
+                    "kind": "user",
+                    "reference": "current_query",
+                    "source_path": "evidence_bundle.query",
+                    "excerpt": "9.0 mL methanol",
+                }
+            },
+            {
+                "provenance": {
+                    "kind": "user",
+                    "reference": "current_query",
+                    "source_path": "evidence_bundle.query",
+                    "excerpt": "4.0 mL ethanol",
+                    "source_digest": canonical_digest("a different query"),
+                }
+            },
+        ]
+
+        agent._stamp_current_evidence_provenance(state, candidates)
+
+        self.assertNotIn("source_digest", candidates[0]["provenance"])
+        self.assertEqual(
+            candidates[1]["provenance"]["source_digest"],
+            canonical_digest("a different query"),
+        )
+        for candidate in candidates:
+            with self.subTest(provenance=candidate["provenance"]):
+                issues = agent._v2_material_provenance_issues(1, candidate, state)
+                self.assertTrue(
+                    any("未绑定当前用户任务输入" in issue for issue in issues),
+                    issues,
+                )
+
     def test_each_action_gets_isolated_online_evidence(self):
         service = _OnlineService()
         agent = ResearchAgent.__new__(ResearchAgent)
@@ -54,6 +147,7 @@ class ResearchV2ContractTest(unittest.TestCase):
     def test_v2_rejects_vague_or_unquantified_active_inputs(self):
         agent = ResearchAgent.__new__(ResearchAgent)
         agent._contract_version = "v2"
+        query = "prepare sample"
         issues = agent._macro_plan_quality_issues(
             [
                 {
@@ -62,13 +156,37 @@ class ResearchV2ContractTest(unittest.TestCase):
                     "试剂/对象": "前驱体",
                     "参数": "加入适量前驱体并搅拌 10 min",
                     "material_inputs": [],
+                    "material_intermediates": [],
                     "material_outputs": [],
+                    "material_relations": [],
                     "container_requirements": [],
                     "intermediate_returns": [],
+                    "material_contract_status": {
+                        "material_inputs": "declared",
+                        "material_intermediates": "unresolved",
+                        "material_outputs": "unresolved",
+                        "logical_containers": "unresolved",
+                        "material_relations": "unresolved",
+                    },
+                    "operation_segments": [
+                        {
+                            "segment_id": "add_precursor",
+                            "material_effect": "consume_material",
+                            "source_operation_ref": "加入前驱体",
+                            "provenance": {
+                                "kind": "user",
+                                "reference": "current_query",
+                                "source_path": "evidence_bundle.query",
+                                "excerpt": query,
+                                "source_digest": canonical_digest(query),
+                            },
+                        }
+                    ],
                 }
             ],
-            "prepare sample",
+            query,
         )
+        self.assertFalse(any("material_contract_status 无效" in issue for issue in issues))
         self.assertTrue(any("material_inputs 为空" in issue for issue in issues))
         self.assertTrue(any("provenance" in issue for issue in issues))
 
@@ -119,6 +237,268 @@ class ResearchV2ContractTest(unittest.TestCase):
             "high entropy PBA coprecipitation",
             agent._knowledge_query.queries,
         )
+
+    def test_v2_local_evidence_is_attached_as_structured_paper_provenance(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        temporary_source = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary_source.cleanup)
+        source_file = Path(temporary_source.name) / "protocol.json"
+        excerpt = "配制前驱体溶液：Ni salt and water, 1 mmol in 10 mL, stir 10 min"
+        source_file.write_text(
+            json.dumps({"protocol_excerpt": excerpt}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare catalyst")
+        )
+        state.current_evidence_bundle = {
+            "results": [
+                {
+                    "paper_id": "local_protocol_1",
+                    "title": "Local protocol",
+                    "source": "local_knowledge_base",
+                    "verification_status": "local_file",
+                    "full_text_status": "local_parsed",
+                    "corpus_files": [str(source_file)],
+                    "evidence_excerpt": excerpt,
+                    "steps": [
+                        {
+                            "操作": "配制前驱体溶液",
+                            "试剂/对象": "Ni salt and water",
+                            "参数": "1 mmol in 10 mL, stir 10 min",
+                        }
+                    ],
+                }
+            ]
+        }
+        state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "配制前驱体溶液",
+                "试剂/对象": "Ni salt and water",
+                "参数": "1 mmol in 10 mL, stir 10 min",
+            }
+        ]
+        # Production validates the normalized V2 macro shape.  This test is
+        # about provenance attachment, so exercise the same boundary instead
+        # of passing a deliberately pre-normalization record to the gate.
+        state.macro_plan = agent._normalize_macro_plan(state.macro_plan)
+
+        agent._annotate_macro_plan_sources(state)
+
+        step = state.macro_plan[0]
+        self.assertEqual(step["provenance"]["kind"], "paper")
+        self.assertEqual(step["provenance"]["reference"], "local_protocol_1")
+        self.assertEqual(
+            step["provenance"]["source_path"],
+            "evidence_bundle.items[0].excerpt",
+        )
+        self.assertEqual(step["provenance"]["excerpt"], excerpt)
+        self.assertEqual(step["provenance"]["source_digest"], canonical_digest(excerpt))
+        self.assertIn(excerpt, source_file.read_text(encoding="utf-8"))
+        self.assertEqual(step["来源"], step["provenance"]["reference"])
+        self.assertTrue(agent._valid_v2_provenance(step["provenance"]))
+
+    def test_v2_local_file_excerpt_is_bound_to_its_exact_source(self):
+        verified_summary = (
+            "Ni salt and water are mixed as 1 mmol in 10 mL, stir 10 min "
+            "to prepare a precursor solution."
+        )
+        protocol_step = {
+            "操作": "配制前驱体溶液",
+            "试剂/对象": "Ni salt and water",
+            "参数": "1 mmol in 10 mL, stir 10 min",
+        }
+        payload = {
+            "文献题目": "Local protocol",
+            "2. 具体的合成步骤": {
+                "描述性总结": verified_summary,
+                "参数列表": [protocol_step],
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "protocol.json"
+            source_text = json.dumps(payload, ensure_ascii=False)
+            source.write_text(source_text, encoding="utf-8")
+            hit = SearchHit(
+                title="Local protocol",
+                file_path=str(source),
+                score=9.5,
+                problem="",
+                synthesis_summary=verified_summary,
+                steps=[protocol_step],
+            )
+
+            class _LocalQuery:
+                def search(self, _queries):
+                    return [hit]
+
+            agent = ResearchAgent.__new__(ResearchAgent)
+            agent._contract_version = "v2"
+            agent._online_literature = False
+            agent._web_search_enabled = False
+            agent._knowledge_base_dir = directory
+            agent._knowledge_query = _LocalQuery()
+            state = ResearchAgentState(
+                event=ResearchEvent(event_type="bootstrap", query="prepare catalyst")
+            )
+            state.current_stage = "synthesis"
+            agent._refresh_action_evidence(
+                state, planning_mode="bootstrap", observation_point="XRD"
+            )
+
+            evidence = state.current_evidence_bundle["results"][0]
+            excerpt = evidence.get("evidence_excerpt", "")
+            self.assertTrue(excerpt)
+            self.assertIn(excerpt, source_text)
+            self.assertIn("1 mmol in 10 mL, stir 10 min", excerpt)
+            state.macro_plan = [{"步骤序号": 1, **protocol_step}]
+            agent._annotate_macro_plan_sources(state)
+            provenance = state.macro_plan[0]["provenance"]
+            self.assertEqual(provenance["kind"], "paper")
+            self.assertEqual(provenance["reference"], evidence["paper_id"])
+            self.assertEqual(
+                provenance["source_path"], "evidence_bundle.items[0].excerpt"
+            )
+            self.assertEqual(provenance["source_digest"], canonical_digest(excerpt))
+            compact = agent._compact_action_evidence_for_planning(
+                state.current_evidence_bundle["results"]
+            )
+            self.assertEqual(
+                compact[0]["evidence_source_path"], provenance["source_path"]
+            )
+            self.assertEqual(
+                agent._v2_material_provenance_issues(1, state.macro_plan[0], state),
+                [],
+            )
+            with tempfile.TemporaryDirectory() as outside_directory:
+                outside_source = Path(outside_directory) / "protocol.json"
+                outside_source.write_text(source_text, encoding="utf-8")
+                outside_hit = SearchHit(
+                    title=hit.title,
+                    file_path=str(outside_source),
+                    score=hit.score,
+                    problem=hit.problem,
+                    synthesis_summary=hit.synthesis_summary,
+                    steps=hit.steps,
+                )
+                self.assertEqual(agent._verified_local_evidence_fields(outside_hit), {})
+
+    def test_v2_missing_local_source_cannot_create_paper_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing_source = Path(directory) / "missing.json"
+            protocol_step = {
+                "操作": "配制前驱体溶液",
+                "试剂/对象": "Ni salt and water",
+                "参数": "1 mmol in 10 mL, stir 10 min",
+            }
+            hit = SearchHit(
+                title="Unverifiable local protocol",
+                file_path=str(missing_source),
+                score=9.5,
+                problem="",
+                synthesis_summary="Ni salt and water are mixed",
+                steps=[protocol_step],
+            )
+
+            class _LocalQuery:
+                def search(self, _queries):
+                    return [hit]
+
+            agent = ResearchAgent.__new__(ResearchAgent)
+            agent._contract_version = "v2"
+            agent._online_literature = False
+            agent._web_search_enabled = False
+            agent._knowledge_base_dir = directory
+            agent._knowledge_query = _LocalQuery()
+            state = ResearchAgentState(
+                event=ResearchEvent(event_type="bootstrap", query="prepare catalyst")
+            )
+            state.current_stage = "synthesis"
+            agent._refresh_action_evidence(
+                state, planning_mode="bootstrap", observation_point="XRD"
+            )
+
+            evidence = state.current_evidence_bundle["results"][0]
+            self.assertFalse(evidence.get("evidence_excerpt"))
+            state.macro_plan = [{"步骤序号": 1, **protocol_step}]
+            agent._annotate_macro_plan_sources(state)
+            provenance = state.macro_plan[0]["provenance"]
+            self.assertEqual(provenance["kind"], "agent_inferred")
+            self.assertEqual(
+                agent._v2_material_provenance_issues(1, state.macro_plan[0], state),
+                [],
+            )
+
+    def test_v2_unmatched_local_step_is_explicitly_agent_inferred(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare catalyst")
+        )
+        state.current_evidence_bundle = {
+            "results": [
+                {
+                    "paper_id": "web_only",
+                    "title": "Unverified web record",
+                    "source": "local_knowledge_base",
+                    "verification_status": "web_unverified",
+                    "full_text_status": "local_parsed",
+                    "steps": [
+                        {
+                            "操作": "配制前驱体溶液",
+                            "试剂/对象": "Ni salt and water",
+                            "参数": "1 mmol in 10 mL",
+                        }
+                    ],
+                }
+            ]
+        }
+        state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "执行本地模板操作",
+                "试剂/对象": "sample",
+                "参数": "25 C for 10 min",
+            }
+        ]
+
+        agent._annotate_macro_plan_sources(state)
+
+        provenance = state.macro_plan[0]["provenance"]
+        self.assertEqual(provenance["kind"], "agent_inferred")
+        self.assertTrue(provenance["rationale"])
+        self.assertEqual(provenance["reference"], "local_heuristic_planner")
+        self.assertNotIn("web_only", provenance["reference"])
+
+    def test_v2_existing_structured_provenance_survives_annotation(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare catalyst")
+        )
+        state.current_evidence_bundle = {"results": []}
+        state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "操作": "观察样品",
+                "试剂/对象": "sample",
+                "参数": "25 C for 10 min",
+                "provenance": {
+                    "kind": "agent_inferred",
+                    "reference": "existing_rule_v1",
+                    "rationale": "existing structured provenance",
+                },
+            }
+        ]
+
+        agent._annotate_macro_plan_sources(state)
+
+        self.assertEqual(
+            state.macro_plan[0]["provenance"]["reference"], "existing_rule_v1"
+        )
+        self.assertEqual(state.macro_plan[0]["来源"], "existing_rule_v1")
 
     def test_v2_macro_step_context_selects_relevant_operation_contracts(self):
         agent = ResearchAgent.__new__(ResearchAgent)
@@ -171,10 +551,16 @@ class ResearchV2ContractTest(unittest.TestCase):
             }
             for index in range(5)
         ]
+        records[2]["evidence_excerpt"] = "Verbatim local source excerpt"
+        records[2]["score"] = 100
 
         compact = agent._compact_action_evidence_for_planning(records)
 
         self.assertEqual(len(compact), 2)
+        self.assertEqual(compact[0]["paper_id"], "p2")
+        self.assertEqual(
+            compact[0]["evidence_source_path"], "evidence_bundle.items[2].excerpt"
+        )
         self.assertEqual(len({item["title"] for item in compact}), 2)
         self.assertLess(len(json.dumps(compact, ensure_ascii=False)), 5000)
         self.assertTrue(all(len(item["steps"]) == 3 for item in compact))

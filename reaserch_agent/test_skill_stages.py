@@ -101,6 +101,126 @@ class SkillStageTests(unittest.TestCase):
         self.assertNotEqual(self.state.macro_action["macro_action_id"], "previous")
         self.assertEqual(self.state.macro_action["planned_operations"], designed["planned_operations"])
 
+    def test_macro_action_view_preserves_opaque_typed_macro_ids_in_handoff(self):
+        identifiers = [0, 1, "1", "001", "1,2"]
+        self.state.macro_plan = [
+            {
+                "步骤序号": index,
+                "macro_step_id": identifier,
+                "操作": "混合",
+                "试剂/对象": "样品",
+                "参数": "室温混合 1 min",
+            }
+            for index, identifier in enumerate(identifiers, start=1)
+        ]
+
+        self.agent._build_macro_action_view(self.state)
+
+        restored = self.agent._state_from_dict(
+            json.loads(json.dumps(self.state.to_dict(), ensure_ascii=False))
+        )
+        outgoing = restored.device_adaptation_external_handoff()["待执行 macro plan"]
+        self.assertEqual(
+            [step["macro_step_id"] for step in outgoing], identifiers
+        )
+        self.assertEqual(
+            [type(step["macro_step_id"]) for step in outgoing],
+            [int, int, str, str, str],
+        )
+        self.assertEqual(
+            [step["logical_step_id"] for step in outgoing], identifiers
+        )
+        self.assertNotEqual(
+            type(outgoing[1]["macro_step_id"]),
+            type(outgoing[2]["macro_step_id"]),
+        )
+
+    def test_macro_action_view_accepts_zero_logical_step_id_fallback(self):
+        self.state.macro_plan = [
+            {
+                "步骤序号": 1,
+                "logical_step_id": 0,
+                "操作": "混合",
+                "试剂/对象": "样品",
+                "参数": "室温混合 1 min",
+            }
+        ]
+
+        self.agent._build_macro_action_view(self.state)
+
+        step = self.state.macro_plan[0]
+        self.assertEqual(step["macro_step_id"], 0)
+        self.assertIs(type(step["macro_step_id"]), int)
+        self.assertEqual(step["logical_step_id"], 0)
+
+    def test_macro_action_view_typed_mirror_conflict_is_atomic(self):
+        self.state.macro_plan = [
+            {"步骤序号": 1, "操作": "混合", "试剂/对象": "A", "参数": "1 min"},
+            {
+                "步骤序号": 2,
+                "macro_step_id": 1,
+                "logical_step_id": "1",
+                "操作": "混合",
+                "试剂/对象": "B",
+                "参数": "1 min",
+            },
+        ]
+        before = deepcopy(self.state.macro_plan)
+
+        self.agent._build_macro_action_view(self.state)
+
+        self.assertEqual(self.state.macro_plan, before)
+        self.assertEqual(self.state.macro_action, {})
+        self.assertEqual(self.state.macro_action_history, [])
+        self.assertTrue(
+            any("macro_step_id/logical_step_id" in error for error in self.state.errors)
+        )
+
+    def test_macro_action_outcome_uses_typed_identity_and_preserves_zero(self):
+        self.state.macro_action = {"macro_action_id": 1}
+        self.state.macro_action_history = [
+            {"macro_action_id": 1, "kind": "integer"},
+            {"macro_action_id": "1", "kind": "string"},
+        ]
+
+        self.agent._record_macro_action_outcome(self.state)
+
+        self.assertEqual(self.state.macro_action_history[0]["outcome"], "completed")
+        self.assertNotIn("outcome", self.state.macro_action_history[1])
+
+        zero_state = ResearchAgentState(event=ResearchEvent("observation"))
+        zero_state.macro_action = {"macro_action_id": 0}
+        self.agent._record_macro_action_outcome(zero_state)
+        self.assertEqual(zero_state.macro_action_history[0]["macro_action_id"], 0)
+        self.assertIs(type(zero_state.macro_action_history[0]["macro_action_id"]), int)
+
+    def test_macro_action_outcome_invalid_identity_fails_closed_with_error(self):
+        self.state.macro_action = {"macro_action_id": False}
+        self.agent._record_macro_action_outcome(self.state)
+        self.assertTrue(any("INVALID_IDENTITY" in error for error in self.state.errors))
+        self.assertEqual(self.state.macro_action_history, [])
+
+        history_state = ResearchAgentState(event=ResearchEvent("observation"))
+        history_state.macro_action = {"macro_action_id": 1}
+        history_state.macro_action_history = [{"macro_action_id": False}]
+        self.agent._record_macro_action_outcome(history_state)
+        self.assertTrue(any("INVALID_IDENTITY" in error for error in history_state.errors))
+        self.assertNotIn("outcome", history_state.macro_action_history[0])
+
+    def test_macro_action_outcome_duplicate_typed_history_is_atomic(self):
+        self.state.macro_action = {"macro_action_id": 1}
+        self.state.macro_action_history = [
+            {"macro_action_id": 1, "kind": "first"},
+            {"macro_action_id": 1, "kind": "duplicate"},
+            {"macro_action_id": "1", "kind": "distinct string"},
+        ]
+        before = deepcopy(self.state.macro_action_history)
+
+        self.agent._record_macro_action_outcome(self.state)
+
+        self.assertEqual(self.state.macro_action_history, before)
+        self.assertTrue(any("duplicate typed identity" in error for error in self.state.errors))
+
     def test_step_contract_round_trips_through_normalization_state_and_handoff(self):
         step = {
             "步骤序号": 7, "操作": "混合", "试剂/对象": "A液", "参数": "5 mL，室温 10 min",

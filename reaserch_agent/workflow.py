@@ -11,6 +11,7 @@ import re
 import time
 from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List, Sequence
 
@@ -19,6 +20,19 @@ from chem_agent_contracts.container_requirements import (
     LogicalContainerContractError,
     format_container_issue,
     parse_logical_container_requirements,
+)
+from chem_agent_contracts.identity import (
+    IdentityContractError,
+    json_scalar_identity_key,
+    normalize_json_scalar_identity,
+)
+from chem_agent_contracts.v2 import (
+    MaterialApplicabilityEvidenceV2,
+    MaterialContractStatusV2,
+    MaterialOperationSegmentV2,
+    MaterialRelationV2,
+    canonical_digest,
+    evidence_contains_exact_quantity,
 )
 
 from .core import BaseAgent
@@ -1019,14 +1033,14 @@ class ResearchAgent(BaseAgent):
         self,
         step: Dict[str, Any],
         protocols: Sequence[Dict[str, Any]],
-    ) -> str:
+    ) -> Any:
         """Conservative attribution: cite a protocol only on strong overlap."""
         step_tokens = self._provenance_tokens(
             f"{step.get('操作', '')} {step.get('试剂/对象', '')} {step.get('参数', '')}"
         )
         if not step_tokens:
             return ""
-        best = ""
+        best: Any = ""
         best_score = 0.0
         for protocol in protocols:
             verification = str(protocol.get("verification_status", "")).strip()
@@ -1055,7 +1069,11 @@ class ResearchAgent(BaseAgent):
                     best_score = overlap
                     page = protocol_step.get("page")
                     suffix = f" p.{page}" if page else ""
-                    best = f"protocol: {label}{suffix}"
+                    evidence_binding = protocol.get("_evidence_binding")
+                    if isinstance(evidence_binding, dict):
+                        best = deepcopy(evidence_binding)
+                    else:
+                        best = f"protocol: {label}{suffix}"
         return best
 
     def _annotate_macro_plan_sources(self, state: ResearchAgentState) -> None:
@@ -1066,24 +1084,326 @@ class ResearchAgent(BaseAgent):
         agent-filled — never fabricated citations.
         """
         try:
-            protocols = [
-                protocol
-                for protocol in (
-                    []
-                    if self._contract_version == "v2"
-                    else state.extracted_protocols
-                )
-                if isinstance(protocol, dict)
-            ]
+            if self._contract_version == "v2":
+                # V2 evidence is invocation-scoped.  Do not reuse the
+                # bootstrap protocol registry here: it may contain stale or
+                # web-unverified records from an earlier action.
+                protocols = self._v2_action_evidence_protocols(state)
+            else:
+                protocols = [
+                    protocol
+                    for protocol in state.extracted_protocols
+                    if isinstance(protocol, dict)
+                ]
             for step in state.macro_plan:
                 if not isinstance(step, dict):
                     continue
-                if not str(step.get("来源", "")).strip():
-                    matched = self._match_step_to_protocol(step, protocols)
+                matched = self._match_step_to_protocol(step, protocols)
+                if self._contract_version == "v2":
+                    self._annotate_v2_step_provenance(step, matched)
+                elif not str(step.get("来源", "")).strip():
                     step["来源"] = matched or "agent补全(未直接引用文献)"
                 self._annotate_macro_step_quantities(state, step)
         except Exception as exc:  # pragma: no cover - must not break planning
             state.add_error(f"macro plan source annotation failed: {exc}")
+
+    def _v2_action_evidence_protocols(
+        self, state: ResearchAgentState
+    ) -> List[Dict[str, Any]]:
+        """Adapt the current local evidence bundle for conservative matching.
+
+        The evidence bundle uses ``local_parsed`` for a parsed local file,
+        while the shared matcher expects the canonical ``parsed`` status.  The
+        adaptation is deliberately limited to this invocation's records and
+        keeps the original identity fields for the resulting provenance.
+        """
+        protocols: List[Dict[str, Any]] = []
+        for evidence_index, record in enumerate(
+            self._current_action_evidence_records(state)
+        ):
+            if not isinstance(record, dict):
+                continue
+            verification = str(record.get("verification_status", "")).strip()
+            full_text = str(record.get("full_text_status", "")).strip()
+            if verification not in self._evidence_identity_statuses():
+                continue
+            if full_text not in {"parsed", "local_parsed"}:
+                continue
+            protocol = {
+                **record,
+                "source_title": record.get("title", ""),
+                "source_file": (
+                    (record.get("corpus_files") or [""])[0]
+                    if isinstance(record.get("corpus_files"), list)
+                    else record.get("source_file", "")
+                ),
+                "full_text_status": "parsed",
+            }
+            evidence_id = str(
+                record.get("evidence_id")
+                or record.get("paper_id")
+                or record.get("doi")
+                or record.get("arxiv_id")
+                or ""
+            ).strip()
+            evidence_excerpt = str(record.get("evidence_excerpt") or "")
+            if evidence_id and evidence_excerpt:
+                protocol["_evidence_binding"] = {
+                    "reference": evidence_id,
+                    "source_path": f"evidence_bundle.items[{evidence_index}].excerpt",
+                    "excerpt": evidence_excerpt,
+                    "source_digest": canonical_digest(evidence_excerpt),
+                }
+            protocols.append(protocol)
+        return protocols
+
+    @staticmethod
+    def _valid_v2_provenance(value: Any) -> bool:
+        if not isinstance(value, dict):
+            return False
+        kind = str(value.get("kind") or value.get("source_type") or "").strip()
+        if kind not in {
+            "user",
+            "paper",
+            "agent_inferred",
+            "manual_revision",
+            "runtime",
+            "device_skill",
+        }:
+            return False
+        if kind == "agent_inferred" and not str(
+            value.get("rationale") or value.get("reason") or ""
+        ).strip():
+            return False
+        return True
+
+    def _v2_material_provenance_issues(
+        self,
+        index: int,
+        step: Dict[str, Any],
+        state: ResearchAgentState,
+    ) -> List[str]:
+        """Bind planned material claims to this action's evidence boundary.
+
+        Structural provenance alone is insufficient: a model could otherwise
+        label a material edge ``paper`` while naming no paper present in the
+        isolated evidence bundle.  This check never invents a relationship.
+        It only verifies the source class chosen by Research.  Unsupported
+        Device compilation is intentionally absent from this decision.
+        """
+
+        def normalized_reference(value: Any) -> str:
+            return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+        current_user_query = normalized_reference(state.event.query)
+        def user_reference_is_current(provenance: Dict[str, Any]) -> bool:
+            source_path = str(provenance.get("source_path") or "").strip()
+            excerpt = normalized_reference(provenance.get("excerpt"))
+            excerpt_matches = bool(
+                excerpt and current_user_query and excerpt in current_user_query
+            )
+            path_is_current = source_path == "evidence_bundle.query"
+            # A path identifies the current immutable field, while the excerpt
+            # proves which part supports this particular claim.  A generic
+            # nonempty value such as "user request" satisfies neither.
+            digest_matches = (
+                str(provenance.get("source_digest") or "").strip()
+                == canonical_digest(state.event.query)
+            )
+            return path_is_current and excerpt_matches and digest_matches
+
+        paper_bindings: Dict[str, Dict[str, Any]] = {}
+        duplicate_paper_ids: set[str] = set()
+        for evidence_index, record in enumerate(
+            self._current_action_evidence_records(state)
+        ):
+            verification = str(record.get("verification_status") or "").strip()
+            full_text = str(record.get("full_text_status") or "").strip()
+            if verification not in self._evidence_identity_statuses():
+                continue
+            if full_text not in {"parsed", "local_parsed"}:
+                continue
+            evidence_id = str(
+                record.get("evidence_id")
+                or record.get("paper_id")
+                or record.get("doi")
+                or record.get("arxiv_id")
+                or ""
+            ).strip()
+            evidence_excerpt = str(record.get("evidence_excerpt") or "")
+            if not evidence_id or not evidence_excerpt:
+                continue
+            if evidence_id in paper_bindings:
+                duplicate_paper_ids.add(evidence_id)
+                continue
+            paper_bindings[evidence_id] = {
+                "source_path": f"evidence_bundle.items[{evidence_index}].excerpt",
+                "source_text": evidence_excerpt,
+                "source_digest": canonical_digest(evidence_excerpt),
+            }
+
+        claims: List[tuple[str, Any]] = [("provenance", step.get("provenance"))]
+        for field_name in (
+            "material_inputs",
+            "material_intermediates",
+            "material_outputs",
+        ):
+            for item_index, item in enumerate(step.get(field_name, []) or [], start=1):
+                if isinstance(item, dict):
+                    claims.append(
+                        (
+                            f"{field_name}[{item_index}].provenance",
+                            item.get("provenance"),
+                        )
+                    )
+        for relation_index, relation in enumerate(
+            step.get("material_relations", []) or [], start=1
+        ):
+            if isinstance(relation, dict):
+                claims.append(
+                    (
+                        f"material_relations[{relation_index}].provenance",
+                        relation.get("provenance"),
+                    )
+                )
+        for segment_index, segment in enumerate(
+            step.get("operation_segments", []) or [], start=1
+        ):
+            if isinstance(segment, dict):
+                claims.append(
+                    (
+                        f"operation_segments[{segment_index}].provenance",
+                        segment.get("provenance"),
+                    )
+                )
+        for applicability_index, applicability in enumerate(
+            step.get("material_applicability", []) or [], start=1
+        ):
+            if isinstance(applicability, dict):
+                claims.append(
+                    (
+                        f"material_applicability[{applicability_index}].provenance",
+                        applicability.get("provenance"),
+                    )
+                )
+        for requirement_index, requirement in enumerate(
+            step.get("quantity_requirements", []) or [], start=1
+        ):
+            if isinstance(requirement, dict):
+                claims.append(
+                    (
+                        f"quantity_requirements[{requirement_index}].provenance",
+                        requirement.get("provenance"),
+                    )
+                )
+
+        issues: List[str] = []
+        for location, provenance in claims:
+            prefix = f"第 {index} 步 {location}"
+            if not self._valid_v2_provenance(provenance):
+                # The shape/rationale checks elsewhere may also report this,
+                # but keep the publication-boundary reason self-contained.
+                issues.append(f"{prefix} 不是完整的 V2 来源记录")
+                continue
+            kind = str(provenance.get("kind") or "").strip()
+            reference = str(provenance.get("reference") or "").strip()
+            if kind == "agent_inferred" and location != "provenance":
+                issues.append(
+                    f"{prefix} 是显式物料声明，不能由 agent_inferred 放行；"
+                    "缺少用户或当前证据时应将对应 material contract 维度保持 unresolved"
+                )
+                continue
+            if kind in {"runtime", "device_skill"}:
+                issues.append(
+                    f"{prefix} 不能用 {kind} 证明执行前的 Research 物料事实；"
+                    "应引用用户/当前证据，或明确标为 agent_inferred"
+                )
+                continue
+            if kind == "manual_revision":
+                issues.append(
+                    f"{prefix} 不得由正常 Research 生成/发布路径声明 manual_revision；"
+                    "该类型只能由修订 CLI 在校验冻结 manifest 后注入"
+                )
+                continue
+            if kind in {"user", "paper"} and not reference:
+                issues.append(f"{prefix} 的 {kind} 来源缺少 reference")
+                continue
+            if kind == "user" and not user_reference_is_current(provenance):
+                issues.append(
+                    f"{prefix} 未绑定当前用户任务输入；user provenance 必须给出 "
+                    "evidence_bundle.query 路径、可核验摘录及 source_digest，"
+                    "或直接引用当前用户原文"
+                )
+                continue
+            if kind == "paper":
+                binding = paper_bindings.get(reference)
+                source_path = str(provenance.get("source_path") or "").strip()
+                excerpt = str(provenance.get("excerpt") or "")
+                source_digest = str(provenance.get("source_digest") or "").strip()
+                if reference in duplicate_paper_ids or binding is None:
+                    issues.append(
+                        f"{prefix} 的 reference 必须精确等于当前 macro action 中"
+                        "唯一、已解析且身份已核验的 evidence_id"
+                    )
+                    continue
+                if (
+                    source_path != binding["source_path"]
+                    or not excerpt
+                    or excerpt not in binding["source_text"]
+                    or source_digest != binding["source_digest"]
+                ):
+                    issues.append(
+                        f"{prefix} 未绑定当前 evidence record 的冻结 excerpt；"
+                        "必须提供精确 source_path、可核验摘录及 source_digest"
+                    )
+        return issues
+
+    def _annotate_v2_step_provenance(
+        self, step: Dict[str, Any], matched: Any
+    ) -> None:
+        """Attach a contract-shaped, truthful source record to one V2 step."""
+        existing = step.get("provenance")
+        if self._valid_v2_provenance(existing):
+            provenance = deepcopy(existing)
+            if "rationale" not in provenance and provenance.get("reason"):
+                provenance["rationale"] = provenance["reason"]
+            step["provenance"] = provenance
+            step["来源"] = str(
+                provenance.get("reference") or step.get("来源") or ""
+            ).strip()
+            return
+
+        if isinstance(matched, dict) and all(
+            str(matched.get(field) or "").strip()
+            for field in ("reference", "source_path", "excerpt", "source_digest")
+        ):
+            provenance = {
+                "kind": "paper",
+                "reference": str(matched["reference"]),
+                "source_path": str(matched["source_path"]),
+                "excerpt": str(matched["excerpt"]),
+                "source_digest": str(matched["source_digest"]),
+                "rationale": (
+                    "当前 macro action 的本地解析证据与该步骤的操作、对象和参数"
+                    "达到保守重合阈值；引用仅限本次 evidence bundle。"
+                ),
+            }
+            step["provenance"] = provenance
+            step["来源"] = str(matched["reference"])
+            return
+
+        # A deterministic heuristic/template step is not a literature claim.
+        provenance = {
+            "kind": "agent_inferred",
+            "reference": "local_heuristic_planner",
+            "rationale": (
+                "该步骤由本地启发式规则或模板根据当前任务约束生成；"
+                "本次 action evidence 未提供可安全匹配的解析协议，"
+                "因此不声称已有文献或实验验证。"
+            ),
+        }
+        step["provenance"] = provenance
+        step["来源"] = "agent补全(未直接引用文献)"
 
     @staticmethod
     def _explicit_step_quantities(text: str) -> List[Dict[str, Any]]:
@@ -1174,10 +1494,21 @@ class ResearchAgent(BaseAgent):
     ) -> None:
         """Attach auditable quantity semantics without inventing inventory.
 
-        The LLM may return this field directly.  We normalize its trust-bearing
-        labels and deterministically backfill explicit values from the natural
-        language parameters so legacy prompts cannot emit an unlabelled 20 mg.
+        The LLM may return this field directly.  Native V2 declarations cross
+        an evidence gate unchanged: numeric text extraction, substring matching
+        and source upgrading are not evidence.  The normalization/backfill
+        below exists only for the V1 compatibility path.
         """
+        if self._contract_version == "v2":
+            raw_requirements = step.get("quantity_requirements")
+            step["quantity_requirements"] = (
+                deepcopy(raw_requirements)
+                if isinstance(raw_requirements, list)
+                else raw_requirements
+            )
+            if raw_requirements is None:
+                step["quantity_requirements"] = []
+            return
         allowed_kinds = {
             "scientific_input_setpoint",
             "target_dose",
@@ -1469,19 +1800,53 @@ class ResearchAgent(BaseAgent):
                 experiment_group["sample_id"] = (
                     f"SAMPLE_{experiment_group['group_id']}_01"
                 )
+
+            # Resolve and validate every identity mirror before mutating any
+            # step.  A conflict on a later step must not leave an earlier step
+            # partially rebound to the new macro action.
+            resolved_step_ids: List[tuple[Dict[str, Any], Any]] = []
             for step in state.macro_plan:
                 if not isinstance(step, dict):
                     continue
+                step_index = len(resolved_step_ids) + 1
+                macro_value = step.get("macro_step_id")
+                logical_value = step.get("logical_step_id")
+                if macro_value is not None and logical_value is not None:
+                    macro_key = json_scalar_identity_key(
+                        macro_value,
+                        f"macro_plan[{step_index - 1}].macro_step_id",
+                    )
+                    logical_key = json_scalar_identity_key(
+                        logical_value,
+                        f"macro_plan[{step_index - 1}].logical_step_id",
+                    )
+                    if macro_key != logical_key:
+                        raise ValueError(
+                            "macro_step_id/logical_step_id must identify the same "
+                            f"typed value at macro_plan[{step_index - 1}]"
+                        )
+                macro_step_id = macro_value
+                if macro_step_id is None:
+                    macro_step_id = logical_value
+                if macro_step_id is None:
+                    macro_step_id = f"MS_{macro_action_id}_{step_index:03d}"
+                macro_step_id = normalize_json_scalar_identity(
+                    macro_step_id,
+                    f"macro_plan[{step_index - 1}].macro_step_id",
+                )
+                resolved_step_ids.append((step, macro_step_id))
+
+            for step, macro_step_id in resolved_step_ids:
                 # Unconditional: a new planning round is a new macro action
                 # instance, so carried-over steps must not keep a stale id.
                 step["macro_action_id"] = macro_action_id
                 step["observation_point_id"] = observation_point_id
-                step_index = len(step_numbers) + 1
-                step["macro_step_id"] = str(
-                    step.get("macro_step_id")
-                    or step.get("logical_step_id")
-                    or f"MS_{macro_action_id}_{step_index:03d}"
-                )
+                # Macro IDs are opaque typed JSON scalars at the Research ->
+                # Device boundary.  In particular, numeric zero is a valid ID
+                # and integer ``1`` must remain distinct from string ``"1"``.
+                # Only ``None`` means absent here; do not use truthiness or
+                # stringify a caller-provided identifier.
+                step["macro_step_id"] = deepcopy(macro_step_id)
                 step["logical_step_id"] = step["macro_step_id"]
                 step["sample_id"] = experiment_group["sample_id"]
                 step_numbers.append(step.get("步骤序号"))
@@ -1625,9 +1990,20 @@ class ResearchAgent(BaseAgent):
         """
         try:
             previous = state.macro_action if isinstance(state.macro_action, dict) else {}
-            previous_id = str(previous.get("macro_action_id", "")).strip()
-            if not previous_id:
+            if previous.get("macro_action_id") is None:
                 return
+            try:
+                previous_id = normalize_json_scalar_identity(
+                    previous["macro_action_id"],
+                    "macro_action.macro_action_id",
+                )
+            except IdentityContractError as exc:
+                state.add_error(
+                    "macro action outcome record failed: "
+                    f"{exc.code} at {exc.path}"
+                )
+                return
+            previous_key = json_scalar_identity_key(previous_id)
 
             repair_path = str(state.post_observation_repair_path or "").strip()
             fit = state.observation_stage_fit if isinstance(state.observation_stage_fit, dict) else {}
@@ -1647,22 +2023,49 @@ class ResearchAgent(BaseAgent):
             latest = state.latest_observation if isinstance(state.latest_observation, dict) else {}
             observation_summary = str(latest.get("summary", ""))[:200]
 
-            updated = False
-            for entry in state.macro_action_history:
-                if isinstance(entry, dict) and entry.get("macro_action_id") == previous_id:
-                    entry.update(
-                        {
-                            "outcome": outcome,
-                            "repair_path": repair_path or "normal",
-                            "observed": observation_summary,
-                        }
+            history_keys: Dict[tuple[str, Any], int] = {}
+            matching_entries: List[Dict[str, Any]] = []
+            for history_index, entry in enumerate(state.macro_action_history):
+                if not isinstance(entry, dict) or entry.get("macro_action_id") is None:
+                    state.add_error(
+                        "macro action outcome record failed: invalid identity at "
+                        f"macro_action_history[{history_index}].macro_action_id"
                     )
-                    updated = True
-                    break
-            if not updated:
+                    return
+                try:
+                    entry_key = json_scalar_identity_key(
+                        entry["macro_action_id"],
+                        f"macro_action_history[{history_index}].macro_action_id",
+                    )
+                except IdentityContractError as exc:
+                    state.add_error(
+                        "macro action outcome record failed: "
+                        f"{exc.code} at {exc.path}"
+                    )
+                    return
+                if entry_key in history_keys:
+                    state.add_error(
+                        "macro action outcome record failed: duplicate typed identity at "
+                        f"macro_action_history[{history_keys[entry_key]}] and "
+                        f"macro_action_history[{history_index}]"
+                    )
+                    return
+                history_keys[entry_key] = history_index
+                if entry_key == previous_key:
+                    matching_entries.append(entry)
+
+            if matching_entries:
+                matching_entries[0].update(
+                    {
+                        "outcome": outcome,
+                        "repair_path": repair_path or "normal",
+                        "observed": observation_summary,
+                    }
+                )
+            else:
                 state.macro_action_history.append(
                     {
-                        "macro_action_id": previous_id,
+                        "macro_action_id": deepcopy(previous_id),
                         "observation_point_id": str(previous.get("observation_point_id", "")),
                         "observation_point": str(previous.get("observation_point", "")),
                         "stage": str(previous.get("stage", "")),
@@ -1879,6 +2282,7 @@ class ResearchAgent(BaseAgent):
                         "steps": deepcopy(hit.steps),
                         "performance": deepcopy(hit.performance),
                         "matched_terms": list(hit.matched_terms),
+                        **self._verified_local_evidence_fields(hit),
                     }
                     for hit in hits
                 ],
@@ -1972,6 +2376,57 @@ class ResearchAgent(BaseAgent):
             f"results={len(isolated['results'])}, status={isolated['retrieval_status']}"
         )
 
+    def _verified_local_evidence_fields(self, hit: SearchHit) -> Dict[str, str]:
+        """Expose only an excerpt that is present in the local source record.
+
+        A corpus search summary is useful for retrieval, but it is not by
+        itself a frozen citation.  PDF summaries are synthesized from extracted
+        sentences, so they remain unbound until a verbatim source span exists.
+        """
+
+        from .tools.literature_acquisition import default_kb_dir
+
+        source_file = Path(hit.file_path)
+        if source_file.suffix.lower() != ".json":
+            return {}
+        try:
+            source_file = source_file.resolve(strict=True)
+            kb_root = Path(
+                getattr(self, "_knowledge_base_dir", None) or default_kb_dir()
+            ).resolve(strict=True)
+            if not source_file.is_relative_to(kb_root):
+                return {}
+            source = json.loads(source_file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            return {}
+        if not isinstance(source, dict):
+            return {}
+        synthesis = source.get("2. 具体的合成步骤")
+        if not isinstance(synthesis, dict):
+            return {}
+        summary = synthesis.get("描述性总结")
+        if (
+            isinstance(summary, str)
+            and len(summary.strip()) >= 40
+            and summary.strip() == hit.synthesis_summary.strip()
+        ):
+            return {
+                "evidence_excerpt": summary.strip()[:1200],
+                "evidence_source_field": "2. 具体的合成步骤.描述性总结",
+            }
+        steps = synthesis.get("参数列表")
+        if isinstance(steps, list):
+            for index, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    continue
+                excerpt = step.get("evidence")
+                if isinstance(excerpt, str) and len(excerpt.strip()) >= 40:
+                    return {
+                        "evidence_excerpt": excerpt.strip()[:1200],
+                        "evidence_source_field": f"2. 具体的合成步骤.参数列表[{index}].evidence",
+                    }
+        return {}
+
     @staticmethod
     def _current_action_evidence_records(state: ResearchAgentState) -> List[Dict[str, Any]]:
         bundle = (
@@ -1994,6 +2449,26 @@ class ResearchAgent(BaseAgent):
         # Never leave a previous action's valid package visible after this
         # candidate fails the final contract boundary.
         state.research_action_package_v2 = {}
+        # The same deterministic stamp is applied by the generator quality
+        # check.  Recheck it here for restored or secondary producer states.
+        self._stamp_current_evidence_provenance(state, state.macro_plan)
+        # Every producer path (initial LLM planning, B2 replanning, deterministic
+        # fallback, and a state restored from disk) converges here.  Keep the
+        # complete Research quality gate at this boundary so a secondary path
+        # cannot publish an ``unresolved`` material contract merely because it
+        # skipped the generator-local retry loop.  A relationship which is
+        # scientifically known remains ``declared`` even when Device cannot yet
+        # compile it; downstream capability is not Research evidence quality.
+        quality_issues = self._macro_plan_quality_issues(
+            state.macro_plan,
+            state.event.query,
+            state=state,
+        )
+        if quality_issues:
+            raise ValueError(
+                "V2 Research -> Device publication gate failed: "
+                + "; ".join(quality_issues[:8])
+            )
         package = research_state_to_v2(state.to_dict())
         state.research_action_package_v2 = package.model_dump(
             mode="json", exclude_none=True
@@ -2002,6 +2477,70 @@ class ResearchAgent(BaseAgent):
             "ResearchActionPackageV2 published with hash="
             f"{package.research_contract_hash}"
         )
+
+    def _stamp_current_evidence_provenance(
+        self,
+        state: ResearchAgentState,
+        macro_plan: Sequence[Dict[str, Any]],
+    ) -> None:
+        """Add transport digests only after exact current-source binding."""
+
+        # A digest is a deterministic transport stamp, not scientific
+        # inference.  Research must still provide the canonical path, exact
+        # excerpt, and (for papers) exact evidence_id; only then do we bind it
+        # to a field retained in the immutable canonical package.
+        user_query = str(state.event.query)
+        query_digest = canonical_digest(user_query)
+        paper_stamp_bindings: Dict[str, Dict[str, str]] = {}
+        for evidence_index, record in enumerate(
+            self._current_action_evidence_records(state)
+        ):
+            evidence_id = str(
+                record.get("evidence_id")
+                or record.get("paper_id")
+                or record.get("doi")
+                or record.get("arxiv_id")
+                or ""
+            ).strip()
+            source_text = str(record.get("evidence_excerpt") or "")
+            if evidence_id and source_text:
+                paper_stamp_bindings[
+                    f"evidence_bundle.items[{evidence_index}].excerpt"
+                ] = {
+                    "reference": evidence_id,
+                    "source_text": source_text,
+                    "source_digest": canonical_digest(source_text),
+                }
+
+        def stamp_current_evidence_provenance(value: Any) -> None:
+            if isinstance(value, list):
+                for item in value:
+                    stamp_current_evidence_provenance(item)
+                return
+            if not isinstance(value, dict):
+                return
+            if value.get("kind") == "user":
+                source_path = str(value.get("source_path") or "").strip()
+                excerpt = str(value.get("excerpt") or "")
+                if source_path == "evidence_bundle.query" and excerpt and excerpt in user_query:
+                    value.setdefault("source_digest", query_digest)
+            elif value.get("kind") == "paper":
+                source_path = str(value.get("source_path") or "").strip()
+                excerpt = str(value.get("excerpt") or "")
+                binding = paper_stamp_bindings.get(source_path)
+                if (
+                    binding is not None
+                    and str(value.get("reference") or "").strip()
+                    == binding["reference"]
+                    and excerpt
+                    and excerpt in binding["source_text"]
+                ):
+                    value.setdefault("source_digest", binding["source_digest"])
+            for item in value.values():
+                stamp_current_evidence_provenance(item)
+
+        for macro_step in macro_plan:
+            stamp_current_evidence_provenance(macro_step)
 
     @staticmethod
     def _evidence_identity_statuses() -> set[str]:
@@ -2477,6 +3016,11 @@ class ResearchAgent(BaseAgent):
         self,
         state: ResearchAgentState,
     ) -> ResearchAgentState:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 device feasibility feedback is a capability blocker, not "
+                "authority to rewrite Research; submit an evidence-bound revision"
+            )
         original_stage = state.current_stage
         original_stage_route = list(state.stage_route)
         original_stage_plan = state.current_stage_plan
@@ -2540,15 +3084,28 @@ class ResearchAgent(BaseAgent):
         )
 
     def _augment_device_adaptation_knowledge(self, state: ResearchAgentState) -> None:
-        queries = self._clean_queries(
-            [
-                state.event.query,
-                state.current_stage,
-                f"{state.event.query} 常压 瓶内 合成",
-                f"{state.event.query} room temperature bottle synthesis",
-                f"{state.event.query} no autoclave synthesis",
-            ]
-        )
+        if self._contract_version == "v2":
+            # A capability failure is not evidence for any particular replacement
+            # route.  Search only the task/stage and the reported capability facts;
+            # never pre-seed a pressure, temperature, vessel, or handoff answer.
+            reported_reasons = self._clean_queries(
+                state.latest_observation.get("unsupported_reasons", [])
+                or state.latest_observation.get("blocking_constraints", [])
+            )
+            queries = self._clean_queries(
+                [state.event.query, state.current_stage]
+                + [f"{state.event.query} {reason}" for reason in reported_reasons]
+            )
+        else:
+            queries = self._clean_queries(
+                [
+                    state.event.query,
+                    state.current_stage,
+                    f"{state.event.query} 常压 瓶内 合成",
+                    f"{state.event.query} room temperature bottle synthesis",
+                    f"{state.event.query} no autoclave synthesis",
+                ]
+            )
         if not queries:
             return
 
@@ -3374,6 +3931,15 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         original_stage_plan: str,
     ) -> Dict[str, Any]:
+        if self._contract_version == "v2":
+            # Device feedback establishes only a capability blocker.  The
+            # current implementation has no resolver that can prove a new
+            # scientific route is authorized by the current evidence, so do
+            # not let either the LLM or the legacy heuristic rewrite it.
+            raise ValueError(
+                "V2 device feedback cannot authorize a Research route revision; "
+                "an evidence-bound Research revision or explicit user authority is required"
+            )
         self._step_macro_action_design(state, "device_adaptation")
         reference_context = self._format_device_adaptation_reference_context(
             state.knowledge_hits[:2]
@@ -3535,6 +4101,11 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         original_stage_plan: str,
     ) -> Dict[str, Any]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 device-feasibility repair cannot synthesize a replacement "
+                "scientific route without current user/evidence authority"
+            )
         macro_plan = self._device_feasible_repair_macro_plan(
             state,
             self._infer_target_material(state.event.query),
@@ -3562,6 +4133,16 @@ class ResearchAgent(BaseAgent):
             observation.get("unsupported_reasons", [])
             or observation.get("blocking_constraints", [])
         )
+        if self._contract_version == "v2":
+            note = (
+                "设备反馈仅记录能力缺口，不授权改变科学路线、材料身份/相态、"
+                "库存边界、尺度、顺序或目标 observation。"
+                f"原始目标保持为：{state.event.query}。"
+                f"设备层拒绝原因：{'；'.join(reasons) if reasons else '未给出具体原因'}。"
+                "若当前用户任务或当前证据没有明确授权替代路线/外部 handoff，"
+                "本计划保持阻断并等待可追溯 Research 修订。"
+            )
+            return f"{original_stage_plan.strip()} {note}".strip()
         capabilities = observation.get("supported_device_capabilities", {})
         supported_containers: List[str] = []
         supported_workstations: List[str] = []
@@ -3591,6 +4172,11 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         macro_plan: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
+        if self._contract_version == "v2":
+            # A requested observation does not authorize adding preparation,
+            # drying, or handoff operations.  The full V2 quality gate reports
+            # the missing evidence/operation and stops instead.
+            return self._normalize_macro_plan(macro_plan)
         observations = self._infer_observation_points(state.event.query, state.survey_report)
         if "XRD" not in observations:
             return self._normalize_macro_plan(macro_plan)
@@ -3702,6 +4288,11 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         macro_plan: List[Dict[str, Any]],
     ) -> List[str]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "legacy device-adaptation pattern checks are disabled for V2; "
+                "V2 requires an evidence-bound Research revision"
+            )
         plan_blob = json.dumps(macro_plan, ensure_ascii=False).lower()
         observation_blob = self._observation_text(state)
         issues: List[str] = []
@@ -3756,6 +4347,8 @@ class ResearchAgent(BaseAgent):
         rigid_markers = ("泡沫镍", "镍泡沫", "nickel foam", "metal foam", "刚性载体")
         query_blob = str(state.event.query or "").lower()
         if (
+            self._contract_version != "v2"
+            and
             any(marker.lower() in observation_blob for marker in (
                 "RIGID_CARRIER_STATE_MISMATCH",
                 "刚性载体状态",
@@ -3803,6 +4396,11 @@ class ResearchAgent(BaseAgent):
         rejected_result: Dict[str, Any],
         quality_feedback: str,
     ) -> str:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 device-adaptation retry is disabled without an evidence-bound "
+                "Research revision"
+            )
         return (
             f"{base_prompt}\n\n"
             "## 本地质量检查反馈\n"
@@ -4609,6 +5207,11 @@ class ResearchAgent(BaseAgent):
         self,
         state: ResearchAgentState,
     ) -> Dict[str, Any]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 post-observation planning has no evidence-bound heuristic "
+                "route repair; unresolved scientific changes require Research review"
+            )
         if state.post_observation_repair_path in {
             "stage_internal",
             "current_stage",
@@ -4702,12 +5305,21 @@ class ResearchAgent(BaseAgent):
                 supported_workstations = self._clean_queries(
                     capabilities.get("supported_workstations", [])
                 )
-            update_sentence = (
-                f"设备适应层反馈当前设备层不支持上一段 macro action："
-                f"{'；'.join(reasons) if reasons else observation_summary}。"
-                "后续计划必须保留当前 stage 的科学目标和论文依据；research layer 只替换"
-                "化学路线级不可执行项，具体容器、工作站和机器人动作由 device agent 映射。"
-            )
+            if self._contract_version == "v2":
+                update_sentence = (
+                    f"设备适应层反馈当前设备层不支持上一段 macro action："
+                    f"{'；'.join(reasons) if reasons else observation_summary}。"
+                    "该反馈只证明能力缺口，不授权改变科学路线、材料身份/相态、库存边界、"
+                    "配方尺度、顺序或目标 observation；必须保留阻断，等待当前用户任务、"
+                    "当前证据或可追溯 Research 修订明确授权。"
+                )
+            else:
+                update_sentence = (
+                    f"设备适应层反馈当前设备层不支持上一段 macro action："
+                    f"{'；'.join(reasons) if reasons else observation_summary}。"
+                    "后续计划必须保留当前 stage 的科学目标和论文依据；research layer 只替换"
+                    "化学路线级不可执行项，具体容器、工作站和机器人动作由 device agent 映射。"
+                )
             report["summary"] = f"{summary} {update_sentence}".strip()
             report["key_findings"] = self._clean_queries(
                 list(report.get("key_findings", []))
@@ -4720,14 +5332,23 @@ class ResearchAgent(BaseAgent):
                 list(report.get("candidate_precedents", []))
                 + [hit.title for hit in state.knowledge_hits[:3]]
             )
-            report["route_implications"] = self._clean_queries(
-                list(report.get("route_implications", []))
-                + [
+            route_implications = [
+                f"支持容器：{'、'.join(supported_containers) if supported_containers else '未明确'}",
+                f"支持工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}",
+            ]
+            if self._contract_version == "v2":
+                route_implications.insert(
+                    0,
+                    "保持原 Research 合同及能力阻断；设备反馈本身不能作为替代路线或离线 handoff 的证据。",
+                )
+            else:
+                route_implications = [
                     "优先在当前 stage 内重写 macro_plan，使其保留化学目标并删除反应釜/在线表征等路线级不可执行项。",
-                    f"支持容器：{'、'.join(supported_containers) if supported_containers else '未明确'}",
-                    f"支持工作站：{'、'.join(supported_workstations) if supported_workstations else '未明确'}",
+                    *route_implications,
                     "如果反应釜、XRD 或 pH 闭环不可用，research 只写常压/低温/固定时间/离线 observation 等化学语义替代；容器和工作站落地交给 device agent。",
                 ]
+            report["route_implications"] = self._clean_queries(
+                list(report.get("route_implications", [])) + route_implications
             )
             report["open_questions"] = self._clean_queries(
                 list(report.get("open_questions", []))
@@ -4880,6 +5501,10 @@ class ResearchAgent(BaseAgent):
         self,
         state: ResearchAgentState,
     ) -> List[Dict[str, Any]]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 observation repair cannot use task-shaped heuristic chemistry"
+            )
         text = self._observation_text(state)
         context_text = " ".join(
             [
@@ -5042,6 +5667,10 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         material: str,
     ) -> List[Dict[str, Any]]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 device feedback cannot authorize a heuristic replacement route"
+            )
         if material == "目标样品":
             material = "目标 Fe-HCF/PBA 样品"
         context_text = self._observation_text(state)
@@ -5493,7 +6122,12 @@ class ResearchAgent(BaseAgent):
         )
         if candidates:
             return ", ".join(candidates[:5])
-        if "PBA" in sentence or "普鲁士蓝" in sentence:
+        # Keep the historical chemistry-specific fallback in V1 only.  V2
+        # must publish an evidence-bound material identity instead of deriving
+        # one from a product-family keyword.
+        if self._contract_version != "v2" and (
+            "PBA" in sentence or "普鲁士蓝" in sentence
+        ):
             return "PBA 样品"
         return "文献实验对象"
 
@@ -5613,7 +6247,8 @@ class ResearchAgent(BaseAgent):
         if self._contract_version == "v2":
             base_prompt += (
                 "\n\n本次只能使用 current_evidence_bundle 中的当前检索结果作为论文证据。"
-                "若为空，仍需给出具体实验值，并逐项标记 agent_inferred。"
+                "若证据为空或不足，不得编造具体物料、数值、路线或终点；"
+                "相关 material contract 维度必须保持 unresolved，并由发布门阻断。"
             )
         if self._use_llm:
             previous_result: Dict[str, Any] | None = None
@@ -5775,11 +6410,13 @@ class ResearchAgent(BaseAgent):
             "verification_status",
             "full_text_status",
             "corpus_files",
+            "evidence_excerpt",
+            "evidence_source_field",
             "score",
         )
         seen_identities: set[tuple[str, str, str]] = set()
-        unique_records: List[Dict[str, Any]] = []
-        for record in records:
+        unique_records: List[tuple[int, Dict[str, Any]]] = []
+        for evidence_index, record in enumerate(records):
             if not isinstance(record, dict):
                 continue
             identity = (
@@ -5790,7 +6427,7 @@ class ResearchAgent(BaseAgent):
             if identity in seen_identities:
                 continue
             seen_identities.add(identity)
-            unique_records.append(record)
+            unique_records.append((evidence_index, record))
 
         parameter_signal = re.compile(
             r"\d+(?:\.\d+)?\s*(?:mmol|mol|mg|g|ml|l|m|min|h|s|rpm|r/min|"
@@ -5843,7 +6480,7 @@ class ResearchAgent(BaseAgent):
                 source_score = 0.0
             return scientific_steps * 5.0 + len(selected) * 2.0 + source_score, source_score
 
-        unique_records.sort(key=record_rank, reverse=True)
+        unique_records.sort(key=lambda entry: record_rank(entry[1]), reverse=True)
         step_fields = (
             "步骤序号",
             "操作",
@@ -5865,12 +6502,16 @@ class ResearchAgent(BaseAgent):
             "evidence": 180,
         }
 
-        for record in unique_records:
+        for evidence_index, record in unique_records:
             item = {
                 key: deepcopy(record[key])
                 for key in metadata_fields
                 if key in record
             }
+            if record.get("evidence_excerpt"):
+                item["evidence_source_path"] = (
+                    f"evidence_bundle.items[{evidence_index}].excerpt"
+                )
             selected_steps = useful_steps(record)
             for key, limit in scalar_limits.items():
                 if selected_steps:
@@ -6049,7 +6690,10 @@ class ResearchAgent(BaseAgent):
         }
         if tier != "step":
             hidden.update({
-                "material_inputs", "material_outputs", "container_requirements", "intermediate_returns",
+                "material_inputs", "material_intermediates", "material_outputs",
+                "material_relations", "operation_segments", "material_applicability",
+                "material_contract_status",
+                "container_requirements", "intermediate_returns",
                 "container_contract", "feedback_contract", "operation_contracts", "scientific_controls",
                 "supported_containers", "input_output_summary", "usage_summary", "audit_rules_summary",
             })
@@ -6438,7 +7082,12 @@ class ResearchAgent(BaseAgent):
                 "input_sample_ids",
                 "output_sample_ids",
                 "material_inputs",
+                "material_intermediates",
                 "material_outputs",
+                "material_relations",
+                "operation_segments",
+                "material_applicability",
+                "material_contract_status",
                 "container_requirements",
                 "intermediate_returns",
                 "expected_return",
@@ -6534,6 +7183,30 @@ class ResearchAgent(BaseAgent):
         dependency closure.  Strip provenance noise here without dropping those
         executable planning facts; Device binding reloads the full Skills later.
         """
+
+        experiment_projection = project_device_context(
+            device_context or {}, "experiment"
+        )
+        experiment_capabilities: List[Dict[str, Any]] = []
+        seen_capability_ids: set[str] = set()
+        for capability in experiment_projection.get("capabilities", []) or []:
+            if not isinstance(capability, dict):
+                continue
+            capability_id = str(capability.get("id") or "").strip()
+            if (
+                not capability_id
+                or capability_id in seen_capability_ids
+                or capability.get("support_status") != "supported"
+            ):
+                continue
+            seen_capability_ids.add(capability_id)
+            experiment_capabilities.append(
+                {
+                    "id": capability_id,
+                    "name": str(capability.get("name") or "").strip(),
+                    "support_status": "supported",
+                }
+            )
 
         def endpoint(value: Any) -> Dict[str, Any]:
             source = value if isinstance(value, dict) else {}
@@ -6790,6 +7463,10 @@ class ResearchAgent(BaseAgent):
             )
             if key in device_context
         } | {
+            # Research may select only these abstract identifiers for
+            # material-operation roles.  Station and Skill-operation choices
+            # remain deliberately absent and belong to Device.
+            "experiment_capabilities": experiment_capabilities,
             "workstations": workstations,
             "operation_contracts": operation_contracts,
             "feedback_default": {
@@ -6896,11 +7573,21 @@ class ResearchAgent(BaseAgent):
         query: str,
         state: ResearchAgentState | None = None,
     ) -> List[str]:
+        if self._contract_version == "v2" and state is not None:
+            # The model is asked for source paths and verbatim excerpts, not
+            # digest bytes.  Bind those claims before the generator gate as
+            # well as at publication, without replacing a supplied digest.
+            self._stamp_current_evidence_provenance(state, macro_plan)
         issues: List[str] = []
         if not macro_plan:
             return ["macro_plan 为空"]
 
         normalized_query = re.sub(r"\s+", "", query)
+        allowed_device_capability_ids = (
+            self._v2_declared_experiment_capability_ids(state)
+            if self._contract_version == "v2" and state is not None
+            else set()
+        )
         for index, step in enumerate(macro_plan, start=1):
             operation = str(step.get("操作", "")).strip()
             target = str(step.get("试剂/对象", "")).strip()
@@ -6924,12 +7611,28 @@ class ResearchAgent(BaseAgent):
             ):
                 issues.append(f"第 {index} 步参数缺少具体实验条件")
 
-            for key in ("material_inputs", "material_outputs"):
+            for key in ("material_inputs", "material_intermediates", "material_outputs"):
                 for material in step.get(key, []) or []:
                     if not isinstance(material, dict) or not str(material.get("name", "")).strip():
                         issues.append(f"第 {index} 步 {key} 必须给出具体物质 name")
             if self._contract_version == "v2":
+                issues.extend(
+                    self._v2_material_contract_issues(
+                        index,
+                        step,
+                        allowed_device_capability_ids=allowed_device_capability_ids,
+                    )
+                )
+                issues.extend(self._v2_quantity_requirement_issues(index, step))
                 issues.extend(self._v2_macro_step_quality_issues(index, step))
+                if state is not None:
+                    issues.extend(
+                        self._v2_material_provenance_issues(
+                            index,
+                            step,
+                            state,
+                        )
+                    )
                 try:
                     parse_logical_container_requirements(step, sequence=index)
                 except LogicalContainerContractError as exc:
@@ -6960,6 +7663,731 @@ class ResearchAgent(BaseAgent):
 
         if state is not None:
             issues.extend(self._macro_return_contract_issues(state, macro_plan))
+        if self._contract_version == "v2":
+            segment_locations: Dict[str, str] = {}
+            for step_index, step in enumerate(macro_plan, start=1):
+                raw_segments = step.get("operation_segments")
+                if not isinstance(raw_segments, list):
+                    continue
+                for segment_index, segment in enumerate(raw_segments, start=1):
+                    if not isinstance(segment, dict):
+                        continue
+                    segment_id = str(segment.get("segment_id") or "").strip()
+                    if not segment_id:
+                        continue
+                    location = (
+                        f"第 {step_index} 步 operation_segments[{segment_index}]"
+                    )
+                    prior_location = segment_locations.get(segment_id)
+                    if prior_location is not None:
+                        issues.append(
+                            f"{location} 的 segment_id={segment_id!r} 与 "
+                            f"{prior_location} 重复；segment_id 必须在整个 "
+                            "Research package 内唯一"
+                        )
+                    else:
+                        segment_locations[segment_id] = location
+            issues.extend(self._v2_material_lineage_issues(macro_plan))
+        return issues
+
+    @staticmethod
+    def _v2_declared_experiment_capability_ids(
+        state: ResearchAgentState,
+    ) -> set[str]:
+        """Return only supported abstract IDs from this run's Device context."""
+
+        context = (state.event.constraints or {}).get("device_context") or {}
+        projection = project_device_context(context, "experiment")
+        return {
+            str(capability.get("id") or "").strip()
+            for capability in projection.get("capabilities", []) or []
+            if isinstance(capability, dict)
+            and str(capability.get("id") or "").strip()
+            and capability.get("support_status") == "supported"
+        }
+
+    @staticmethod
+    def _v2_material_contract_issues(
+        index: int,
+        step: Dict[str, Any],
+        *,
+        allowed_device_capability_ids: set[str],
+    ) -> List[str]:
+        """Require explicit applicability and instance-level material facts."""
+
+        issues: List[str] = []
+        raw_status = step.get("material_contract_status")
+        if not isinstance(raw_status, dict):
+            return [
+                f"第 {index} 步缺少 material_contract_status；"
+                "material_inputs/material_intermediates/material_outputs/"
+                "logical_containers/material_relations "
+                "必须分别声明 declared/not_applicable/unresolved"
+            ]
+        try:
+            status = MaterialContractStatusV2.model_validate(raw_status, strict=True)
+        except ValidationError as exc:
+            return [
+                f"第 {index} 步 material_contract_status 无效："
+                + "; ".join(error["msg"] for error in exc.errors(include_url=False))
+            ]
+
+        # Applicability is declared structurally, never inferred from operation
+        # wording.  A segment records the authorised material effect and a
+        # separate evidence object binds each N/A field to those segments.
+        raw_segments = step.get("operation_segments")
+        parsed_segments: List[MaterialOperationSegmentV2] = []
+        if not isinstance(raw_segments, list) or not raw_segments:
+            issues.append(
+                f"第 {index} 步缺少非空 operation_segments；不得从操作文本猜测物料影响"
+            )
+        else:
+            for segment_index, segment in enumerate(raw_segments, start=1):
+                try:
+                    parsed_segments.append(
+                        MaterialOperationSegmentV2.model_validate(segment, strict=True)
+                    )
+                except ValidationError as exc:
+                    issues.append(
+                        f"第 {index} 步 operation_segments[{segment_index}] 无效："
+                        + "; ".join(
+                            error["msg"] for error in exc.errors(include_url=False)
+                        )
+                    )
+        segment_ids = {segment.segment_id for segment in parsed_segments}
+        if len(segment_ids) != len(parsed_segments):
+            issues.append(f"第 {index} 步 segment_id 必须唯一")
+        active_segment_ids = {
+            segment.segment_id
+            for segment in parsed_segments
+            if segment.material_effect
+            not in {
+                "none",
+                "register_existing_input",
+                "observe_without_material_change",
+            }
+        }
+        registers_existing_materials = any(
+            segment.material_effect == "register_existing_input"
+            for segment in parsed_segments
+        )
+
+        raw_applicability = step.get("material_applicability")
+        parsed_applicability: List[MaterialApplicabilityEvidenceV2] = []
+        if raw_applicability is None:
+            raw_applicability = []
+        if not isinstance(raw_applicability, list):
+            issues.append(f"第 {index} 步 material_applicability 必须为数组")
+        else:
+            for evidence_index, evidence in enumerate(raw_applicability, start=1):
+                try:
+                    parsed_applicability.append(
+                        MaterialApplicabilityEvidenceV2.model_validate(
+                            evidence, strict=True
+                        )
+                    )
+                except ValidationError as exc:
+                    issues.append(
+                        f"第 {index} 步 material_applicability[{evidence_index}] 无效："
+                        + "; ".join(
+                            error["msg"] for error in exc.errors(include_url=False)
+                        )
+                    )
+        applicability_by_field: Dict[str, MaterialApplicabilityEvidenceV2] = {}
+        for evidence in parsed_applicability:
+            if evidence.contract_field in applicability_by_field:
+                issues.append(
+                    f"第 {index} 步 {evidence.contract_field} 存在重复 N/A 证据"
+                )
+            applicability_by_field[evidence.contract_field] = evidence
+            unknown = set(evidence.operation_segment_ids) - segment_ids
+            if unknown:
+                issues.append(
+                    f"第 {index} 步 {evidence.contract_field} N/A 证据引用未知 segment："
+                    f"{sorted(unknown)}"
+                )
+            if set(evidence.operation_segment_ids) != segment_ids:
+                issues.append(
+                    f"第 {index} 步 {evidence.contract_field} N/A 证据必须覆盖本 macro 的全部 segment"
+                )
+        not_applicable_fields = {
+            field_name
+            for field_name in (
+                "material_inputs",
+                "material_intermediates",
+                "material_outputs",
+                "logical_containers",
+                "material_relations",
+            )
+            if getattr(status, field_name) == "not_applicable"
+        }
+        if set(applicability_by_field) != not_applicable_fields:
+            issues.append(
+                f"第 {index} 步 material_applicability 必须与 not_applicable 字段一一对应"
+            )
+        segment_effects = {segment.material_effect for segment in parsed_segments}
+        if "unknown" in segment_effects and not_applicable_fields:
+            issues.append(
+                f"第 {index} 步存在 unknown material_effect，任何物料维度都不得标 N/A"
+            )
+        if status.material_inputs == "not_applicable" and segment_effects & {
+            "register_existing_input", "consume_material", "transform_material",
+            "transfer_material", "split_material", "merge_material",
+        }:
+            issues.append(f"第 {index} 步 material_inputs=N/A 与输入型 segment 冲突")
+        if status.material_outputs == "not_applicable" and segment_effects & {
+            "produce_material", "transform_material", "transfer_material",
+            "split_material", "merge_material",
+        }:
+            issues.append(f"第 {index} 步 material_outputs=N/A 与输出型 segment 冲突")
+        relation_evidence = applicability_by_field.get("material_relations")
+        if relation_evidence is not None:
+            segments_by_id = {
+                segment.segment_id: segment for segment in parsed_segments
+            }
+            conflicting = sorted(
+                segment_id
+                for segment_id in relation_evidence.operation_segment_ids
+                if segment_id in segments_by_id
+                and segments_by_id[segment_id].material_effect
+                not in {
+                    "none",
+                    "register_existing_input",
+                    "observe_without_material_change",
+                }
+            )
+            if conflicting:
+                issues.append(
+                    f"第 {index} 步 material_relations=not_applicable 与物料影响 segment 冲突："
+                    f"{conflicting}"
+                )
+        if registers_existing_materials and status.material_inputs != "declared":
+            issues.append(
+                f"第 {index} 步声明 register_existing_input，material_inputs 必须声明具体"
+                "材料实例；material_relations 不适用不能关闭输入边界审计"
+            )
+
+        collections = {
+            "material_inputs": step.get("material_inputs"),
+            "material_intermediates": step.get("material_intermediates"),
+            "material_outputs": step.get("material_outputs"),
+            "logical_containers": step.get("container_requirements"),
+            "material_relations": step.get("material_relations"),
+        }
+        for field_name, raw_values in collections.items():
+            disposition = getattr(status, field_name)
+            if disposition == "unresolved":
+                issues.append(
+                    f"第 {index} 步 {field_name} 仍为 unresolved，不能进入 Device"
+                )
+            if not isinstance(raw_values, list):
+                issues.append(f"第 {index} 步 {field_name} 必须为数组")
+                continue
+            if disposition == "declared" and not raw_values:
+                issues.append(
+                    f"第 {index} 步 {field_name}=declared 但没有显式记录"
+                )
+            if disposition == "not_applicable" and raw_values:
+                issues.append(
+                    f"第 {index} 步 {field_name}=not_applicable 但数组非空"
+                )
+
+        raw_containers = (
+            collections["logical_containers"]
+            if isinstance(collections["logical_containers"], list)
+            else []
+        )
+        logical_ids: set[str] = set()
+        if status.logical_containers == "declared":
+            for container_index, container in enumerate(raw_containers, start=1):
+                logical_id = (
+                    container.get("logical_container_id")
+                    if isinstance(container, dict) else None
+                )
+                if not isinstance(logical_id, str) or not logical_id.strip():
+                    issues.append(
+                        f"第 {index} 步 container_requirements[{container_index}] "
+                        "缺少显式 logical_container_id"
+                    )
+                    continue
+                if logical_id in logical_ids:
+                    issues.append(
+                        f"第 {index} 步 logical_container_id={logical_id!r} 重复"
+                    )
+                logical_ids.add(logical_id)
+
+        instance_ids: Dict[str, set[str]] = {
+            "input": set(),
+            "intermediate": set(),
+            "output": set(),
+        }
+        ports_by_instance: Dict[str, Dict[str, Dict[str, Any]]] = {
+            "input": {},
+            "intermediate": {},
+            "output": {},
+        }
+        for field_name, direction in (
+            ("material_inputs", "input"),
+            ("material_intermediates", "intermediate"),
+            ("material_outputs", "output"),
+        ):
+            raw_ports = collections[field_name]
+            if getattr(status, field_name) != "declared" or not isinstance(raw_ports, list):
+                continue
+            for port_index, port in enumerate(raw_ports, start=1):
+                if not isinstance(port, dict):
+                    continue
+                prefix = f"第 {index} 步 {field_name}[{port_index}]"
+                for required_field in ("material_id", "material_instance_id"):
+                    value = port.get(required_field)
+                    if not isinstance(value, str) or not value.strip():
+                        issues.append(f"{prefix} 缺少显式 {required_field}")
+                instance_id = port.get("material_instance_id")
+                if isinstance(instance_id, str) and instance_id.strip():
+                    if instance_id in instance_ids[direction]:
+                        issues.append(f"{prefix} material_instance_id 重复")
+                    instance_ids[direction].add(instance_id)
+                    ports_by_instance[direction][instance_id] = port
+                if not isinstance(port.get("provenance"), dict):
+                    issues.append(f"{prefix} 缺少结构化 provenance")
+                quantity = port.get("quantity")
+                if isinstance(quantity, dict) and not str(
+                    quantity.get("semantic") or ""
+                ).strip():
+                    issues.append(
+                        f"{prefix} quantity 必须声明 planned_target/planning_estimate/"
+                        "runtime_measurement_required/whole_batch_unspecified 语义"
+                    )
+                logical_id = port.get("logical_container_id")
+                if status.logical_containers == "declared":
+                    if not isinstance(logical_id, str) or logical_id not in logical_ids:
+                        issues.append(
+                            f"{prefix} 必须引用本步已声明的 logical_container_id"
+                        )
+                elif logical_id:
+                    issues.append(
+                        f"{prefix} 引用了容器，但 logical_containers 未声明"
+                    )
+                if direction == "input":
+                    origin = port.get("material_origin")
+                    parent_refs = port.get("parent_output_refs", [])
+                    if origin not in {"external_inventory", "upstream_output"}:
+                        issues.append(
+                            f"{prefix} material_origin 必须为 external_inventory 或 upstream_output"
+                        )
+                    if not isinstance(parent_refs, list):
+                        issues.append(f"{prefix} parent_output_refs 必须为数组")
+                    elif origin == "upstream_output" and not parent_refs:
+                        issues.append(
+                            f"{prefix} 来源为 upstream_output 但缺少 parent_output_refs"
+                        )
+                    elif origin == "external_inventory" and parent_refs:
+                        issues.append(
+                            f"{prefix} 来源为 external_inventory，不得填写 parent_output_refs"
+                        )
+                    if isinstance(parent_refs, list):
+                        for ref_index, ref in enumerate(parent_refs, start=1):
+                            if not isinstance(ref, dict) or not str(
+                                ref.get("macro_step_id") or ""
+                            ).strip() or not str(
+                                ref.get("material_instance_id") or ""
+                            ).strip():
+                                issues.append(
+                                    f"{prefix} parent_output_refs[{ref_index}] 必须显式给出 "
+                                    "macro_step_id 和 material_instance_id"
+                                )
+                elif direction == "intermediate":
+                    if port.get("material_origin") != "same_step_relation":
+                        issues.append(
+                            f"{prefix} material_origin 必须为 same_step_relation"
+                        )
+                    if port.get("parent_output_refs"):
+                        issues.append(
+                            f"{prefix} 不得用 parent_output_refs 伪装宏步骤内中间态"
+                        )
+
+        raw_relations = collections["material_relations"]
+        if status.material_relations == "declared" and isinstance(raw_relations, list):
+            relation_ids: set[str] = set()
+            intermediate_ids = instance_ids["intermediate"]
+            produced_intermediates: Dict[str, int] = {}
+            consumed_intermediates: Dict[str, List[int]] = {}
+            used_inputs: set[str] = set()
+            produced_outputs: set[str] = set()
+            input_use_counts = {
+                instance_id: 0 for instance_id in instance_ids["input"]
+            }
+            output_production_counts = {
+                instance_id: 0 for instance_id in instance_ids["output"]
+            }
+            has_material_edge = False
+            covered_active_segment_ids: set[str] = set()
+            for relation_index, relation in enumerate(raw_relations, start=1):
+                prefix = f"第 {index} 步 material_relations[{relation_index}]"
+                if not isinstance(relation, dict):
+                    continue
+                try:
+                    parsed = MaterialRelationV2.model_validate(relation, strict=True)
+                except ValidationError as exc:
+                    issues.append(
+                        f"{prefix} 无效："
+                        + "; ".join(
+                            error["msg"] for error in exc.errors(include_url=False)
+                        )
+                    )
+                    continue
+                if parsed.relation_id in relation_ids:
+                    issues.append(f"{prefix} relation_id 重复")
+                relation_ids.add(parsed.relation_id)
+                if parsed.source_operation_ref not in segment_ids:
+                    issues.append(
+                        f"{prefix} source_operation_ref 未引用已声明的 segment_id"
+                    )
+                if parsed.event_kind != "none":
+                    has_material_edge = True
+                    covered_active_segment_ids.add(parsed.source_operation_ref)
+                unknown_inputs = set(parsed.input_material_instance_ids) - (
+                    instance_ids["input"] | intermediate_ids
+                )
+                unknown_outputs = set(parsed.output_material_instance_ids) - (
+                    intermediate_ids | instance_ids["output"]
+                )
+                unknown_containers = set(parsed.logical_container_ids) - logical_ids
+                if unknown_inputs:
+                    issues.append(f"{prefix} 引用未知 input instance：{sorted(unknown_inputs)}")
+                if unknown_outputs:
+                    issues.append(f"{prefix} 引用未知 output instance：{sorted(unknown_outputs)}")
+                if unknown_containers:
+                    issues.append(f"{prefix} 引用未知 logical container：{sorted(unknown_containers)}")
+                for instance_id in set(parsed.input_material_instance_ids) & intermediate_ids:
+                    consumed_intermediates.setdefault(instance_id, []).append(relation_index)
+                for instance_id in set(parsed.output_material_instance_ids) & intermediate_ids:
+                    if instance_id in produced_intermediates:
+                        issues.append(f"{prefix} 重复产出 intermediate {instance_id!r}")
+                    produced_intermediates[instance_id] = relation_index
+                used_inputs.update(
+                    set(parsed.input_material_instance_ids) & instance_ids["input"]
+                )
+                produced_outputs.update(
+                    set(parsed.output_material_instance_ids) & instance_ids["output"]
+                )
+                for instance_id in (
+                    set(parsed.input_material_instance_ids) & instance_ids["input"]
+                ):
+                    input_use_counts[instance_id] += 1
+                for instance_id in (
+                    set(parsed.output_material_instance_ids) & instance_ids["output"]
+                ):
+                    output_production_counts[instance_id] += 1
+                if parsed.event_kind in {
+                    "process_same_material",
+                    "split_same_material",
+                    "replicate_same_material",
+                } and not unknown_inputs and not unknown_outputs:
+                    endpoint_ports = [
+                        ports_by_instance["input"].get(instance_id)
+                        or ports_by_instance["intermediate"].get(instance_id)
+                        for instance_id in parsed.input_material_instance_ids
+                    ] + [
+                        ports_by_instance["intermediate"].get(instance_id)
+                        or ports_by_instance["output"].get(instance_id)
+                        for instance_id in parsed.output_material_instance_ids
+                    ]
+                    material_ids = {
+                        port.get("material_id")
+                        for port in endpoint_ports
+                        if isinstance(port, dict)
+                        and isinstance(port.get("material_id"), str)
+                        and port.get("material_id").strip()
+                    }
+                    endpoints_have_material_ids = all(
+                        isinstance(port, dict)
+                        and isinstance(port.get("material_id"), str)
+                        and bool(port.get("material_id").strip())
+                        for port in endpoint_ports
+                    )
+                    if endpoints_have_material_ids and len(material_ids) != 1:
+                        issues.append(
+                            f"{prefix} {parsed.event_kind} 必须保持同一个 material_id；"
+                            "材料身份变化必须使用 state_change"
+                        )
+            unused_inputs = instance_ids["input"] - used_inputs
+            orphan_outputs = instance_ids["output"] - produced_outputs
+            if unused_inputs:
+                issues.append(
+                    f"第 {index} 步存在未被任何 relation 消费的 input instance："
+                    f"{sorted(unused_inputs)}"
+                )
+            if orphan_outputs:
+                issues.append(
+                    f"第 {index} 步存在未由任何 relation 产出的 output instance："
+                    f"{sorted(orphan_outputs)}"
+                )
+            multiply_consumed = sorted(
+                instance_id
+                for instance_id, count in input_use_counts.items()
+                if count > 1
+            )
+            multiply_produced = sorted(
+                instance_id
+                for instance_id, count in output_production_counts.items()
+                if count > 1
+            )
+            if multiply_consumed:
+                issues.append(
+                    f"第 {index} 步 input instance 被重复消费：{multiply_consumed}；"
+                    "分支必须由一条显式 split relation 产生不同输出实例"
+                )
+            if multiply_produced:
+                issues.append(
+                    f"第 {index} 步 output instance 被多条 relation 重复产出："
+                    f"{multiply_produced}"
+                )
+            uncovered_active_segments = sorted(
+                active_segment_ids - covered_active_segment_ids
+            )
+            if uncovered_active_segments:
+                issues.append(
+                    f"第 {index} 步存在未由 relation 覆盖的物料影响 segment："
+                    f"{uncovered_active_segments}"
+                )
+            segments_by_id = {
+                segment.segment_id: segment for segment in parsed_segments
+            }
+            for segment_id in sorted(covered_active_segment_ids):
+                segment = segments_by_id.get(segment_id)
+                if segment is None:
+                    # The relation-level source reference error above already
+                    # reports this malformed edge.
+                    continue
+                implementation = segment.device_implementation
+                if implementation is None:
+                    issues.append(
+                        f"第 {index} 步 operation segment {segment_id!r} 被非 none "
+                        "relation 引用，但缺少抽象 device_implementation"
+                    )
+                    continue
+                for role in implementation.ordered_steps:
+                    if role.capability_id not in allowed_device_capability_ids:
+                        issues.append(
+                            f"第 {index} 步 operation segment {segment_id!r} 的 role "
+                            f"{role.role_id!r} 引用了本轮 device_context 未声明为 supported "
+                            f"的 capability_id={role.capability_id!r}；不得选择工作站、"
+                            "Skill operation 或按文本猜测能力"
+                        )
+            if status.material_intermediates == "declared":
+                for instance_id in intermediate_ids:
+                    producer = produced_intermediates.get(instance_id)
+                    consumers = consumed_intermediates.get(instance_id, [])
+                    if producer is None:
+                        issues.append(
+                            f"第 {index} 步 intermediate {instance_id!r} 缺少产出 relation"
+                        )
+                    if len(consumers) != 1:
+                        issues.append(
+                            f"第 {index} 步 intermediate {instance_id!r} 必须由一个后续 relation 消费；"
+                            "分支须使用一条显式 split relation"
+                        )
+                    elif producer is not None and consumers[0] <= producer:
+                        issues.append(
+                            f"第 {index} 步 intermediate {instance_id!r} 的消费早于产出"
+                        )
+        return issues
+
+    @staticmethod
+    def _v2_material_lineage_issues(
+        macro_plan: Sequence[Dict[str, Any]],
+    ) -> List[str]:
+        """Validate explicit upstream output references across macro steps."""
+
+        issues: List[str] = []
+        outputs: Dict[tuple[Any, str], tuple[int, Dict[str, Any]]] = {}
+        relation_ids: Dict[str, int] = {}
+        parent_consumers: Dict[tuple[Any, str], List[str]] = {}
+        for index, step in enumerate(macro_plan, start=1):
+            step_id = step.get("macro_step_id")
+            status = step.get("material_contract_status")
+            if isinstance(status, dict) and status.get("material_relations") == "declared":
+                for relation in step.get("material_relations", []) or []:
+                    if not isinstance(relation, dict):
+                        continue
+                    relation_id = relation.get("relation_id")
+                    if not isinstance(relation_id, str) or not relation_id:
+                        continue
+                    prior = relation_ids.get(relation_id)
+                    if prior is not None:
+                        issues.append(
+                            f"第 {index} 步 relation_id={relation_id!r} 与第 {prior} 步重复；"
+                            "relation_id 必须在整个 Research package 内唯一"
+                        )
+                    else:
+                        relation_ids[relation_id] = index
+            if not isinstance(status, dict) or status.get("material_outputs") != "declared":
+                continue
+            for output in step.get("material_outputs", []) or []:
+                if not isinstance(output, dict):
+                    continue
+                instance_id = output.get("material_instance_id")
+                if step_id is not None and isinstance(instance_id, str) and instance_id:
+                    try:
+                        step_key = json_scalar_identity_key(step_id)
+                    except IdentityContractError:
+                        issues.append(
+                            f"第 {index} 步 macro_step_id 不是受支持的 JSON 标量身份"
+                        )
+                        continue
+                    key = (step_key, instance_id)
+                    if key in outputs:
+                        issues.append(
+                            f"第 {index} 步重复声明上游输出实例 {instance_id!r}"
+                        )
+                    outputs[key] = (index, output)
+
+        for index, step in enumerate(macro_plan, start=1):
+            status = step.get("material_contract_status")
+            if not isinstance(status, dict) or status.get("material_inputs") != "declared":
+                continue
+            for port_index, material in enumerate(step.get("material_inputs", []) or [], start=1):
+                if not isinstance(material, dict) or material.get("material_origin") != "upstream_output":
+                    continue
+                seen_port_refs: set[tuple[Any, str]] = set()
+                for ref_index, ref in enumerate(material.get("parent_output_refs", []) or [], start=1):
+                    if not isinstance(ref, dict):
+                        continue
+                    prefix = (
+                        f"第 {index} 步 material_inputs[{port_index}] "
+                        f"parent_output_refs[{ref_index}]"
+                    )
+                    ref_step = ref.get("macro_step_id")
+                    ref_instance = ref.get("material_instance_id")
+                    try:
+                        key = (json_scalar_identity_key(ref_step), str(ref_instance or ""))
+                    except IdentityContractError:
+                        issues.append(f"{prefix} 的 macro_step_id 不是受支持的 JSON 标量身份")
+                        continue
+                    if key in seen_port_refs:
+                        issues.append(f"{prefix} 重复引用同一个上游输出实例")
+                        continue
+                    seen_port_refs.add(key)
+                    parent = outputs.get(key)
+                    if parent is None:
+                        issues.append(f"{prefix} 未指向已声明的具体上游输出")
+                        continue
+                    parent_index, parent_material = parent
+                    if parent_index >= index:
+                        issues.append(f"{prefix} 必须指向更早的 macro step")
+                    if parent_material.get("material_id") != material.get("material_id"):
+                        issues.append(f"{prefix} 的 material_id 与上游输出不一致")
+                    parent_consumers.setdefault(key, []).append(
+                        f"第 {index} 步 material_inputs[{port_index}]"
+                    )
+        for key, consumers in parent_consumers.items():
+            if len(consumers) > 1:
+                issues.append(
+                    f"上游输出实例 {key!r} 被多个下游 input 重复消费：{consumers}；"
+                    "必须先用一条显式 split relation 产生不同输出实例"
+                )
+        return issues
+
+    @staticmethod
+    def _v2_quantity_requirement_issues(
+        index: int,
+        step: Dict[str, Any],
+    ) -> List[str]:
+        """Require exact evidence and material binding for every V2 quantity."""
+
+        raw_requirements = step.get("quantity_requirements", [])
+        if not isinstance(raw_requirements, list):
+            return [f"第 {index} 步 quantity_requirements 必须为数组"]
+        material_names = {
+            str(material.get("material_id") or "").strip(): str(
+                material.get("name") or ""
+            ).strip()
+            for field_name in (
+                "material_inputs",
+                "material_intermediates",
+                "material_outputs",
+            )
+            for material in step.get(field_name, []) or []
+            if isinstance(material, dict)
+            and str(material.get("material_id") or "").strip()
+        }
+        allowed_kinds = {
+            "scientific_input_setpoint",
+            "target_dose",
+            "whole_batch",
+            "runtime_measured_inventory",
+            "semantic_classification_required",
+        }
+        source_kinds = {
+            "user_query": {"user"},
+            "literature": {"paper"},
+            "process_semantics": {"user", "paper"},
+        }
+        issues: List[str] = []
+        for requirement_index, requirement in enumerate(raw_requirements, start=1):
+            prefix = f"第 {index} 步 quantity_requirements[{requirement_index}]"
+            if not isinstance(requirement, dict):
+                issues.append(f"{prefix} 必须为对象")
+                continue
+            kind = str(requirement.get("kind") or "").strip()
+            if kind not in allowed_kinds:
+                issues.append(f"{prefix} kind 无效")
+            material_id = str(requirement.get("material_id") or "").strip()
+            if not material_id or material_id not in material_names:
+                issues.append(f"{prefix} 必须精确绑定本步已声明 material_id")
+            material_name = str(requirement.get("material") or "").strip()
+            if (
+                material_id in material_names
+                and (
+                    not material_name
+                    or material_name.casefold()
+                    != material_names[material_id].casefold()
+                )
+            ):
+                issues.append(f"{prefix} material 必须精确标识绑定的 material port")
+            source = str(requirement.get("source") or "").strip()
+            provenance = requirement.get("provenance")
+            provenance_kind = (
+                str(provenance.get("kind") or "").strip()
+                if isinstance(provenance, dict)
+                else ""
+            )
+            expected_kinds = source_kinds.get(source)
+            if expected_kinds is None:
+                issues.append(
+                    f"{prefix} source={source or '<empty>'} 不能证明 Research 数量；"
+                    "不得用 agent_proposed/workstation_requirement 或裸文本升级"
+                )
+            elif provenance_kind not in expected_kinds:
+                issues.append(f"{prefix} source 与 provenance.kind 不一致")
+            if not isinstance(provenance, dict):
+                issues.append(f"{prefix} 缺少结构化 provenance")
+                provenance_excerpt = ""
+            else:
+                provenance_excerpt = str(provenance.get("excerpt") or "")
+                if material_name and material_name.casefold() not in provenance_excerpt.casefold():
+                    issues.append(f"{prefix} 来源摘录未标识绑定物料")
+            value = requirement.get("value")
+            unit = str(requirement.get("unit") or "").strip()
+            if kind in {"whole_batch", "runtime_measured_inventory"}:
+                if value is not None or unit:
+                    issues.append(f"{prefix} {kind} 不得携带已知数值/单位")
+            elif kind in allowed_kinds and (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or not unit
+            ):
+                issues.append(f"{prefix} 数值需求必须给出有限 value 和 unit")
+            elif kind not in {"whole_batch", "runtime_measured_inventory"} and not (
+                evidence_contains_exact_quantity(
+                    provenance_excerpt,
+                    value,
+                    unit,
+                )
+            ):
+                issues.append(f"{prefix} 来源摘录未包含完全匹配的 value/unit")
         return issues
 
     @staticmethod
@@ -6977,28 +8405,99 @@ class ResearchAgent(BaseAgent):
 
         issues: List[str] = []
         vague = re.compile(r"适量|按需|若干|少量|足量|合适量|as needed|q\.?s\.?")
-        operation = str(step.get("操作") or step.get("operation") or "")
-        active_addition = bool(
-            re.search(r"加入|加液|滴加|投料|称量|移取|取样|配制|分装|dosing|dispens", operation, re.I)
+        parsed_segments: List[MaterialOperationSegmentV2] = []
+        for segment in step.get("operation_segments", []) or []:
+            try:
+                parsed_segments.append(
+                    MaterialOperationSegmentV2.model_validate(segment, strict=True)
+                )
+            except ValidationError:
+                # The structural material-contract gate reports the precise
+                # segment error; do not infer a fallback effect here.
+                pass
+        registers_existing_materials = any(
+            segment.material_effect == "register_existing_input"
+            for segment in parsed_segments
+        )
+        relation_status = step.get("material_contract_status")
+        relation_status = (
+            relation_status.get("material_relations")
+            if isinstance(relation_status, dict)
+            else ""
+        )
+        consumes_material = any(
+            segment.material_effect
+            in {
+                "consume_material",
+                "transform_material",
+                "transfer_material",
+                "split_material",
+                "merge_material",
+            }
+            for segment in parsed_segments
         )
 
-        def _quantity_ok(material: Dict[str, Any], *, output: bool) -> bool:
+        relation_by_input: Dict[str, List[Dict[str, Any]]] = {}
+        for relation in step.get("material_relations", []) or []:
+            if not isinstance(relation, dict):
+                continue
+            for instance_id in relation.get("input_material_instance_ids", []) or []:
+                if isinstance(instance_id, str):
+                    relation_by_input.setdefault(instance_id, []).append(relation)
+
+        def _quantity_ok(
+            material: Dict[str, Any], *, direction: str
+        ) -> bool:
             quantity = material.get("quantity")
             if isinstance(quantity, dict):
                 mode = str(quantity.get("mode") or "exact")
-                if mode in {"all_available", "runtime_measured"}:
-                    return True
+                semantic = str(quantity.get("semantic") or "")
                 value = quantity.get("value")
                 unit = str(quantity.get("unit") or "").strip()
+                if mode == "all_available":
+                    if value is not None or unit or semantic != "whole_batch_unspecified":
+                        return False
+                    if direction != "input":
+                        return True
+                    instance_id = str(material.get("material_instance_id") or "")
+                    return (
+                        material.get("material_origin") == "upstream_output"
+                        and bool(material.get("parent_output_refs"))
+                        and any(
+                            relation.get("quantity_basis") == "whole_batch"
+                            for relation in relation_by_input.get(instance_id, [])
+                        )
+                    )
+                if mode == "runtime_measured":
+                    return (
+                        value is None
+                        and bool(unit)
+                        and semantic == "runtime_measurement_required"
+                        and (
+                            direction != "input"
+                            or (
+                                registers_existing_materials
+                                and relation_status == "not_applicable"
+                                and material.get("material_origin")
+                                == "external_inventory"
+                                and not material.get("parent_output_refs")
+                            )
+                        )
+                    )
                 return (
                     mode == "exact"
                     and isinstance(value, (int, float))
                     and not isinstance(value, bool)
                     and bool(unit)
+                    and semantic in {"planned_target", "planning_estimate"}
                 )
-            return bool(PARAMETER_DETAIL_RE.search(str(quantity or "")))
+            return False
 
-        for key, output in (("material_inputs", False), ("material_outputs", True)):
+        for key, direction in (
+            ("material_inputs", "input"),
+            ("material_intermediates", "intermediate"),
+            ("material_outputs", "output"),
+        ):
             materials = step.get(key, []) or []
             if not isinstance(materials, list):
                 issues.append(f"第 {index} 步 {key} 必须为数组")
@@ -7010,11 +8509,11 @@ class ResearchAgent(BaseAgent):
                     issues.append(
                         f"第 {index} 步 {key}[{material_index}] 不得使用模糊用量"
                     )
-                if not _quantity_ok(material, output=output):
+                if not _quantity_ok(material, direction=direction):
                     suffix = (
-                        "必须给出数值和单位，未知产率可用 all_available/runtime_measured"
-                        if output
-                        else "主动投料必须给出精确数值和单位；未知产率中间体可用 all_available/runtime_measured"
+                        "数量必须显式区分计划目标、计划估计、整批非数值或运行时待测；"
+                        "exact 不是库存/实测证据，all_available 不得携带数值，"
+                        "runtime_measured 必须冻结待测单位且仅表示待测要求"
                     )
                     issues.append(f"第 {index} 步 {key}[{material_index}] {suffix}")
                 source = material.get("provenance") or material.get("source")
@@ -7027,8 +8526,8 @@ class ResearchAgent(BaseAgent):
                             f"第 {index} 步 {key}[{material_index}] 的 agent_inferred 缺少推导理由"
                         )
 
-        if active_addition and not (step.get("material_inputs") or []):
-            issues.append(f"第 {index} 步主动投料但 material_inputs 为空")
+        if consumes_material and not (step.get("material_inputs") or []):
+            issues.append(f"第 {index} 步物料影响段需要输入，但 material_inputs 为空")
 
         provenance = step.get("provenance") or step.get("来源")
         if not isinstance(provenance, dict):
@@ -7423,6 +8922,10 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         macro_plan: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
+        if self._contract_version == "v2":
+            # Missing observation/preparation steps are contract gaps, not a
+            # licence to append a task-shaped wash/dry/test template.
+            return self._normalize_macro_plan(macro_plan)
         observations = self._infer_observation_points(state.event.query, state.survey_report)
         if not observations:
             return macro_plan
@@ -7486,9 +8989,6 @@ class ResearchAgent(BaseAgent):
             )
             if joined_constraints.strip():
                 base_queries.append(f"{base} {joined_constraints}")
-
-        if "普鲁士蓝" not in query and "PBA" not in query.upper():
-            base_queries.append("普鲁士蓝 类似物 合成")
 
         return sanitize_search_queries(self._clean_queries(base_queries))[:6]
 
@@ -7632,6 +9132,12 @@ class ResearchAgent(BaseAgent):
                 "macro_plan": self._normalize_macro_plan(protocol_steps),
             }
 
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 macro planning requires a sufficiently complete current protocol; "
+                "missing material facts remain unresolved"
+            )
+
         reference_hit = state.knowledge_hits[0] if state.knowledge_hits else None
         if reference_hit is None:
             offline_plan = self._synthesize_macro_plan_from_context(state, None)
@@ -7701,6 +9207,10 @@ class ResearchAgent(BaseAgent):
         state: ResearchAgentState,
         reference_hit: SearchHit | None,
     ) -> List[Dict[str, Any]]:
+        if self._contract_version == "v2":
+            raise ValueError(
+                "V2 cannot synthesize task-shaped chemistry from incomplete context"
+            )
         context_blob = " ".join(
             [
                 state.event.query,
@@ -7929,11 +9439,33 @@ class ResearchAgent(BaseAgent):
                     else []
                 )
                 for key in (
-                    "material_inputs", "material_outputs",
+                    "material_inputs", "material_intermediates", "material_outputs",
+                    "material_relations", "operation_segments", "material_applicability",
                     "intermediate_returns",
                 ):
                     value = step.get(key, [])
-                    entry[key] = deepcopy(value) if isinstance(value, list) else []
+                    entry[key] = (
+                        deepcopy(value)
+                        if self._contract_version == "v2" or isinstance(value, list)
+                        else []
+                    )
+                    if (
+                        self._contract_version == "v2"
+                        and key == "operation_segments"
+                        and isinstance(entry[key], list)
+                    ):
+                        for segment in entry[key]:
+                            if not isinstance(segment, dict):
+                                continue
+                            provenance = segment.get("provenance")
+                            if not isinstance(provenance, dict) or provenance.get("kind") != "agent_inferred":
+                                continue
+                            # A null source in an inferred segment is absent
+                            # evidence, like the schema's empty-string default.
+                            # Do not modify user/paper claims or required rationale.
+                            for optional_field in ("reference", "source_path", "excerpt"):
+                                if optional_field in provenance and provenance[optional_field] is None:
+                                    provenance[optional_field] = ""
                 # Preserve malformed V2 requirements for the quality gate; do
                 # not turn an invalid object/null into an apparently valid [].
                 containers = step.get("container_requirements", [])
@@ -7945,6 +9477,7 @@ class ResearchAgent(BaseAgent):
                 for key in (
                     "macro_action_id", "observation_point_id", "logical_step_id",
                     "macro_step_id", "sample_id", "provenance",
+                    "material_contract_status",
                     "planned_operation", "device_validation_required", "device_validation_notes",
                     "device_validation", "device_validation_note",
                 ):

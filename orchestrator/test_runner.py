@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import tempfile
 import threading
 import time
@@ -28,11 +29,20 @@ from orchestrator.runner import (
     STOP_GOAL_REACHED,
     STOP_MANUAL_REQUIRED,
     STOP_MAX_ITERATIONS,
+    STOP_READY_FOR_DISPATCH,
     STOP_REVIEW_REQUIRED,
     CampaignConfig,
     CampaignRunner,
     DeviceRepairResumeError,
     package_requires_review,
+)
+from device_agent.feasibility_certificate import (
+    FEASIBILITY_CERTIFICATE_VERSION,
+    device_plan_contract_digest,
+    device_plan_contract_view,
+    feasibility_certificate_id,
+    feasibility_certificate_protected_payload,
+    stable_digest,
 )
 
 MACRO_STEP = {
@@ -44,12 +54,24 @@ MACRO_STEP = {
 PLAN_STATE = {"status": "completed", "macro_plan": [MACRO_STEP]}
 CLOSURE_STATE = {"status": "completed", "macro_plan": []}
 MANUAL_STATE = {"status": "manual_required", "macro_plan": [MACRO_STEP]}
+V2_PACKAGE_CONTRACT = {
+    "contract_version": "v2",
+    "contract_resolution": {
+        "requested": "v2",
+        "source_input": "v2",
+        "effective": "v2",
+        "requested_matches_effective": True,
+        "source_matches_effective": True,
+    },
+}
 SUCCESS_PACKAGE = {
+    **V2_PACKAGE_CONTRACT,
     "status": "success",
     "workflow_json": {"steps": [{"step_number": 1}, {"step_number": 2}]},
     "workflow_txt": "1. 第1步 物料站：...",
 }
 REVIEW_FLAGGED_PACKAGE = {
+    **V2_PACKAGE_CONTRACT,
     "status": "success",
     "requires_scientific_review": True,
     "workflow_json": {
@@ -92,6 +114,138 @@ UNVERIFIABLE_PACKAGE = {
         },
     },
 }
+
+
+def _valid_v2_feasibility_certificate(
+    package: Dict[str, Any],
+) -> Dict[str, Any]:
+    seed = package.get("feasibility_certificate")
+    seed = seed if isinstance(seed, dict) else {}
+    matrix = copy.deepcopy(
+        package.get("sample_control_matrix")
+        or seed.get("sample_control_matrix")
+        or seed.get("sample_matrix")
+        or []
+    )
+    accepted_plan = copy.deepcopy(package)
+    accepted_plan["sample_control_matrix"] = matrix
+    certificate: Dict[str, Any] = {
+        "certificate_version": FEASIBILITY_CERTIFICATE_VERSION,
+        "contract_version": "v2",
+        "research_plan_signature": str(
+            seed.get("research_plan_signature") or "route-frozen"
+        ),
+        "target_materials": [],
+        "reaction_route": [],
+        "reagent_identity_and_order": [],
+        "observation_points": [],
+        "sample_control_matrix": matrix,
+        "accepted_device_sample_control_matrix": matrix,
+        "device_sample_ids": [],
+        "semantic_analysis": [],
+        "accepted_device_plan_signature": stable_digest(
+            accepted_plan.get("device_plan", []), prefix="device_plan"
+        ),
+        "accepted_device_plan_contract_sha256": device_plan_contract_digest(
+            accepted_plan
+        ),
+        "acceptance_scope": "accepted_device_plan",
+    }
+    protected = feasibility_certificate_protected_payload(certificate)
+    certificate.update(
+        {
+            "accepted": True,
+            "device_snapshot_id": "snapshot-frozen",
+            "device_truth_sha256": "snapshot-frozen",
+            "protected_digest": stable_digest(protected),
+            "route_signature": certificate["research_plan_signature"],
+            "sample_matrix_signature": stable_digest(
+                matrix, prefix="sample_matrix"
+            ),
+            "device_snapshot_signature": "snapshot-frozen",
+            "device_snapshot": copy.deepcopy(
+                seed.get("device_snapshot") or {"WS-01": "available"}
+            ),
+        }
+    )
+    certificate["certificate_id"] = feasibility_certificate_id(
+        protected_digest=certificate["protected_digest"],
+        device_snapshot_id=certificate["device_snapshot_id"],
+        device_truth_sha256=certificate["device_truth_sha256"],
+    )
+    return certificate
+
+
+# The shared success fixtures represent the default V2 runtime.  Keep their
+# certificate bound to the exact contract fields above so orchestration tests
+# exercise the same dispatch boundary as production instead of relying on a
+# checker mock to bypass certificate validation.
+for _success_fixture in (SUCCESS_PACKAGE, REVIEW_FLAGGED_PACKAGE):
+    _success_fixture["feasibility_accepted"] = True
+    _success_fixture["feasibility_certificate"] = (
+        _valid_v2_feasibility_certificate(_success_fixture)
+    )
+
+
+def _valid_v2_successor_package(
+    request: Dict[str, Any],
+    override: Dict[str, Any],
+    package: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build the success fixture the Device resume boundary now requires."""
+
+    previous_plan = copy.deepcopy(request.get("last_device_plan") or {})
+    revised_plan = copy.deepcopy(previous_plan)
+    supplied_plan = override.get("device_plan")
+    if isinstance(supplied_plan, dict):
+        revised_plan.update(copy.deepcopy(supplied_plan))
+    elif isinstance(supplied_plan, list):
+        revised_plan["device_plan"] = copy.deepcopy(supplied_plan)
+    for field_name in device_plan_contract_view({}):
+        if field_name in override:
+            revised_plan[field_name] = copy.deepcopy(override[field_name])
+
+    result = copy.deepcopy(revised_plan)
+    result.update(copy.deepcopy(package or SUCCESS_PACKAGE))
+    predecessor = copy.deepcopy(request["feasibility_certificate"])
+    before = device_plan_contract_view(previous_plan)
+    after = device_plan_contract_view(result)
+    predecessor.update(
+        {
+            "accepted": True,
+            "certificate_version": FEASIBILITY_CERTIFICATE_VERSION,
+            "contract_version": "v2",
+            "accepted_device_plan_signature": stable_digest(
+                result.get("device_plan", []), prefix="device_plan"
+            ),
+            "accepted_device_plan_contract_sha256": (
+                device_plan_contract_digest(result)
+            ),
+            "acceptance_scope": "accepted_device_plan_revision",
+            "supersedes_certificate_id": request["feasibility_certificate"][
+                "certificate_id"
+            ],
+            "repair_request_id": request["request_id"],
+            "repair_authority": "human_device_plan_override",
+            "authorized_change_scope": {
+                "changed_contract_fields": [
+                    key for key in before if before[key] != after[key]
+                ],
+                "declared_changes": copy.deepcopy(override.get("changes") or []),
+                "declarations": copy.deepcopy(override.get("declarations") or {}),
+            },
+        }
+    )
+    protected = feasibility_certificate_protected_payload(predecessor)
+    predecessor["protected_digest"] = stable_digest(protected)
+    predecessor["certificate_id"] = feasibility_certificate_id(
+        protected_digest=predecessor["protected_digest"],
+        device_snapshot_id=str(predecessor.get("device_snapshot_id") or ""),
+        device_truth_sha256=str(predecessor.get("device_truth_sha256") or ""),
+    )
+    result["feasibility_accepted"] = True
+    result["feasibility_certificate"] = predecessor
+    return result
 
 
 class BoundaryCrossingAdapter(MockExecutionAdapter):
@@ -190,6 +344,7 @@ def make_runner(
     max_iterations: int = 5,
     deadlock_limit: int = 3,
     transient_retry_limit: int = 0,
+    requested_contract_version: str = "v2",
 ):
     config = CampaignConfig(
         query="测试 campaign query",
@@ -197,6 +352,7 @@ def make_runner(
         max_iterations=max_iterations,
         feasibility_deadlock_limit=deadlock_limit,
         transient_device_retry_limit=transient_retry_limit,
+        requested_contract_version=requested_contract_version,
         campaigns_root=Path(tmp),
     )
     return CampaignRunner(
@@ -223,6 +379,14 @@ class IsolatedCampaignTest(unittest.TestCase):
 
 
 class CampaignRunnerTest(IsolatedCampaignTest):
+    def test_device_args_cannot_override_selected_contract_version(self) -> None:
+        with self.assertRaisesRegex(ValueError, "device_args --contract-version"):
+            CampaignConfig(
+                query="contract boundary",
+                requested_contract_version="v2",
+                device_args=["--contract-version", "v1"],
+            )
+
     def test_campaign_iteration_budget_is_capped_at_12(self) -> None:
         self.assertEqual(CampaignConfig(query="q").max_iterations, 12)
         self.assertEqual(CampaignConfig(query="q").transient_device_retry_limit, 0)
@@ -252,9 +416,100 @@ class CampaignRunnerTest(IsolatedCampaignTest):
                 (campaign_dir / "campaign_summary.json").read_text(encoding="utf-8")
             )
             self.assertEqual(summary["stop_reason"], STOP_GOAL_REACHED)
+            self.assertEqual(
+                summary["contract_resolution"]["requested"], "v2"
+            )
             self.assertTrue(
                 (campaign_dir / "iteration_01" / "observation_in.json").exists()
             )
+
+    def test_normal_v2_success_rejects_missing_or_tampered_certificate(self) -> None:
+        cases = []
+        missing = copy.deepcopy(SUCCESS_PACKAGE)
+        missing.pop("feasibility_certificate")
+        cases.append(("missing", missing))
+        tampered = copy.deepcopy(SUCCESS_PACKAGE)
+        tampered["feasibility_certificate"]["protected_digest"] = "sha256_tampered"
+        cases.append(("tampered", tampered))
+        contradictory = copy.deepcopy(SUCCESS_PACKAGE)
+        contradictory["feasibility_accepted"] = False
+        cases.append(("top_level_not_accepted", contradictory))
+        revision = copy.deepcopy(SUCCESS_PACKAGE)
+        revision_certificate = revision["feasibility_certificate"]
+        revision_certificate["acceptance_scope"] = (
+            "accepted_device_plan_revision"
+        )
+        revision_protected = feasibility_certificate_protected_payload(
+            revision_certificate
+        )
+        revision_certificate["protected_digest"] = stable_digest(
+            revision_protected
+        )
+        revision_certificate["certificate_id"] = feasibility_certificate_id(
+            protected_digest=revision_certificate["protected_digest"],
+            device_snapshot_id=str(
+                revision_certificate.get("device_snapshot_id") or ""
+            ),
+            device_truth_sha256=str(
+                revision_certificate.get("device_truth_sha256") or ""
+            ),
+        )
+        cases.append(("revision_scope_without_lineage", revision))
+
+        for label, package in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                steps = FakeSteps([PLAN_STATE, CLOSURE_STATE], [package])
+                adapter = CountingMockAdapter()
+                captured_reports = []
+                with patch("orchestrator.runner.check_dispatch") as checker, patch(
+                    "orchestrator.runner.write_check_report",
+                    side_effect=lambda report, _directory: (
+                        captured_reports.append(copy.deepcopy(report)) or {}
+                    ),
+                ):
+                    result = make_runner(tmp, steps, adapter=adapter).run()
+
+                self.assertEqual(result.stop_reason, STOP_DEVICE_ERROR)
+                self.assertEqual(adapter.calls, 0)
+                self.assertEqual(
+                    [call["event_type"] for call in steps.research_calls],
+                    ["bootstrap"],
+                )
+                checker.assert_not_called()
+                self.assertEqual(len(captured_reports), 1)
+                report = captured_reports[0]
+                self.assertEqual(report["status"], "failed")
+                self.assertFalse(report["dispatchable"])
+                self.assertEqual(
+                    report["findings"][0]["code"],
+                    "invalid_v2_feasibility_certificate",
+                )
+
+    def test_normal_v1_success_remains_certificate_compatible(self) -> None:
+        package = copy.deepcopy(SUCCESS_PACKAGE)
+        package["contract_version"] = "v1"
+        package["contract_resolution"] = {
+            "requested": "v1",
+            "source_input": "v1",
+            "effective": "v1",
+            "requested_matches_effective": True,
+            "source_matches_effective": True,
+        }
+        package.pop("feasibility_certificate", None)
+        package.pop("feasibility_accepted", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            steps = FakeSteps([PLAN_STATE, CLOSURE_STATE], [package])
+            adapter = CountingMockAdapter()
+            result = make_runner(
+                tmp,
+                steps,
+                adapter=adapter,
+                requested_contract_version="v1",
+            ).run()
+
+        self.assertEqual(result.stop_reason, STOP_GOAL_REACHED)
+        self.assertEqual(adapter.calls, 1)
+        self.assertEqual(len(steps.research_calls), 2)
 
     def test_max_iterations_stops_loop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -284,6 +539,9 @@ class CampaignRunnerTest(IsolatedCampaignTest):
         ]
         package["batch_plan"] = [{"batch_id": "batch-1"}]
         package["material_ledger"] = {"checks": {"no_double_count": True}}
+        package["feasibility_certificate"] = _valid_v2_feasibility_certificate(
+            package
+        )
         with tempfile.TemporaryDirectory() as tmp:
             steps = FakeSteps([PLAN_STATE, CLOSURE_STATE], [package])
             result = make_runner(tmp, steps).run()
@@ -396,6 +654,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
     def test_translation_repair_exhaustion_stays_at_device_and_emits_handoff(self) -> None:
         """A post-feasibility workflow failure never enters Research B2."""
         translation_failed = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -404,6 +663,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "failure_stage": "dispatch_validation",
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "plan_abc123",
                 "sample_matrix": [],
                 "device_snapshot": {"stations": ["WS-01"]},
@@ -483,6 +743,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             },
         ]
         quantity_failed = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -491,6 +752,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "failure_stage": "device_quantity_repair_exhausted",
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "plan_quantity_1",
                 "sample_matrix": [],
                 "device_snapshot": {"stations": ["WS-01"]},
@@ -707,6 +969,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
 
     def test_device_override_resume_skips_bootstrap_and_preserves_iteration(self) -> None:
         manual_package = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -714,6 +977,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "feasibility_accepted": True,
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "route-frozen",
                 "sample_matrix": [],
                 "device_snapshot": {"WS-01": "available"},
@@ -721,6 +985,9 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
             "error_package": {"type": "device_workflow_repair_exhausted"},
         }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
         with tempfile.TemporaryDirectory() as tmp:
             initial_steps = FakeSteps([PLAN_STATE], [manual_package])
             initial = make_runner(tmp, initial_steps).run()
@@ -733,7 +1000,18 @@ class CampaignRunnerTest(IsolatedCampaignTest):
                 / DEVICE_PLAN_OVERRIDE_TEMPLATE
             )
 
-            resumed_steps = FakeSteps([CLOSURE_STATE], [SUCCESS_PACKAGE])
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            override = json.loads(override_path.read_text(encoding="utf-8"))
+            resumed_package = _valid_v2_successor_package(
+                request,
+                override,
+                {
+                    **SUCCESS_PACKAGE,
+                    "status": "ready_for_dispatch",
+                    "feedback_route": "success",
+                },
+            )
+            resumed_steps = FakeSteps([CLOSURE_STATE], [resumed_package])
             config = CampaignConfig(
                 query="测试 campaign query",
                 campaign_id="cmp_test_runner",
@@ -757,8 +1035,428 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             self.assertTrue(resumed_steps.device_calls[0]["override_path"])
             self.assertTrue(resumed_steps.device_calls[0]["request_path"])
 
+    def test_device_repair_resume_rejects_unbound_successor_certificates(self) -> None:
+        manual_package = {
+            **V2_PACKAGE_CONTRACT,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": "device_workflow",
+            "feasibility_accepted": True,
+            "feasibility_certificate": {
+                "accepted": True,
+                "contract_version": "v2",
+                "research_plan_signature": "route-frozen",
+                "sample_matrix": [],
+                "device_snapshot": {"WS-01": "available"},
+            },
+            "device_plan": [
+                {"source_macro_step": 1, "operation": "transfer"}
+            ],
+            "error_package": {"type": "device_workflow_repair_exhausted"},
+        }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            initial = make_runner(
+                tmp, FakeSteps([PLAN_STATE], [manual_package])
+            ).run()
+            iteration_dir = Path(initial.campaign_dir) / "iteration_01"
+            request_path = iteration_dir / DEVICE_REPAIR_REQUEST
+            override_path = iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            override = json.loads(override_path.read_text(encoding="utf-8"))
+            valid = _valid_v2_successor_package(request, override)
+
+            def resign(candidate: Dict[str, Any]) -> None:
+                certificate = candidate["feasibility_certificate"]
+                protected = feasibility_certificate_protected_payload(
+                    certificate
+                )
+                certificate["protected_digest"] = stable_digest(protected)
+                certificate["certificate_id"] = feasibility_certificate_id(
+                    protected_digest=certificate["protected_digest"],
+                    device_snapshot_id=str(
+                        certificate.get("device_snapshot_id") or ""
+                    ),
+                    device_truth_sha256=str(
+                        certificate.get("device_truth_sha256") or ""
+                    ),
+                )
+
+            missing = copy.deepcopy(valid)
+            missing.pop("feasibility_certificate")
+            bad_version = copy.deepcopy(valid)
+            bad_version["feasibility_certificate"]["certificate_version"] = "2.3"
+            bad_contract = copy.deepcopy(valid)
+            bad_contract["feasibility_certificate"]["contract_version"] = "v1"
+            bad_protected = copy.deepcopy(valid)
+            bad_protected["feasibility_certificate"]["protected_digest"] = "bad"
+            bad_id = copy.deepcopy(valid)
+            bad_id["feasibility_certificate"]["certificate_id"] = "bad"
+            bad_predecessor = copy.deepcopy(valid)
+            bad_predecessor["feasibility_certificate"][
+                "supersedes_certificate_id"
+            ] = "wrong-predecessor"
+            resign(bad_predecessor)
+            bad_request = copy.deepcopy(valid)
+            bad_request["feasibility_certificate"][
+                "repair_request_id"
+            ] = "wrong-request"
+            resign(bad_request)
+            bad_authority = copy.deepcopy(valid)
+            bad_authority["feasibility_certificate"][
+                "repair_authority"
+            ] = "automatic_device_plan_rewrite"
+            resign(bad_authority)
+            bad_plan = copy.deepcopy(valid)
+            bad_plan["container_plan"] = [{"container_id": "tampered"}]
+            bad_scope = copy.deepcopy(valid)
+            bad_scope["feasibility_certificate"]["authorized_change_scope"][
+                "changed_contract_fields"
+            ] = ["container_plan"]
+            resign(bad_scope)
+
+            cases = (
+                ("missing", missing, "accepted feasibility_certificate"),
+                ("version", bad_version, "version 2.4"),
+                ("contract", bad_contract, "contract_version"),
+                ("protected", bad_protected, "protected_digest"),
+                ("certificate_id", bad_id, "certificate_id"),
+                ("predecessor", bad_predecessor, "does not supersede"),
+                ("request", bad_request, "repair_request_id"),
+                ("authority", bad_authority, "repair_authority"),
+                ("plan", bad_plan, "plan digest"),
+                ("scope", bad_scope, "changed_contract_fields"),
+            )
+            for label, output, message in cases:
+                with self.subTest(label=label):
+                    resumed_steps = FakeSteps([CLOSURE_STATE], [output])
+                    adapter = CountingMockAdapter()
+                    runner = CampaignRunner(
+                        CampaignConfig(
+                            query="测试 campaign query",
+                            campaign_id="cmp_test_runner",
+                            campaigns_root=Path(tmp),
+                            resume_device_repair=request_path,
+                            device_plan_override=override_path,
+                        ),
+                        adapter,
+                        research_step=resumed_steps.research_step,
+                        device_step=resumed_steps.device_step,
+                    )
+                    with self.assertRaisesRegex(
+                        DeviceRepairResumeError, message
+                    ):
+                        runner.run()
+                    self.assertEqual(adapter.calls, 0)
+                    self.assertEqual(resumed_steps.research_calls, [])
+
+    def test_forward_only_resume_checks_without_execution_or_research(self) -> None:
+        manual_package = {
+            **V2_PACKAGE_CONTRACT,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": "device_workflow",
+            "feasibility_accepted": True,
+            "feasibility_certificate": {
+                "accepted": True,
+                "contract_version": "v2",
+                "research_plan_signature": "route-frozen",
+                "sample_matrix": [],
+                "device_snapshot": {"WS-01": "available"},
+            },
+            "device_plan": [
+                {"source_macro_step": 1, "operation": "transfer"}
+            ],
+        }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            initial = make_runner(
+                tmp, FakeSteps([PLAN_STATE], [manual_package])
+            ).run()
+            iteration_dir = Path(initial.campaign_dir) / "iteration_01"
+            request_path = iteration_dir / DEVICE_REPAIR_REQUEST
+            override_path = iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            override = json.loads(override_path.read_text(encoding="utf-8"))
+            resumed_package = _valid_v2_successor_package(request, override)
+            resumed_steps = FakeSteps([CLOSURE_STATE], [resumed_package])
+            adapter = CountingMockAdapter()
+
+            result = CampaignRunner(
+                CampaignConfig(
+                    query="测试 campaign query",
+                    campaign_id="cmp_test_runner",
+                    campaigns_root=Path(tmp),
+                    resume_device_repair=request_path,
+                    device_plan_override=override_path,
+                    forward_only=True,
+                ),
+                adapter,
+                research_step=resumed_steps.research_step,
+                device_step=resumed_steps.device_step,
+            ).run()
+
+            self.assertEqual(result.stop_reason, STOP_READY_FOR_DISPATCH)
+            self.assertEqual(adapter.calls, 0)
+            self.assertEqual(resumed_steps.research_calls, [])
+            resume_dirs = sorted(
+                Path(result.campaign_dir).glob(
+                    "iteration_01_device_repair_resume_*"
+                )
+            )
+            self.assertFalse((resume_dirs[-1] / "observation_in.json").exists())
+
+    def test_conflicting_success_human_resume_skips_successor_and_dispatch(
+        self,
+    ) -> None:
+        manual_package = {
+            **V2_PACKAGE_CONTRACT,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": "device_workflow",
+            "feasibility_accepted": True,
+            "feasibility_certificate": {
+                "accepted": True,
+                "contract_version": "v2",
+                "research_plan_signature": "route-frozen",
+                "sample_matrix": [],
+                "device_snapshot": {"WS-01": "available"},
+            },
+            "device_plan": [
+                {"source_macro_step": 1, "operation": "transfer"}
+            ],
+        }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            initial = make_runner(
+                tmp, FakeSteps([PLAN_STATE], [manual_package])
+            ).run()
+            iteration_dir = Path(initial.campaign_dir) / "iteration_01"
+            request_path = iteration_dir / DEVICE_REPAIR_REQUEST
+            override_path = iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE
+            resumed_steps = FakeSteps(
+                [CLOSURE_STATE],
+                [
+                    {
+                        **V2_PACKAGE_CONTRACT,
+                        **UNVERIFIABLE_PACKAGE,
+                        "status": "success",
+                        "feedback_route": "human",
+                    }
+                ],
+            )
+            adapter = CountingMockAdapter()
+
+            result = CampaignRunner(
+                CampaignConfig(
+                    query="测试 campaign query",
+                    campaign_id="cmp_test_runner",
+                    campaigns_root=Path(tmp),
+                    resume_device_repair=request_path,
+                    device_plan_override=override_path,
+                ),
+                adapter,
+                research_step=resumed_steps.research_step,
+                device_step=resumed_steps.device_step,
+            ).run()
+
+            self.assertEqual(result.stop_reason, STOP_MANUAL_REQUIRED)
+            resume_dirs = sorted(
+                Path(result.campaign_dir).glob(
+                    "iteration_01_device_repair_resume_*"
+                )
+            )
+            self.assertFalse(
+                (resume_dirs[-1] / DEVICE_REPAIR_REQUEST).exists()
+            )
+            self.assertTrue(
+                (resume_dirs[-1] / "AWAITING_CONDITION_REVIEW.md").exists()
+            )
+            self.assertEqual(adapter.calls, 0)
+            self.assertEqual(resumed_steps.research_calls, [])
+
+    def test_forward_only_resume_continuation_checks_without_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "research_state.json"
+            state_path.write_text(
+                json.dumps(PLAN_STATE, ensure_ascii=False), encoding="utf-8"
+            )
+            steps = FakeSteps([CLOSURE_STATE], [SUCCESS_PACKAGE])
+            adapter = CountingMockAdapter()
+            runner = CampaignRunner(
+                CampaignConfig(
+                    query="测试 campaign query",
+                    campaign_id="cmp_test_runner",
+                    campaigns_root=Path(tmp),
+                    forward_only=True,
+                ),
+                adapter,
+                research_step=steps.research_step,
+                device_step=steps.device_step,
+            )
+
+            stop_reason, _, _, _, _, _ = runner._continue_campaign_from_state(
+                PLAN_STATE,
+                state_path,
+                start_iteration=2,
+            )
+
+            self.assertEqual(stop_reason, STOP_READY_FOR_DISPATCH)
+            self.assertEqual(adapter.calls, 0)
+            self.assertEqual(steps.research_calls, [])
+
+    def test_device_repair_resume_rejects_contract_boundary_drift(self) -> None:
+        manual_package = {
+            **V2_PACKAGE_CONTRACT,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": "device_workflow",
+            "feasibility_accepted": True,
+            "feasibility_certificate": {
+                "accepted": True,
+                "contract_version": "v2",
+                "research_plan_signature": "route-frozen",
+                "sample_matrix": [],
+                "device_snapshot": {"WS-01": "available"},
+            },
+            "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
+        }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            initial = make_runner(
+                tmp, FakeSteps([PLAN_STATE], [manual_package])
+            ).run()
+            iteration_dir = Path(initial.campaign_dir) / "iteration_01"
+            request_path = iteration_dir / DEVICE_REPAIR_REQUEST
+            template_path = iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE
+
+            drifted_override = json.loads(
+                template_path.read_text(encoding="utf-8")
+            )
+            drifted_override["contract_version"] = "v1"
+            drifted_override_path = iteration_dir / "override-contract-v1.json"
+            drifted_override_path.write_text(
+                json.dumps(drifted_override, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            no_calls = FakeSteps([CLOSURE_STATE], [SUCCESS_PACKAGE])
+            with self.assertRaisesRegex(
+                DeviceRepairResumeError, "override contract_version"
+            ):
+                CampaignRunner(
+                    CampaignConfig(
+                        query="测试 campaign query",
+                        campaign_id="cmp_test_runner",
+                        campaigns_root=Path(tmp),
+                        resume_device_repair=request_path,
+                        device_plan_override=drifted_override_path,
+                    ),
+                    MockExecutionAdapter(),
+                    research_step=no_calls.research_step,
+                    device_step=no_calls.device_step,
+                ).run()
+            self.assertEqual(no_calls.device_calls, [])
+            self.assertEqual(no_calls.research_calls, [])
+
+            runtime_drift_calls = FakeSteps([CLOSURE_STATE], [SUCCESS_PACKAGE])
+            with self.assertRaisesRegex(
+                DeviceRepairResumeError, "selected runtime"
+            ):
+                CampaignRunner(
+                    CampaignConfig(
+                        query="测试 campaign query",
+                        campaign_id="cmp_test_runner",
+                        requested_contract_version="v1",
+                        campaigns_root=Path(tmp),
+                        resume_device_repair=request_path,
+                        device_plan_override=template_path,
+                    ),
+                    MockExecutionAdapter(),
+                    research_step=runtime_drift_calls.research_step,
+                    device_step=runtime_drift_calls.device_step,
+                ).run()
+            self.assertEqual(runtime_drift_calls.device_calls, [])
+            self.assertEqual(runtime_drift_calls.research_calls, [])
+
+    def test_device_repair_resume_rejects_mismatched_output_contract(self) -> None:
+        manual_package = {
+            **V2_PACKAGE_CONTRACT,
+            "status": "manual_required",
+            "feedback_type": "human_review_required",
+            "feedback_route": "human",
+            "failure_scope": "device_workflow",
+            "feasibility_accepted": True,
+            "feasibility_certificate": {
+                "accepted": True,
+                "contract_version": "v2",
+                "research_plan_signature": "route-frozen",
+                "sample_matrix": [],
+                "device_snapshot": {"WS-01": "available"},
+            },
+            "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
+        }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            initial = make_runner(
+                tmp, FakeSteps([PLAN_STATE], [manual_package])
+            ).run()
+            iteration_dir = Path(initial.campaign_dir) / "iteration_01"
+            bad_output = {
+                **SUCCESS_PACKAGE,
+                "contract_version": "v1",
+                "contract_resolution": {
+                    "requested": "v1",
+                    "source_input": "v2",
+                    "effective": "v1",
+                    "requested_matches_effective": True,
+                    "source_matches_effective": False,
+                },
+            }
+            resumed_steps = FakeSteps([CLOSURE_STATE], [bad_output])
+            adapter = CountingMockAdapter()
+
+            with self.assertRaisesRegex(
+                DeviceRepairResumeError, "does not match requested"
+            ):
+                CampaignRunner(
+                    CampaignConfig(
+                        query="测试 campaign query",
+                        campaign_id="cmp_test_runner",
+                        campaigns_root=Path(tmp),
+                        resume_device_repair=(
+                            iteration_dir / DEVICE_REPAIR_REQUEST
+                        ),
+                        device_plan_override=(
+                            iteration_dir / DEVICE_PLAN_OVERRIDE_TEMPLATE
+                        ),
+                    ),
+                    adapter,
+                    research_step=resumed_steps.research_step,
+                    device_step=resumed_steps.device_step,
+                ).run()
+            self.assertEqual(adapter.calls, 0)
+            self.assertEqual(resumed_steps.research_calls, [])
+
     def test_human_quantity_approval_resume_is_validated_without_bootstrap(self) -> None:
         manual_package = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -766,6 +1464,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "feasibility_accepted": True,
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "certificate_id": "certificate-quantity-001",
                 "protected_digest": "certificate-digest-quantity-001",
                 "research_plan_signature": "route-frozen",
@@ -823,6 +1522,9 @@ class CampaignRunnerTest(IsolatedCampaignTest):
                 ],
             },
         }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
         with tempfile.TemporaryDirectory() as tmp:
             initial = make_runner(
                 tmp,
@@ -858,7 +1560,9 @@ class CampaignRunnerTest(IsolatedCampaignTest):
                 encoding="utf-8",
             )
 
-            resumed_steps = FakeSteps([CLOSURE_STATE], [SUCCESS_PACKAGE])
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            resumed_package = _valid_v2_successor_package(request, override)
+            resumed_steps = FakeSteps([CLOSURE_STATE], [resumed_package])
             config = CampaignConfig(
                 query="测试 campaign query",
                 campaign_id="cmp_test_runner",
@@ -882,6 +1586,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
 
     def test_device_override_route_or_sample_matrix_drift_is_rejected(self) -> None:
         manual_package = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -889,12 +1594,16 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "feasibility_accepted": True,
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "route-frozen",
                 "sample_matrix": [{"sample_id": "S-1", "group": "sample"}],
                 "device_snapshot": {"WS-01": "available"},
             },
             "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
         }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
         with tempfile.TemporaryDirectory() as tmp:
             initial = make_runner(
                 tmp,
@@ -949,6 +1658,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
 
     def test_device_override_cannot_hide_scientific_change_with_mechanical_kind(self) -> None:
         manual_package = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -956,12 +1666,16 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "feasibility_accepted": True,
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "route-frozen",
                 "sample_matrix": [],
                 "device_snapshot": {"WS-01": "available"},
             },
             "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
         }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
         with tempfile.TemporaryDirectory() as tmp:
             initial = make_runner(
                 tmp,
@@ -1011,6 +1725,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
 
     def test_failed_resumed_cycle_emits_next_versioned_repair_request(self) -> None:
         manual_package = {
+            **V2_PACKAGE_CONTRACT,
             "status": "manual_required",
             "feedback_type": "human_review_required",
             "feedback_route": "human",
@@ -1018,6 +1733,7 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "feasibility_accepted": True,
             "feasibility_certificate": {
                 "accepted": True,
+                "contract_version": "v2",
                 "research_plan_signature": "route-frozen",
                 "sample_matrix": [],
                 "device_snapshot": {"WS-01": "available"},
@@ -1025,6 +1741,9 @@ class CampaignRunnerTest(IsolatedCampaignTest):
             "device_plan": [{"source_macro_step": 1, "operation": "transfer"}],
             "repair_history": [{"cycle": 1}, {"cycle": 2}],
         }
+        manual_package["feasibility_certificate"] = (
+            _valid_v2_feasibility_certificate(manual_package)
+        )
         with tempfile.TemporaryDirectory() as tmp:
             initial = make_runner(
                 tmp,

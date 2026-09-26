@@ -18,6 +18,24 @@ from orchestrator.runner import (
     CampaignRunner,
     feedback_route,
 )
+from orchestrator.test_runner import (
+    V2_PACKAGE_CONTRACT,
+    _valid_v2_feasibility_certificate,
+)
+
+
+def _certified_forward_only_package():
+    package = {
+        **V2_PACKAGE_CONTRACT,
+        "status": "ready_for_dispatch",
+        "feedback_route": "success",
+        "workflow_json": {"steps": [{"device_step_id": "DS_1"}]},
+        "feasibility_accepted": True,
+    }
+    package["feasibility_certificate"] = _valid_v2_feasibility_certificate(
+        package
+    )
+    return package
 
 
 def _research_contract():
@@ -55,10 +73,73 @@ def _research_contract():
 
 
 def test_v2_routes_ready_and_terminal_explicitly():
-    assert feedback_route({"status": "ready_for_dispatch"}) == "success"
+    assert feedback_route(
+        {"status": "ready_for_dispatch", "feedback_route": "success"}
+    ) == "success"
+    assert feedback_route({"status": "success"}) == "success"
+    assert feedback_route(
+        {"status": "success", "feedback_route": "none"}
+    ) == "success"
     assert feedback_route(
         {"status": "terminal_unmappable", "feedback_route": "terminal"}
     ) == "terminal"
+
+
+def test_success_envelopes_fail_closed_on_conflicting_terminal_fields():
+    cases = (
+        (
+            {"status": "success", "feedback_route": "human"},
+            "human",
+        ),
+        (
+            {"status": "success", "feedback_type": "human_review_required"},
+            "human",
+        ),
+        (
+            {"status": "success", "failure_scope": "human_review_required"},
+            "human",
+        ),
+        (
+            {"status": "success", "feedback_route": "device"},
+            "device",
+        ),
+        (
+            {"status": "success", "failure_scope": "device_workflow"},
+            "device",
+        ),
+        (
+            {
+                "status": "ready_for_dispatch",
+                "feedback_route": "success",
+                "feedback_type": "device_internal_error",
+            },
+            "device",
+        ),
+        (
+            {"status": "success", "feedback_route": "terminal"},
+            "terminal",
+        ),
+        (
+            {
+                "status": "ready_for_dispatch",
+                "feedback_route": "success",
+                "feedback_type": "terminal_unmappable",
+            },
+            "terminal",
+        ),
+        (
+            {
+                "status": "terminal_unmappable",
+                "feedback_route": "terminal",
+                "feedback_type": "human_review_required",
+            },
+            "human",
+        ),
+        ({"status": "ready_for_dispatch"}, "device"),
+        ({"status": "success", "feedback_route": "success"}, "device"),
+    )
+    for package, expected in cases:
+        assert feedback_route(package) == expected
 
 
 def test_terminal_unmappable_stops_campaign_without_research_retry():
@@ -109,10 +190,7 @@ def test_forward_only_stops_after_first_validated_device_workflow():
         return result
 
     def device_step(state_path, iteration_dir, **kwargs):
-        return {
-            "status": "ready_for_dispatch",
-            "workflow_json": {"steps": [{"device_step_id": "DS_1"}]},
-        }
+        return _certified_forward_only_package()
 
     class _NoExecutionAdapter(MockExecutionAdapter):
         def execute(self, package, iteration_dir):
@@ -162,10 +240,7 @@ def test_forward_only_rejected_workflow_is_not_ready_for_dispatch():
         return result
 
     def device_step(state_path, iteration_dir, **kwargs):
-        return {
-            "status": "ready_for_dispatch",
-            "workflow_json": {"steps": [{"device_step_id": "DS_1"}]},
-        }
+        return _certified_forward_only_package()
 
     class _NoExecutionAdapter(MockExecutionAdapter):
         def execute(self, package, iteration_dir):

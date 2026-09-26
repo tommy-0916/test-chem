@@ -5,7 +5,7 @@
   "source": "chem_resources/lab-design-all/skills/chemistry-experiment-workstation",
   "source_kind": "lab-design-all",
   "source_digest_sha256": "b55ab0c9003db0056619dcb619f0286a41ff173b0159e3268baf76820ad0e976",
-  "semantic_mapping_digest": "d55d0f704614b453a9909944b24f024e066d32e2cbf03c61611a95e822334870",
+  "semantic_mapping_digest": "3e1db3ba76dfb16e1c990a14dc5851c3d8a8603da7d38829d88b4eaaedc97900",
   "source_index": "chem_resources/workstation_capability_index.json",
   "planning_policy": "Compose macro actions from the listed operations. This layer deliberately does not expose operation inputs, outputs or machine parameters. Respect unavailable stations.",
   "workstations": [
