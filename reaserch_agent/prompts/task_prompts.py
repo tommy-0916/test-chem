@@ -161,7 +161,7 @@ paper protocol extract
 - protocols 最多输出 3 个，优先输出与 query 最相关的论文
 - steps 中的“参数”不得使用“适量”“按需”“建议”等规划性表达，除非论文原文就是这样
 - 若知识文本中含有 [p.N] 页码标记，请给对应 step 附加可选字段 "page"（整数，取该实验段所在页）；没有标记则省略该字段
-- 每个 step 可附加可选 `source` 出处对象 `{source_document, section, locator: null, excerpt_hash: null}`;locator/excerpt_hash 当前恒为 null(预留细粒度接口,未来升级到段落/句子级只补值不改合同)
+- 每个 step 可附加可选 `source` 出处对象 `{{source_document, section, locator: null, excerpt_hash: null}}`;locator/excerpt_hash 当前恒为 null(预留细粒度接口,未来升级到段落/句子级只补值不改合同)
 - 不要输出设备/workstation 控制语义"""
 
 STAGE_DESIGN_PROMPT = """## 任务名称
