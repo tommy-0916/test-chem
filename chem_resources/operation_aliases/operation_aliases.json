@@ -1,0 +1,11 @@
+{
+  "schema": "operation-aliases/v1",
+  "comment": "Canonical operation names with station-scoped aliases. The loader merges these into the flat compatibility alias map consumed by resolve_explicit_alias, which is always evaluated against one station's own operation list, so an alias can never make an operation acceptable at an unrelated station. Do not add new entries to the Python constant table in workstation_loader.py; extend this resource instead.",
+  "station_aliases": {
+    "Drying_Oven_V1": {
+      "canonical": "烘干主流程",
+      "aliases": ["静置烘干", "烘干"],
+      "notes": "canonical 取自 lab-design-all Drying_Oven_V1 SKILL 与 0410 平台导出;chem_resources/workstations/dryer.json 的 静置烘干 为旧名(已对齐),仅作 alias 保留。"
+    }
+  }
+}
