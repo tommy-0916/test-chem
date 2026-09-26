@@ -1005,5 +1005,131 @@ class V2ContractTest(unittest.TestCase):
         self.assertEqual(event.identity_encoding, research.identity_encoding)
 
 
+
+class ScientificSemanticsPhase12Test(unittest.TestCase):
+    """Phase 1+2: evidence_class dimension, dual-graph fields, state vocabulary."""
+
+    def test_evidence_class_kind_mapping(self):
+        from chem_agent_contracts.v2 import ProvenanceV2
+
+        with self.assertRaises(ValueError):
+            ProvenanceV2(kind="paper", reference="r", evidence_class="device_sop")
+        with self.assertRaises(ValueError):
+            ProvenanceV2(kind="device_skill", reference="r", evidence_class="paper_explicit")
+        with self.assertRaises(ValueError):
+            ProvenanceV2(
+                kind="agent_inferred",
+                rationale="r",
+                evidence_class="chemistry_convention",
+            )
+        convention_backed = ProvenanceV2(
+            kind="agent_inferred",
+            rationale="r",
+            evidence_class="chemistry_convention",
+            inference_rule="CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+        )
+        self.assertEqual(convention_backed.inference_rule, "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+        derived = ProvenanceV2(
+            kind="agent_inferred",
+            rationale="r",
+            derivation="conservation: input_total == output_total",
+        )
+        self.assertIn("conservation", derived.derivation)
+        # unsupported is not a provenance value
+        with self.assertRaises(ValueError):
+            ProvenanceV2(kind="paper", reference="r", evidence_class="unsupported")
+
+    def test_material_port_state_vocabulary_convergence(self):
+        from chem_agent_contracts.v2 import MaterialPortV2
+
+        recognized = MaterialPortV2(
+            material_id="m",
+            name="n",
+            state="悬浊液",
+            provenance={"kind": "user"},
+        )
+        self.assertEqual(recognized.state, "suspension")
+        unknown = MaterialPortV2(
+            material_id="m",
+            name="n",
+            state="等离子体态",
+            provenance={"kind": "user"},
+        )
+        self.assertEqual(unknown.state, "unknown")
+
+    def test_dual_graph_fields_roundtrip(self):
+        from chem_agent_contracts.v2 import MacroStepV2
+
+        step = MacroStepV2(
+            macro_step_id="MS_1",
+            macro_action_id="MA_1",
+            sequence=1,
+            operation="离心收集沉淀",
+            sample_id="S1",
+            state_transition={
+                "before_state": "悬浊液",
+                "after_state": "湿固体",
+                "confidence": "convention",
+            },
+            lineage_relation={
+                "relation_type": "state_change_of",
+                "parent_material_instance_ids": ["p1"],
+                "child_material_instance_ids": ["c1"],
+            },
+            container_lineage={
+                "before_container_id": "reactor_01",
+                "after_container_id": "tube_01",
+            },
+            provenance={"kind": "paper", "reference": "r"},
+        )
+        self.assertEqual(step.state_transition.before_state, "suspension")
+        self.assertEqual(step.state_transition.after_state, "retained_wet_solid")
+        self.assertEqual(step.state_transition.confidence, "convention")
+        self.assertEqual(step.lineage_relation.relation_type, "state_change_of")
+        self.assertEqual(step.container_lineage.before_container_id, "reactor_01")
+
+    def test_lineage_only_relation_allows_unchanged_state(self):
+        from chem_agent_contracts.v2 import MacroStepV2
+
+        step = MacroStepV2(
+            macro_step_id="MS_2",
+            macro_action_id="MA_1",
+            sequence=2,
+            operation="分装",
+            sample_id="S1",
+            state_transition={
+                "before_state": "悬浊液",
+                "after_state": "悬浊液",
+                "confidence": "unknown",
+            },
+            lineage_relation={
+                "relation_type": "split_from_parent",
+                "parent_material_instance_ids": ["p1"],
+                "child_material_instance_ids": ["c1", "c2"],
+            },
+            provenance={"kind": "paper", "reference": "r"},
+        )
+        self.assertEqual(step.lineage_relation.relation_type, "split_from_parent")
+        with self.assertRaises(ValueError):
+            MacroStepV2(
+                macro_step_id="MS_3",
+                macro_action_id="MA_1",
+                sequence=3,
+                operation="分装",
+                sample_id="S1",
+                state_transition={
+                    "before_state": "悬浊液",
+                    "after_state": "溶液",
+                    "confidence": "unknown",
+                },
+                lineage_relation={
+                    "relation_type": "transfer_of",
+                    "parent_material_instance_ids": ["p1"],
+                    "child_material_instance_ids": ["c1"],
+                },
+                provenance={"kind": "paper", "reference": "r"},
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

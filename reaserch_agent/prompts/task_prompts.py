@@ -144,6 +144,12 @@ paper protocol extract
           "试剂/对象": "论文中的试剂、样品或对象",
           "参数": "论文给出的具体参数；若缺失写 文献未说明",
           "evidence": "支持该步骤的简短论文依据或上下文"
+          "source": {{
+            "source_document": "来源论文标题或路径",
+            "section": "实验段所在章节/小节名或页码标记",
+            "locator": null,
+            "excerpt_hash": null
+          }}
         }}
       ]
     }}
@@ -155,6 +161,7 @@ paper protocol extract
 - protocols 最多输出 3 个，优先输出与 query 最相关的论文
 - steps 中的“参数”不得使用“适量”“按需”“建议”等规划性表达，除非论文原文就是这样
 - 若知识文本中含有 [p.N] 页码标记，请给对应 step 附加可选字段 "page"（整数，取该实验段所在页）；没有标记则省略该字段
+- 每个 step 可附加可选 `source` 出处对象 `{source_document, section, locator: null, excerpt_hash: null}`;locator/excerpt_hash 当前恒为 null(预留细粒度接口,未来升级到段落/句子级只补值不改合同)
 - 不要输出设备/workstation 控制语义"""
 
 STAGE_DESIGN_PROMPT = """## 任务名称
@@ -467,6 +474,15 @@ macro plan design
 - 设备摘要的 `I/O/CReq` 给出容器输入、输出和数量/状态约束；`Ctl` 只是控制设定，`Qout` 是物料
   输出效果，`Report` 才是设备返回的数值。
   `Report=未声明` 时不得把烘干、称量、转移或表征工作站写成会返回实际整批质量/收率。
+- `state_transition` / `lineage_relation` / `container_lineage` 是可选双图注解(边界 B:状态图与谱系图分开)。
+  状态变化写 before_state/after_state(受控词表 powder/suspension/solution/retained_wet_solid/
+  washed_wet_solid/dry_solid/supernatant/filtrate/gas/unknown)与 confidence=explicit|convention|unknown;
+  谱系写 relation_type=split_from_parent|merge_from_children|aliquot_of|transfer_of|state_change_of 与
+  parent/child material instance id;transfer/split/merge 允许状态不变只变谱系。留空时发布门按
+  chem_resources/chemistry_conventions/conventions.json 确定性展开,展开只补状态/相/谱系,绝不生成数值。
+- `agent_inferred` 保留为合法 provenance.kind:携带 inference_rule(convention rule_id)或形式化 derivation
+  的推断可发布,并配 evidence_class=chemistry_convention;携带数值的裸 agent_inferred(无 rule_id/derivation)
+  由发布门拦截(边界 A)。
 - 不要输出“围绕 query 进行首轮探索性配方准备”“进一步优化条件”“结合文献细化”这类占位性步骤
 - 不要把洗涤、干燥、离心、陈化简单删掉；如果它们在文献中和合成段绑定，可写进同一个 step 的 `参数`
 - 通常输出 4-8 个 macro steps；若参考案例有可迁移的 `参数列表`，优先沿用其粒度并按当前 query 做必要改写
@@ -580,6 +596,20 @@ macro plan design
         "material_outputs": "declared",
         "logical_containers": "declared",
         "material_relations": "declared"
+      }},
+      "state_transition": {{
+        "before_state": "suspension",
+        "after_state": "retained_wet_solid",
+        "confidence": "explicit | convention | unknown"
+      }},
+      "lineage_relation": {{
+        "relation_type": "split_from_parent | merge_from_children | aliquot_of | transfer_of | state_change_of",
+        "parent_material_instance_ids": ["parent_batch_01"],
+        "child_material_instance_ids": ["child_batch_01"]
+      }},
+      "container_lineage": {{
+        "before_container_id": "reaction_container_01",
+        "after_container_id": "collection_container_01"
       }},
       "container_requirements": [
         {{"logical_container_id":"reaction_container_01","container_type":"reaction vessel","count":1,"capacity_ml":10,"lid_state":"unknown"}}

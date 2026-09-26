@@ -143,8 +143,19 @@ class ResearchAgentState:
             "人工交接摘要": self.manual_handoff,
         }
 
+    def _strict_entry_preflight_block(self) -> Dict[str, Any]:
+        """Phase 5 strict-entry preflight (diagnostic layer; Device keeps the
+        hard dispatch gate).  Format/registry failures raise -- never silent."""
+        try:
+            from .strict_entry import build_strict_entry_preflight
+        except ImportError:
+            from strict_entry import build_strict_entry_preflight
+        return build_strict_entry_preflight(
+            self.research_action_package_v2, self.macro_plan
+        )
     def device_adaptation_external_handoff(self) -> Dict[str, Any]:
         return {
+            "strict_entry_preflight": self._strict_entry_preflight_block(),
             "handoff_type": "research_to_device_adaptation",
             "contract_version": self.contract_version,
             "research_action_package_v2": self.research_action_package_v2,

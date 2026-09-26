@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Mapping, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -89,8 +90,95 @@ def evidence_contains_exact_quantity(
     )
 
 
+EvidenceClassV2 = Literal[
+    "paper_explicit",
+    "chemistry_convention",
+    "device_sop",
+    "runtime_measurement",
+]
+
+# kind -> evidence_class canonical mapping (boundary A: the two dimensions are
+# orthogonal but constrained).  ``unsupported`` is deliberately NOT a
+# provenance value; it is an audit verdict recorded elsewhere.
+_PROVENANCE_EVIDENCE_CLASS_BY_KIND: Dict[str, str] = {
+    "paper": "paper_explicit",
+    "device_skill": "device_sop",
+    "runtime": "runtime_measurement",
+}
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+_MATERIAL_STATE_RESOURCE = (
+    Path(__file__).resolve().parents[1]
+    / "chem_resources"
+    / "material_states"
+    / "v1.json"
+)
+_FALLBACK_MATERIAL_STATE_ALIASES: Dict[str, str] = {
+    "powder": "powder",
+    "粉末": "powder",
+    "suspension": "suspension",
+    "悬浊液": "suspension",
+    "solution": "solution",
+    "溶液": "solution",
+    "液态": "solution",
+    "纯液态": "solution",
+    "liquid": "solution",
+    "retained_wet_solid": "retained_wet_solid",
+    "湿固体": "retained_wet_solid",
+    "沉淀": "retained_wet_solid",
+    "washed_wet_solid": "washed_wet_solid",
+    "洗涤后湿固体": "washed_wet_solid",
+    "dry_solid": "dry_solid",
+    "干粉": "dry_solid",
+    "干燥固体": "dry_solid",
+    "supernatant": "supernatant",
+    "上清液": "supernatant",
+    "filtrate": "filtrate",
+    "滤液": "filtrate",
+    "gas": "gas",
+    "气体": "gas",
+    "unknown": "unknown",
+    "未知": "unknown",
+}
+_MATERIAL_STATE_ALIASES_CACHE: Optional[Dict[str, str]] = None
+
+
+def material_state_aliases() -> Dict[str, str]:
+    """Controlled material-state vocabulary (chem_resources/material_states/v1).
+
+    Unrecognized values normalize to ``unknown`` -- never an error.  A cached
+    embedded fallback keeps contracts loadable when the resource is absent.
+    """
+    global _MATERIAL_STATE_ALIASES_CACHE
+    if _MATERIAL_STATE_ALIASES_CACHE is not None:
+        return _MATERIAL_STATE_ALIASES_CACHE
+    aliases = dict(_FALLBACK_MATERIAL_STATE_ALIASES)
+    try:
+        payload = json.loads(_MATERIAL_STATE_RESOURCE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if (
+        isinstance(payload, dict)
+        and str(payload.get("schema") or "").strip() == "material-states/v1"
+        and isinstance(payload.get("aliases"), dict)
+    ):
+        for key, value in payload["aliases"].items():
+            if isinstance(key, str) and isinstance(value, str) and value.strip():
+                aliases[key.strip()] = value.strip()
+    _MATERIAL_STATE_ALIASES_CACHE = aliases
+    return aliases
+
+
+def normalize_material_state(value: Any) -> str:
+    """Free-text state -> controlled vocabulary token; unknown stays unknown."""
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    return material_state_aliases().get(text, material_state_aliases().get(text.casefold(), "unknown"))
 
 
 class ProvenanceV2(StrictModel):
@@ -114,11 +202,37 @@ class ProvenanceV2(StrictModel):
     revision_id: str = ""
     manifest_digest: str = ""
     automation_claim: Optional[bool] = None
+    # Boundary A: ``kind`` records how the data arrived; ``evidence_class``
+    # records which scientific evidence class backs it.  ``agent_inferred``
+    # stays a first-class kind -- it must simply carry an explicit
+    # ``inference_rule`` (chemistry convention rule_id) or a formal
+    # ``derivation`` (arithmetic/conservation/lineage) when it claims
+    # convention backing.  Bare agent_inferred publication is blocked by
+    # the Research publish gate, not by deleting the kind.
+    evidence_class: Optional[EvidenceClassV2] = None
+    inference_rule: str = ""
+    derivation: str = ""
 
     @model_validator(mode="after")
     def require_inference_rationale(self) -> "ProvenanceV2":
         if self.kind == "agent_inferred" and not self.rationale.strip():
             raise ValueError("agent_inferred provenance requires a rationale")
+        if self.evidence_class is not None:
+            expected = _PROVENANCE_EVIDENCE_CLASS_BY_KIND.get(self.kind)
+            if expected is not None and self.evidence_class != expected:
+                raise ValueError(
+                    f"provenance kind={self.kind} requires "
+                    f"evidence_class={expected}"
+                )
+            if (
+                self.kind == "agent_inferred"
+                and self.evidence_class == "chemistry_convention"
+                and not self.inference_rule.strip()
+            ):
+                raise ValueError(
+                    "agent_inferred with evidence_class=chemistry_convention "
+                    "requires inference_rule (convention rule_id)"
+                )
         if self.kind == "manual_revision":
             if not self.rationale.strip():
                 raise ValueError("manual_revision provenance requires a rationale")
@@ -334,6 +448,14 @@ class MaterialPortV2(StrictModel):
     parent_output_refs: List[MaterialOutputRefV2] = Field(default_factory=list)
     logical_container_id: Optional[str] = Field(default=None, min_length=1)
     provenance: ProvenanceV2
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_state(cls, values: Any) -> Any:
+        if isinstance(values, dict) and "state" in values:
+            values = dict(values)
+            values["state"] = normalize_material_state(values.get("state"))
+        return values
 
     @model_validator(mode="after")
     def concentration_has_unit(self) -> "MaterialPortV2":
@@ -594,6 +716,66 @@ class MacroActionV2(StrictModel):
     completion_condition: str = Field(min_length=1)
 
 
+class StateTransitionV2(StrictModel):
+    """Material state graph edge (boundary B: separate from lineage)."""
+
+    before_state: str = "unknown"
+    after_state: str = "unknown"
+    confidence: Literal["explicit", "convention", "unknown"] = "unknown"
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_states(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            values = dict(values)
+            for key in ("before_state", "after_state"):
+                if key in values:
+                    values[key] = normalize_material_state(values.get(key))
+        return values
+
+
+class LineageRelationV2(StrictModel):
+    """Material lineage graph edge (who descends from whom)."""
+
+    relation_type: Literal[
+        "split_from_parent",
+        "merge_from_children",
+        "aliquot_of",
+        "transfer_of",
+        "state_change_of",
+    ]
+    parent_material_instance_ids: List[str] = Field(default_factory=list)
+    child_material_instance_ids: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_lineage_shape(self) -> "LineageRelationV2":
+        for field_name in (
+            "parent_material_instance_ids",
+            "child_material_instance_ids",
+        ):
+            values = getattr(self, field_name)
+            if any(not isinstance(value, str) or not value.strip() for value in values):
+                raise ValueError(f"{field_name} must contain nonempty string IDs")
+            if len(set(values)) != len(values):
+                raise ValueError(f"{field_name} must not contain duplicate IDs")
+        if not self.parent_material_instance_ids or not self.child_material_instance_ids:
+            raise ValueError("lineage relation requires parent and child material instances")
+        if self.relation_type == "split_from_parent" and (
+            len(self.parent_material_instance_ids) != 1
+        ):
+            raise ValueError("split_from_parent requires exactly one parent")
+        if self.relation_type == "aliquot_of" and len(self.parent_material_instance_ids) != 1:
+            raise ValueError("aliquot_of requires exactly one parent")
+        return self
+
+
+class ContainerLineageV2(StrictModel):
+    """Container chain edge for one material movement."""
+
+    before_container_id: str = Field(min_length=1)
+    after_container_id: str = Field(min_length=1)
+
+
 class MacroStepV2(StrictModel):
     macro_step_id: str = Field(min_length=1)
     macro_action_id: str = Field(min_length=1)
@@ -622,8 +804,33 @@ class MacroStepV2(StrictModel):
     )
     material_contract_status: Optional[MaterialContractStatusV2] = None
     material_contract_migration: Optional[MaterialContractMigrationV2] = None
+    # Phase 2 dual-graph annotations (boundary B).  All optional: historical
+    # packages remain readable, and transfer/split/merge legitimately change
+    # lineage without any state transition.
+    state_transition: Optional[StateTransitionV2] = None
+    lineage_relation: Optional[LineageRelationV2] = None
+    container_lineage: Optional[ContainerLineageV2] = None
     expected_return: List[Dict[str, Any]] = Field(default_factory=list)
     provenance: ProvenanceV2
+
+    @model_validator(mode="after")
+    def validate_dual_graph_consistency(self) -> "MacroStepV2":
+        transition = self.state_transition
+        lineage = self.lineage_relation
+        if (
+            transition is not None
+            and lineage is not None
+            and lineage.relation_type
+            in {"transfer_of", "split_from_parent", "aliquot_of", "merge_from_children"}
+            and transition.confidence == "unknown"
+            and transition.before_state != transition.after_state
+        ):
+            raise ValueError(
+                "lineage-only relations (transfer/split/aliquot/merge) with an "
+                "unknown-confidence state change must keep states equal; declare "
+                "the state change explicitly or drop it"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_material_contract(self) -> "MacroStepV2":
@@ -1120,6 +1327,63 @@ class MacroStepV2(StrictModel):
         return self
 
 
+class UnsupportedFactV2(StrictModel):
+    """Completeness-audit verdict for a fact with no evidence path.
+
+    ``unsupported`` is an audit judgement, never a provenance value.
+    """
+
+    fact: str = Field(min_length=1)
+    why_required: str = ""
+    ladder_exhausted: List[str] = Field(default_factory=list)
+    required: bool = True
+
+
+class UnresolvedRuntimeDependencyV2(StrictModel):
+    quantity: str = Field(min_length=1)
+    first_consumer_step: str = ""
+    missing_resolution: Literal["no_measurement_scheduled"] = (
+        "no_measurement_scheduled"
+    )
+
+
+class ScientificFidelityRiskV2(StrictModel):
+    risk: str = Field(min_length=1)
+    step: str = ""
+    reason: str = ""
+    equivalence_evidence: Optional[str] = None
+
+
+class ScientificCompletenessV2(StrictModel):
+    evidence_class_counts: Dict[str, int] = Field(default_factory=dict)
+    unsupported: List[UnsupportedFactV2] = Field(default_factory=list)
+    unresolved_runtime_dependencies: List[UnresolvedRuntimeDependencyV2] = Field(
+        default_factory=list
+    )
+    scientific_fidelity_risks: List[ScientificFidelityRiskV2] = Field(
+        default_factory=list
+    )
+    broken_material_lineage: int = 0
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> "ScientificCompletenessV2":
+        expected_required = sum(1 for item in self.unsupported if item.required)
+        expected_runtime = len(self.unresolved_runtime_dependencies)
+        expected_fidelity = sum(
+            1 for risk in self.scientific_fidelity_risks
+            if not str(risk.equivalence_evidence or "").strip()
+        )
+        counts = dict(self.counts)
+        counts.setdefault("required_unsupported", expected_required)
+        counts.setdefault("unresolved_runtime_dependency", expected_runtime)
+        counts.setdefault(
+            "scientific_fidelity_risk_requiring_review", expected_fidelity
+        )
+        object.__setattr__(self, "counts", counts)
+        return self
+
+
 class ResearchActionPackageV2(StrictModel):
     schema_version: Literal["2.0"] = CONTRACT_VERSION_V2
     # Historical V2 packages omitted this field and treated every ID as a
@@ -1136,6 +1400,9 @@ class ResearchActionPackageV2(StrictModel):
         Literal["full_raw_observations_v1"]
     ] = None
     raw_observations_sha256: str = ""
+    # Phase 3 Scientific Completeness Audit (optional; historical packages
+    # simply omit it).  Included in the contract hash like every other field.
+    scientific_completeness: Optional[ScientificCompletenessV2] = None
     research_contract_hash: str = ""
 
     @model_validator(mode="after")
@@ -1459,6 +1726,9 @@ class ResearchActionPackageV2(StrictModel):
                 "material_applicability",
                 "material_contract_status",
                 "material_contract_migration",
+                "state_transition",
+                "lineage_relation",
+                "container_lineage",
             ):
                 if field_name not in step.model_fields_set:
                     step_payload.pop(field_name, None)
@@ -1497,6 +1767,9 @@ class ResearchActionPackageV2(StrictModel):
                     "revision_id",
                     "manifest_digest",
                     "automation_claim",
+                    "evidence_class",
+                    "inference_rule",
+                    "derivation",
                 ):
                     if field_name not in model_value.model_fields_set:
                         payload_value.pop(field_name, None)
@@ -1518,6 +1791,8 @@ class ResearchActionPackageV2(StrictModel):
         # their digest so decoding semantics are immutable and auditable.
         if self.identity_encoding is None:
             payload.pop("identity_encoding", None)
+        if "scientific_completeness" not in self.model_fields_set:
+            payload.pop("scientific_completeness", None)
         digest = canonical_digest(payload, prefix="research_v2")
         if self.research_contract_hash and self.research_contract_hash != digest:
             raise ValueError("research_contract_hash does not match package content")

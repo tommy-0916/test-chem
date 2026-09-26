@@ -1,0 +1,1219 @@
+{
+ "source_campaign": "campaigns/A01-device-k3-fresh-20260920-140057/device_state.json (frozen, read-only copy)",
+ "research_action_package_v2": {
+  "schema_version": "2.0",
+  "campaign_id": "A01-20260718-193746",
+  "capability_snapshot_id": "",
+  "stage": {
+   "stage_id": "STAGE_01",
+   "name": "合成、必要并完成 XRD 观察",
+   "objective": "当前 stage 为“合成、必要并完成 XRD 观察”，唯一目标 observation point 是获得不同 Fe 引入方式样品及对照样品的有效 XRD 图谱。stage goal 是在统一名义 Ni/Fe 摩尔比和一致后处理条件下，制备原位共沉淀 Ni0.8Fe0.2、Ni(OH)2 表面后引入 Fe、Ni(OH)2/FeOOH 物理混合、无 Fe 的 Ni(OH)2 对照，并增加 FeOOH 参照，以判断 Fe 引入方式是否引起主体晶相、层间距、结晶度或独立含 Fe 相的差异。planning logic 是使用外部预配并已装载的 Ni(NO3)2、Fe(NO3)3 和 NaOH 原液进行小体积并行沉淀；所有体系采用固定加料节拍、60 ℃搅拌熟化、离心洗涤和60 ℃干燥，避免静置老化造成流程断链；后引入样品在洗净的湿态 Ni(OH)2 上沉积 Fe 氧羟化物，物理混合样品则将分别制得的 Ni(OH)2 与 FeOOH 按相同名义 Ni:Fe=4:1 混合。key variables 为 Fe 引入方式、名义 Ni/Fe 比、熟化条件和后处理一致性；每类样品制备2个独立重复。XRD 前将固定质量固体分散于不少于4.0 mL乙醇中，统一采集参数并进行物相匹配、峰位和峰宽比较。expected observation 包括 Ni(OH)2 或层状 NiFe 主体衍射峰、峰位偏移或展宽、结晶度变化，以及物理混合或后沉积样品中可能出现的独立 FeOOH/低结晶含 Fe 相信号；不以未观察到 Fe 相作为 Fe 均匀掺杂的单独证据。stage completion condition 是五类样品的全部重复均获得通过背景、信噪比和重复性检查的 XRD 原始数据及物相比较表，并记录无法由 XRD 判定的低含量或无定形 Fe 问题。本阶段不提前执行 XPS、Raman、SEM、TEM 或电化学测试。由于没有知识库协议命中，以下首轮固定参数均为 agent 补全；当前调用也未提供303实验室任务创建接口，因此不能生成或返回真实实验任务 id。",
+   "observation_point": "XRD",
+   "completion_condition": "是五类样品的全部重复均获得通过背景、信噪比和重复性检查的 XRD 原始数据及物相比较表，并记录无法由 XRD 判定的低含量或无定形 Fe 问题",
+   "capability_requirements": []
+  },
+  "macro_action": {
+   "macro_action_id": "MA_S01_R00",
+   "stage_id": "STAGE_01",
+   "experiment_group": {
+    "group_id": "GRP_MA_S01_R00_01",
+    "role": "experimental",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "hypothesis": "合成、必要并完成 XRD 观察",
+    "comparison_to": [],
+    "variables": {}
+   },
+   "objective": "合成、必要并完成 XRD 观察",
+   "planned_operations": [
+    "建立样品矩阵并准备已装载前驱体原液",
+    "制备Ni(OH)2对照及后引入、物理混合所需Ni基体",
+    "制备FeOOH参照及物理混合所需含Fe组分",
+    "原位共沉淀制备NiFe-CP",
+    "在Ni(OH)2湿态基体上后引入Fe制备NiFe-PS",
+    "制备Ni(OH)2/FeOOH物理混合对照",
+    "制备XRD分散样并获得晶相观察"
+   ],
+   "expected_observation": "获得 XRD 的有效结果",
+   "completion_condition": "是五类样品的全部重复均获得通过背景、信噪比和重复性检查的 XRD 原始数据及物相比较表，并记录无法由 XRD 判定的低含量或无定形 Fe 问题"
+  },
+  "macro_steps": [
+   {
+    "macro_step_id": "MS_MA_S01_R00_001",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 1,
+    "operation": "建立样品矩阵并准备已装载前驱体原液",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "使用外部预配并已装载的0.200 mol L^-1 Ni(NO3)2、0.200 mol L^-1 Fe(NO3)3和1.00 mol L^-1 NaOH原液。设Ni-0为无Fe的Ni(OH)2对照；NiFe-CP为原位共沉淀样品；NiFe-PS为Ni(OH)2表面后引入Fe样品；Ni/FeOOH-PM为物理混合样品；FeOOH-ref为含Fe参照。除FeOOH-ref外，含Fe样品均按名义Ni:Fe=0.80:0.20 mmol设计；每类制备2个独立重复，单次沉淀或后沉积体系总液体体积固定为10.0 mL。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 0.2,
+      "unit": "mol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 0.2,
+      "unit": "mol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 1.0,
+      "unit": "mol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 0.2,
+      "unit": "mmol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 10.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_002",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 2,
+    "operation": "制备Ni(OH)2对照及后引入、物理混合所需Ni基体",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "Ni-0每个重复使用5.00 mL Ni(NO3)2原液和2.50 mL去离子水，在25 ℃、600 rpm搅拌下于10 min内分10批加入2.50 mL NaOH原液；NiFe-PS前体及物理混合用Ni(OH)2每个重复分别使用4.00 mL Ni(NO3)2原液、3.50 mL去离子水和2.50 mL NaOH原液，并采用相同加料节拍。加料结束后均升至60 ℃、600 rpm继续搅拌熟化360 min。Ni-0和物理混合用Ni(OH)2以8000 rpm离心10 min，依次用8.0 mL去离子水洗涤3次、8.0 mL乙醇洗涤2次，每次重分散后均以8000 rpm离心10 min，最后60 ℃干燥12 h；NiFe-PS前体仅用8.0 mL去离子水洗涤3次并保留湿态沉淀供后续Fe沉积。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 5.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 2.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 25.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 2.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_7",
+      "value": 4.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_8",
+      "value": 3.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_9",
+      "value": 2.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_10",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_11",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_12",
+      "value": 360.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_13",
+      "value": 8000.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_14",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_15",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_16",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_17",
+      "value": 8000.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_18",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_19",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_20",
+      "value": 12.0,
+      "unit": "h",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_21",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_003",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 3,
+    "operation": "制备FeOOH参照及物理混合所需含Fe组分",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "每个重复将1.00 mL Fe(NO3)3原液与8.40 mL去离子水混合，在25 ℃、600 rpm搅拌下于10 min内分6批加入0.60 mL NaOH原液，总体积10.0 mL；随后升至60 ℃、600 rpm搅拌熟化360 min，以获得低温制备的铁氧羟化物参照。以8000 rpm离心10 min，依次用8.0 mL去离子水洗涤3次、8.0 mL乙醇洗涤2次，每次均重分散并再次离心，最后60 ℃干燥12 h。将所得固体分别保留为FeOOH-ref和物理混合用含Fe组分；具体物相以本阶段XRD结果命名，不预设其为单一晶型。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 1.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 8.4,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 25.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 0.6,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_7",
+      "value": 10.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_8",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_9",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_10",
+      "value": 360.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_11",
+      "value": 8000.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_12",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_13",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_14",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_15",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_16",
+      "value": 12.0,
+      "unit": "h",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_004",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 4,
+    "operation": "原位共沉淀制备NiFe-CP",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "每个重复混合4.00 mL Ni(NO3)2原液、1.00 mL Fe(NO3)3原液和2.50 mL去离子水，对应Ni 0.80 mmol、Fe 0.20 mmol；在25 ℃、600 rpm搅拌下于10 min内分10批加入2.50 mL NaOH原液，总体积10.0 mL。加料结束后升至60 ℃、600 rpm搅拌熟化360 min。以8000 rpm离心10 min，依次用8.0 mL去离子水洗涤3次、8.0 mL乙醇洗涤2次，每次重分散后再次离心；最终在60 ℃干燥12 h。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 4.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 1.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 2.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 0.8,
+      "unit": "mmol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 0.2,
+      "unit": "mmol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 25.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_7",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_8",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_9",
+      "value": 2.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_10",
+      "value": 10.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_11",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_12",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_13",
+      "value": 360.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_14",
+      "value": 8000.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_15",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_16",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_17",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_18",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_19",
+      "value": 12.0,
+      "unit": "h",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_005",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 5,
+    "operation": "在Ni(OH)2湿态基体上后引入Fe制备NiFe-PS",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "将由0.80 mmol Ni前驱体制得且经3次水洗的湿态Ni(OH)2完全重分散于8.40 mL去离子水中，超声10 min后在25 ℃、600 rpm搅拌。于10 min内分10批加入1.00 mL Fe(NO3)3原液，每批间隔约1 min并持续搅拌；随后于10 min内分6批加入0.60 mL NaOH原液，总体积10.0 mL。升至60 ℃、600 rpm继续搅拌120 min，以形成表面或界面富Fe的后引入样品。以8000 rpm离心10 min，依次用8.0 mL去离子水洗涤3次、8.0 mL乙醇洗涤2次，每次重分散后再次离心；最终60 ℃干燥12 h。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 0.8,
+      "unit": "mmol",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 8.4,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 25.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_7",
+      "value": 1.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_8",
+      "value": 1.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_9",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_10",
+      "value": 0.6,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_11",
+      "value": 10.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_12",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_13",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_14",
+      "value": 120.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_15",
+      "value": 8000.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_16",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_17",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_18",
+      "value": 8.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_19",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_20",
+      "value": 12.0,
+      "unit": "h",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_006",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 6,
+    "operation": "制备Ni(OH)2/FeOOH物理混合对照",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "每个重复按名义Ni:Fe=4:1混合Ni(OH)2与铁氧羟化物；以理想无水化学式折算时使用74.2 mg Ni(OH)2和17.8 mg FeOOH。加入4.50 mL乙醇，超声分散15 min后在25 ℃、600 rpm搅拌30 min，使两种独立固相充分接触但不进行化学共沉淀；随后60 ℃干燥12 h并轻柔研散。记录实际称取质量，物理混合样品不得接受额外碱处理或60 ℃水相熟化。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 74.2,
+      "unit": "mg",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 17.8,
+      "unit": "mg",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 4.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 15.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 25.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 600.0,
+      "unit": "rpm",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_7",
+      "value": 30.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_8",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_9",
+      "value": 12.0,
+      "unit": "h",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_10",
+      "value": 60.0,
+      "unit": "℃",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   },
+   {
+    "macro_step_id": "MS_MA_S01_R00_007",
+    "macro_action_id": "MA_S01_R00",
+    "sequence": 7,
+    "operation": "制备XRD分散样并获得晶相观察",
+    "sample_id": "SAMPLE_GRP_MA_S01_R00_01_01",
+    "material_inputs": [],
+    "material_outputs": [],
+    "parameters": [
+     {
+      "name": "research_parameter_text",
+      "value": "每个样品重复称取10.0 mg干燥粉体，加入4.50 mL无水乙醇，超声10 min并在测试前搅拌5 min形成均匀悬浊液，确保XRD进样总液量高于4.0 mL。采用相同滴液量和干燥条件制样；使用Cu Kα辐射，在2θ=5–80°范围扫描，步长0.02°、每步积分1 s，并采集乙醇/空白基底背景。输出原始图谱、扣背景图谱、候选物相匹配、主要峰位、半峰宽和重复间偏差；比较Ni(OH)2主体峰、NiFe样品峰位或峰宽变化以及独立铁氧羟化物衍射信号。仅在全部五类样品的两个重复均获得可判读且重复一致的图谱后，认定到达本stage的XRD observation point。",
+      "unit": "",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_1",
+      "value": 10.0,
+      "unit": "mg",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_2",
+      "value": 4.5,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_3",
+      "value": 10.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_4",
+      "value": 5.0,
+      "unit": "min",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_5",
+      "value": 4.0,
+      "unit": "mL",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     },
+     {
+      "name": "numeric_parameter_6",
+      "value": 1.0,
+      "unit": "s",
+      "provenance": {
+       "kind": "agent_inferred",
+       "reference": "agent补全",
+       "rationale": "Research supplied this explicit experimental parameter"
+      }
+     }
+    ],
+    "logical_containers": [],
+    "expected_return": [],
+    "provenance": {
+     "kind": "agent_inferred",
+     "reference": "agent补全",
+     "rationale": "Research generated this concrete macro step"
+    }
+   }
+  ],
+  "evidence_bundle": {
+   "bundle_id": "evidence_df89a755bcd2573353a5a1fc0575497e966d2bbde547f376f0e7a315f1212f21",
+   "scope": "macro_action",
+   "query": "为了探究 Fe 在 NiFe 基催化剂中的存在形式和配位环境对碱性 OER 活性、反应动力学和结构重构行为的影响，请围绕 NiFe 基催化剂设计合理的实验方案。实验应包含不同 Fe 引入方式或不同 Fe 配位环境样品的设计，并设置 Ni 基催化剂及物理混合样品作为对照，比较其晶相结构、元素分布、表面价态、OER 活性和稳定性差异。方案需覆盖催化剂制备、必要后处理、结构/界面表征、电极制备和电化学工作站测试等关键环节，并获得能够评价过电位、Tafel 斜率、电化学活性面积、电荷转移阻抗和长期稳定性的结果。请将实验下发至 303 实验室，并返回该实验任务的 id。",
+   "objective": "",
+   "retrieval_status": "empty",
+   "current_invocation_only": true,
+   "items": [],
+   "errors": []
+  },
+  "research_contract_hash": "research_v2_8f976d3b5ad3a5864a5dfe87073370f7ae16827b2491f43fa2aac30b88d1996a"
+ }
+}

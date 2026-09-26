@@ -33,6 +33,7 @@ from chem_agent_contracts.v2 import (
     MaterialRelationV2,
     canonical_digest,
     evidence_contains_exact_quantity,
+    normalize_material_state,
 )
 
 from .core import BaseAgent
@@ -2174,6 +2175,7 @@ class ResearchAgent(BaseAgent):
         """Compact per-call evidence view: sources + known gaps + citation rule."""
         sources: List[Dict[str, Any]] = []
         known_gaps: List[str] = []
+        known_gaps_structured: List[Dict[str, Any]] = []
         for protocol in state.extracted_protocols[:6]:
             if not isinstance(protocol, dict):
                 continue
@@ -2195,13 +2197,19 @@ class ResearchAgent(BaseAgent):
             )
             if verification not in self._evidence_identity_statuses():
                 if verification == "web_unverified":
-                    known_gaps.append(
-                        f"{title}: 网页内容未经论文身份验证，只能作为检索线索"
-                    )
+                    gap_text_identity = f"{title}: 网页内容未经论文身份验证，只能作为检索线索"
                 else:
-                    known_gaps.append(
+                    gap_text_identity = (
                         f"{title}: 身份状态 {verification or 'unknown'} 未经验证，引用需谨慎"
                     )
+                known_gaps.append(gap_text_identity)
+                known_gaps_structured.append(
+                    {
+                        "gap": gap_text_identity,
+                        "ladder_position": "main_text",
+                        "detail": "论文身份未建立，无法进入正文级证据阶梯",
+                    }
+                )
             if full_text_status != "parsed":
                 detail = (
                     "仅有元数据/摘要"
@@ -2211,14 +2219,35 @@ class ResearchAgent(BaseAgent):
                 known_gaps.append(
                     f"{title}: 不具备可解析全文（{detail}），不可用于支撑具体实验参数"
                 )
+                gap_text_fulltext = known_gaps[-1]
+                known_gaps_structured.append(
+                    {
+                        "gap": gap_text_fulltext,
+                        "ladder_position": "main_text",
+                        "detail": "全文不可用，正文/SI 两级均无法排查",
+                    }
+                )
             missing = protocol.get("missing_parameters") or []
             if missing:
                 known_gaps.append(f"{title}: 文献未说明 {missing[:3]}")
+                gap_text_missing = known_gaps[-1]
+                known_gaps_structured.append(
+                    {
+                        "gap": gap_text_missing,
+                        "ladder_position": "main_text",
+                        "detail": (
+                            "正文未说明;supporting_information 级未抽取,"
+                            "若后续 workflow 依赖需进入更深阶梯或记 unsupported"
+                        ),
+                    }
+                )
         if not sources:
             return {}
         return {
             "sources": sources,
             "known_gaps": known_gaps[:8],
+            "known_gaps_structured": known_gaps_structured[:8],
+            "ladder": list(self._EVIDENCE_LADDER),
             "citation_rule": (
                 "macro plan 步骤引用文献参数时，尽量在 `来源` 字段标注 paper_id/文献题目"
                 "与页码（如 p.4）；由 agent 补全的参数标注 agent补全。"
@@ -2440,6 +2469,697 @@ class ResearchAgent(BaseAgent):
             if isinstance(item, dict)
         ]
 
+    @staticmethod
+    def _conventions_resource_path() -> str:
+        return os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "chem_resources",
+            "chemistry_conventions",
+            "conventions.json",
+        )
+
+    @staticmethod
+    def _load_chemistry_conventions() -> List[Dict[str, Any]]:
+        """Controlled chemistry-convention rule library (boundary D).
+
+        Rules are deterministic semantic expansion: states/phases/lineage
+        only.  Every rule must declare numeric_generation_allowed=false and
+        the expansion channel below never writes quantities or parameters.
+        """
+        cache = getattr(ResearchAgent, "_chemistry_conventions_cache", None)
+        if cache is not None:
+            return cache
+        rules: List[Dict[str, Any]] = []
+        try:
+            with open(ResearchAgent._conventions_resource_path(), encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            payload = None
+        if (
+            isinstance(payload, dict)
+            and str(payload.get("schema") or "").strip() == "chemistry-conventions/v1"
+            and isinstance(payload.get("rules"), list)
+        ):
+            for rule in payload["rules"]:
+                if not isinstance(rule, dict):
+                    continue
+                if rule.get("numeric_generation_allowed") is not False:
+                    continue
+                if not str(rule.get("rule_id") or "").strip():
+                    continue
+                rules.append(rule)
+        ResearchAgent._chemistry_conventions_cache = rules
+        return rules
+
+    def _expand_chemistry_conventions(
+        self, macro_plan: Sequence[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Phase 1 convention expansion pass (publish gate).
+
+        A rule applies when the operation text, the intent text AND the
+        normalized input states all match (e.g. collect precipitate vs
+        collect supernatant hit different centrifugation rules).  The pass
+        only annotates state_transition / lineage_relation / container
+        lineage and marks affected output provenance with
+        evidence_class=chemistry_convention + inference_rule=rule_id while
+        KEEPING kind=agent_inferred (boundary A).  It never writes numbers:
+        quantities and parameters are untouched, and DRYING_V1 output mass
+        stays runtime_pending because no mass value is ever generated here.
+        """
+        if self._contract_version != "v2" or not macro_plan:
+            return []
+        rules = self._load_chemistry_conventions()
+        known_states = {
+            "powder", "suspension", "solution", "retained_wet_solid",
+            "washed_wet_solid", "dry_solid", "supernatant", "filtrate", "gas",
+        }
+        applied: List[Dict[str, Any]] = []
+        for step_index, step in enumerate(macro_plan):
+            if not isinstance(step, dict):
+                continue
+            operation_blob = " ".join(
+                str(step.get(key) or "") for key in ("操作", "operation")
+            ).lower()
+            intent_blob = " ".join(
+                str(step.get(key) or "")
+                for key in ("操作", "试剂/对象", "参数", "operation", "parameters")
+            ).lower()
+            input_states: List[str] = []
+            input_ids: List[str] = []
+            for key in ("material_inputs", "material_intermediates"):
+                for material in step.get(key) or []:
+                    if not isinstance(material, dict):
+                        continue
+                    input_states.append(normalize_material_state(material.get("state")))
+                    instance_id = str(material.get("material_instance_id") or "").strip()
+                    if instance_id:
+                        input_ids.append(instance_id)
+            for rule in rules:
+                preconditions = rule.get("preconditions") or {}
+                operation_patterns = [
+                    str(pattern).lower()
+                    for pattern in (preconditions.get("operation_patterns") or [])
+                ]
+                if not any(pattern in operation_blob for pattern in operation_patterns):
+                    continue
+                intent_patterns = [
+                    str(pattern).lower()
+                    for pattern in (preconditions.get("intent_patterns") or [])
+                ]
+                if not any(pattern in intent_blob for pattern in intent_patterns):
+                    continue
+                allowed_inputs = {
+                    str(state).strip()
+                    for state in (rule.get("allowed_input_states") or [])
+                    if str(state).strip()
+                }
+                if allowed_inputs and not (
+                    set(input_states) & allowed_inputs
+                ):
+                    continue
+                self._apply_convention_rule(
+                    step, rule, input_states, input_ids, known_states
+                )
+                applied.append(
+                    {
+                        "step_index": step_index,
+                        "rule_id": str(rule.get("rule_id") or ""),
+                        "discard_outputs": list(rule.get("discard_outputs") or []),
+                        "retained_output": str(rule.get("retained_output") or ""),
+                    }
+                )
+                break
+        if applied:
+            logger.info(
+                "chemistry convention expansion applied: %s",
+                sorted({record["rule_id"] for record in applied}),
+            )
+        return applied
+
+    @staticmethod
+    def _apply_convention_rule(
+        step: Dict[str, Any],
+        rule: Dict[str, Any],
+        input_states: List[str],
+        input_ids: List[str],
+        known_states: set[str],
+    ) -> None:
+        lineage_effect = rule.get("lineage_effect") or {}
+        relation_type = str(lineage_effect.get("relation_type") or "").strip()
+        before_state = input_states[0] if input_states else "unknown"
+        retained = str(rule.get("retained_output") or "").strip()
+        after_state = retained if retained in known_states else before_state
+        if after_state not in known_states:
+            after_state = "unknown"
+        step.setdefault(
+            "state_transition",
+            {
+                "before_state": before_state,
+                "after_state": after_state,
+                "confidence": "convention",
+            },
+        )
+        output_ids = [
+            str(material.get("material_instance_id") or "").strip()
+            for material in (step.get("material_outputs") or [])
+            if isinstance(material, dict)
+            and str(material.get("material_instance_id") or "").strip()
+        ]
+        if relation_type and input_ids and output_ids:
+            step.setdefault(
+                "lineage_relation",
+                {
+                    "relation_type": relation_type,
+                    "parent_material_instance_ids": list(input_ids),
+                    "child_material_instance_ids": list(output_ids),
+                },
+            )
+        # container chain: only annotate when the step explicitly names
+        # different input/output logical containers.
+        input_containers = [
+            str(material.get("logical_container_id") or "").strip()
+            for material in (step.get("material_inputs") or [])
+            if isinstance(material, dict)
+            and str(material.get("logical_container_id") or "").strip()
+        ]
+        output_containers = [
+            str(material.get("logical_container_id") or "").strip()
+            for material in (step.get("material_outputs") or [])
+            if isinstance(material, dict)
+            and str(material.get("logical_container_id") or "").strip()
+        ]
+        if input_containers and output_containers and (
+            set(input_containers) != set(output_containers)
+        ):
+            step.setdefault(
+                "container_lineage",
+                {
+                    "before_container_id": input_containers[0],
+                    "after_container_id": output_containers[0],
+                },
+            )
+        # Mark affected outputs: keep kind=agent_inferred, add the convention
+        # evidence dimensions (boundary A).  Only fill missing/unknown states.
+        for material in step.get("material_outputs") or []:
+            if not isinstance(material, dict):
+                continue
+            if after_state in known_states and normalize_material_state(
+                material.get("state")
+            ) in {"unknown"}:
+                material["state"] = after_state
+            provenance = material.setdefault("provenance", {})
+            if isinstance(provenance, dict):
+                provenance.setdefault("kind", "agent_inferred")
+                if not str(provenance.get("rationale") or "").strip():
+                    provenance["rationale"] = (
+                        f"chemistry convention expansion ({rule.get('rule_id')})"
+                    )
+                # Boundary A: only convention-backed inference is labelled.
+                # Paper/user-bound facts keep their own evidence class.
+                if str(provenance.get("kind") or "") == "agent_inferred":
+                    provenance["evidence_class"] = "chemistry_convention"
+                    provenance["inference_rule"] = str(rule.get("rule_id") or "")
+
+    def _v2_bare_agent_inferred_issues(
+        self, macro_plan: Sequence[Dict[str, Any]]
+    ) -> List[str]:
+        """Boundary A: block bare agent_inferred numeric material facts.
+
+        agent_inferred stays a first-class provenance kind; the publish gate
+        only stops agent_inferred claims that carry NUMBERS without either an
+        inference_rule (convention rule_id) or a formal derivation.  Identity
+        or state-only agent_inferred facts with a rationale remain publishable.
+        """
+        if self._contract_version != "v2" or not macro_plan:
+            return []
+        issues: List[str] = []
+        for index, step in enumerate(macro_plan, start=1):
+            if not isinstance(step, dict):
+                continue
+            for key in ("material_inputs", "material_intermediates", "material_outputs"):
+                for material in step.get(key) or []:
+                    if not isinstance(material, dict):
+                        continue
+                    provenance = material.get("provenance")
+                    if not isinstance(provenance, dict):
+                        continue
+                    if str(provenance.get("kind") or "") != "agent_inferred":
+                        continue
+                    quantity = material.get("quantity")
+                    has_number = isinstance(quantity, dict) and (
+                        quantity.get("value") is not None
+                    )
+                    if not has_number:
+                        continue
+                    has_basis = bool(
+                        str(provenance.get("inference_rule") or "").strip()
+                        or str(provenance.get("derivation") or "").strip()
+                    )
+                    if not has_basis:
+                        issues.append(
+                            f"第 {index} 步 {key} 的裸 agent_inferred 数值缺少 "
+                            "inference_rule/derivation，发布门拦截"
+                        )
+        return issues
+
+    def _v2_material_graph_issues(
+        self,
+        macro_plan: Sequence[Dict[str, Any]],
+        expansion_records: Sequence[Dict[str, Any]],
+    ) -> List[str]:
+        """Phase 2 boundary-B dual-graph checklist (publish gate).
+
+        Material lineage (who descends from whom) and material state
+        (phase changes) are checked separately: transfer/split/merge may
+        change lineage while the state stays unchanged.
+        """
+        if self._contract_version != "v2" or not macro_plan:
+            return []
+        issues: List[str] = []
+        produced_at: Dict[str, int] = {}
+        first_used_at: Dict[str, int] = {}
+        external_roots: set[str] = set()
+        parent_map: Dict[str, List[str]] = {}
+        relation_seen: set[str] = set()
+
+        def note_relation(relation: Any, step_number: int) -> None:
+            if not isinstance(relation, dict):
+                return
+            inputs = [
+                str(value).strip()
+                for value in (relation.get("input_material_instance_ids") or [])
+                if str(value).strip()
+            ]
+            outputs = [
+                str(value).strip()
+                for value in (relation.get("output_material_instance_ids") or [])
+                if str(value).strip()
+            ]
+            kind = str(relation.get("event_kind") or "")
+            marker = (kind, tuple(sorted(inputs)), tuple(sorted(outputs)))
+            if marker in relation_seen:
+                issues.append(
+                    f"第 {step_number} 步存在重复 material relation {sorted(outputs)}"
+                )
+            relation_seen.add(marker)
+            for output_id in outputs:
+                parent_map.setdefault(output_id, []).extend(inputs)
+
+        for index, step in enumerate(macro_plan, start=1):
+            if not isinstance(step, dict):
+                continue
+            for key in ("material_inputs", "material_intermediates"):
+                for material in step.get(key) or []:
+                    if not isinstance(material, dict):
+                        continue
+                    instance_id = str(material.get("material_instance_id") or "").strip()
+                    if not instance_id:
+                        continue
+                    first_used_at.setdefault(instance_id, index)
+                    origin = str(material.get("material_origin") or "").strip()
+                    if origin == "external_inventory":
+                        external_roots.add(instance_id)
+                        continue
+                    if instance_id not in produced_at:
+                        issues.append(
+                            f"第 {index} 步输入物料 {instance_id} 先前不存在"
+                            "(非 external_inventory 且无 parent/source)"
+                        )
+            for material in step.get("material_outputs") or []:
+                if not isinstance(material, dict):
+                    continue
+                instance_id = str(material.get("material_instance_id") or "").strip()
+                if not instance_id:
+                    issues.append(f"第 {index} 步存在缺少 material_instance_id 的输出")
+                    continue
+                if instance_id in produced_at:
+                    issues.append(
+                        f"物料实例 {instance_id} 被第 {produced_at[instance_id]} 步和"
+                        f"第 {index} 步重复产出"
+                    )
+                produced_at[instance_id] = index
+            for relation in step.get("material_relations") or []:
+                note_relation(relation, index)
+            lineage = step.get("lineage_relation")
+            if isinstance(lineage, dict):
+                relation_type = str(lineage.get("relation_type") or "")
+                parents = [
+                    str(value).strip()
+                    for value in (lineage.get("parent_material_instance_ids") or [])
+                    if str(value).strip()
+                ]
+                children = [
+                    str(value).strip()
+                    for value in (lineage.get("child_material_instance_ids") or [])
+                    if str(value).strip()
+                ]
+                if relation_type == "split_from_parent" and len(parents) != 1:
+                    issues.append(f"第 {index} 步 split 后 parent-child 不明确(parents={parents})")
+                if relation_type == "merge_from_children":
+                    missing = [
+                        parent
+                        for parent in parents
+                        if parent not in produced_at and parent not in external_roots
+                    ]
+                    if missing:
+                        issues.append(
+                            f"第 {index} 步 merge 输出未追到全部 children: missing={missing}"
+                        )
+                if relation_type == "state_change_of" and not children:
+                    issues.append(f"第 {index} 步 state_change 缺少 child material")
+                for parent in parents:
+                    if (
+                        parent not in produced_at
+                        and parent not in external_roots
+                    ):
+                        issues.append(
+                            f"第 {index} 步 lineage parent {parent} 先前不存在"
+                        )
+                for child in children:
+                    if child not in produced_at and index not in (produced_at.get(child),):
+                        produced_at.setdefault(child, index)
+
+        # orphan outputs: produced, never used, and not a final-step product.
+        final_index = len(macro_plan)
+        for instance_id, produced_index in produced_at.items():
+            if instance_id not in first_used_at and produced_index < final_index:
+                issues.append(
+                    f"物料实例 {instance_id} 是 orphan output"
+                    f"(第 {produced_index} 步产出后再未被使用)"
+                )
+
+        # final-sample traceability: every last-step output must reach a root.
+        def reaches_root(instance_id: str, seen: set[str]) -> bool:
+            if instance_id in external_roots:
+                return True
+            if instance_id in seen:
+                return False
+            seen.add(instance_id)
+            parents = parent_map.get(instance_id) or []
+            if not parents:
+                return False
+            return any(reaches_root(parent, seen) for parent in parents)
+
+        for material in macro_plan[-1].get("material_outputs") or [] if isinstance(macro_plan[-1], dict) else []:
+            if not isinstance(material, dict):
+                continue
+            instance_id = str(material.get("material_instance_id") or "").strip()
+            if instance_id and not reaches_root(instance_id, set()):
+                issues.append(
+                    f"final sample {instance_id} 不可追溯到 root materials"
+                )
+
+        # discard phase explicitness: discarded phases must not be silently
+        # declared as retained outputs of the same step.
+        for record in expansion_records:
+            discard_states = {
+                normalize_material_state(state)
+                for state in (record.get("discard_outputs") or [])
+            } - {"unknown"}
+            if not discard_states:
+                continue
+            step_index = int(record.get("step_index") or 0)
+            if step_index >= len(macro_plan) or not isinstance(macro_plan[step_index], dict):
+                continue
+            for material in macro_plan[step_index].get("material_outputs") or []:
+                if not isinstance(material, dict):
+                    continue
+                if normalize_material_state(material.get("state")) in discard_states:
+                    issues.append(
+                        f"第 {step_index + 1} 步 discard 相 {sorted(discard_states)} "
+                        "被声明为 retained output"
+                    )
+        deduped: List[str] = []
+        seen_issue: set[str] = set()
+        for issue in issues:
+            if issue not in seen_issue:
+                seen_issue.add(issue)
+                deduped.append(issue)
+        return deduped
+
+    _EVIDENCE_LADDER: tuple[str, ...] = (
+        "main_text",
+        "supporting_information",
+        "cited_method",
+        "extraction_completeness",
+        "convention_expansion",
+        "device_sop",
+        "runtime_pending",
+        "unsupported",
+    )
+
+    @staticmethod
+    def _provenance_evidence_path(provenance: Any) -> str:
+        """Map a provenance dict to its evidence path, or "" when unsupported."""
+        if not isinstance(provenance, dict):
+            return ""
+        kind = str(provenance.get("kind") or provenance.get("source_type") or "")
+        if kind == "paper":
+            return "paper_explicit"
+        if kind == "device_skill":
+            return "device_sop"
+        if kind == "runtime":
+            return "runtime_measurement"
+        if kind in {"user", "manual_revision"}:
+            return "task_or_revision"
+        if kind == "agent_inferred":
+            if str(provenance.get("inference_rule") or "").strip():
+                return "chemistry_convention"
+            if str(provenance.get("derivation") or "").strip():
+                return "chemistry_convention"
+            evidence_class = str(provenance.get("evidence_class") or "")
+            if evidence_class in {
+                "paper_explicit",
+                "chemistry_convention",
+                "device_sop",
+                "runtime_measurement",
+            }:
+                return evidence_class
+        return ""
+
+    def _runtime_resolution_scheduled_before(
+        self,
+        macro_plan: Sequence[Dict[str, Any]],
+        consumer_index: int,
+    ) -> bool:
+        """Boundary C: a runtime-pending quantity may enter Device only when a
+        measurement/resolution path is scheduled before the first consumer."""
+        measurement_patterns = (
+            "称量",
+            "测量",
+            "weigh",
+            "measure",
+            "滴定",
+            "quantify",
+        )
+        for step in macro_plan[: max(consumer_index - 1, 0)]:
+            if not isinstance(step, dict):
+                continue
+            blob = " ".join(
+                str(step.get(key) or "")
+                for key in ("操作", "试剂/对象", "参数", "operation", "parameters")
+            ).lower()
+            if any(pattern in blob for pattern in measurement_patterns):
+                return True
+            for segment in step.get("operation_segments") or []:
+                if not isinstance(segment, dict):
+                    continue
+                role_text = " ".join(
+                    str(segment.get(key) or "")
+                    for key in ("role", "role_id", "material_effect", "source_operation_ref")
+                ).lower()
+                if "measur" in role_text or "weigh" in role_text:
+                    return True
+            for requirement in step.get("quantity_requirements") or []:
+                if (
+                    isinstance(requirement, dict)
+                    and str(requirement.get("kind") or "")
+                    == "runtime_measured_inventory"
+                ):
+                    return True
+        return False
+
+    def _scientific_completeness_audit(
+        self,
+        macro_plan: Sequence[Dict[str, Any]],
+        graph_issues: Sequence[str],
+    ) -> Dict[str, Any]:
+        """Phase 3 Scientific Completeness Audit (publish gate).
+
+        ``unsupported`` is an audit judgement, never a provenance value:
+        a fact no evidence path can explain is listed with the exhausted
+        ladder; only downstream-required ones block publication.
+        """
+        class_counts = {
+            "paper_explicit": 0,
+            "chemistry_convention": 0,
+            "device_sop": 0,
+            "runtime_measurement": 0,
+        }
+        unsupported: List[Dict[str, Any]] = []
+        runtime_dependencies: List[Dict[str, Any]] = []
+        fidelity_risks: List[Dict[str, Any]] = []
+
+        consumed_by: Dict[str, int] = {}
+        for index, step in enumerate(macro_plan, start=1):
+            if not isinstance(step, dict):
+                continue
+            for key in ("material_inputs", "material_intermediates"):
+                for material in step.get(key) or []:
+                    if not isinstance(material, dict):
+                        continue
+                    instance_id = str(material.get("material_instance_id") or "").strip()
+                    if instance_id:
+                        consumed_by.setdefault(instance_id, index)
+
+        total_steps = len(macro_plan)
+        checked_runtime_instances: set[str] = set()
+        for index, step in enumerate(macro_plan, start=1):
+            if not isinstance(step, dict):
+                continue
+            step_path = self._provenance_evidence_path(step.get("provenance"))
+            if step_path in class_counts:
+                class_counts[step_path] += 1
+            for key in (
+                "material_inputs",
+                "material_intermediates",
+                "material_outputs",
+            ):
+                for material in step.get(key) or []:
+                    if not isinstance(material, dict):
+                        continue
+                    instance_id = str(material.get("material_instance_id") or "").strip()
+                    material_name = str(material.get("material_id") or "unknown")
+                    path = self._provenance_evidence_path(material.get("provenance"))
+                    if path in class_counts:
+                        class_counts[path] += 1
+                    elif path == "":
+                        downstream_index = consumed_by.get(instance_id)
+                        is_final_product = not downstream_index and index == total_steps
+                        required = bool(
+                            (downstream_index and downstream_index > index)
+                            or is_final_product
+                        )
+                        why = (
+                            "该物料被后续步骤依赖"
+                            if downstream_index and downstream_index > index
+                            else "final sample 必须可解释"
+                            if is_final_product
+                            else "论文未说明且当前 workflow 不依赖"
+                        )
+                        unsupported.append(
+                            {
+                                "fact": (
+                                    f"第 {index} 步 {key} {material_name}"
+                                    f"({instance_id or 'no-instance'})"
+                                ),
+                                "why_required": why,
+                                "ladder_exhausted": list(self._EVIDENCE_LADDER),
+                                "required": required,
+                            }
+                        )
+                    if instance_id and instance_id not in checked_runtime_instances:
+                        quantity = material.get("quantity")
+                        if isinstance(quantity, dict) and (
+                            quantity.get("mode") == "runtime_measured"
+                            or quantity.get("semantic")
+                            == "runtime_measurement_required"
+                        ):
+                            checked_runtime_instances.add(instance_id)
+                            first_consumer = consumed_by.get(instance_id)
+                            if first_consumer and first_consumer > index:
+                                if not self._runtime_resolution_scheduled_before(
+                                    macro_plan, first_consumer
+                                ):
+                                    unit = str(quantity.get("unit") or "")
+                                    runtime_dependencies.append(
+                                        {
+                                            "quantity": (
+                                                f"{material_name}({unit})"
+                                                if unit
+                                                else material_name
+                                            ),
+                                            "first_consumer_step": f"第 {first_consumer} 步",
+                                            "missing_resolution": "no_measurement_scheduled",
+                                        }
+                                    )
+            for requirement in step.get("quantity_requirements") or []:
+                if not isinstance(requirement, dict):
+                    continue
+                path = self._provenance_evidence_path(requirement.get("provenance"))
+                if path in class_counts:
+                    class_counts[path] += 1
+                material_id = str(requirement.get("material_id") or "")
+                if (
+                    material_id
+                    and material_id not in checked_runtime_instances
+                    and str(requirement.get("kind") or "") == "runtime_measured_inventory"
+                ):
+                    checked_runtime_instances.add(material_id)
+                    first_consumer = consumed_by.get(material_id)
+                    if first_consumer and first_consumer > index:
+                        if not self._runtime_resolution_scheduled_before(
+                            macro_plan, first_consumer
+                        ):
+                            runtime_dependencies.append(
+                                {
+                                    "quantity": material_id,
+                                    "first_consumer_step": f"第 {first_consumer} 步",
+                                    "missing_resolution": "no_measurement_scheduled",
+                                }
+                            )
+            blob = " ".join(
+                str(step.get(key) or "")
+                for key in ("操作", "试剂/对象", "参数", "operation", "parameters")
+            )
+            simultaneous = re.search(
+                r"边[^。；\n]{0,12}边(加|滴)|边(加|滴)[^。；\n]{0,12}边搅拌|"
+                r"while stirring|同步滴加|一边[^。；\n]{0,8}一边",
+                blob,
+                re.IGNORECASE,
+            )
+            alternating = re.search(
+                r"分\s*\d+\s*批|\d+\s*批[次循环交替]|加料[^。；]{0,6}搅拌[^。；]{0,6}加料|"
+                r"交替(加料|搅拌|滴加)",
+                blob,
+            ) or (
+                len(step.get("operation_segments") or []) >= 2
+                and simultaneous is not None
+            )
+            if simultaneous and alternating:
+                equivalence = step.get("fidelity_equivalence_evidence")
+                fidelity_risks.append(
+                    {
+                        "risk": "加料-搅拌交替适配(连续加料搅拌被拆成循环)",
+                        "step": f"第 {index} 步",
+                        "reason": (
+                            "操作文本保留边加边搅/while stirring 意图,但执行段被拆成"
+                            "多次加料-搅拌循环,改变局部浓度/动力学"
+                        ),
+                        "equivalence_evidence": (
+                            str(equivalence).strip() if equivalence else None
+                        ),
+                    }
+                )
+
+        counts = {
+            "required_unsupported": sum(
+                1 for item in unsupported if item["required"]
+            ),
+            "unresolved_runtime_dependency": len(runtime_dependencies),
+            "scientific_fidelity_risk_requiring_review": sum(
+                1 for risk in fidelity_risks if not risk["equivalence_evidence"]
+            ),
+        }
+        return {
+            "evidence_class_counts": class_counts,
+            "unsupported": unsupported,
+            "unresolved_runtime_dependencies": runtime_dependencies,
+            "scientific_fidelity_risks": fidelity_risks,
+            "broken_material_lineage": len(graph_issues),
+            "counts": counts,
+        }
+
     def _publish_v2_contract(self, state: ResearchAgentState) -> None:
         if self._contract_version != "v2" or not state.macro_plan:
             state.research_action_package_v2 = {}
@@ -2452,6 +3172,9 @@ class ResearchAgent(BaseAgent):
         # The same deterministic stamp is applied by the generator quality
         # check.  Recheck it here for restored or secondary producer states.
         self._stamp_current_evidence_provenance(state, state.macro_plan)
+        # Phase 1: deterministic chemistry-convention expansion (states,
+        # phases, lineage only -- never numerics).
+        expansion_records = self._expand_chemistry_conventions(state.macro_plan)
         # Every producer path (initial LLM planning, B2 replanning, deterministic
         # fallback, and a state restored from disk) converges here.  Keep the
         # complete Research quality gate at this boundary so a secondary path
@@ -2469,7 +3192,46 @@ class ResearchAgent(BaseAgent):
                 "V2 Research -> Device publication gate failed: "
                 + "; ".join(quality_issues[:8])
             )
-        package = research_state_to_v2(state.to_dict())
+        # Boundary A: bare agent_inferred numeric facts are blocked here.
+        bare_inferred_issues = self._v2_bare_agent_inferred_issues(state.macro_plan)
+        if bare_inferred_issues:
+            raise ValueError(
+                "V2 Research -> Device publication gate failed: "
+                + "; ".join(bare_inferred_issues[:8])
+            )
+        # Phase 2 boundary-B: material lineage + state dual-graph checklist.
+        graph_issues = self._v2_material_graph_issues(
+            state.macro_plan, expansion_records
+        )
+        if graph_issues:
+            raise ValueError(
+                "V2 material graph gate failed: " + "; ".join(graph_issues[:8])
+            )
+        # Phase 3: Scientific Completeness Audit.  The audit block is persisted
+        # with the V2 package and included in the contract hash.
+        completeness = self._scientific_completeness_audit(
+            state.macro_plan, graph_issues
+        )
+        block_counts = completeness["counts"]
+        if (
+            block_counts["required_unsupported"]
+            or block_counts["unresolved_runtime_dependency"]
+            or block_counts["scientific_fidelity_risk_requiring_review"]
+            or completeness["broken_material_lineage"]
+        ):
+            raise ValueError(
+                "V2 scientific completeness gate failed: "
+                f"required_unsupported={block_counts['required_unsupported']}, "
+                "unresolved_runtime_dependency="
+                f"{block_counts['unresolved_runtime_dependency']}, "
+                "scientific_fidelity_risk_requiring_review="
+                f"{block_counts['scientific_fidelity_risk_requiring_review']}, "
+                "broken_material_lineage="
+                f"{completeness['broken_material_lineage']}"
+            )
+        state_payload = state.to_dict()
+        state_payload["scientific_completeness"] = completeness
+        package = research_state_to_v2(state_payload)
         state.research_action_package_v2 = package.model_dump(
             mode="json", exclude_none=True
         )
@@ -9211,6 +9973,12 @@ class ResearchAgent(BaseAgent):
             raise ValueError(
                 "V2 cannot synthesize task-shaped chemistry from incomplete context"
             )
+        logger.warning(
+            "V1 hardcoded PBA heuristic template (_synthesize_macro_plan_from_context) "
+            "is deprecated: chemistry conventions now live in "
+            "chem_resources/chemistry_conventions/conventions.json and the V2 "
+            "contract path disables this template entirely."
+        )
         context_blob = " ".join(
             [
                 state.event.query,

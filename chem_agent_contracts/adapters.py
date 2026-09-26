@@ -33,6 +33,10 @@ from .v2 import (
     MacroStepV2,
     MaterialApplicabilityEvidenceV2,
     MaterialContractMigrationV2,
+    StateTransitionV2,
+    LineageRelationV2,
+    ContainerLineageV2,
+    ScientificCompletenessV2,
     MaterialContractStatusV2,
     MaterialOperationSegmentV2,
     MaterialOutputRefV2,
@@ -836,6 +840,26 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             if native_v2
             else _items(step.get("quantity_requirements"))
         )
+        def _optional_model(raw: Any, model_cls: Any) -> Any:
+            if raw in (_MISSING, None, ""):
+                return None
+            if isinstance(raw, model_cls):
+                return raw
+            if isinstance(raw, dict):
+                try:
+                    return model_cls(**raw)
+                except ValueError as exc:
+                    raise _ContractCollectionError(
+                        f"{source_step_path}.{model_cls.__name__}",
+                        raw,
+                        f"invalid {model_cls.__name__}: {exc}",
+                    ) from exc
+            raise _ContractCollectionError(
+                f"{source_step_path}.{model_cls.__name__}",
+                raw,
+                f"{model_cls.__name__} must be an object when present",
+            )
+
         converted.append(
             MacroStepV2(
                 macro_step_id=step_id,
@@ -887,6 +911,15 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
                 material_applicability=material_applicability,
                 material_contract_status=material_status,
                 material_contract_migration=material_migration,
+                state_transition=_optional_model(
+                    step.get("state_transition", _MISSING), StateTransitionV2
+                ),
+                lineage_relation=_optional_model(
+                    step.get("lineage_relation", _MISSING), LineageRelationV2
+                ),
+                container_lineage=_optional_model(
+                    step.get("container_lineage", _MISSING), ContainerLineageV2
+                ),
                 expected_return=_items(step.get("intermediate_returns")),
                 provenance=provenance,
             )
@@ -952,6 +985,11 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
         evidence_bundle=_evidence_bundle(source, scope="macro_action", action_id=action_id),
         raw_observations_digest_scope=RAW_OBSERVATIONS_DIGEST_SCOPE_V1,
         raw_observations_sha256=canonical_raw_observations_digest(raw_observations),
+        scientific_completeness=(
+            ScientificCompletenessV2(**source["scientific_completeness"])
+            if isinstance(source.get("scientific_completeness"), dict)
+            else None
+        ),
     )
     # Hash the representation that actually crosses the JSON boundary.  Some
     # nested Pydantic defaults are absent from an adapter-constructed model's

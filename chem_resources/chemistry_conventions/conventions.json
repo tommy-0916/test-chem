@@ -1,0 +1,222 @@
+{
+  "schema": "chemistry-conventions/v1",
+  "comment": "受控 chemistry convention 规则库。规则是 deterministic semantic expansion:只展开状态/相/谱系/lineage,绝不展开数值(numeric_generation_allowed 恒为 false,代码层同样禁止)。规则命中由 operation 文本 + 意图文本 + 输入状态共同决定;同一操作的不同意图命中不同规则(例:collect precipitate vs collect supernatant)。",
+  "rules": [
+    {
+      "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+      "version": "1.0.0",
+      "operation": "centrifugation",
+      "preconditions": {
+        "operation_patterns": ["centrifug", "离心"],
+        "intent_patterns": ["collect precipitate", "collect the precipitate", "collect pellet", "保留沉淀", "收集沉淀", "离心收集沉淀", "留固"],
+        "input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"]
+      },
+      "allowed_input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
+      "output_states": ["retained_wet_solid", "supernatant"],
+      "retained_output": "retained_wet_solid",
+      "discard_outputs": ["supernatant"],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "CENTRIFUGE_COLLECT_SUPERNATANT_V1",
+      "version": "1.0.0",
+      "operation": "centrifugation",
+      "preconditions": {
+        "operation_patterns": ["centrifug", "离心"],
+        "intent_patterns": ["collect supernatant", "collect the supernatant", "保留上清", "收集上清", "取上清", "留液"],
+        "input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"]
+      },
+      "allowed_input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
+      "output_states": ["supernatant", "retained_wet_solid"],
+      "retained_output": "supernatant",
+      "discard_outputs": ["retained_wet_solid"],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "WASHING_V1",
+      "version": "1.0.0",
+      "operation": "washing",
+      "preconditions": {
+        "operation_patterns": ["wash", "洗涤", "清洗", "醇洗", "水洗"],
+        "intent_patterns": ["wash", "washing", "洗涤", "洗至", "离心洗涤"],
+        "input_states": ["retained_wet_solid", "washed_wet_solid"]
+      },
+      "allowed_input_states": ["retained_wet_solid", "washed_wet_solid"],
+      "output_states": ["washed_wet_solid", "supernatant"],
+      "retained_output": "washed_wet_solid",
+      "discard_outputs": ["supernatant"],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "repeated_application": "same_lineage",
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "DRYING_V1",
+      "version": "1.0.0",
+      "operation": "drying",
+      "preconditions": {
+        "operation_patterns": ["dry", "drying", "烘干", "干燥", "真空干燥"],
+        "intent_patterns": ["dry", "drying", "烘干", "干燥", "overnight"],
+        "input_states": ["retained_wet_solid", "washed_wet_solid"]
+      },
+      "allowed_input_states": ["retained_wet_solid", "washed_wet_solid"],
+      "output_states": ["dry_solid"],
+      "retained_output": "dry_solid",
+      "discard_outputs": [],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "runtime_pending_fields": ["mass"],
+      "notes": "干燥后质量恒为 runtime_pending;不得生成任何确定质量数值。",
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "FILTRATION_COLLECT_RETAINED_V1",
+      "version": "1.0.0",
+      "operation": "filtration",
+      "preconditions": {
+        "operation_patterns": ["filtrat", "过滤", "抽滤"],
+        "intent_patterns": ["collect the solid", "collect retained", "保留滤饼", "收集滤饼", "保留固体"],
+        "input_states": ["suspension"]
+      },
+      "allowed_input_states": ["suspension"],
+      "output_states": ["retained_wet_solid", "filtrate"],
+      "retained_output": "retained_wet_solid",
+      "discard_outputs": ["filtrate"],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "FILTRATION_COLLECT_FILTRATE_V1",
+      "version": "1.0.0",
+      "operation": "filtration",
+      "preconditions": {
+        "operation_patterns": ["filtrat", "过滤", "抽滤"],
+        "intent_patterns": ["collect the filtrate", "保留滤液", "收集滤液", "取滤液"],
+        "input_states": ["suspension"]
+      },
+      "allowed_input_states": ["suspension"],
+      "output_states": ["filtrate", "retained_wet_solid"],
+      "retained_output": "filtrate",
+      "discard_outputs": ["retained_wet_solid"],
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "ALIQUOT_V1",
+      "version": "1.0.0",
+      "operation": "aliquot",
+      "preconditions": {
+        "operation_patterns": ["aliquot", "sampling", "取样", "分样", "移取等分"],
+        "intent_patterns": ["aliquot", "sample", "取样", "分样", "抽取等分"],
+        "input_states": ["solution", "suspension", "powder", "dry_solid"]
+      },
+      "allowed_input_states": ["solution", "suspension", "powder", "dry_solid"],
+      "output_states": ["solution", "suspension", "powder", "dry_solid"],
+      "retained_output": "remaining_parent",
+      "discard_outputs": [],
+      "lineage_effect": {
+        "relation_type": "split_from_parent",
+        "lineage_preserved": false,
+        "parent_role": "input",
+        "child_roles": ["sampled_fraction", "remaining_parent"]
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "TRANSFER_V1",
+      "version": "1.0.0",
+      "operation": "transfer",
+      "preconditions": {
+        "operation_patterns": ["transfer", "转移", "移液", "移取", "换瓶"],
+        "intent_patterns": ["transfer", "转移", "移取", "移至", "换瓶"],
+        "input_states": ["solution", "suspension", "powder", "dry_solid", "retained_wet_solid", "washed_wet_solid", "supernatant", "filtrate"]
+      },
+      "allowed_input_states": ["solution", "suspension", "powder", "dry_solid", "retained_wet_solid", "washed_wet_solid", "supernatant", "filtrate"],
+      "output_states": ["same_as_input"],
+      "retained_output": "transferred_content",
+      "discard_outputs": [],
+      "lineage_effect": {
+        "relation_type": "transfer_of",
+        "lineage_preserved": false,
+        "state_change_allowed": false,
+        "container_change_allowed": true,
+        "parent_role": "input",
+        "child_role": "transferred_content"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "SPLIT_V1",
+      "version": "1.0.0",
+      "operation": "split",
+      "preconditions": {
+        "operation_patterns": ["split", "分装", "分液", "分成", "分配"],
+        "intent_patterns": ["split", "分成", "分装", "分为", "各取"],
+        "input_states": ["solution", "suspension", "powder", "dry_solid"]
+      },
+      "allowed_input_states": ["solution", "suspension", "powder", "dry_solid"],
+      "output_states": ["same_as_input"],
+      "retained_output": "all_children",
+      "discard_outputs": [],
+      "lineage_effect": {
+        "relation_type": "split_from_parent",
+        "lineage_preserved": false,
+        "state_change_allowed": false,
+        "parent_role": "input",
+        "child_role": "all_children"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "MERGE_V1",
+      "version": "1.0.0",
+      "operation": "merge",
+      "preconditions": {
+        "operation_patterns": ["merge", "pool", "合并", "合批", "混合收集"],
+        "intent_patterns": ["merge", "pool", "合并", "合批", "汇入"],
+        "input_states": ["solution", "suspension", "supernatant", "filtrate", "powder", "dry_solid"]
+      },
+      "allowed_input_states": ["solution", "suspension", "supernatant", "filtrate", "powder", "dry_solid"],
+      "output_states": ["same_as_dominant_input"],
+      "retained_output": "merged_output",
+      "discard_outputs": [],
+      "lineage_effect": {
+        "relation_type": "merge_from_children",
+        "lineage_preserved": false,
+        "parent_role": "all_inputs",
+        "child_role": "merged_output"
+      },
+      "numeric_generation_allowed": false
+    }
+  ]
+}
