@@ -65,6 +65,7 @@ class ResearchAgentState:
     # Quote-bound PDF proposals are retained for audit only. They have no
     # trusted role/capabilities and cannot authorize RouteDecision or publish.
     route_unreviewed_group_proposals_v1: List[Dict[str, Any]] = field(default_factory=list)
+    route_pdf_locator_production_v1: Dict[str, Any] = field(default_factory=dict)
     route_group_fact_receipts_v1: Dict[str, Any] = field(default_factory=dict)
     route_group_proposal_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_compilation_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
@@ -164,6 +165,7 @@ class ResearchAgentState:
             **({"route_binding_status_v1": self.route_binding_status_v1} if self.route_binding is not None else {}),
             "路线实验组提案诊断 V1": self.route_group_proposal_diagnostics_v1,
             "路线未审阅逐组提案 V1": self.route_unreviewed_group_proposals_v1,
+            "路线 PDF 原文定位生产 V1": self.route_pdf_locator_production_v1,
             "路线逐组字面核验记录 V1": self.route_group_fact_receipts_v1,
             "路线计划绑定状态 V1": self.route_binding_status_v1,
             "路线事实编译诊断 V1": self.route_compilation_diagnostics_v1,

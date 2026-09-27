@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from types import SimpleNamespace
 import tempfile
@@ -248,6 +249,11 @@ class RouteWorkflowHookTest(unittest.TestCase):
             }
             for key in keys
         ]
+        proposals[0]["route_facts"] = [{
+            "fact_id": "mix", "field_path": "route_signature.operations[0]",
+            "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
+            "block_locator": "pdf:p1:b2-p1:b2", "required": True,
+        }]
         captured: list[list[dict]] = []
 
         def evaluate(goal, protocols, **kwargs):
@@ -273,6 +279,14 @@ class RouteWorkflowHookTest(unittest.TestCase):
         )
         self.assertTrue(all(item.get("source", {}).get("source_digest") == digest
                             for item in captured[0]))
+        self.assertEqual(
+            captured[0][0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b1-p1:b1",
+        )
+        self.assertEqual(
+            state.raw_llm_outputs["route_pdf_group_propose"]["proposals"][0]
+            ["route_facts"][0]["block_locator"], "pdf:p1:b2-p1:b2",
+        )
         self.assertNotIn("legacy summary", repr(captured[0]))
         self.assertEqual(state.route_group_proposal_diagnostics_v1, [])
         self.assertEqual(invoke.call_count, 1)
@@ -361,6 +375,81 @@ class RouteWorkflowHookTest(unittest.TestCase):
             "trusted_group_role_missing",
             [item["reason_code"] for item in state.route_group_proposal_diagnostics_v1],
         )
+
+    def test_workflow_preserves_raw_model_anchor_and_records_computed_locator(self) -> None:
+        digest = "sha256_" + "d" * 64
+        group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-4", experimental_group_id="Sample synthesis",
+                section="Methods", locator="pdf:p1:b1-p1:b2",
+                source_digest=digest,
+            ),
+            source_document="/trusted/source.pdf",
+            blocks=(
+                PdfSourceBlockV1("pdf:p1:b1-p1:b1", "Sample synthesis"),
+                PdfSourceBlockV1("pdf:p1:b2-p1:b2", "Mix 2 mmol salt."),
+            ),
+        )
+        proposal = {
+            "source_group_ref": {
+                "paper_id": "paper-4",
+                "experimental_group_id": "Sample synthesis",
+                "source_digest": digest,
+            },
+            "route_facts": [{
+                "fact_id": "mix", "field_path": "route_signature.operations[0]",
+                "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
+                "block_locator": "pdf:p1:b1-p1:b1", "required": True,
+            }],
+        }
+        raw_envelope = {"proposals": [proposal]}
+        original = deepcopy(raw_envelope)
+        agent = ResearchAgent(
+            model=object(), use_llm=True, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[{"signed": "input"}],
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+        )
+        with patch(
+            "reaserch_agent.route_pdf_groups.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=[group]),
+        ), patch.object(
+            agent, "invoke_text", return_value=json.dumps(raw_envelope),
+        ) as invoke:
+            reviewed_protocols = agent._propose_attested_route_protocols(state, ".")
+
+        self.assertEqual(invoke.call_count, 1)
+        self.assertEqual(reviewed_protocols, [])
+        self.assertEqual(raw_envelope, original)
+        self.assertEqual(state.raw_llm_outputs["route_pdf_group_propose"], original)
+        self.assertEqual(len(state.route_unreviewed_group_proposals_v1), 1)
+        self.assertEqual(
+            state.route_unreviewed_group_proposals_v1[0]["route_facts"][0]
+            ["source"]["locator"], "pdf:p1:b2-p1:b2",
+        )
+        location = state.route_pdf_locator_production_v1
+        self.assertEqual(
+            location["located_proposals"][0]["route_facts"][0]["block_locator"],
+            "pdf:p1:b2-p1:b2",
+        )
+        self.assertEqual(location["field_records"][0]["raw_block_locator"],
+                         "pdf:p1:b1-p1:b1")
+        self.assertEqual(location["field_records"][0]["resolved_block_locator"],
+                         "pdf:p1:b2-p1:b2")
+        self.assertEqual(location["field_records"][0]["source_digest"], digest)
+        restored = agent._state_from_dict(state.to_dict())
+        self.assertEqual(restored.route_pdf_locator_production_v1, location)
+        self.assertEqual(
+            restored.raw_llm_outputs["route_pdf_group_propose"], original,
+        )
+        self.assertIn(
+            "trusted_group_role_missing",
+            [item["reason_code"] for item in state.route_group_proposal_diagnostics_v1],
+        )
+        self.assertEqual(state.research_action_package_v2, {})
 
     def test_bad_pdf_quote_keeps_scoped_review_work_order(self) -> None:
         digest = "sha256_" + "b" * 64

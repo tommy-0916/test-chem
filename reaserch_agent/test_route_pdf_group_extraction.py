@@ -11,6 +11,7 @@ from reaserch_agent.route_pdf_group_extraction import (
     propose_pdf_group_protocols,
     propose_pdf_group_unreviewed,
 )
+from reaserch_agent.route_pdf_group_proposals import associate_pdf_group_proposals
 from reaserch_agent.route_pdf_groups import (
     PdfExperimentalGroupV1,
     PdfSourceBlockV1,
@@ -181,18 +182,120 @@ class PdfGroupExtractionTest(unittest.TestCase):
         )
         self.assertEqual(result.protocols[0]["role_hint"], "synthesis")
 
+    def test_unreviewed_producer_relocates_wrong_model_anchor_without_mutating_raw(self) -> None:
+        proposal = self._proposal(0)
+        proposal["route_facts"][0]["block_locator"] = "pdf:p1:b2-p1:b2"
+        raw_envelope = {"proposals": [proposal, self._proposal(1)]}
+        original = deepcopy(raw_envelope)
+
+        # The final association gate remains strict when called with raw output.
+        direct = associate_pdf_group_proposals(
+            self.groups, raw_envelope["proposals"]
+        )
+        self.assertEqual(direct.protocols, [])
+        self.assertIn(
+            "fact_block_locator_not_in_excerpt_span",
+            [item.reason_code for item in direct.diagnostics],
+        )
+
+        produced = propose_pdf_group_unreviewed(
+            self.groups, lambda _prompt: raw_envelope
+        )
+        self.assertEqual(produced.diagnostics, [])
+        self.assertEqual(len(produced.protocols), 2)
+        self.assertEqual(raw_envelope, original)
+        self.assertEqual(
+            produced.protocols[0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b3-p1:b3",
+        )
+        located = produced.locator_production
+        self.assertEqual(
+            located["located_proposals"][0]["route_facts"][0]["block_locator"],
+            "pdf:p1:b3-p1:b3",
+        )
+        records = located["field_records"]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["raw_block_locator"], "pdf:p1:b2-p1:b2")
+        self.assertEqual(records[0]["resolved_block_locator"], "pdf:p1:b3-p1:b3")
+        self.assertEqual(records[0]["experimental_group_id"], "Group A")
+        self.assertEqual(records[0]["source_digest"], self.keys[0][2])
+        self.assertTrue(records[0]["reason_code"])
+
+    def test_unreviewed_producer_locates_cross_block_quote_within_one_group(self) -> None:
+        original = self.groups[0]
+        group = PdfExperimentalGroupV1(
+            source_scope=original.source_scope.model_copy(
+                update={"locator": "pdf:p1:b2-p1:b4"}, deep=True,
+            ),
+            source_document=original.source_document,
+            blocks=(
+                original.blocks[0],
+                PdfSourceBlockV1("pdf:p1:b3-p1:b3", "Group A: mix 2 mmol salt"),
+                PdfSourceBlockV1("pdf:p1:b4-p1:b4", "solution."),
+            ),
+        )
+        proposal = self._proposal(0)
+        proposal["route_facts"][0].update({
+            "excerpt": "mix 2 mmol salt solution.",
+            "block_locator": "pdf:p1:b2-p1:b2",
+        })
+        result = propose_pdf_group_unreviewed(
+            [group, self.groups[1]],
+            lambda _prompt: {"proposals": [proposal, self._proposal(1)]},
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(
+            result.protocols[0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b3-p1:b4",
+        )
+        self.assertEqual(
+            result.locator_production["located_proposals"][0]
+            ["route_facts"][0]["block_locator"], "pdf:p1:b3-p1:b3",
+        )
+
+    def test_unreviewed_producer_rejects_ambiguous_quote_in_same_group(self) -> None:
+        original = self.groups[0]
+        group = PdfExperimentalGroupV1(
+            source_scope=original.source_scope.model_copy(
+                update={"locator": "pdf:p1:b2-p1:b4"}, deep=True,
+            ),
+            source_document=original.source_document,
+            blocks=(
+                original.blocks[0],
+                PdfSourceBlockV1("pdf:p1:b3-p1:b3", "mix 2 mmol salt"),
+                PdfSourceBlockV1("pdf:p1:b4-p1:b4", "mix 2 mmol salt"),
+            ),
+        )
+        proposal = self._proposal(0)
+        proposal["route_facts"][0].update({
+            "excerpt": "mix 2 mmol salt",
+            "block_locator": "pdf:p1:b3-p1:b3",
+        })
+        result = propose_pdf_group_unreviewed(
+            [group, self.groups[1]],
+            lambda _prompt: {"proposals": [proposal, self._proposal(1)]},
+        )
+        self.assertEqual(result.protocols, [])
+        self.assertIn(
+            "fact_excerpt_ambiguous_in_group",
+            [item.reason_code for item in result.diagnostics],
+        )
+
     def test_unreviewed_proposals_fail_closed_on_incomplete_or_forged_output(self) -> None:
         good = [self._proposal(0), self._proposal(1)]
         forged = deepcopy(good)
         forged[0]["group_role"] = "synthesis"
         outside = deepcopy(good)
+        outside[0]["route_facts"][0]["excerpt"] = (
+            "Group B: XRD characterization."
+        )
         outside[0]["route_facts"][0]["block_locator"] = (
             self.groups[1].blocks[1].locator
         )
         for proposals, reason in (
             (good[:1], "enumerated_group_proposal_missing"),
             (forged, "proposal_source_or_status_field_forbidden"),
-            (outside, "fact_block_outside_group"),
+            (outside, "fact_excerpt_not_in_block"),
         ):
             with self.subTest(reason=reason):
                 result = propose_pdf_group_unreviewed(

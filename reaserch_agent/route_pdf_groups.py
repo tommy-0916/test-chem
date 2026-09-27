@@ -46,6 +46,9 @@ _EXPERIMENTAL_SECTIONS = frozenset({
     "methods and materials",
 })
 
+# Bump when this enumerator or route_pdf_source changes group block semantics.
+PDF_GROUP_PARSER_VERSION = "route_pdf_groups/v1"
+
 
 @dataclass(frozen=True)
 class PdfSourceBlockV1:
@@ -507,6 +510,7 @@ def audit_pdf_group_roles(
 
 
 __all__ = [
+    "PDF_GROUP_PARSER_VERSION",
     "PdfSourceBlockV1", "PdfExperimentalGroupV1",
     "PdfGroupEnumerationDiagnosticV1", "PdfGroupEnumerationResultV1",
     "PdfGroupCoverageReportV1",

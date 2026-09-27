@@ -22,6 +22,7 @@ from .route_pdf_group_proposals import (
     associate_pdf_group_proposals,
 )
 from .route_pdf_groups import PdfExperimentalGroupV1
+from .route_pdf_locator_production import produce_pdf_proposal_locators
 
 
 _ROUTE_ROLES = frozenset({"synthesis", "material_processing"})
@@ -118,12 +119,13 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "optional quantity object with value and unit. Use exactly these "
         "field names, not inputs/outputs/conditions aliases. Each route_fact "
         "has fact_id, field_path, "
-        "value, unit, excerpt, block_locator, and required=true. Its excerpt "
+        "value, unit, excerpt, and required=true. A block_locator hint is "
+        "optional and never authoritative; the program locates the excerpt "
+        "in the source group. Its excerpt "
         "must be a unique literal quotation within this same group, stating "
         "its value literally (including exact number and unit for quantities). "
         "Only PDF layout whitespace may differ. The quotation may span at "
-        "most three adjacent blocks; block_locator must name one of those "
-        "blocks. Include enough surrounding text to distinguish repeated "
+        "most three adjacent blocks. Include enough surrounding text to distinguish repeated "
         "short phrases. field_path uses roots such as "
         "material_graph[0].operation, "
         "material_graph[0].material_inputs[0].quantity.value, or "
@@ -180,6 +182,7 @@ def _invoke_bounded_proposals(
     *,
     reviewed_capabilities: Mapping[tuple[str, str, str], Sequence[str]] | None = None,
     reviewed_roles: Mapping[tuple[str, str, str], str] | None = None,
+    locate_unreviewed: bool = False,
 ) -> PdfGroupProposalAssociationResultV1:
     prompt = _build_prompt(source_groups)
     if len(prompt) > budget.max_prompt_chars:
@@ -201,12 +204,26 @@ def _invoke_bounded_proposals(
         return _diagnostic("proposal_model_envelope_invalid")
     if response_chars > budget.max_response_chars:
         return _diagnostic("response_char_budget_exceeded")
-    return associate_pdf_group_proposals(
+    locator_artifact: dict[str, Any] = {}
+    if locate_unreviewed:
+        located = produce_pdf_proposal_locators(source_groups, proposals)
+        locator_artifact = located.audit_artifact()
+        if located.diagnostics:
+            # Partial location records remain visible, but no partial batch
+            # enters association, literal checking, or route discovery.
+            return PdfGroupProposalAssociationResultV1(
+                diagnostics=located.diagnostics,
+                locator_production=locator_artifact,
+            )
+        proposals = located.proposals
+    result = associate_pdf_group_proposals(
         source_groups,
         proposals,
         required_capabilities_by_group=reviewed_capabilities,
         group_roles_by_group=reviewed_roles,
     )
+    result.locator_production = locator_artifact
+    return result
 
 
 def propose_pdf_group_unreviewed(
@@ -228,7 +245,9 @@ def propose_pdf_group_unreviewed(
     source_groups, issue = _snapshot_group_inventory(enumerated_groups, budget)
     if issue is not None:
         return issue
-    return _invoke_bounded_proposals(source_groups, invoke_json, budget)
+    return _invoke_bounded_proposals(
+        source_groups, invoke_json, budget, locate_unreviewed=True,
+    )
 
 
 def propose_pdf_group_protocols(

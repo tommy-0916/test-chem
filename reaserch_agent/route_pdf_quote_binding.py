@@ -19,6 +19,7 @@ _LOCATOR = re.compile(
 )
 _MAX_QUOTE_BLOCKS = 3
 _MAX_SKIPPED_CAPTIONS = 1
+PDF_QUOTE_BINDING_VERSION = "route_pdf_quote_binding/v1"
 # These characters explicitly join text at a PDF line/block seam. Plain digit
 # or letter seams are never concatenated.
 _SEAM_JOINERS = frozenset({"·", "/", "-", "–", "−"})
@@ -196,4 +197,7 @@ def bind_pdf_quote(
     return PdfQuoteBindingV1(locator, first, last), ""
 
 
-__all__ = ["PdfQuoteBindingV1", "bind_pdf_quote", "normalize_pdf_quote_whitespace"]
+__all__ = [
+    "PDF_QUOTE_BINDING_VERSION", "PdfQuoteBindingV1", "bind_pdf_quote",
+    "normalize_pdf_quote_whitespace",
+]

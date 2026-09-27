@@ -48,6 +48,8 @@ class PdfGroupProposalDiagnosticV1:
 class PdfGroupProposalAssociationResultV1:
     protocols: list[dict[str, Any]] = field(default_factory=list)
     diagnostics: list[PdfGroupProposalDiagnosticV1] = field(default_factory=list)
+    # Producer-only, unsigned audit data. This is never a reviewed protocol.
+    locator_production: dict[str, Any] = field(default_factory=dict)
 
 
 def _text(value: Any) -> str:

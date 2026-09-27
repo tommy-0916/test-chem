@@ -1103,6 +1103,7 @@ class ResearchAgent(BaseAgent):
 
         state.route_group_proposal_diagnostics_v1 = []
         state.route_unreviewed_group_proposals_v1 = []
+        state.route_pdf_locator_production_v1 = {}
         state.route_group_fact_receipts_v1 = {}
         state.raw_llm_outputs.pop("route_pdf_group_propose", None)
         if not self._signed_route_source_events:
@@ -1162,6 +1163,9 @@ class ResearchAgent(BaseAgent):
         unreviewed = propose_pdf_group_unreviewed(
             enumerated.groups, invoke, budget=budget,
         )
+        state.route_pdf_locator_production_v1 = deepcopy(
+            unreviewed.locator_production
+        )
         state.route_group_proposal_diagnostics_v1.extend(
             {"phase": "unreviewed_proposal_extraction", **vars(item)}
             for item in unreviewed.diagnostics
@@ -1193,7 +1197,9 @@ class ResearchAgent(BaseAgent):
             # cannot be promoted by a later reviewed association that checks
             # only group linkage and quote location.
             return []
-        envelope = deepcopy(state.raw_llm_outputs["route_pdf_group_propose"])
+        envelope = {"proposals": deepcopy(
+            state.route_pdf_locator_production_v1["located_proposals"]
+        )}
         associated = propose_pdf_group_protocols(
             enumerated.groups, lambda _prompt: envelope,
             group_roles_by_group=self._trusted_route_group_roles_by_group,
