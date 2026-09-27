@@ -70,7 +70,8 @@ def candidate(
     evidence_id = "E-" + route_id
     paper_provenance = ProvenanceV2(
         kind="paper", reference=evidence_id, evidence_class="paper_explicit",
-        source_path="paper.pdf", excerpt=EXCERPT, source_digest=DOCUMENT_DIGEST,
+        source_path="evidence_bundle.items[0].excerpt", excerpt=EXCERPT,
+        source_digest=canonical_digest(EXCERPT),
     )
     if provenance_kind == "agent_inferred":
         field_provenance = ProvenanceV2(
@@ -200,6 +201,50 @@ class RouteDecisionOfflineTest(unittest.TestCase):
         self.assertEqual(result.selected_route_id, route.route_id)
         self.assertEqual(result.candidates[0].candidate.source_scope.experimental_group_id, "control")
         self.assertEqual(result.candidates[0].validation.candidate_digest, canonical_digest(route))
+
+    def test_document_digest_cannot_replace_v2_excerpt_digest(self) -> None:
+        route = candidate()
+        route.evidence_matrix[0].provenance.source_digest = DOCUMENT_DIGEST
+        result = decide_routes(goal(), [route], receipt)
+        self.assertIn(
+            "paper_excerpt_digest_mismatch:precursor.amount",
+            result.candidates[0].reasons,
+        )
+
+    def test_paper_field_must_reference_exact_bundle_excerpt_path(self) -> None:
+        route = candidate()
+        route.evidence_matrix[0].provenance.source_path = "original-paper.md"
+        result = decide_routes(goal(), [route], receipt)
+        self.assertIn(
+            "paper_source_path_mismatch:precursor.amount",
+            result.candidates[0].reasons,
+        )
+
+    def test_locked_group_also_locks_declared_source_version(self) -> None:
+        route = candidate()
+        locked = route.source_scope.model_copy(deep=True)
+        locked.source_digest = "sha256_" + "9" * 64
+        result = decide_routes(
+            goal(constraint="locked_experimental_group", locked_scope=locked),
+            [route], receipt,
+        )
+        self.assertEqual(result.status, "unresolved")
+        self.assertIn(
+            "locked_experimental_group_mismatch", result.candidates[0].reasons,
+        )
+
+    def test_locked_family_requires_verified_source_family(self) -> None:
+        route = candidate(family="precipitation")
+        verified = route.route_signature.model_copy(deep=True)
+        verified.route_family = "reflux"
+        result = decide_routes(
+            goal(constraint="locked_family", locked_family="precipitation"),
+            [route], lambda item: receipt(item, source_route_signature=verified),
+        )
+        self.assertEqual(result.status, "unresolved")
+        self.assertIn(
+            "locked_source_route_family_mismatch", result.candidates[0].reasons,
+        )
 
     def test_same_paper_other_group_cannot_supply_field(self) -> None:
         route = candidate(field_group_id="treated")

@@ -52,6 +52,9 @@ class ResearchAgentState:
     knowledge_hits: List[SearchHit] = field(default_factory=list)
     memory_hits: List[SearchHit] = field(default_factory=list)
     extracted_protocols: List[Dict[str, Any]] = field(default_factory=list)
+    route_decision_v1: Dict[str, Any] = field(default_factory=dict)
+    route_discovery_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
+    route_validation_diagnostics_v1: Dict[str, List[str]] = field(default_factory=dict)
     survey_report: Dict[str, Any] = field(default_factory=dict)
 
     stage_route: List[str] = field(default_factory=list)
@@ -131,6 +134,9 @@ class ResearchAgentState:
             "当前stage设计理由": self.current_stage_reason,
             "调研报告": self.survey_report,
             "从知识库论文抽取的实验过程": self.extracted_protocols,
+            "化学路线决策 V1": self.route_decision_v1,
+            "路线候选发现诊断 V1": self.route_discovery_diagnostics_v1,
+            "路线验证诊断 V1": self.route_validation_diagnostics_v1,
             "最新 observation": self.latest_observation,
             "observation 与当前 stage 的一致性判断": self.observation_stage_fit,
             "当前 observation 的结构化科学解释": self.observation_interpretation,

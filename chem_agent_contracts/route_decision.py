@@ -239,10 +239,19 @@ def _field_issue(
             return "paper_excerpt_missing"
         if provenance.reference != field.evidence_id:
             return "paper_reference_mismatch"
-        if provenance.source_digest != field.source_scope.source_digest:
-            return "paper_source_digest_mismatch"
         if provenance.excerpt not in item.excerpt:
             return "paper_excerpt_bundle_mismatch"
+        item_index = next(
+            index for index, evidence in enumerate(candidate.evidence_bundle)
+            if evidence.evidence_id == field.evidence_id
+        )
+        if provenance.source_path != f"evidence_bundle.items[{item_index}].excerpt":
+            return "paper_source_path_mismatch"
+        # The experimental-group scope hashes original source bytes; V2
+        # provenance hashes the published excerpt field. These are distinct
+        # identities and must not be compared with each other.
+        if provenance.source_digest != canonical_digest(item.excerpt):
+            return "paper_excerpt_digest_mismatch"
         if isinstance(field.value, (int, float)) and not isinstance(field.value, bool):
             if not evidence_contains_exact_quantity(provenance.excerpt, field.value, field.unit):
                 return "paper_quantity_excerpt_mismatch"
@@ -287,6 +296,20 @@ def _same_experimental_group(
         left is not None and right is not None
         and left.paper_id == right.paper_id
         and left.experimental_group_id == right.experimental_group_id
+    )
+
+
+def _locked_scope_matches(
+    candidate: Optional[ExperimentalGroupScopeV1],
+    locked: Optional[ExperimentalGroupScopeV1],
+) -> bool:
+    if not _same_experimental_group(candidate, locked):
+        return False
+    assert candidate is not None and locked is not None
+    return all(
+        not getattr(locked, field_name) or
+        getattr(candidate, field_name) == getattr(locked, field_name)
+        for field_name in ("section", "locator", "source_digest")
     )
 
 
@@ -335,7 +358,7 @@ def _candidate_assessment(
         science_hard.add("endpoint_state_mismatch")
     if goal.constraint == "locked_family" and candidate.route_signature.route_family != goal.locked_family:
         science_hard.add("locked_route_family_mismatch")
-    if goal.constraint == "locked_experimental_group" and not _same_experimental_group(candidate.source_scope, goal.locked_scope):
+    if goal.constraint == "locked_experimental_group" and not _locked_scope_matches(candidate.source_scope, goal.locked_scope):
         science_hard.add("locked_experimental_group_mismatch")
     if candidate.origin == "hypothesis":
         science_hard.add("hypothesis_without_primary_experimental_group")
@@ -383,6 +406,11 @@ def _candidate_assessment(
         if receipt.source_route_signature is None:
             science_pending.add("route_signature_unverified")
         else:
+            if (
+                goal.constraint == "locked_family"
+                and receipt.source_route_signature.route_family != goal.locked_family
+            ):
+                science_hard.add("locked_source_route_family_mismatch")
             for component in route_signature_mismatches(
                 candidate.route_signature, receipt.source_route_signature
             ):

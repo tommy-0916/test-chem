@@ -985,6 +985,47 @@ class ResearchAgent(BaseAgent):
     # evidence-grade provenance (P6)
     # ------------------------------------------------------------------
 
+    def evaluate_route_decision_v1(
+        self, state: ResearchAgentState, goal: Any
+    ) -> Any:
+        """Evaluate typed route candidates and persist the full audit record.
+
+        This explicit API does not publish a macro plan. B1/B2 still need a
+        verified group extractor and a selected-route-to-plan binding before
+        they can call it automatically.
+        """
+        if self._contract_version != "v2":
+            raise ValueError("RouteDecisionV1 requires the V2 Research contract")
+        from chem_agent_contracts.route_candidate import RouteGoalV1
+        from .route_pipeline import (
+            evaluate_route_decision_v1, trusted_route_text_sources,
+        )
+        from .tools.literature_acquisition import default_kb_dir
+
+        typed_goal = RouteGoalV1.model_validate(goal, strict=True)
+        kb_root = self._knowledge_base_dir or default_kb_dir()
+        device_context = (state.event.constraints or {}).get("device_context")
+        result = evaluate_route_decision_v1(
+            typed_goal, state.extracted_protocols,
+            source_root=kb_root,
+            trusted_source_paths=trusted_route_text_sources(kb_root),
+            device_context=device_context if isinstance(device_context, dict) else None,
+            science_agent=self,
+        )
+        state.route_decision_v1 = result.decision.model_dump(mode="json")
+        state.route_discovery_diagnostics_v1 = [
+            item.model_dump(mode="json") for item in result.discovery.diagnostics
+        ]
+        state.route_validation_diagnostics_v1 = dict(result.validation_diagnostics)
+        state.persistent_outputs = state.research_layer_internal_outputs()
+        state.add_log(
+            "RouteDecisionV1 evaluated: "
+            f"status={result.decision.status}, "
+            f"candidates={len(result.discovery.candidates)}, "
+            f"discovery_unresolved={sum(item.status == 'unresolved' for item in result.discovery.diagnostics)}"
+        )
+        return result
+
     def _attach_protocol_provenance(self, state: ResearchAgentState) -> None:
         """Tag extracted protocols with registry identity + verification status."""
         if not state.extracted_protocols:
@@ -7126,15 +7167,22 @@ class ResearchAgent(BaseAgent):
             if not isinstance(protocol, dict):
                 continue
             steps = self._normalize_protocol_steps(protocol.get("steps", []))
-            if not steps:
+            groups = protocol.get("experimental_groups")
+            if not steps and not (isinstance(groups, list) and groups):
                 continue
             source_title = str(protocol.get("source_title", "")).strip()
-            normalized.append(
-                {
+            entry: Dict[str, Any] = {
                     "source_title": source_title,
                     "source_file": str(
                         protocol.get("source_file", "") or title_to_path.get(source_title, "")
                     ).strip(),
+                    # This is the paper's reported experimental group, not the
+                    # action sample group created later by ResearchAgent.
+                    "experimental_group_id": str(
+                        protocol.get("experimental_group_id", "")
+                    ).strip(),
+                    "group_role": str(protocol.get("group_role", "")).strip(),
+                    "source": self._normalize_protocol_source(protocol.get("source")),
                     "relevance": str(protocol.get("relevance", "")).strip(),
                     "protocol_summary": str(protocol.get("protocol_summary", "")).strip(),
                     "steps": steps,
@@ -7142,7 +7190,26 @@ class ResearchAgent(BaseAgent):
                         protocol.get("missing_parameters", [])
                     ),
                 }
-            )
+            # Rich extraction data is a proposal until SourceVerifier and the
+            # scientific/device adapters check it. Preserve its declared
+            # structure without promoting any self-reported validation status.
+            for key in ("target", "route_signature", "source_scope"):
+                if isinstance(protocol.get(key), dict):
+                    entry[key] = deepcopy(protocol[key])
+            for key in ("evidence_bundle", "evidence_matrix", "material_graph"):
+                if isinstance(protocol.get(key), list):
+                    entry[key] = deepcopy(protocol[key])
+            if isinstance(groups, list):
+                entry["experimental_groups"] = deepcopy(groups)
+            if isinstance(protocol.get("required_capabilities"), list):
+                entry["required_capabilities"] = [
+                    item for item in protocol["required_capabilities"]
+                    if isinstance(item, str) and item.strip()
+                ]
+            for key in ("route_id", "source_digest", "source_document"):
+                if isinstance(protocol.get(key), str):
+                    entry[key] = protocol[key].strip()
+            normalized.append(entry)
         return normalized
 
     def _normalize_protocol_steps(self, steps: Sequence[Any]) -> List[Dict[str, Any]]:
@@ -7157,15 +7224,38 @@ class ResearchAgent(BaseAgent):
                 "参数": str(step.get("参数", "") or "文献未说明").strip(),
                 "evidence": str(step.get("evidence", "")).strip(),
             }
+            for key in ("step_role", "group_role"):
+                if isinstance(step.get(key), str) and step[key].strip():
+                    entry[key] = step[key].strip()
             page_value = step.get("page")
             if isinstance(page_value, int) or (
                 isinstance(page_value, str) and page_value.strip().isdigit()
             ):
                 entry["page"] = int(page_value)
+            source = self._normalize_protocol_source(step.get("source"))
+            if source:
+                entry["source"] = source
             normalized.append(entry)
         for index, step in enumerate(normalized, start=1):
             step["步骤序号"] = index
         return normalized
+
+    @staticmethod
+    def _normalize_protocol_source(raw: Any) -> Dict[str, Any]:
+        """Keep a proposed source locator for later independent verification."""
+        if not isinstance(raw, dict):
+            return {}
+        source: Dict[str, Any] = {}
+        for key in (
+            "source_document", "section", "locator", "excerpt_hash",
+            "source_digest", "experimental_group_id",
+        ):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                source[key] = value.strip()
+            elif value is None and key in raw:
+                source[key] = None
+        return source
 
     def _heuristic_paper_protocol_extract(
         self,

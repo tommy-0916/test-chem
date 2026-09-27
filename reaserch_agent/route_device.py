@@ -77,6 +77,7 @@ def preflight_route_capabilities(
             "status": "unknown",
             "missing_capabilities": [],
             "unresolved_capabilities": [],
+            "checked_capabilities": [],
             "snapshot_id": "",
             "reasons": [f"device_truth_unavailable:{type(exc).__name__}"],
         }
@@ -95,6 +96,7 @@ def preflight_route_capabilities(
             "status": "unknown",
             "missing_capabilities": [],
             "unresolved_capabilities": [],
+            "checked_capabilities": [],
             "snapshot_id": "",
             "reasons": ["capability_restrictions_invalid"],
         }
@@ -103,6 +105,7 @@ def preflight_route_capabilities(
         "status": "unknown",
         "missing_capabilities": [],
         "unresolved_capabilities": [],
+        "checked_capabilities": [],
         "snapshot_id": snapshot_id,
         "reasons": [],
     }
@@ -141,6 +144,8 @@ def preflight_route_capabilities(
     ) or allowed_operations is None:
         result["reasons"].append("capability_restrictions_invalid")
         return result
+
+    result["checked_capabilities"] = list(required)
 
     for capability_id in required:
         if capability_id in excluded_ids or (allowed_ids is not None and capability_id not in allowed_ids):

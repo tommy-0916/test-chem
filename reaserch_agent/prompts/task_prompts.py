@@ -127,6 +127,8 @@ paper protocol extract
 4. 如果知识库中已有结构化参数列表，优先逐步复用该参数列表
 5. 每个 step 必须是论文实验过程中的一个真实实验段，而不是研究建议
 6. 输出应面向后续 macro plan 转换，因此保留试剂名称、用量、浓度、体积、温度、时间、后处理和表征条件
+7. 每个 protocol 只对应论文中一个可辨认的 experimental group；合成、后处理、表征和性能测试组分开，不得跨组拼接参数。无法辨认组别时 experimental_group_id 留空
+8. source/locator 仅填写知识库文本明确给出的原文定位；摘要和文件名不能当作原文定位
 
 ## 输出要求
 只输出 JSON：
@@ -135,6 +137,15 @@ paper protocol extract
     {{
       "source_title": "论文标题",
       "source_file": "来源文件路径或空字符串",
+      "experimental_group_id": "论文中该实验组的原始名称；不明则空字符串",
+      "group_role": "synthesis / material_processing / characterization / performance_testing；不明则空字符串",
+      "source": {{
+        "source_document": "论文或 SI 的原文路径；不明则空字符串",
+        "section": "该实验组所在章节；不明则空字符串",
+        "experimental_group_id": "与上方同一个实验组原始名称",
+        "locator": null,
+        "excerpt_hash": null
+      }},
       "relevance": "为什么该 protocol 与 query 相关",
       "protocol_summary": "论文实验过程摘要",
       "steps": [
@@ -143,10 +154,11 @@ paper protocol extract
           "操作": "论文中的实验动作",
           "试剂/对象": "论文中的试剂、样品或对象",
           "参数": "论文给出的具体参数；若缺失写 文献未说明",
-          "evidence": "支持该步骤的简短论文依据或上下文"
+          "evidence": "支持该步骤的简短论文原文摘录；无原文则空字符串",
           "source": {{
             "source_document": "来源论文标题或路径",
             "section": "实验段所在章节/小节名或页码标记",
+            "experimental_group_id": "该步骤所属的同一个实验组原始名称",
             "locator": null,
             "excerpt_hash": null
           }}
@@ -161,7 +173,7 @@ paper protocol extract
 - protocols 最多输出 3 个，优先输出与 query 最相关的论文
 - steps 中的“参数”不得使用“适量”“按需”“建议”等规划性表达，除非论文原文就是这样
 - 若知识文本中含有 [p.N] 页码标记，请给对应 step 附加可选字段 "page"（整数，取该实验段所在页）；没有标记则省略该字段
-- 每个 step 可附加可选 `source` 出处对象 `{{source_document, section, locator: null, excerpt_hash: null}}`;locator/excerpt_hash 当前恒为 null(预留细粒度接口,未来升级到段落/句子级只补值不改合同)
+- 若知识文本明确含有行号、页码或段落标记，可填写对应 locator；否则保持 null。excerpt_hash 仅在输入提供时复制，不能自行编造
 - 不要输出设备/workstation 控制语义"""
 
 STAGE_DESIGN_PROMPT = """## 任务名称

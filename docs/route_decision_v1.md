@@ -1,6 +1,6 @@
 # RouteDecision V1：实验组级化学路线决策层
 
-状态：架构与合同设计。阶段 1 仅实现离线合同和确定性策略测试；本文描述的工作流接入、自动补证和 A01 黑盒回归属于后续阶段。阶段 1 不运行 A01，也不改变现有 Phase 1–5 发布门。
+状态：阶段 2 离线适配器已实现。候选发现、原文核验、科学审计和设备预检已经组成可调用的确定性决策管线；B1/B2 工作流接入、可核验的 PDF/原始 SI 抽取、自动补证和 A01 黑盒回归仍未完成。没有运行 A01，也没有改动现有 Phase 1–5 发布门。
 
 ## 本次交付状态
 
@@ -9,12 +9,15 @@
 | 候选、目标、决策合同与固定排序 | 已实现；离线测试使用合成实验组 |
 | 结构化 RouteSignature 比较 | 已实现精确结构比较；同义词必须先由可信归一化统一 |
 | 候选级设备能力预检 | 已复用现有能力索引与投影；只核抽象 capability ID、映射和明确可用状态 |
-| 原文/SI 逐字段 SourceVerifier | 未实现；当前测试通过合成回执模拟核验结果 |
-| 候选级 ScientificAudit 适配器 | 未实现；当前测试通过合成回执模拟现有完整性审计结果 |
+| 实验组候选发现 | 已实现离线通用发现；旧论文级摘要或不完整组保持 unresolved |
+| 原文逐字段 SourceVerifier | 已实现本地 UTF-8 `.md/.txt` 实验组行号、原文摘要、证据摘录及所有图中论文引用的核验；PDF/JSON 和无可核验组位置的文本弃权 |
+| 候选级 ScientificAudit 适配器 | 已复用现有 Phase 1–3、material provenance 与 quantity gate；图中每个数值须逐字段落入 evidence matrix |
+| 可信适配器编排 | 已实现 `evaluate_route_decision_v1`；仅由 PaperRegistry 的已解析本地文本建立可信路径，独立回执汇合后调用确定性 selector |
+| ResearchAgent 显式决策 API | `ResearchAgent.evaluate_route_decision_v1(state, goal)` 已可把完整决策和诊断持久化在 state；不会由此自动发布 macro plan |
 | 定向补证 | 仅实现预算与无新增事实的停止判定；未接入检索或抽取 |
 | B1/B2 自动决策接入与 A01 黑盒回归 | 未实现；未启动 A01 |
 
-因此当前代码是**可审查的离线决策策略**，还不是已经能在生产流程中自主选择化学路线的代理。只有可信 SourceVerifier、科学审计与设备适配器都产生绑定当前候选的回执后，`selected_for_planning` 才可用于后续 macro planning。
+因此当前代码是**可审查、可独立调用的离线路线决策管线**，还不是生产流程中已自主选择化学路线的代理。合成夹具中可形成 `selected_for_planning`；实际知识库多为生成 JSON 摘要或 PDF，缺少该核验器要求的实验组行号、完整结构化候选和可独立核验的路线签名，不能据此宣称 A01 已具备选路条件。受控 KB 中出现一个 `.md/.txt` 文件及路线签名注释，只证明候选与该文件一致；当前管线尚未独立证明该文件是期刊发表的 primary paper/SI 或签名经过人工审定。`selected_for_planning` 也不会绕开原有 Research 发布门及 Device 硬门。
 
 ## 目标与边界
 
@@ -45,7 +48,7 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。未来接�
   → 现有 Phase 1–5 发布门 → Device hard gate
 ```
 
-现有 `SearchHit` 和 `extracted_protocols` 以论文/步骤为主，尚无稳定的论文 `experimental_group_id`。`PAPER_PROTOCOL_EXTRACT_PROMPT` 虽要求步骤携带 `source_document`、`section`、`locator`、`excerpt_hash`，`_normalize_protocol_steps` 当前却丢弃 `source`。接入前须修复这种归一化丢失，并用原文定位和文档哈希核验摘录。当前抽取最多覆盖有限的 top hits/protocols，不应将其视为完整候选全集。`MacroActionV2.experiment_group` 是计划执行的样品组，不能充当论文实验组 ID。
+现有 `SearchHit` 和 `extracted_protocols` 仍以论文/步骤为主。抽取提示现在要求逐实验组拆分，归一化已保留实验组 ID、角色和步骤原文定位；但当前 live prompt 不产生完整 `RouteSignatureV1`、`EvidenceMatrix`、`MacroStepV2` 图和设备能力声明，因此 discovery 对普通 live output 会返回 `structured_route_field_missing`，不会凭摘要补齐。当前抽取最多覆盖有限的 top hits/protocols，不应将其视为完整候选全集。`MacroActionV2.experiment_group` 是计划执行的样品组，不能充当论文实验组 ID。
 
 ## 候选与决策合同
 
@@ -75,8 +78,8 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。未来接�
 
 ## 可信适配器与现有规则的复用
 
-1. **SourceVerifier**：核对原始论文/SI 身份、文件哈希、实验组边界及字段摘录的真实位置。DOI、搜索摘要或论文级 `evidence_excerpt` 本身不足以证明一个数值属于某实验组。产出逐字段核验回执；`ProvenanceV2` 和既有 `evidence_class` 语义保持不变。
-2. **ScientificAudit**：把候选的步骤、物料和来源映射到既有 chemistry conventions、material state/lineage graph、provenance 校验及 Scientific Completeness Audit。convention 只可扩展其已授权的状态与谱系语义，不能产生新数值。当前审计函数作用于 macro plan；在候选可以安全形成该输入之前，适配器必须返回 `unknown`，不得复制一套较宽松的平行科学规则或伪造 `pass`。
+1. **SourceVerifier**：核对受控本地文本的原始字节哈希、实验组边界、字段行号、证据包整段摘录和物料图所有论文引用。DOI、搜索摘要或论文级 `evidence_excerpt` 本身不足以证明一个数值属于某实验组。`ExperimentalGroupScope.source_digest` 是整篇源文件的 SHA256；`ProvenanceV2.source_digest` 继续按 V2 合同绑定 `EvidenceItemV2.excerpt` 的 canonical digest，两者不可混用。PDF/JSON 当前保持未核验。
+2. **ScientificAudit**：把候选的步骤、物料和来源映射到既有 chemistry conventions、material state/lineage graph、provenance 校验及 Scientific Completeness Audit。convention 只可扩展其已授权的状态与谱系语义，不能产生新数值。图中数值如果没有同路径 evidence matrix 绑定，就保持 unresolved；明确错误的摘要、数值或 provenance 进入 gate issues。候选缺现有规则所需的上下文时返回未评估，不复制一套较宽松的平行科学规则。
 3. **CapabilityPreflight**：当前候选级实现从现有 workstation 能力索引核验抽象 capability ID、经审核的操作映射与明确设备状态，并将限制一并纳入快照。容器、控制细节、规模及测量反馈仍需成型步骤和 Device 合同核验。现有 Research `strict_entry` 是基于 plan/package 的诊断层，不能单独证明候选路线完全可执行。没有权威能力回执时返回 `unknown`，缺少必需能力时返回 `blocked`；不能静默 fallback 或替换化学路线。
 
 候选级审查只是选出可继续规划的路线。后续 macro plan 仍须经过现有 Phase 1–5 的完整发布门，Device 仍保留最终 hard gate。任何候选审查回执不得替代这些最终校验。
@@ -107,6 +110,8 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。未来接�
 
 **阶段 1：合同与离线确定性策略。** 新增通用候选/决策模型、规范化哈希、硬拒绝与字典序策略的纯函数，以及使用合成实验组的离线测试。测试覆盖跨组字段拒绝、缺失必需字段、已核验的 runtime 解析路径、无权威设备回执时弃权、设备能力缺失、三种路线锁定、排序与并列、快照变化后失效，以及旧 `agent_inferred` 不升级。测试中的核验回执为合成 fixture；它们验证策略如何消费回执，尚未验证原文和完整科学门的真实接线。阶段 1 不修改生产工作流，不宣称系统已经自主选路，也不运行 A01。
 
-**后续接入：** 修复实验组 ID 与 locator 保真；实现上述可信适配器和有限额补证；在 B1/B2 的 macro action 前引入决策；将决策 ID 和快照绑定到后续计划，并保持现有发布与 Device 门。只有接入完成后才做黑盒端到端验收。
+**阶段 2：离线可信适配器。** 已实现实验组发现、受控本地文本核验、复用现有科学 gate 的候选审计、设备能力预检和 receipt 编排；归一化已保留组别和定位。离线测试包含跨组、篡改原文、摘录伪造、图中漏列数值与缺失来源。生产 B1/B2 仍未调用此管线。
+
+**后续接入：** 先给原始论文/SI 建立可独立核验的页/段定位和实验组级结构化抽取，再让 B1/B2 在 macro action 前调用决策；把唯一选中 candidate 的原文、证据快照与 material graph 绑定到后续计划，最终仍过现有 Research V2 发布门和 Device hard gate。自动补证限额接入后再做 A01 黑盒端到端验收。
 
 A01/Huang 仅作黑盒回归：尿素及 PBA 路线不得向共沉淀路线输参数；同论文 control、后处理/蚀刻及 OER 测试实验组不得混参；旧冻结值不能追认论文出处；同路线 primary-paper 实验组可独立成候选；缺 pH-feedback 等必需能力时由 capability layer 阻断；没有合法路线时返回 `unresolved`，不猜配方。当前仓库有 frozen A01 包与合成测试记录，但尚无可供直接核验的 Huang 原文实验组 fixture；补齐原始来源与定位后才能将它用于实证回归。
