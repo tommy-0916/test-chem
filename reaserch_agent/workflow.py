@@ -1106,6 +1106,7 @@ class ResearchAgent(BaseAgent):
         state.route_pdf_locator_production_v1 = {}
         state.route_group_fact_receipts_v1 = {}
         state.raw_llm_outputs.pop("route_pdf_group_propose", None)
+        state.raw_llm_outputs.pop("route_pdf_group_propose_revisions", None)
         if not self._signed_route_source_events:
             state.route_group_proposal_diagnostics_v1.append({
                 "phase": "source_inventory",
@@ -1152,7 +1153,12 @@ class ResearchAgent(BaseAgent):
             if len(raw_text) > budget.max_response_chars:
                 raise ValueError("route proposal raw response exceeds budget")
             proposal = self._parse_json_response(raw_text)
-            state.raw_llm_outputs["route_pdf_group_propose"] = proposal
+            if "route_pdf_group_propose" not in state.raw_llm_outputs:
+                state.raw_llm_outputs["route_pdf_group_propose"] = deepcopy(proposal)
+            else:
+                state.raw_llm_outputs.setdefault(
+                    "route_pdf_group_propose_revisions", []
+                ).append(deepcopy(proposal))
             return proposal
 
         # The signed PDF can first produce an untrusted, quote-bound work
@@ -1162,6 +1168,7 @@ class ResearchAgent(BaseAgent):
         # changing the facts between the two boundaries.
         unreviewed = propose_pdf_group_unreviewed(
             enumerated.groups, invoke, budget=budget,
+            check_required_graph_facts=True,
         )
         state.route_pdf_locator_production_v1 = deepcopy(
             unreviewed.locator_production
@@ -1174,11 +1181,29 @@ class ResearchAgent(BaseAgent):
             # Preserve a scoped work order even when some proposals fail
             # literal association. It remains unsigned and cannot be sent to
             # RouteDecision as a trusted candidate.
-            state.route_group_fact_receipts_v1 = asdict(
-                produce_pdf_group_fact_receipt(
-                    enumerated.groups, unreviewed,
-                    signed_inventory_verified=True,
+            diagnostic_association = unreviewed
+            if (
+                state.route_pdf_locator_production_v1.get("status")
+                == "located_unreviewed"
+                and isinstance(
+                    state.route_pdf_locator_production_v1.get("located_proposals"),
+                    list,
                 )
+            ):
+                from .route_pdf_group_proposals import associate_pdf_group_proposals
+
+                diagnostic_association = associate_pdf_group_proposals(
+                    enumerated.groups,
+                    state.route_pdf_locator_production_v1["located_proposals"],
+                )
+            diagnostic_receipt = produce_pdf_group_fact_receipt(
+                enumerated.groups, diagnostic_association,
+                signed_inventory_verified=True,
+            )
+            state.route_group_fact_receipts_v1 = asdict(diagnostic_receipt)
+            state.route_group_proposal_diagnostics_v1.extend(
+                {"phase": "literal_fact_check", "reason_code": reason}
+                for reason in diagnostic_receipt.reason_codes
             )
             return []
         state.route_unreviewed_group_proposals_v1 = [

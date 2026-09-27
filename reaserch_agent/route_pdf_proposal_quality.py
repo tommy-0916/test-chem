@@ -1,0 +1,103 @@
+"""Audit the literal shape of unreviewed PDF facts without changing them.
+
+These diagnostics help a bounded proposal producer identify fields that cannot
+pass the existing literal receipt. They are not source verification, chemical
+review, or route admission: quote scope, attribution, graph equality, and
+publication remain the responsibility of their existing gates.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+import re
+from typing import Any
+
+from .route_group_compiler import literal_quantity_present
+from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
+
+
+def assess_unreviewed_proposal_literal_shape(
+    proposals: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return per-fact shape diagnostics; never mutate an unreviewed proposal.
+
+    This only checks the value, unit, and proposed excerpt. It deliberately
+    cannot establish that an excerpt occurs in the signed PDF or belongs to
+    the claimed material and experimental group.
+    """
+
+    diagnostics: list[dict[str, Any]] = []
+    for proposal_index, proposal in enumerate(proposals):
+        if not isinstance(proposal, Mapping):
+            diagnostics.append({
+                "proposal_index": proposal_index, "fact_index": -1,
+                "fact_id": "", "field_path": "",
+                "reason_code": "proposal_invalid",
+            })
+            continue
+        facts = proposal.get("route_facts", [])
+        if not isinstance(facts, list):
+            diagnostics.append({
+                "proposal_index": proposal_index, "fact_index": -1,
+                "fact_id": "", "field_path": "",
+                "reason_code": "proposal_route_facts_invalid",
+            })
+            continue
+        for fact_index, fact in enumerate(facts):
+            fact_id = fact.get("fact_id") if isinstance(fact, Mapping) else None
+            field_path = fact.get("field_path") if isinstance(fact, Mapping) else None
+            record = {
+                "proposal_index": proposal_index,
+                "fact_index": fact_index,
+                "fact_id": fact_id if isinstance(fact_id, str) else "",
+                "field_path": field_path if isinstance(field_path, str) else "",
+            }
+            if not isinstance(fact, Mapping):
+                diagnostics.append({**record, "reason_code": "proposal_route_fact_invalid"})
+                continue
+            if fact.get("required") is not True:
+                diagnostics.append({
+                    **record, "reason_code": "fact_required_must_be_true",
+                })
+            value = fact.get("value")
+            unit = fact.get("unit", "")
+            excerpt = fact.get("excerpt")
+            if not isinstance(unit, str):
+                diagnostics.append({**record, "reason_code": "fact_unit_invalid"})
+            if isinstance(value, bool):
+                diagnostics.append({
+                    **record, "reason_code": "fact_value_type_unverifiable",
+                })
+            elif isinstance(value, (int, float)):
+                if isinstance(unit, str):
+                    reason = (
+                        "fact_numeric_unit_missing" if not unit.strip() else
+                        "fact_quantity_not_in_excerpt" if not
+                        literal_quantity_present(excerpt, value, unit) else ""
+                    )
+                    if reason:
+                        diagnostics.append({**record, "reason_code": reason})
+            elif isinstance(value, str):
+                if isinstance(unit, str) and unit.strip():
+                    diagnostics.append({
+                        **record, "reason_code": "fact_unit_non_numeric",
+                    })
+                literal = normalize_pdf_quote_whitespace(value)
+                quote = (
+                    normalize_pdf_quote_whitespace(excerpt)
+                    if isinstance(excerpt, str) else ""
+                )
+                if not literal or re.search(
+                    rf"(?<!\w){re.escape(literal)}(?!\w)", quote,
+                ) is None:
+                    diagnostics.append({
+                        **record, "reason_code": "fact_value_not_in_excerpt",
+                    })
+            else:
+                diagnostics.append({
+                    **record, "reason_code": "fact_value_type_unverifiable",
+                })
+    return diagnostics
+
+
+__all__ = ["assess_unreviewed_proposal_literal_shape"]

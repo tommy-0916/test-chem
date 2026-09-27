@@ -23,6 +23,7 @@ from .route_pdf_group_proposals import (
 )
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_locator_production import produce_pdf_proposal_locators
+from .route_pdf_local_repair import revise_pdf_group_proposals_locally
 
 
 _ROUTE_ROLES = frozenset({"synthesis", "material_processing"})
@@ -119,7 +120,12 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "optional quantity object with value and unit. Use exactly these "
         "field names, not inputs/outputs/conditions aliases. Each route_fact "
         "has fact_id, field_path, "
-        "value, unit, excerpt, and required=true. A block_locator hint is "
+        "value, unit, excerpt, and required=true. The unit must always be a "
+        "string: use an empty string for textual values and the exact quoted "
+        "unit for numeric values. A textual value must appear literally in "
+        "its excerpt; do not substitute a paraphrase or controlled-vocabulary "
+        "name for a paper quotation. Keep each fact atomic and tied to one "
+        "material, operation, and field path. A block_locator hint is "
         "optional and never authoritative; the program locates the excerpt "
         "in the source group. Its excerpt "
         "must be a unique literal quotation within this same group, stating "
@@ -132,7 +138,10 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "route_signature.operations[0]; never use "
         "material_graph.macro_steps. Use a separate fact for every proposed route-defining "
         "signature value, material identity/state, operation, and numeric graph "
-        "leaf. Paper references in graph provenance use "
+        "leaf. "
+        "A route_fact field_path must resolve to route_signature or "
+        "material_graph; do not emit a fact with field_path target. "
+        "Paper references in graph provenance use "
         "{\"kind\":\"paper\",\"reference\":\"fact:<fact_id>\"}. "
         "If a value, group relation, or source block is unclear, omit that "
         "claim; do not fill gaps from other groups or general knowledge. "
@@ -183,6 +192,8 @@ def _invoke_bounded_proposals(
     reviewed_capabilities: Mapping[tuple[str, str, str], Sequence[str]] | None = None,
     reviewed_roles: Mapping[tuple[str, str, str], str] | None = None,
     locate_unreviewed: bool = False,
+    max_repair_groups: int = 0,
+    check_required_graph_facts: bool = False,
 ) -> PdfGroupProposalAssociationResultV1:
     prompt = _build_prompt(source_groups)
     if len(prompt) > budget.max_prompt_chars:
@@ -206,13 +217,43 @@ def _invoke_bounded_proposals(
         return _diagnostic("response_char_budget_exceeded")
     locator_artifact: dict[str, Any] = {}
     if locate_unreviewed:
+        proposals, local_revision = revise_pdf_group_proposals_locally(
+            source_groups, proposals, invoke_json, _build_prompt,
+            max_repair_groups=max_repair_groups,
+            max_prompt_chars=budget.max_prompt_chars,
+            max_response_chars=budget.max_response_chars,
+            check_required_graph_facts=check_required_graph_facts,
+        )
         located = produce_pdf_proposal_locators(source_groups, proposals)
         locator_artifact = located.audit_artifact()
+        locator_artifact["local_revision"] = local_revision
         if located.diagnostics:
             # Partial location records remain visible, but no partial batch
             # enters association, literal checking, or route discovery.
             return PdfGroupProposalAssociationResultV1(
                 diagnostics=located.diagnostics,
+                locator_production=locator_artifact,
+            )
+        if local_revision["final_issues"]:
+            # The same literal predicate used by the formal receipt found
+            # unresolved fields. Keep per-field feedback in the unsigned
+            # artifact; no partial protocol may be treated as a route.
+            diagnostics = []
+            for item in local_revision["final_issues"]:
+                index = item["proposal_index"]
+                proposal = proposals[index] if 0 <= index < len(proposals) else {}
+                ref = proposal.get("source_group_ref", {}) if isinstance(
+                    proposal, Mapping
+                ) else {}
+                diagnostics.append(PdfGroupProposalDiagnosticV1(
+                    reason_code=item["reason_code"],
+                    paper_id=ref.get("paper_id", "") if isinstance(ref, Mapping) else "",
+                    experimental_group_id=ref.get("experimental_group_id", "")
+                    if isinstance(ref, Mapping) else "",
+                    proposal_index=index,
+                ))
+            return PdfGroupProposalAssociationResultV1(
+                diagnostics=diagnostics,
                 locator_production=locator_artifact,
             )
         proposals = located.proposals
@@ -231,6 +272,8 @@ def propose_pdf_group_unreviewed(
     invoke_json: Callable[[str], Mapping[str, Any]],
     *,
     budget: PdfGroupExtractionBudgetV1 = PdfGroupExtractionBudgetV1(),
+    max_repair_groups: int = 8,
+    check_required_graph_facts: bool = False,
 ) -> PdfGroupProposalAssociationResultV1:
     """Extract quote-bound proposals before independent role/capability review.
 
@@ -242,11 +285,15 @@ def propose_pdf_group_unreviewed(
     """
     if not isinstance(budget, PdfGroupExtractionBudgetV1):
         raise TypeError("budget must be PdfGroupExtractionBudgetV1")
+    if type(max_repair_groups) is not int or max_repair_groups < 0:
+        raise ValueError("max_repair_groups must be nonnegative")
     source_groups, issue = _snapshot_group_inventory(enumerated_groups, budget)
     if issue is not None:
         return issue
     return _invoke_bounded_proposals(
         source_groups, invoke_json, budget, locate_unreviewed=True,
+        max_repair_groups=min(max_repair_groups, budget.max_groups),
+        check_required_graph_facts=check_required_graph_facts,
     )
 
 

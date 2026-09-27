@@ -254,6 +254,7 @@ class RouteWorkflowHookTest(unittest.TestCase):
             "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
             "block_locator": "pdf:p1:b2-p1:b2", "required": True,
         }]
+        proposals[0]["route_signature"] = {"operations": ["Mix"]}
         captured: list[list[dict]] = []
 
         def evaluate(goal, protocols, **kwargs):
@@ -335,6 +336,7 @@ class RouteWorkflowHookTest(unittest.TestCase):
                 "source_digest": scope.source_digest,
             }, "route_facts": []}
             if scope.experimental_group_id == "Sample synthesis":
+                proposal["route_signature"] = {"operations": ["Mix"]}
                 proposal["route_facts"] = [{
                     "fact_id": "mix", "field_path": "route_signature.operations[0]",
                     "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
@@ -401,6 +403,7 @@ class RouteWorkflowHookTest(unittest.TestCase):
                 "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
                 "block_locator": "pdf:p1:b1-p1:b1", "required": True,
             }],
+            "route_signature": {"operations": ["Mix"]},
         }
         raw_envelope = {"proposals": [proposal]}
         original = deepcopy(raw_envelope)
