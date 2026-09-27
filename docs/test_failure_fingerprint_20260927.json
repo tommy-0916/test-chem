@@ -1,0 +1,2449 @@
+{
+  "schema": "test_failure_fingerprint/v1",
+  "date": "2026-09-27",
+  "baseline_commit": "ca07cdca090ab7beabac0d91b1451eb5668fc1b4",
+  "current_commit": "f37a431e14391baa7a2b3ea08bfd3ab1f71a8c7e",
+  "current_checkout_note": "The f37a431 checkout also contained untracked offline replay tests from this turn. They passed; current collection totals are not a pure f37a431 commit count. Existing ignored B01 diagnostic fixtures were present only in the current checkout.",
+  "method": "Same .venv interpreter and same test command, f37a431 checkout with extra untracked tests versus ca07cdc git archive. Failure identity is test ID; compare exception type, normalized reason, repository path and function; source line numbers and randomized temporary directory names are preserved in records but excluded from semantic classification.",
+  "commands": {
+    "research": "python -m unittest discover -s reaserch_agent -p test*.py -q",
+    "device": "python -m pytest device_agent -q --tb=short --junitxml=<out>.xml"
+  },
+  "totals": {
+    "research": {
+      "baseline": {
+        "ran": 584,
+        "failures": 8,
+        "errors": 21
+      },
+      "current": {
+        "ran": 597,
+        "failures": 8,
+        "errors": 21
+      }
+    },
+    "device": {
+      "baseline": {
+        "collected": 957,
+        "failed": 50,
+        "passed": 905,
+        "skipped": 2
+      },
+      "current": {
+        "collected": 985,
+        "failed": 50,
+        "passed": 935,
+        "skipped": 0
+      }
+    }
+  },
+  "comparison": {
+    "new_failure_ids": [],
+    "removed_failure_ids": [],
+    "changed_exception_type": [],
+    "changed_repo_function": [],
+    "changed_normalized_reason": [],
+    "raw_differences": {
+      "research_source_line_shifts": 8,
+      "device_source_line_shifts": 3,
+      "research_prompt_length_assertion": {
+        "test": "test_macro_step_prompt_projection_keeps_contract_without_audit_noise",
+        "baseline": "18027 not less than 17637.199999999997",
+        "current": "18027 not less than 17633.699999999997",
+        "cause": "Full device context differs only in absolute skill_source_path: 140 versus 135 serialized characters. The compact context is 18027 in both revisions. Baseline is extracted under a different length path."
+      },
+      "device_skips": {
+        "tests": [
+          "device_agent.test_dispatch_state_layering.FrozenB01LidChainTest::test_double_open_without_close_still_conflicts",
+          "device_agent.test_dispatch_state_layering.FrozenB01LidChainTest::test_no_lid_state_conflict_on_b01_chain"
+        ],
+        "cause": "A local untracked/ignored B01 diagnostic package exists in the current checkout but is absent from the git archive baseline; both pass in current and skip in baseline."
+      }
+    }
+  },
+  "fingerprints": {
+    "research": {
+      "baseline": {
+        "test_recall_layers_and_budgets (test_campaign_memory.RecallBuilderTest.test_recall_layers_and_budgets)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 224,
+            "function": "test_recall_layers_and_budgets"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 224,
+            "function": "test_recall_layers_and_budgets"
+          }
+        },
+        "test_compact_state_context_includes_campaign_memory (test_campaign_memory.RecallContextTest.test_compact_state_context_includes_campaign_memory)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_cross_campaign_layer_only_on_abnormal_signal (test_campaign_memory.RecallContextTest.test_cross_campaign_layer_only_on_abnormal_signal)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_nodes_written_per_turn (test_campaign_memory.TrajectoryNodeTest.test_nodes_written_per_turn)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_stage_rollup_written_on_closure_or_stage_change (test_campaign_memory.TrajectoryNodeTest.test_stage_rollup_written_on_closure_or_stage_change)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_compact_context_contains_evidence_packet (test_evidence_provenance.EvidencePacketAndRefsTest.test_compact_context_contains_evidence_packet)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_evidence_refs_flow_into_ledger_and_memory (test_evidence_provenance.EvidencePacketAndRefsTest.test_evidence_refs_flow_into_ledger_and_memory)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_web_and_parse_failed_sources_are_explicit_known_gaps (test_evidence_provenance.EvidencePacketAndRefsTest.test_web_and_parse_failed_sources_are_explicit_known_gaps)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_every_macro_step_has_source_annotation (test_evidence_provenance.MacroPlanSourceTest.test_every_macro_step_has_source_annotation)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_protocols_carry_registry_identity (test_evidence_provenance.ProtocolProvenanceTest.test_protocols_carry_registry_identity)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_bootstrap_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "macro_plan_design LLM failed without fallback:",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5113,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 7762,
+            "function": "_step_macro_plan_design"
+          }
+        },
+        "test_bootstrap_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "macro_plan_design LLM failed without fallback: macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5113,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 7809,
+            "function": "_step_macro_plan_design"
+          }
+        },
+        "test_device_adaptation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5371,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 178,
+            "function": "test_device_adaptation_accepts_first_valid_candidate_without_retry"
+          }
+        },
+        "test_device_adaptation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_exhaustion_does_not_publish)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5371,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 184,
+            "function": "test_device_adaptation_exhaustion_does_not_publish"
+          }
+        },
+        "test_device_adaptation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5371,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 181,
+            "function": "test_device_adaptation_repairs_invalid_lid_once"
+          }
+        },
+        "test_post_observation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "post_observation_macro_plan_design LLM failed without fallback:",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5113,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5323,
+            "function": "_step_post_observation_macro_plan_design"
+          }
+        },
+        "test_post_observation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "post_observation_macro_plan_design LLM failed without fallback: post-observation macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5113,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5347,
+            "function": "_step_post_observation_macro_plan_design"
+          }
+        },
+        "test_valid_none_carrier_can_be_published_without_changing_bottle_lids (test_logical_container_contract.LogicalContainerContractTests.test_valid_none_carrier_can_be_published_without_changing_bottle_lids)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 Research -> Device publication gate failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 6 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 7 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 8 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 3843,
+            "function": "_publish_v2_contract"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 240,
+            "function": "test_valid_none_carrier_can_be_published_without_changing_bottle_lids"
+          }
+        },
+        "test_layered_memory_add_search_update_history (test_memory_layers.ChemMemoryLayerTests.test_layered_memory_add_search_update_history)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 17,
+            "function": "test_layered_memory_add_search_update_history"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 17,
+            "function": "test_layered_memory_add_search_update_history"
+          }
+        },
+        "test_query_tools_use_separate_experiment_and_literature_layers (test_memory_layers.ChemMemoryLayerTests.test_query_tools_use_separate_experiment_and_literature_layers)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 57,
+            "function": "test_query_tools_use_separate_experiment_and_literature_layers"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 57,
+            "function": "test_query_tools_use_separate_experiment_and_literature_layers"
+          }
+        },
+        "test_research_agent_memory_uses_experiment_layer (test_memory_layers.ChemMemoryLayerTests.test_research_agent_memory_uses_experiment_layer)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 81,
+            "function": "test_research_agent_memory_uses_experiment_layer"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 81,
+            "function": "test_research_agent_memory_uses_experiment_layer"
+          }
+        },
+        "test_concurrent_same_identity_records_do_not_overwrite (test_ingestion.KnowledgeIngestionTests.test_concurrent_same_identity_records_do_not_overwrite)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "1 != 2",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_ingestion.py",
+            "line": 96,
+            "function": "test_concurrent_same_identity_records_do_not_overwrite"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_ingestion.py",
+            "line": 96,
+            "function": "test_concurrent_same_identity_records_do_not_overwrite"
+          }
+        },
+        "test_bootstrap_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_exhaustion_does_not_publish)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'macro_plan_design LLM failed without fallback: macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 166,
+            "function": "test_bootstrap_exhaustion_does_not_publish"
+          }
+        },
+        "test_final_publication_rejects_invalid_lid_with_original_context (test_logical_container_contract.LogicalContainerContractTests.test_final_publication_rejects_invalid_lid_with_original_context)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'V2 Research -> Device publication gate failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 6 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 7 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 8 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 234,
+            "function": "test_final_publication_rejects_invalid_lid_with_original_context"
+          }
+        },
+        "test_missing_container_requirements_remains_a_supported_empty_default (test_logical_container_contract.LogicalContainerContractTests.test_missing_container_requirements_remains_a_supported_empty_default)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "Lists differ: ['�� 1 ��ȱ�� material_contract_status��materia[1329 chars]ved'] != []",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 224,
+            "function": "test_missing_container_requirements_remains_a_supported_empty_default"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 224,
+            "function": "test_missing_container_requirements_remains_a_supported_empty_default"
+          }
+        },
+        "test_post_observation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_exhaustion_does_not_publish)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'post_observation_macro_plan_design LLM failed without fallback: post-observation macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 175,
+            "function": "test_post_observation_exhaustion_does_not_publish"
+          }
+        },
+        "test_quality_gate_locates_original_step_and_container_without_mutation (test_logical_container_contract.LogicalContainerContractTests.test_quality_gate_locates_original_step_and_container_without_mutation)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "9 != 1",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 190,
+            "function": "test_quality_gate_locates_original_step_and_container_without_mutation"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 190,
+            "function": "test_quality_gate_locates_original_step_and_container_without_mutation"
+          }
+        },
+        "test_default_ledger_path_layout (test_plan_ledger.PlanLedgerFileTest.test_default_ledger_path_layout)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "False is not true",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_plan_ledger.py",
+            "line": 76,
+            "function": "test_default_ledger_path_layout"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_plan_ledger.py",
+            "line": 76,
+            "function": "test_default_ledger_path_layout"
+          }
+        },
+        "test_macro_step_prompt_projection_keeps_contract_without_audit_noise (test_v2_contract.ResearchV2ContractTest.test_macro_step_prompt_projection_keeps_contract_without_audit_noise)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "18027 not less than 17637.199999999997",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_v2_contract.py",
+            "line": 622,
+            "function": "test_macro_step_prompt_projection_keeps_contract_without_audit_noise"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_v2_contract.py",
+            "line": 622,
+            "function": "test_macro_step_prompt_projection_keeps_contract_without_audit_noise"
+          }
+        }
+      },
+      "current": {
+        "test_recall_layers_and_budgets (test_campaign_memory.RecallBuilderTest.test_recall_layers_and_budgets)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 224,
+            "function": "test_recall_layers_and_budgets"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 224,
+            "function": "test_recall_layers_and_budgets"
+          }
+        },
+        "test_compact_state_context_includes_campaign_memory (test_campaign_memory.RecallContextTest.test_compact_state_context_includes_campaign_memory)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_cross_campaign_layer_only_on_abnormal_signal (test_campaign_memory.RecallContextTest.test_cross_campaign_layer_only_on_abnormal_signal)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_nodes_written_per_turn (test_campaign_memory.TrajectoryNodeTest.test_nodes_written_per_turn)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_stage_rollup_written_on_closure_or_stage_change (test_campaign_memory.TrajectoryNodeTest.test_stage_rollup_written_on_closure_or_stage_change)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_campaign_memory.py",
+            "line": 102,
+            "function": "tearDown"
+          }
+        },
+        "test_compact_context_contains_evidence_packet (test_evidence_provenance.EvidencePacketAndRefsTest.test_compact_context_contains_evidence_packet)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_evidence_refs_flow_into_ledger_and_memory (test_evidence_provenance.EvidencePacketAndRefsTest.test_evidence_refs_flow_into_ledger_and_memory)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_web_and_parse_failed_sources_are_explicit_known_gaps (test_evidence_provenance.EvidencePacketAndRefsTest.test_web_and_parse_failed_sources_are_explicit_known_gaps)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_every_macro_step_has_source_annotation (test_evidence_provenance.MacroPlanSourceTest.test_every_macro_step_has_source_annotation)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_protocols_carry_registry_identity (test_evidence_provenance.ProtocolProvenanceTest.test_protocols_carry_registry_identity)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/memstore/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_evidence_provenance.py",
+            "line": 125,
+            "function": "tearDown"
+          }
+        },
+        "test_bootstrap_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "macro_plan_design LLM failed without fallback:",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5323,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 7972,
+            "function": "_step_macro_plan_design"
+          }
+        },
+        "test_bootstrap_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "macro_plan_design LLM failed without fallback: macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5323,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 8019,
+            "function": "_step_macro_plan_design"
+          }
+        },
+        "test_device_adaptation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5581,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 178,
+            "function": "test_device_adaptation_accepts_first_valid_candidate_without_retry"
+          }
+        },
+        "test_device_adaptation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_exhaustion_does_not_publish)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5581,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 184,
+            "function": "test_device_adaptation_exhaustion_does_not_publish"
+          }
+        },
+        "test_device_adaptation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 device feedback cannot authorize a Research route revision; an evidence-bound Research revision or explicit user authority is required",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5581,
+            "function": "_step_device_adaptation_macro_plan_design"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 181,
+            "function": "test_device_adaptation_repairs_invalid_lid_once"
+          }
+        },
+        "test_post_observation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_accepts_first_valid_candidate_without_retry)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "post_observation_macro_plan_design LLM failed without fallback:",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5323,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5533,
+            "function": "_step_post_observation_macro_plan_design"
+          }
+        },
+        "test_post_observation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_repairs_invalid_lid_once)": {
+          "kind": "ERROR",
+          "exception_type": "RuntimeError",
+          "reason": "post_observation_macro_plan_design LLM failed without fallback: post-observation macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5323,
+            "function": "_raise_llm_step_failure"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 5557,
+            "function": "_step_post_observation_macro_plan_design"
+          }
+        },
+        "test_valid_none_carrier_can_be_published_without_changing_bottle_lids (test_logical_container_contract.LogicalContainerContractTests.test_valid_none_carrier_can_be_published_without_changing_bottle_lids)": {
+          "kind": "ERROR",
+          "exception_type": "ValueError",
+          "reason": "V2 Research -> Device publication gate failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 6 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 7 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 8 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/workflow.py",
+            "line": 4053,
+            "function": "_publish_v2_contract"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 240,
+            "function": "test_valid_none_carrier_can_be_published_without_changing_bottle_lids"
+          }
+        },
+        "test_layered_memory_add_search_update_history (test_memory_layers.ChemMemoryLayerTests.test_layered_memory_add_search_update_history)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 17,
+            "function": "test_layered_memory_add_search_update_history"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 17,
+            "function": "test_layered_memory_add_search_update_history"
+          }
+        },
+        "test_query_tools_use_separate_experiment_and_literature_layers (test_memory_layers.ChemMemoryLayerTests.test_query_tools_use_separate_experiment_and_literature_layers)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 57,
+            "function": "test_query_tools_use_separate_experiment_and_literature_layers"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 57,
+            "function": "test_query_tools_use_separate_experiment_and_literature_layers"
+          }
+        },
+        "test_research_agent_memory_uses_experiment_layer (test_memory_layers.ChemMemoryLayerTests.test_research_agent_memory_uses_experiment_layer)": {
+          "kind": "ERROR",
+          "exception_type": "PermissionError",
+          "reason": "[WinError 32] ��һ����������ʹ�ô��ļ��������޷����ʡ�: '<temp>/chem_memory.sqlite'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 81,
+            "function": "test_research_agent_memory_uses_experiment_layer"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_memory_layers.py",
+            "line": 81,
+            "function": "test_research_agent_memory_uses_experiment_layer"
+          }
+        },
+        "test_concurrent_same_identity_records_do_not_overwrite (test_ingestion.KnowledgeIngestionTests.test_concurrent_same_identity_records_do_not_overwrite)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "1 != 2",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_ingestion.py",
+            "line": 96,
+            "function": "test_concurrent_same_identity_records_do_not_overwrite"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_ingestion.py",
+            "line": 96,
+            "function": "test_concurrent_same_identity_records_do_not_overwrite"
+          }
+        },
+        "test_bootstrap_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_exhaustion_does_not_publish)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'macro_plan_design LLM failed without fallback: macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 166,
+            "function": "test_bootstrap_exhaustion_does_not_publish"
+          }
+        },
+        "test_final_publication_rejects_invalid_lid_with_original_context (test_logical_container_contract.LogicalContainerContractTests.test_final_publication_rejects_invalid_lid_with_original_context)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'V2 Research -> Device publication gate failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 6 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 7 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 8 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 234,
+            "function": "test_final_publication_rejects_invalid_lid_with_original_context"
+          }
+        },
+        "test_missing_container_requirements_remains_a_supported_empty_default (test_logical_container_contract.LogicalContainerContractTests.test_missing_container_requirements_remains_a_supported_empty_default)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "Lists differ: ['�� 1 ��ȱ�� material_contract_status��materia[1329 chars]ved'] != []",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 224,
+            "function": "test_missing_container_requirements_remains_a_supported_empty_default"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 224,
+            "function": "test_missing_container_requirements_remains_a_supported_empty_default"
+          }
+        },
+        "test_post_observation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_exhaustion_does_not_publish)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "'/macro_plan/7/container_requirements/2/lid_state' not found in 'post_observation_macro_plan_design LLM failed without fallback: post-observation macro plan quality check failed: �� 1 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 2 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 3 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 4 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved; �� 5 ��ȱ�� material_contract_status��material_inputs/material_intermediates/material_outputs/logical_containers/material_relations ����ֱ����� declared/not_applicable/unresolved'",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 99,
+            "function": "_assert_error_location"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 175,
+            "function": "test_post_observation_exhaustion_does_not_publish"
+          }
+        },
+        "test_quality_gate_locates_original_step_and_container_without_mutation (test_logical_container_contract.LogicalContainerContractTests.test_quality_gate_locates_original_step_and_container_without_mutation)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "9 != 1",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 190,
+            "function": "test_quality_gate_locates_original_step_and_container_without_mutation"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_logical_container_contract.py",
+            "line": 190,
+            "function": "test_quality_gate_locates_original_step_and_container_without_mutation"
+          }
+        },
+        "test_default_ledger_path_layout (test_plan_ledger.PlanLedgerFileTest.test_default_ledger_path_layout)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "False is not true",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_plan_ledger.py",
+            "line": 76,
+            "function": "test_default_ledger_path_layout"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_plan_ledger.py",
+            "line": 76,
+            "function": "test_default_ledger_path_layout"
+          }
+        },
+        "test_macro_step_prompt_projection_keeps_contract_without_audit_noise (test_v2_contract.ResearchV2ContractTest.test_macro_step_prompt_projection_keeps_contract_without_audit_noise)": {
+          "kind": "FAIL",
+          "exception_type": "AssertionError",
+          "reason": "18027 not less than 17633.699999999997",
+          "stack_origin": {
+            "path": "<repo>/reaserch_agent/test_v2_contract.py",
+            "line": 622,
+            "function": "test_macro_step_prompt_projection_keeps_contract_without_audit_noise"
+          },
+          "first_repo_frame": {
+            "path": "<repo>/reaserch_agent/test_v2_contract.py",
+            "line": 622,
+            "function": "test_macro_step_prompt_projection_keeps_contract_without_audit_noise"
+          }
+        }
+      }
+    },
+    "device": {
+      "baseline": {
+        "device_agent.test_capability_audit.ConnectedSampleContainerChainTest::test_incomplete_trace_or_necessary_transfer_is_not_flagged": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: Lists differ: [{'type': 'unverified_transfer_justificati[469 chars]h。'}] != []\n\nFirst list contains 1 additional elements.\nFirst extra element 0:\n{'type': 'unverified_transfer_justification', 'finding_id': 'unverified_transfer_justification:sample_A:edge[1:3]>edge[2:4]', 'sample_id': 'sample_A', 'step_numbers': [3, 4], 'feedback_route': 'device', 'failure_scope': 'device_workflow', 'requires_research_replan': False, 'evidence': 'capacity_split | minimal_required_transfer', 'message': '样品 sample_A 的步骤 3→4 声称属于必要转移，但sample_lineage.justification_evidence_refs 未逐边指向同一 Research 来源且 kind 匹配的结构化 quantity_adjustments 记录。请在 Device 内补齐证据或删除无意义换瓶；不得返回 Research。'}\n\n+ []\n- [{'evidence': 'capacity_split | minimal_required_transfer',\n-   'failure_scope': 'device_workflow',\n-   'feedback_route': 'device',\n-   'finding_id': 'unverified_transfer_justification:sample_A:edge[1:3]>edge[2:4]',\n-   'message': '样品 sample_A 的步骤 3→4 '\n-              '声称属于必要转移，但sample_lineage.justification_evidence_refs 未逐边指向同一 '\n-              'Research 来源且 kind 匹配的结构化 quantity_adjustments 记录。请在 Device '\n-              '内补齐证据或删除无意义换瓶；不得返回 Research。',\n-   'requires_research_replan': False,\n-   'sample_id': 'sample_A',\n-   'step_numbers': [3, 4],\n-   'type': 'unverified_transfer_justification'}]",
+          "stack_origin": {
+            "path": "device_agent/test_capability_audit.py",
+            "line": 381,
+            "function": "test_incomplete_trace_or_necessary_transfer_is_not_flagged"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_capability_audit.py",
+            "line": 381,
+            "function": "test_incomplete_trace_or_necessary_transfer_is_not_flagged"
+          }
+        },
+        "device_agent.test_feasibility_orchestration::test_runtime_later_failure_never_calls_approval_or_translation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: V2 Device entry requires an embedded canonical Research package",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 14516,
+            "function": "_validate_v2_raw_canonical_handoff"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_feasibility_orchestration.py",
+            "line": 194,
+            "function": "test_runtime_later_failure_never_calls_approval_or_translation"
+          }
+        },
+        "device_agent.test_plan_repair::test_original_candidates_still_fail_with_accurate_reasons": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert ['legacy_text_recipe'] == ['structured_...hema_adapter']\n  \n  At index 0 diff: 'legacy_text_recipe' != 'structured_recipe_schema_adapter'\n  Use -v to get more diff",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 149,
+            "function": "test_original_candidates_still_fail_with_accurate_reasons"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 149,
+            "function": "test_original_candidates_still_fail_with_accurate_reasons"
+          }
+        },
+        "device_agent.test_plan_repair::test_non_numeric_error_routes_to_controlled_verdict": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' in {'manual', 'partial', 'requires_llm'}",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 502,
+            "function": "test_non_numeric_error_routes_to_controlled_verdict"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 502,
+            "function": "test_non_numeric_error_routes_to_controlled_verdict"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_uses_patch_first_without_llm": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_uses_patch_first_without_llm.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19298,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 747,
+            "function": "test_stage1_repair_uses_patch_first_without_llm"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_controlled_stop_by_default_on_patch_stop": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_controlled_stop_by_default_on_patch_stop.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19298,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 774,
+            "function": "test_stage1_repair_controlled_stop_by_default_on_patch_stop"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_regenerates_only_with_explicit_authorization": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_regenerates_only_with_explicit_authorization.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19298,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 821,
+            "function": "test_stage1_repair_regenerates_only_with_explicit_authorization"
+          }
+        },
+        "device_agent.test_plan_repair::test_recipe_wrapper_conflicting_derived_target_is_refused": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1063,
+            "function": "test_recipe_wrapper_conflicting_derived_target_is_refused"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1063,
+            "function": "test_recipe_wrapper_conflicting_derived_target_is_refused"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_ambiguous_mass_is_never_materialized": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1085,
+            "function": "test_legacy_ambiguous_mass_is_never_materialized"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1085,
+            "function": "test_legacy_ambiguous_mass_is_never_materialized"
+          }
+        },
+        "device_agent.test_plan_repair::test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1107,
+            "function": "test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1107,
+            "function": "test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_incomplete_mapping_is_never_guessed": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1115,
+            "function": "test_legacy_incomplete_mapping_is_never_guessed"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1115,
+            "function": "test_legacy_incomplete_mapping_is_never_guessed"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_container_mismatch_stays_open": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1123,
+            "function": "test_legacy_container_mismatch_stays_open"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1123,
+            "function": "test_legacy_container_mismatch_stays_open"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_header_mismatch_stays_open": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1131,
+            "function": "test_legacy_header_mismatch_stays_open"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1131,
+            "function": "test_legacy_header_mismatch_stays_open"
+          }
+        },
+        "device_agent.test_plan_repair::test_wrapper_hopper_constraint_with_unstructured_comment_rejected": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1142,
+            "function": "test_wrapper_hopper_constraint_with_unstructured_comment_rejected"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1142,
+            "function": "test_wrapper_hopper_constraint_with_unstructured_comment_rejected"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_hopper_constraint_with_digit_comment_rejected": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1151,
+            "function": "test_legacy_hopper_constraint_with_digit_comment_rejected"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1151,
+            "function": "test_legacy_hopper_constraint_with_digit_comment_rejected"
+          }
+        },
+        "device_agent.test_plan_repair::test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'handler_input_incompatible' == 'manual_no_patchable_checks'\n  \n  - manual_no_patchable_checks\n  + handler_input_incompatible",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1342,
+            "function": "test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1342,
+            "function": "test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_terminal_xrd_return_keeps_normal_success_and_dispatch": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 116,
+            "function": "test_terminal_xrd_return_keeps_normal_success_and_dispatch"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[legacy]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[optional]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[declared]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_return_contract_change_invalidates_old_certificate_even_for_terminal_return": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 203,
+            "function": "test_return_contract_change_invalidates_old_certificate_even_for_terminal_return"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_pre_gate_certificate_cannot_resume_new_wait_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 215,
+            "function": "test_pre_gate_certificate_cannot_resume_new_wait_contract"
+          }
+        },
+        "device_agent.test_run_from_research_state_args::test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg": {
+          "kind": "failure",
+          "exception_type": "SystemExit",
+          "reason": "SystemExit: V2 repair request feasibility_certificate version is unsupported or missing",
+          "stack_origin": {
+            "path": "device_agent/run_from_research_state.py",
+            "line": 291,
+            "function": "validate_repair_contract_boundary"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_run_from_research_state_args.py",
+            "line": 203,
+            "function": "test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg"
+          }
+        },
+        "device_agent.test_run_from_research_state_args::test_repair_contract_boundary_rejects_request_override_or_runtime_drift": {
+          "kind": "failure",
+          "exception_type": "SystemExit",
+          "reason": "SystemExit: V2 repair request feasibility_certificate version is unsupported or missing",
+          "stack_origin": {
+            "path": "device_agent/run_from_research_state.py",
+            "line": 291,
+            "function": "validate_repair_contract_boundary"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_run_from_research_state_args.py",
+            "line": 236,
+            "function": "test_repair_contract_boundary_rejects_request_override_or_runtime_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 6014,
+            "function": "test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield"
+          }
+        },
+        "device_agent.test_single_agent::test_human_status_plan_rewrite_keeps_certified_plan_and_diagnostic_candidate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 6087,
+            "function": "test_human_status_plan_rewrite_keeps_certified_plan_and_diagnostic_candidate"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_workflow_digest_guard_rejects_post_validation_mutation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7434,
+            "function": "test_v2_final_workflow_digest_guard_rejects_post_validation_mutation"
+          }
+        },
+        "device_agent.test_single_agent::test_failed_terminal_preserves_complete_signed_device_plan_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7586,
+            "function": "test_failed_terminal_preserves_complete_signed_device_plan_contract"
+          }
+        },
+        "device_agent.test_single_agent::test_failed_terminal_guard_blocks_drifted_signed_plan_field": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7614,
+            "function": "test_failed_terminal_guard_blocks_drifted_signed_plan_field"
+          }
+        },
+        "device_agent.test_single_agent::test_quantity_audit_manual_branch_also_guards_signed_plan_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7638,
+            "function": "test_quantity_audit_manual_branch_also_guards_signed_plan_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_success_terminal_preserves_complete_signed_device_plan_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7670,
+            "function": "test_success_terminal_preserves_complete_signed_device_plan_contract"
+          }
+        },
+        "device_agent.test_single_agent::test_scientific_review_requirement_is_signed_from_all_sticky_sources": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7733,
+            "function": "test_scientific_review_requirement_is_signed_from_all_sticky_sources"
+          }
+        },
+        "device_agent.test_single_agent::test_terminal_plan_certificate_guard_blocks_late_contract_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7862,
+            "function": "test_terminal_plan_certificate_guard_blocks_late_contract_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_terminal_package_also_blocks_late_contract_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7897,
+            "function": "test_manual_terminal_package_also_blocks_late_contract_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_dispatch_payload_guard_rejects_formatter_a_then_b": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7931,
+            "function": "test_v2_final_dispatch_payload_guard_rejects_formatter_a_then_b"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_dispatch_binding_allows_only_runtime_plan_name": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7972,
+            "function": "test_v2_final_dispatch_binding_allows_only_runtime_plan_name"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_override_reruns_full_semantic_plan_gate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 9483,
+            "function": "test_manual_override_reruns_full_semantic_plan_gate"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_feasibility_certificate_binds_contract_version": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10132,
+            "function": "test_v2_feasibility_certificate_binds_contract_version"
+          }
+        },
+        "device_agent.test_single_agent::test_successor_feasibility_certificate_binds_revision_and_lineage": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10199,
+            "function": "test_successor_feasibility_certificate_binds_revision_and_lineage"
+          }
+        },
+        "device_agent.test_single_agent::test_v1_legacy_certificate_without_id_gets_complete_successor_lineage": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10252,
+            "function": "test_v1_legacy_certificate_without_id_gets_complete_successor_lineage"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_manual_override_rejects_repair_request_plan_not_bound_to_certificate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10295,
+            "function": "test_v2_manual_override_rejects_repair_request_plan_not_bound_to_certificate"
+          }
+        },
+        "device_agent.test_single_agent::test_rejected_manual_override_rolls_back_all_actionable_plan_fields": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10439,
+            "function": "test_rejected_manual_override_rolls_back_all_actionable_plan_fields"
+          }
+        },
+        "device_agent.test_single_agent::test_rejected_override_with_invalid_prior_certificate_is_not_accepted": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10457,
+            "function": "test_rejected_override_with_invalid_prior_certificate_is_not_accepted"
+          }
+        },
+        "device_agent.test_single_agent::test_automatic_plan_rewrite_issues_successor_certificate_before_translation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10529,
+            "function": "test_automatic_plan_rewrite_issues_successor_certificate_before_translation"
+          }
+        },
+        "device_agent.test_single_agent::test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'manual_required' == 'success'\n  \n  - success\n  + manual_required",
+          "stack_origin": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10800,
+            "function": "test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10800,
+            "function": "test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_override_reagent_drift_is_rejected_without_stage1_llm": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "assert False is True",
+          "stack_origin": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10918,
+            "function": "test_manual_override_reagent_drift_is_rejected_without_stage1_llm"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10918,
+            "function": "test_manual_override_reagent_drift_is_rejected_without_stage1_llm"
+          }
+        },
+        "device_agent.test_skill_loading::test_certificate_is_independent_of_prompt_projection": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 202,
+            "function": "test_certificate_is_independent_of_prompt_projection"
+          }
+        },
+        "device_agent.test_skill_loading::test_same_agent_new_run_refreshes_tool_body_and_all_contracts": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 256,
+            "function": "test_same_agent_new_run_refreshes_tool_body_and_all_contracts"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 256,
+            "function": "test_same_agent_new_run_refreshes_tool_body_and_all_contracts"
+          }
+        },
+        "device_agent.test_skill_loading::test_explicit_validator_paths_survive_second_run_and_are_refreshed": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 356,
+            "function": "test_explicit_validator_paths_survive_second_run_and_are_refreshed"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 356,
+            "function": "test_explicit_validator_paths_survive_second_run_and_are_refreshed"
+          }
+        },
+        "device_agent.test_skill_loading::test_nonstandard_validator_refresh_hook_is_honored": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 395,
+            "function": "test_nonstandard_validator_refresh_hook_is_honored"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 395,
+            "function": "test_nonstandard_validator_refresh_hook_is_honored"
+          }
+        }
+      },
+      "current": {
+        "device_agent.test_capability_audit.ConnectedSampleContainerChainTest::test_incomplete_trace_or_necessary_transfer_is_not_flagged": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: Lists differ: [{'type': 'unverified_transfer_justificati[469 chars]h。'}] != []\n\nFirst list contains 1 additional elements.\nFirst extra element 0:\n{'type': 'unverified_transfer_justification', 'finding_id': 'unverified_transfer_justification:sample_A:edge[1:3]>edge[2:4]', 'sample_id': 'sample_A', 'step_numbers': [3, 4], 'feedback_route': 'device', 'failure_scope': 'device_workflow', 'requires_research_replan': False, 'evidence': 'capacity_split | minimal_required_transfer', 'message': '样品 sample_A 的步骤 3→4 声称属于必要转移，但sample_lineage.justification_evidence_refs 未逐边指向同一 Research 来源且 kind 匹配的结构化 quantity_adjustments 记录。请在 Device 内补齐证据或删除无意义换瓶；不得返回 Research。'}\n\n+ []\n- [{'evidence': 'capacity_split | minimal_required_transfer',\n-   'failure_scope': 'device_workflow',\n-   'feedback_route': 'device',\n-   'finding_id': 'unverified_transfer_justification:sample_A:edge[1:3]>edge[2:4]',\n-   'message': '样品 sample_A 的步骤 3→4 '\n-              '声称属于必要转移，但sample_lineage.justification_evidence_refs 未逐边指向同一 '\n-              'Research 来源且 kind 匹配的结构化 quantity_adjustments 记录。请在 Device '\n-              '内补齐证据或删除无意义换瓶；不得返回 Research。',\n-   'requires_research_replan': False,\n-   'sample_id': 'sample_A',\n-   'step_numbers': [3, 4],\n-   'type': 'unverified_transfer_justification'}]",
+          "stack_origin": {
+            "path": "device_agent/test_capability_audit.py",
+            "line": 381,
+            "function": "test_incomplete_trace_or_necessary_transfer_is_not_flagged"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_capability_audit.py",
+            "line": 381,
+            "function": "test_incomplete_trace_or_necessary_transfer_is_not_flagged"
+          }
+        },
+        "device_agent.test_feasibility_orchestration::test_runtime_later_failure_never_calls_approval_or_translation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: V2 Device entry requires an embedded canonical Research package",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 14516,
+            "function": "_validate_v2_raw_canonical_handoff"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_feasibility_orchestration.py",
+            "line": 194,
+            "function": "test_runtime_later_failure_never_calls_approval_or_translation"
+          }
+        },
+        "device_agent.test_plan_repair::test_original_candidates_still_fail_with_accurate_reasons": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert ['legacy_text_recipe'] == ['structured_...hema_adapter']\n  \n  At index 0 diff: 'legacy_text_recipe' != 'structured_recipe_schema_adapter'\n  Use -v to get more diff",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 149,
+            "function": "test_original_candidates_still_fail_with_accurate_reasons"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 149,
+            "function": "test_original_candidates_still_fail_with_accurate_reasons"
+          }
+        },
+        "device_agent.test_plan_repair::test_non_numeric_error_routes_to_controlled_verdict": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' in {'manual', 'partial', 'requires_llm'}",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 502,
+            "function": "test_non_numeric_error_routes_to_controlled_verdict"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 502,
+            "function": "test_non_numeric_error_routes_to_controlled_verdict"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_uses_patch_first_without_llm": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_uses_patch_first_without_llm.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19371,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 747,
+            "function": "test_stage1_repair_uses_patch_first_without_llm"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_controlled_stop_by_default_on_patch_stop": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_controlled_stop_by_default_on_patch_stop.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19371,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 774,
+            "function": "test_stage1_repair_controlled_stop_by_default_on_patch_stop"
+          }
+        },
+        "device_agent.test_plan_repair::test_stage1_repair_regenerates_only_with_explicit_authorization": {
+          "kind": "failure",
+          "exception_type": "TypeError",
+          "reason": "TypeError: test_stage1_repair_regenerates_only_with_explicit_authorization.<locals>.<lambda>() got an unexpected keyword argument 'relationship_binding_authority'",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 19371,
+            "function": "<lambda>"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 821,
+            "function": "test_stage1_repair_regenerates_only_with_explicit_authorization"
+          }
+        },
+        "device_agent.test_plan_repair::test_recipe_wrapper_conflicting_derived_target_is_refused": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1063,
+            "function": "test_recipe_wrapper_conflicting_derived_target_is_refused"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1063,
+            "function": "test_recipe_wrapper_conflicting_derived_target_is_refused"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_ambiguous_mass_is_never_materialized": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1085,
+            "function": "test_legacy_ambiguous_mass_is_never_materialized"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1085,
+            "function": "test_legacy_ambiguous_mass_is_never_materialized"
+          }
+        },
+        "device_agent.test_plan_repair::test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1107,
+            "function": "test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1107,
+            "function": "test_recipe_wrapper_rejects_dimensionally_wrong_mass_unit"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_incomplete_mapping_is_never_guessed": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1115,
+            "function": "test_legacy_incomplete_mapping_is_never_guessed"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1115,
+            "function": "test_legacy_incomplete_mapping_is_never_guessed"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_container_mismatch_stays_open": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1123,
+            "function": "test_legacy_container_mismatch_stays_open"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1123,
+            "function": "test_legacy_container_mismatch_stays_open"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_header_mismatch_stays_open": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1131,
+            "function": "test_legacy_header_mismatch_stays_open"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1131,
+            "function": "test_legacy_header_mismatch_stays_open"
+          }
+        },
+        "device_agent.test_plan_repair::test_wrapper_hopper_constraint_with_unstructured_comment_rejected": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1142,
+            "function": "test_wrapper_hopper_constraint_with_unstructured_comment_rejected"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1142,
+            "function": "test_wrapper_hopper_constraint_with_unstructured_comment_rejected"
+          }
+        },
+        "device_agent.test_plan_repair::test_legacy_hopper_constraint_with_digit_comment_rejected": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'evidence_insufficient' == 'requires_llm'\n  \n  - requires_llm\n  + evidence_insufficient",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1151,
+            "function": "test_legacy_hopper_constraint_with_digit_comment_rejected"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1151,
+            "function": "test_legacy_hopper_constraint_with_digit_comment_rejected"
+          }
+        },
+        "device_agent.test_plan_repair::test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'handler_input_incompatible' == 'manual_no_patchable_checks'\n  \n  - manual_no_patchable_checks\n  + handler_input_incompatible",
+          "stack_origin": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1342,
+            "function": "test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_plan_repair.py",
+            "line": 1342,
+            "function": "test_mixed_findings_promote_recipe_patch_and_keep_semantic_blocked"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_terminal_xrd_return_keeps_normal_success_and_dispatch": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 116,
+            "function": "test_terminal_xrd_return_keeps_normal_success_and_dispatch"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[legacy]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[optional]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate[declared]": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 140,
+            "function": "test_legacy_optional_and_declared_returns_do_not_trigger_external_wait_gate"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_return_contract_change_invalidates_old_certificate_even_for_terminal_return": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 203,
+            "function": "test_return_contract_change_invalidates_old_certificate_even_for_terminal_return"
+          }
+        },
+        "device_agent.test_return_wait_gate::test_pre_gate_certificate_cannot_resume_new_wait_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_return_wait_gate.py",
+            "line": 215,
+            "function": "test_pre_gate_certificate_cannot_resume_new_wait_contract"
+          }
+        },
+        "device_agent.test_run_from_research_state_args::test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg": {
+          "kind": "failure",
+          "exception_type": "SystemExit",
+          "reason": "SystemExit: V2 repair request feasibility_certificate version is unsupported or missing",
+          "stack_origin": {
+            "path": "device_agent/run_from_research_state.py",
+            "line": 291,
+            "function": "validate_repair_contract_boundary"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_run_from_research_state_args.py",
+            "line": 203,
+            "function": "test_main_passes_typed_approval_bundle_only_as_internal_run_kwarg"
+          }
+        },
+        "device_agent.test_run_from_research_state_args::test_repair_contract_boundary_rejects_request_override_or_runtime_drift": {
+          "kind": "failure",
+          "exception_type": "SystemExit",
+          "reason": "SystemExit: V2 repair request feasibility_certificate version is unsupported or missing",
+          "stack_origin": {
+            "path": "device_agent/run_from_research_state.py",
+            "line": 291,
+            "function": "validate_repair_contract_boundary"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_run_from_research_state_args.py",
+            "line": 236,
+            "function": "test_repair_contract_boundary_rejects_request_override_or_runtime_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 6014,
+            "function": "test_mixed_quantity_issues_rewrite_once_without_forging_unknown_yield"
+          }
+        },
+        "device_agent.test_single_agent::test_human_status_plan_rewrite_keeps_certified_plan_and_diagnostic_candidate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 6087,
+            "function": "test_human_status_plan_rewrite_keeps_certified_plan_and_diagnostic_candidate"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_workflow_digest_guard_rejects_post_validation_mutation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7434,
+            "function": "test_v2_final_workflow_digest_guard_rejects_post_validation_mutation"
+          }
+        },
+        "device_agent.test_single_agent::test_failed_terminal_preserves_complete_signed_device_plan_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7586,
+            "function": "test_failed_terminal_preserves_complete_signed_device_plan_contract"
+          }
+        },
+        "device_agent.test_single_agent::test_failed_terminal_guard_blocks_drifted_signed_plan_field": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7614,
+            "function": "test_failed_terminal_guard_blocks_drifted_signed_plan_field"
+          }
+        },
+        "device_agent.test_single_agent::test_quantity_audit_manual_branch_also_guards_signed_plan_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7638,
+            "function": "test_quantity_audit_manual_branch_also_guards_signed_plan_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_success_terminal_preserves_complete_signed_device_plan_contract": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7670,
+            "function": "test_success_terminal_preserves_complete_signed_device_plan_contract"
+          }
+        },
+        "device_agent.test_single_agent::test_scientific_review_requirement_is_signed_from_all_sticky_sources": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: feasibility certification requires a clean audit bound to the final candidate",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4623,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7733,
+            "function": "test_scientific_review_requirement_is_signed_from_all_sticky_sources"
+          }
+        },
+        "device_agent.test_single_agent::test_terminal_plan_certificate_guard_blocks_late_contract_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7862,
+            "function": "test_terminal_plan_certificate_guard_blocks_late_contract_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_terminal_package_also_blocks_late_contract_drift": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7897,
+            "function": "test_manual_terminal_package_also_blocks_late_contract_drift"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_dispatch_payload_guard_rejects_formatter_a_then_b": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7931,
+            "function": "test_v2_final_dispatch_payload_guard_rejects_formatter_a_then_b"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_final_dispatch_binding_allows_only_runtime_plan_name": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 7972,
+            "function": "test_v2_final_dispatch_binding_allows_only_runtime_plan_name"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_override_reruns_full_semantic_plan_gate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 9483,
+            "function": "test_manual_override_reruns_full_semantic_plan_gate"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_feasibility_certificate_binds_contract_version": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10132,
+            "function": "test_v2_feasibility_certificate_binds_contract_version"
+          }
+        },
+        "device_agent.test_single_agent::test_successor_feasibility_certificate_binds_revision_and_lineage": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10199,
+            "function": "test_successor_feasibility_certificate_binds_revision_and_lineage"
+          }
+        },
+        "device_agent.test_single_agent::test_v1_legacy_certificate_without_id_gets_complete_successor_lineage": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10252,
+            "function": "test_v1_legacy_certificate_without_id_gets_complete_successor_lineage"
+          }
+        },
+        "device_agent.test_single_agent::test_v2_manual_override_rejects_repair_request_plan_not_bound_to_certificate": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10295,
+            "function": "test_v2_manual_override_rejects_repair_request_plan_not_bound_to_certificate"
+          }
+        },
+        "device_agent.test_single_agent::test_rejected_manual_override_rolls_back_all_actionable_plan_fields": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10439,
+            "function": "test_rejected_manual_override_rolls_back_all_actionable_plan_fields"
+          }
+        },
+        "device_agent.test_single_agent::test_rejected_override_with_invalid_prior_certificate_is_not_accepted": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10457,
+            "function": "test_rejected_override_with_invalid_prior_certificate_is_not_accepted"
+          }
+        },
+        "device_agent.test_single_agent::test_automatic_plan_rewrite_issues_successor_certificate_before_translation": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10529,
+            "function": "test_automatic_plan_rewrite_issues_successor_certificate_before_translation"
+          }
+        },
+        "device_agent.test_single_agent::test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'manual_required' == 'success'\n  \n  - success\n  + manual_required",
+          "stack_origin": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10800,
+            "function": "test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10800,
+            "function": "test_typed_approval_bundle_is_one_shot_and_agent_state_never_leaks"
+          }
+        },
+        "device_agent.test_single_agent::test_manual_override_reagent_drift_is_rejected_without_stage1_llm": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "assert False is True",
+          "stack_origin": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10918,
+            "function": "test_manual_override_reagent_drift_is_rejected_without_stage1_llm"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_single_agent.py",
+            "line": 10918,
+            "function": "test_manual_override_reagent_drift_is_rejected_without_stage1_llm"
+          }
+        },
+        "device_agent.test_skill_loading::test_certificate_is_independent_of_prompt_projection": {
+          "kind": "failure",
+          "exception_type": "ValueError",
+          "reason": "ValueError: final Device Plan was not canonicalized before feasibility certification",
+          "stack_origin": {
+            "path": "device_agent/single_agent.py",
+            "line": 4592,
+            "function": "_build_feasibility_certificate"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 202,
+            "function": "test_certificate_is_independent_of_prompt_projection"
+          }
+        },
+        "device_agent.test_skill_loading::test_same_agent_new_run_refreshes_tool_body_and_all_contracts": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 256,
+            "function": "test_same_agent_new_run_refreshes_tool_body_and_all_contracts"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 256,
+            "function": "test_same_agent_new_run_refreshes_tool_body_and_all_contracts"
+          }
+        },
+        "device_agent.test_skill_loading::test_explicit_validator_paths_survive_second_run_and_are_refreshed": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 356,
+            "function": "test_explicit_validator_paths_survive_second_run_and_are_refreshed"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 356,
+            "function": "test_explicit_validator_paths_survive_second_run_and_are_refreshed"
+          }
+        },
+        "device_agent.test_skill_loading::test_nonstandard_validator_refresh_hook_is_honored": {
+          "kind": "failure",
+          "exception_type": "AssertionError",
+          "reason": "AssertionError: assert 'failed' == 'completed'\n  \n  - completed\n  + failed",
+          "stack_origin": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 395,
+            "function": "test_nonstandard_validator_refresh_hook_is_honored"
+          },
+          "first_repo_frame": {
+            "path": "device_agent/test_skill_loading.py",
+            "line": 395,
+            "function": "test_nonstandard_validator_refresh_hook_is_honored"
+          }
+        }
+      }
+    }
+  },
+  "capture_note": "Chinese portions of native test output were replacement-decoded by PowerShell redirection on this Windows host; English reason codes, error types, test IDs and repository stack frames remain available. Full console logs and JUnit XML reside in the temporary comparison directory."
+}
