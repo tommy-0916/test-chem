@@ -174,6 +174,7 @@ paper protocol extract
 - steps 中的“参数”不得使用“适量”“按需”“建议”等规划性表达，除非论文原文就是这样
 - 若知识文本中含有 [p.N] 页码标记，请给对应 step 附加可选字段 "page"（整数，取该实验段所在页）；没有标记则省略该字段
 - 若知识文本明确含有行号、页码或段落标记，可填写对应 locator；否则保持 null。excerpt_hash 仅在输入提供时复制，不能自行编造
+- 若输入同时提供可定位的原文、明确实验组、原始文件 SHA256 和已明确的 material_graph 字段路径，可额外输出 route_facts 数组；每项只记录一个原文事实的 fact_id、field_path、value、unit、excerpt，以及 source 的 paper_id、experimental_group_id、section、locator、source_digest。缺任一项就省略 route_facts，不得猜测或从相邻实验组借值
 - 不要输出设备/workstation 控制语义"""
 
 STAGE_DESIGN_PROMPT = """## 任务名称

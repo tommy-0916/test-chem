@@ -52,7 +52,14 @@ class ResearchAgentState:
     knowledge_hits: List[SearchHit] = field(default_factory=list)
     memory_hits: List[SearchHit] = field(default_factory=list)
     extracted_protocols: List[Dict[str, Any]] = field(default_factory=list)
+    # Opt-in route decisions remain sticky across B2 observations. A selected
+    # route is planning authority only; no action is published without an
+    # exact candidate-graph-to-plan binding and the existing V2 gates.
+    route_decision_enabled_v1: bool = False
+    route_decision_goal_v1: Dict[str, Any] = field(default_factory=dict)
+    route_binding_status_v1: str = ""
     route_decision_v1: Dict[str, Any] = field(default_factory=dict)
+    route_compilation_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_discovery_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_validation_diagnostics_v1: Dict[str, List[str]] = field(default_factory=dict)
     survey_report: Dict[str, Any] = field(default_factory=dict)
@@ -135,6 +142,8 @@ class ResearchAgentState:
             "调研报告": self.survey_report,
             "从知识库论文抽取的实验过程": self.extracted_protocols,
             "化学路线决策 V1": self.route_decision_v1,
+            "路线计划绑定状态 V1": self.route_binding_status_v1,
+            "路线事实编译诊断 V1": self.route_compilation_diagnostics_v1,
             "路线候选发现诊断 V1": self.route_discovery_diagnostics_v1,
             "路线验证诊断 V1": self.route_validation_diagnostics_v1,
             "最新 observation": self.latest_observation,

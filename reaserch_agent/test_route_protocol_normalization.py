@@ -88,6 +88,29 @@ class RouteProtocolNormalizationTests(unittest.TestCase):
         self.assertEqual(normalized[0]["experimental_groups"], groups)
         self.assertIsNot(normalized[0]["experimental_groups"], groups)
 
+    def test_route_facts_survive_flat_and_nested_group_normalization(self) -> None:
+        agent = ResearchAgent(
+            model=object(), use_llm=False, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+        )
+        fact = {
+            "fact_id": "amount", "field_path": "material_graph[0].parameters[0].value",
+            "value": 2, "unit": "mmol", "excerpt": "Add 2 mmol salt.",
+            "source": {"locator": "lines:4-4"},
+        }
+        flat = {"source_title": "Study", "route_facts": [fact]}
+        nested = {
+            "source_title": "Study", "experimental_groups": [{
+                "experimental_group_id": "Group A", "route_facts": [fact],
+            }],
+        }
+        normalized = agent._normalize_extracted_protocols([flat, nested], [])
+        self.assertEqual(len(normalized), 2)
+        self.assertEqual(normalized[0]["route_facts"], [fact])
+        self.assertEqual(normalized[1]["experimental_groups"][0]["route_facts"], [fact])
+        self.assertIsNot(normalized[0]["route_facts"], flat["route_facts"])
+        self.assertIsNot(normalized[1]["experimental_groups"], nested["experimental_groups"])
+
 
 if __name__ == "__main__":
     unittest.main()

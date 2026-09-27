@@ -21,6 +21,28 @@ _INDEXED_NAME = re.compile(r"^([a-z][a-z0-9_]*)(?:\[(0|[1-9][0-9]*)\])?$")
 _GRAPH_ROOT = re.compile(r"^material_graph\[(0|[1-9][0-9]*)\]$")
 
 
+def _signature_field(candidate: RouteCandidateV1, field_path: str) -> Any | None:
+    """Resolve a signature claim without treating the claim as source proof."""
+
+    chunks = field_path.split(".")
+    if len(chunks) < 2 or chunks[0] != "route_signature":
+        return None
+    node: Any = candidate.route_signature.model_dump(mode="json")
+    for chunk in chunks[1:]:
+        match = _INDEXED_NAME.fullmatch(chunk)
+        if match is None or not isinstance(node, dict):
+            return None
+        node = node.get(match.group(1))
+        if node is None:
+            return None
+        if match.group(2) is not None:
+            index = int(match.group(2))
+            if not isinstance(node, list) or index >= len(node):
+                return None
+            node = node[index]
+    return node
+
+
 def _graph_field(
     steps: list[dict[str, Any]], field_path: str
 ) -> tuple[Any, dict[str, Any], int] | None:
@@ -348,6 +370,19 @@ def audit_route_candidate_science(
         if field.status != "supported":
             # RouteDecision maps unsupported to rejection and unknown to
             # unresolved.  This adapter must not flatten those meanings.
+            continue
+        if field.field_path.startswith("route_signature."):
+            signature_value = _signature_field(candidate, field.field_path)
+            if signature_value is None or field.provenance is None:
+                continue
+            if not _same_value(signature_value, field.value):
+                issues.append(f"evidence_matrix_signature_mismatch:{field.field_path}")
+                continue
+            # SourceVerifier independently checks this literal quote against
+            # the original experimental group.  This adapter only confirms
+            # that the evidence-matrix claim equals the proposed signature.
+            if not source_pending:
+                result["audited_field_paths"].append(field.field_path)
             continue
         resolved = _graph_field(steps, field.field_path)
         if resolved is None or field.provenance is None:

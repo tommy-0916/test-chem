@@ -23,6 +23,8 @@ from chem_agent_contracts.v2 import StrictModel, canonical_digest
 
 from .route_device import preflight_route_capabilities
 from .route_discovery import RouteDiscoveryResultV1, discover_route_candidates
+from .route_group_compiler import compile_experimental_group_protocols
+from .route_pdf_source import verify_route_pdf_source
 from .route_science import audit_route_candidate_science
 from .route_source import verify_route_source
 from .tools.paper_registry import PaperRegistry
@@ -38,11 +40,17 @@ class RoutePipelineResultV1(StrictModel):
     goal: RouteGoalV1
     discovery: RouteDiscoveryResultV1
     decision: RouteDecisionV1
+    compilation_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
     validation_diagnostics: dict[str, list[str]] = Field(default_factory=dict)
 
 
 def trusted_route_text_sources(kb_dir: str | Path) -> dict[str, list[Path]]:
-    """Index only registered, parsed original text inside the KB root."""
+    """Index registered locatable source files inside the KB root.
+
+    The legacy function name is retained for existing callers; supported
+    formats are UTF-8 text and PDF. Registry metadata alone does not prove
+    that a file is a publisher original or a reviewed source annotation.
+    """
     root = Path(kb_dir).expanduser().resolve()
     if not root.is_dir():
         return {}
@@ -61,7 +69,7 @@ def trusted_route_text_sources(kb_dir: str | Path) -> dict[str, list[Path]]:
                 path = Path(raw).expanduser().resolve(strict=True)
             except (OSError, ValueError):
                 continue
-            if path.is_file() and path.is_relative_to(root) and path.suffix.lower() in {".txt", ".md"}:
+            if path.is_file() and path.is_relative_to(root) and path.suffix.lower() in {".txt", ".md", ".pdf"}:
                 if path not in paths:
                     paths.append(path)
         if paths:
@@ -87,7 +95,7 @@ def _matching_trusted_source(
             path = Path(name).expanduser().resolve(strict=True)
             if not path.is_file() or not path.is_relative_to(root):
                 continue
-            if path.suffix.lower() not in {".txt", ".md"}:
+            if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
                 continue
             if path.stat().st_size > 8 * 1024 * 1024:
                 continue
@@ -118,21 +126,26 @@ def evaluate_route_decision_v1(
             try:
                 path = Path(name).expanduser().resolve(strict=True)
                 if (path.is_file() and path.is_relative_to(root)
-                        and path.suffix.lower() in {".txt", ".md"}
+                        and path.suffix.lower() in {".txt", ".md", ".pdf"}
                         and path.stat().st_size <= 8 * 1024 * 1024):
                     paths = scoped_sources.setdefault(paper_id, [])
                     if path not in paths:
                         paths.append(path)
             except (OSError, ValueError):
                 continue
+    compilation = compile_experimental_group_protocols(protocols)
     discovery = discover_route_candidates(
-        goal, protocols, trusted_source_paths=scoped_sources,
+        goal, compilation.protocols, trusted_source_paths=scoped_sources,
     )
     diagnostics: dict[str, list[str]] = {}
 
     def validate(candidate: RouteCandidateV1) -> RouteValidationReceiptV1:
         path = _matching_trusted_source(candidate, scoped_sources, root)
-        source = verify_route_source(
+        source_verifier = (
+            verify_route_pdf_source if path and path.suffix.lower() == ".pdf"
+            else verify_route_source
+        )
+        source = source_verifier(
             candidate,
             source_paths={candidate.source_scope.paper_id: path} if path and candidate.source_scope else {},
             source_root=root,
@@ -177,7 +190,7 @@ def evaluate_route_decision_v1(
     unresolved_discovery = [
         item for item in discovery.diagnostics if item.status == "unresolved"
     ]
-    if unresolved_discovery:
+    if unresolved_discovery or compilation.diagnostics:
         # An unparsed synthesis group can be a better candidate than the
         # current winner. Preserve the selector's conservative global rule
         # even when discovery could not construct that group's typed object.
@@ -187,6 +200,7 @@ def evaluate_route_decision_v1(
         payload["decision_reasons"] = [
             "candidate_discovery_incomplete",
             *sorted({item.reason_code for item in unresolved_discovery}),
+            *sorted({item.reason_code for item in compilation.diagnostics}),
         ]
         for record in payload["candidates"]:
             if record["status"] == "selected_for_planning":
@@ -199,6 +213,7 @@ def evaluate_route_decision_v1(
         goal=goal,
         discovery=discovery,
         decision=decision,
+        compilation_diagnostics=[vars(item) for item in compilation.diagnostics],
         validation_diagnostics=diagnostics,
     )
 

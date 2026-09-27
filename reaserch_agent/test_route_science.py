@@ -117,6 +117,25 @@ class RouteScienceAuditTest(unittest.TestCase):
         # material contract still prevents a verified graph receipt.
         self.assertEqual(result["verified_graph_step_ids"], [])
 
+    def test_signature_fact_is_audited_only_when_equal_to_proposed_signature(self) -> None:
+        step = _step(1)
+        step["material_inputs"] = [_port("feed", origin="external_inventory")]
+        step["material_outputs"] = [_port("product")]
+        path = "route_signature.operations[0]"
+        field = {
+            "field_path": path, "value": "mix", "status": "supported",
+            "provenance": PAPER,
+        }
+        result = self.audit(_candidate([step], [field]))
+        self.assertIn(path, result["audited_field_paths"])
+        field["value"] = "heat"
+        result = self.audit(_candidate([step], [field]))
+        self.assertNotIn(path, result["audited_field_paths"])
+        self.assertIn(
+            f"evidence_matrix_signature_mismatch:{path}",
+            result["scientific_gate_issues"],
+        )
+
     def test_bare_agent_inferred_numeric_material_is_blocked(self) -> None:
         step = _step(1)
         step["material_inputs"] = [_port("feed", origin="external_inventory")]

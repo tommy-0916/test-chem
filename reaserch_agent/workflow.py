@@ -990,9 +990,9 @@ class ResearchAgent(BaseAgent):
     ) -> Any:
         """Evaluate typed route candidates and persist the full audit record.
 
-        This explicit API does not publish a macro plan. B1/B2 still need a
-        verified group extractor and a selected-route-to-plan binding before
-        they can call it automatically.
+        This API does not publish a macro plan. Opt-in B1/B2 may call it, but
+        selection remains unbound until a lossless candidate-to-plan adapter
+        exists; ordinary B1/B2 planning remains on the legacy path.
         """
         if self._contract_version != "v2":
             raise ValueError("RouteDecisionV1 requires the V2 Research contract")
@@ -1013,6 +1013,9 @@ class ResearchAgent(BaseAgent):
             science_agent=self,
         )
         state.route_decision_v1 = result.decision.model_dump(mode="json")
+        state.route_compilation_diagnostics_v1 = [
+            dict(item) for item in result.compilation_diagnostics
+        ]
         state.route_discovery_diagnostics_v1 = [
             item.model_dump(mode="json") for item in result.discovery.diagnostics
         ]
@@ -1025,6 +1028,82 @@ class ResearchAgent(BaseAgent):
             f"discovery_unresolved={sum(item.status == 'unresolved' for item in result.discovery.diagnostics)}"
         )
         return result
+
+    def _route_decision_gate_before_action(
+        self, state: ResearchAgentState, branch: str
+    ) -> bool:
+        """Opt-in B1/B2 decision boundary, before any new macro action.
+
+        A selected route is not yet an executable plan. The existing raw-plan
+        adapter regenerates parameters from prose and reassigns action/sample
+        identities, so projecting a verified candidate graph through it would
+        lose field-level provenance. Until that binding is lossless, abstain
+        even on selection instead of letting the legacy planner switch routes.
+        """
+        constraints = state.event.constraints or {}
+        if "route_decision_goal_v1" in constraints:
+            state.route_decision_enabled_v1 = True
+            raw_goal = constraints["route_decision_goal_v1"]
+            state.route_decision_goal_v1 = (
+                deepcopy(raw_goal) if isinstance(raw_goal, dict) else {}
+            )
+        if not state.route_decision_enabled_v1:
+            return False
+
+        state.route_decision_v1 = {}
+        state.route_compilation_diagnostics_v1 = []
+        state.route_discovery_diagnostics_v1 = []
+        state.route_validation_diagnostics_v1 = {}
+        try:
+            if not state.route_decision_goal_v1:
+                raise ValueError("route_decision_goal_v1 is required")
+            if self._contract_version != "v2":
+                raise ValueError("route_decision_goal_v1 requires Research V2")
+            result = self.evaluate_route_decision_v1(
+                state, state.route_decision_goal_v1
+            )
+            decision = result.decision
+            if decision.status == "selected_for_planning":
+                state.route_binding_status_v1 = "selected_unbound"
+                reason = (
+                    "route_plan_binding_unavailable: selected candidate has no "
+                    "lossless material-graph-to-action binding"
+                )
+            else:
+                state.route_binding_status_v1 = "decision_unresolved"
+                reason = "route_decision_" + decision.status
+                if decision.decision_reasons:
+                    reason += ": " + "; ".join(decision.decision_reasons[:5])
+        except Exception as exc:
+            state.route_binding_status_v1 = "decision_error"
+            reason = f"route_decision_error: {exc}"
+            state.add_error(reason)
+
+        # Keep the previous B2 action only as a historical snapshot. The
+        # current handoff must contain no plan or package after abstention.
+        if state.macro_plan and not state.previous_macro_plan:
+            state.previous_macro_plan = deepcopy(state.macro_plan)
+        state.macro_plan = []
+        state.macro_action = {}
+        state.pending_macro_action = {}
+        state.current_evidence_bundle = {}
+        state.research_action_package_v2 = {}
+        state.device_adaptation_handoff = {}
+        state.status = "manual_required"
+        state.current_branch = branch
+        state.next_branch = "B8"
+        state.failure_category = (
+            "route_plan_binding_unavailable"
+            if state.route_binding_status_v1 == "selected_unbound"
+            else "route_decision_error"
+            if state.route_binding_status_v1 == "decision_error"
+            else "route_decision_unresolved"
+        )
+        state.manual_handoff = reason
+        state.route_message = reason
+        state.persistent_outputs = state.research_layer_internal_outputs()
+        state.add_log(reason)
+        return True
 
     def _attach_protocol_provenance(self, state: ResearchAgentState) -> None:
         """Tag extracted protocols with registry identity + verification status."""
@@ -3813,6 +3892,8 @@ class ResearchAgent(BaseAgent):
                 f"paper protocol extract completed with {len(state.extracted_protocols)} protocols"
             )
             self._attach_protocol_provenance(state)
+            if self._route_decision_gate_before_action(state, "B1"):
+                return state
             # Issue 8 P1: explicit three-state evidence record. Planning DOES
             # continue without a citable protocol (the plan is then honestly
             # per-step labelled `agent补全` and gated by requires_review /
@@ -3930,6 +4011,13 @@ class ResearchAgent(BaseAgent):
                 "B2 received observation and previous macro plan with "
                 f"{len(state.previous_macro_plan)} steps"
             )
+
+            # Device-local feedback cannot request a new Research action, so
+            # the historical package is preserved by the early return above.
+            # Every authorized opt-in B2 path rechecks the route before a new
+            # action or feasibility adaptation can be generated.
+            if self._route_decision_gate_before_action(state, "B2"):
+                return state
 
             if self._is_device_feasibility_observation(state.latest_observation):
                 fit_judge = self._heuristic_observation_stage_fit_judge(state)
@@ -7168,7 +7256,10 @@ class ResearchAgent(BaseAgent):
                 continue
             steps = self._normalize_protocol_steps(protocol.get("steps", []))
             groups = protocol.get("experimental_groups")
-            if not steps and not (isinstance(groups, list) and groups):
+            route_facts = protocol.get("route_facts")
+            if not steps and not (isinstance(groups, list) and groups) and not (
+                isinstance(route_facts, list) and route_facts
+            ):
                 continue
             source_title = str(protocol.get("source_title", "")).strip()
             entry: Dict[str, Any] = {
@@ -7199,6 +7290,10 @@ class ResearchAgent(BaseAgent):
             for key in ("evidence_bundle", "evidence_matrix", "material_graph"):
                 if isinstance(protocol.get(key), list):
                     entry[key] = deepcopy(protocol[key])
+            # Facts are extraction proposals. Preserve exact claimed values and
+            # source spans for the independent group compiler/source verifier.
+            if isinstance(route_facts, list):
+                entry["route_facts"] = deepcopy(route_facts)
             if isinstance(groups, list):
                 entry["experimental_groups"] = deepcopy(groups)
             if isinstance(protocol.get("required_capabilities"), list):

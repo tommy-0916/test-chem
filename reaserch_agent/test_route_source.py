@@ -154,13 +154,51 @@ class RouteSourceVerificationTest(unittest.TestCase):
             provenance=step_provenance,
         )]
 
-    def test_exact_group_field_and_source_signature_verified(self) -> None:
+    def test_signature_annotation_without_quoted_component_facts_abstains(self) -> None:
         result = self._verify(self._candidate())
         self.assertTrue(result.source_scope_verified)
         self.assertEqual(result.verified_evidence_ids, ("E-1",))
         self.assertEqual(result.verified_field_paths, ("precursor.amount",))
-        self.assertEqual(result.source_route_signature, self.signature)
+        # A local JSON signature annotation is not enough without individual
+        # quoted facts for every signature component.
+        self.assertIsNone(result.source_route_signature)
+        self.assertTrue(any(
+            reason.startswith("source_signature_field_evidence_missing:")
+            for reason in result.reasons
+        ))
         self.assertEqual(result.document_digest, self.document_digest)
+
+    def test_signature_components_with_group_quotes_can_be_verified(self) -> None:
+        self.group_a_excerpt = (
+            "Mix 2 mmol metal salt with base to pH 10; "
+            "precipitation precursor_to_wet_solid metal_salt base dissolve "
+            "precipitate pH_feedback retained_wet_solid."
+        )
+        self.lines[3] = self.group_a_excerpt
+        self._write_source()
+        candidate = self._candidate()
+        signature_fields = {
+            "route_signature.route_family": "precipitation",
+            "route_signature.target_transformation": "precursor_to_wet_solid",
+            "route_signature.precursor_roles[0]": "metal_salt",
+            "route_signature.reagent_roles[0]": "base",
+            "route_signature.operations[0]": "dissolve",
+            "route_signature.operations[1]": "precipitate",
+            "route_signature.control_modes[0]": "pH_feedback",
+            "route_signature.endpoint_state": "retained_wet_solid",
+        }
+        numeric = candidate.evidence_matrix[0]
+        for path, value in signature_fields.items():
+            candidate.evidence_matrix.append(RouteFieldEvidenceV1(
+                field_path=path, value=value, status="supported",
+                source_scope=numeric.source_scope.model_copy(deep=True),
+                evidence_id="E-1",
+                provenance=numeric.provenance.model_copy(deep=True),
+            ))
+        result = self._verify(candidate)
+        self.assertTrue(result.source_scope_verified, result.reasons)
+        self.assertEqual(result.source_route_signature, self.signature)
+        self.assertTrue(set(signature_fields).issubset(result.verified_field_paths))
 
     def test_changed_document_and_candidate_digest_cannot_reuse_verification(self) -> None:
         candidate = self._candidate()

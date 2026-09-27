@@ -95,11 +95,11 @@ def _group_span(
 def _source_signature(
     lines: list[str], group_start: int, group_end: int
 ) -> tuple[RouteSignatureV1 | None, tuple[int, int] | None, str | None]:
-    """Read a reviewed machine-readable signature embedded in this group.
+    """Read a machine-readable signature annotation embedded in this group.
 
     Ordinary Methods prose cannot establish all RouteSignatureV1 roles and
-    transitions deterministically.  Without this explicit source block the
-    signature remains unknown and route selection must abstain.
+    transitions deterministically. The annotation alone is not source proof;
+    verify_route_source additionally requires quoted per-component facts.
     """
 
     openings = [
@@ -128,6 +128,29 @@ def _source_signature(
     except (TypeError, ValueError, ValidationError):
         return None, (opening, closing), "source_signature_invalid"
     return signature, (opening, closing), None
+
+
+def _signature_claims(signature: RouteSignatureV1) -> dict[str, str]:
+    """Every chemical signature component needs a quoted group-level fact.
+
+    The embedded JSON block alone may be a local annotation. It cannot turn
+    a proposed route into independently quoted paper evidence.
+    """
+
+    claims = {
+        "route_signature.route_family": signature.route_family,
+        "route_signature.target_transformation": signature.target_transformation,
+        "route_signature.endpoint_state": signature.endpoint_state,
+    }
+    for key in ("precursor_roles", "reagent_roles", "operations", "control_modes"):
+        for index, value in enumerate(getattr(signature, key)):
+            claims[f"route_signature.{key}[{index}]"] = value
+    for index, transition in enumerate(signature.phase_transitions):
+        for key in ("before_state", "after_state", "confidence"):
+            claims[f"route_signature.phase_transitions[{index}].{key}"] = getattr(
+                transition, key
+            )
+    return claims
 
 
 def _field_source_issue(
@@ -387,6 +410,20 @@ def verify_route_source(
         if binding is None or not _in_group_prose(binding[1], prose_segments):
             item_invalid = True
             reasons.append(f"evidence_item_excerpt_not_in_group:{evidence_id}")
+    if source_signature is not None:
+        fields_by_path = {
+            field.field_path: field for field in candidate.evidence_matrix
+        }
+        verified_paths = set(verified_fields)
+        for path, expected_value in _signature_claims(source_signature).items():
+            field = fields_by_path.get(path)
+            if (
+                field is None or field.status != "supported"
+                or field.value != expected_value or path not in verified_paths
+            ):
+                reasons.append(f"source_signature_field_evidence_missing:{path}")
+                source_signature = None
+                break
     if field_invalid or graph_invalid or item_invalid:
         return RouteSourceVerificationV1(
             document_digest=digest,
