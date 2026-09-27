@@ -7,6 +7,9 @@ import unittest
 
 from chem_agent_contracts.route_action_intent import (
     RouteActionIntentV1,
+    RouteActionBindingDraftV1,
+    build_route_action_binding_draft_v1,
+    validate_route_action_binding_draft_v1,
     validate_route_action_intent_v1,
 )
 from chem_agent_contracts.route_candidate import (
@@ -202,6 +205,107 @@ def _fixture(candidate: RouteCandidateV1 | None = None):
 
 
 class RouteActionIntentTest(unittest.TestCase):
+    def test_typed_binding_draft_preserves_each_parameter_and_snapshot(self) -> None:
+        intent, decision, bundle = _fixture()
+        candidate = decision.candidates[0].candidate
+        draft = build_route_action_binding_draft_v1(
+            intent, decision=decision, current_evidence_bundle=bundle,
+        )
+        self.assertIsInstance(draft, RouteActionBindingDraftV1)
+        self.assertEqual(draft.schema_version, "route-action-binding-draft/v1")
+        self.assertEqual(draft.stage, intent.stage)
+        self.assertEqual(draft.macro_action, intent.macro_action)
+        self.assertEqual(draft.macro_steps, candidate.material_graph)
+        self.assertEqual(draft.evidence_bundle, bundle)
+        self.assertEqual(draft.decision_id, decision.decision_id)
+        self.assertEqual(draft.candidate_digest, canonical_digest(candidate))
+        self.assertEqual(draft.evidence_snapshot_hash, decision.evidence_snapshot_hash)
+        self.assertEqual(
+            draft.device_contract_snapshot_hash,
+            decision.device_contract_snapshot_hash,
+        )
+        self.assertEqual(draft.evidence_bundle_digest, canonical_digest(bundle))
+        self.assertIsNot(draft.macro_steps[0], candidate.material_graph[0])
+        self.assertEqual(
+            [
+                (parameter.value, parameter.unit, parameter.provenance.reference)
+                for parameter in draft.macro_steps[0].parameters
+            ],
+            [(2, "mmol", "E1"), (80, "°C", "E2")],
+        )
+
+    def test_binding_draft_is_detached_from_mutated_inputs(self) -> None:
+        intent, decision, bundle = _fixture()
+        draft = build_route_action_binding_draft_v1(
+            intent, decision=decision, current_evidence_bundle=bundle,
+        )
+        snapshot = draft.model_dump(mode="json")
+        intent.stage.objective = "changed stage"
+        intent.macro_action.planned_operations[0] = "changed operation"
+        decision.candidates[0].candidate.material_graph[0].parameters[1].value = 999
+        decision.candidates[0].candidate.material_graph[0].parameters[1].provenance.reference = "E1"
+        bundle.items[1].excerpt = "changed excerpt"
+        self.assertEqual(draft.model_dump(mode="json"), snapshot)
+
+    def test_binding_draft_revalidates_an_already_mutated_intent(self) -> None:
+        intent, decision, bundle = _fixture()
+        intent.stage.observation_point = " "
+        with self.assertRaisesRegex(ValueError, "stage.observation_point"):
+            build_route_action_binding_draft_v1(
+                intent, decision=decision, current_evidence_bundle=bundle,
+            )
+
+        intent, decision, bundle = _fixture()
+        payload = intent.model_dump(mode="json")
+        payload["macro_action"] = intent.macro_action
+        intent.macro_action.experiment_group.role = "invalid"  # type: ignore[assignment]
+        with self.assertRaises(ValueError):
+            build_route_action_binding_draft_v1(
+                payload, decision=decision, current_evidence_bundle=bundle,
+            )
+
+    def test_binding_draft_rejects_second_parameter_provenance_and_missing_intent(self) -> None:
+        candidate = _candidate()
+        candidate.material_graph[0].parameters[1].provenance = _paper_provenance(0)
+        intent, decision, bundle = _fixture(candidate)
+        with self.assertRaisesRegex(ValueError, r"material_graph\[0\].parameters\[1\].provenance"):
+            build_route_action_binding_draft_v1(
+                intent, decision=decision, current_evidence_bundle=bundle,
+            )
+
+        intent, decision, bundle = _fixture()
+        payload = intent.model_dump(mode="json")
+        del payload["macro_action"]["observation_point_id"]
+        with self.assertRaisesRegex(ValueError, "observation_point_id"):
+            build_route_action_binding_draft_v1(
+                payload, decision=decision, current_evidence_bundle=bundle,
+            )
+
+    def test_binding_draft_rejects_paper_quantity_as_numeric_string(self) -> None:
+        candidate = _candidate()
+        candidate.material_graph[0].parameters[0].value = "999"
+        intent, decision, bundle = _fixture(candidate)
+        with self.assertRaisesRegex(ValueError, "paper parameter is not bound"):
+            build_route_action_binding_draft_v1(
+                intent, decision=decision, current_evidence_bundle=bundle,
+            )
+
+    def test_saved_draft_graph_must_rebind_to_current_decision(self) -> None:
+        intent, decision, bundle = _fixture()
+        draft = build_route_action_binding_draft_v1(
+            intent, decision=decision, current_evidence_bundle=bundle,
+        )
+        verified = validate_route_action_binding_draft_v1(
+            draft, decision=decision, current_evidence_bundle=bundle,
+        )
+        self.assertEqual(verified, draft)
+        forged = draft.model_dump(mode="json")
+        forged["macro_steps"][0]["parameters"][0]["value"] = 999
+        with self.assertRaisesRegex(ValueError, "differs from current selected route"):
+            validate_route_action_binding_draft_v1(
+                forged, decision=decision, current_evidence_bundle=bundle,
+            )
+
     def test_selected_graph_retains_distinct_parameter_provenances(self) -> None:
         intent, decision, bundle = _fixture()
         before = copy.deepcopy(decision.candidates[0].candidate.material_graph)

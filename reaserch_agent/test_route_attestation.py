@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from hashlib import sha256
 import importlib.util
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
@@ -19,7 +21,20 @@ from reaserch_agent.route_attestation import (
     attested_route_sources,
     verify_source_document_attestation,
 )
+from reaserch_agent import route_signed_event
+from reaserch_agent.route_signed_event import (
+    SIGNED_EVENT_SCHEMA_VERSION_V1,
+    TrustedIssuerPublicKeyV1,
+    signed_trusted_acquisition_event_message_v1,
+)
 from reaserch_agent.tools.paper_registry import PaperRegistry
+
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+except ImportError:
+    serialization = None
+    Ed25519PrivateKey = None
 
 
 @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
@@ -96,6 +111,34 @@ class RouteAttestationTest(unittest.TestCase):
             pdf_file=str(self.pdf),
         )
 
+    def _signed_event(
+        self, event: TrustedAcquisitionEventV1
+    ) -> tuple[dict, dict[str, TrustedIssuerPublicKeyV1]]:
+        if Ed25519PrivateKey is None or serialization is None:
+            self.skipTest("cryptography unavailable")
+        private_key = Ed25519PrivateKey.generate()
+        public_key = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        key_id = "independent-issuer-key"
+        payload = event.model_dump(mode="json")
+        message = signed_trusted_acquisition_event_message_v1(
+            key_id=key_id, event=payload
+        )
+        envelope = {
+            "schema_version": SIGNED_EVENT_SCHEMA_VERSION_V1,
+            "key_id": key_id,
+            "event": payload,
+            "signature": base64.b64encode(private_key.sign(message)).decode("ascii"),
+        }
+        keys = {
+            key_id: TrustedIssuerPublicKeyV1(
+                public_key_bytes=public_key, allowed_issuer=self.issuer
+            )
+        }
+        return envelope, keys
+
     def test_independent_event_and_artifact_bind_exact_pdf_and_registry(self) -> None:
         attestation = self._attestation()
         path, event = self._write_attestation(attestation)
@@ -106,7 +149,10 @@ class RouteAttestationTest(unittest.TestCase):
         self.assertTrue(check.verified, check.reasons)
         self.assertEqual(check.document_digest, self.document_digest)
         self.assertEqual(check.attestation_path, str(path))
-        indexed = attested_route_sources(self.root, [event])
+        envelope, keys = self._signed_event(event)
+        indexed = attested_route_sources(
+            self.root, [envelope], trusted_public_keys=keys
+        )
         self.assertEqual(len(indexed[self.paper_id]), 1)
         self.assertEqual(indexed[self.paper_id][0].path, self.pdf)
         self.assertEqual(
@@ -120,9 +166,17 @@ class RouteAttestationTest(unittest.TestCase):
 
     def test_verified_doi_and_local_file_without_event_do_not_index(self) -> None:
         self._register()
-        self.assertEqual(attested_route_sources(self.root, []), {})
-        self.assertEqual(attested_route_sources(self.root, None), {})
-        self.assertEqual(attested_route_sources(self.root, [{"issuer": self.issuer}]), {})
+        self.assertEqual(
+            attested_route_sources(self.root, [], trusted_public_keys={}), {}
+        )
+        self.assertEqual(
+            attested_route_sources(self.root, None, trusted_public_keys={}), {}
+        )
+        self.assertEqual(
+            attested_route_sources(
+                self.root, [{"issuer": self.issuer}], trusted_public_keys={}
+            ), {}
+        )
         self.assertIn(
             "trusted_event_missing",
             verify_source_document_attestation(
@@ -130,12 +184,16 @@ class RouteAttestationTest(unittest.TestCase):
             ).reasons,
         )
         self._register(status="local_file")
-        self.assertEqual(attested_route_sources(self.root, []), {})
+        self.assertEqual(
+            attested_route_sources(self.root, [], trusted_public_keys={}), {}
+        )
 
     def test_self_asserted_issuer_in_artifact_does_not_create_trust(self) -> None:
         self._write_attestation(self._attestation())
         self._register()
-        self.assertEqual(attested_route_sources(self.root, []), {})
+        self.assertEqual(
+            attested_route_sources(self.root, [], trusted_public_keys={}), {}
+        )
 
     def test_tampered_attestation_is_rejected_by_external_event_digest(self) -> None:
         path, event = self._write_attestation(self._attestation())
@@ -159,22 +217,58 @@ class RouteAttestationTest(unittest.TestCase):
 
     def test_wrong_registry_association_cannot_index_document(self) -> None:
         _, event = self._write_attestation(self._attestation())
-        self.assertEqual(attested_route_sources(self.root, [event]), {})
+        envelope, keys = self._signed_event(event)
+        self.assertEqual(
+            attested_route_sources(self.root, [envelope], trusted_public_keys=keys), {}
+        )
         PaperRegistry(self.root).upsert(
             title="Other study", doi="10.1000/other",
             verification_status="verified_doi", full_text_status="parsed",
             pdf_file=str(self.pdf),
         )
-        self.assertEqual(attested_route_sources(self.root, [event]), {})
+        self.assertEqual(
+            attested_route_sources(self.root, [envelope], trusted_public_keys=keys), {}
+        )
 
     def test_registry_doi_must_match_attested_document_identity(self) -> None:
         _, event = self._write_attestation(self._attestation())
+        envelope, keys = self._signed_event(event)
         self._register()
         registry_path = self.root / "registry" / "papers.jsonl"
         record = json.loads(registry_path.read_text(encoding="utf-8").splitlines()[0])
         record["doi"] = "10.1000/different"
         registry_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-        self.assertEqual(attested_route_sources(self.root, [event]), {})
+        self.assertEqual(
+            attested_route_sources(self.root, [envelope], trusted_public_keys=keys), {}
+        )
+
+    def test_public_index_rejects_raw_event_and_tampered_envelope(self) -> None:
+        _, event = self._write_attestation(self._attestation())
+        self._register()
+        envelope, keys = self._signed_event(event)
+        self.assertEqual(
+            attested_route_sources(self.root, [event], trusted_public_keys=keys), {}
+        )
+        tampered = {
+            **envelope,
+            "event": {**envelope["event"], "attestation_digest": "sha256_" + "0" * 64},
+        }
+        self.assertEqual(
+            attested_route_sources(self.root, [tampered], trusted_public_keys=keys), {}
+        )
+        self.assertEqual(
+            attested_route_sources(self.root, [envelope], trusted_public_keys={}), {}
+        )
+
+    def test_public_index_fails_closed_when_ed25519_unavailable(self) -> None:
+        _, event = self._write_attestation(self._attestation())
+        self._register()
+        envelope, keys = self._signed_event(event)
+        with patch.object(route_signed_event, "Ed25519PublicKey", None):
+            indexed = attested_route_sources(
+                self.root, [envelope], trusted_public_keys=keys
+            )
+        self.assertEqual(indexed, {})
 
     def test_supporting_information_requires_parent_doi_and_si_evidence(self) -> None:
         attestation = self._attestation(kind="supporting_information")

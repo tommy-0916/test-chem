@@ -7,20 +7,23 @@ evidence bundle; Research and Device publication gates remain authoritative.
 
 from __future__ import annotations
 
+import copy
 import re
 from typing import Any, Iterator, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .route_candidate import RouteCandidateV1
 from .route_decision import RouteDecisionV1
 from .v2 import (
     EvidenceBundleV2,
     MacroActionV2,
+    MacroStepV2,
     ProvenanceV2,
     StageV2,
     StrictModel,
     canonical_digest,
+    evidence_contains_exact_quantity,
 )
 
 
@@ -47,11 +50,62 @@ class RouteActionIntentV1(StrictModel):
     macro_action: MacroActionV2
 
 
-def _fresh(model_type: type[_T], value: _T | dict[str, Any]) -> _T:
-    """Revalidate a snapshot so mutation of an existing model cannot pass."""
+class RouteActionBindingDraftV1(StrictModel):
+    """Detached typed route/action binding for review, never a V2 publication."""
 
-    payload = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
-    return model_type.model_validate(payload, strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal["route-action-binding-draft/v1"] = (
+        "route-action-binding-draft/v1"
+    )
+    route_id: str = Field(min_length=1)
+    decision_id: str = Field(pattern=_DIGEST_PATTERN)
+    candidate_digest: str = Field(pattern=_DIGEST_PATTERN)
+    evidence_snapshot_hash: str = Field(pattern=_DIGEST_PATTERN)
+    device_contract_snapshot_hash: str = Field(min_length=1)
+    evidence_bundle_id: str = Field(min_length=1)
+    evidence_bundle_digest: str = Field(pattern=_DIGEST_PATTERN)
+    stage: StageV2
+    macro_action: MacroActionV2
+    macro_steps: list[MacroStepV2] = Field(min_length=1)
+    evidence_bundle: EvidenceBundleV2
+
+    @model_validator(mode="after")
+    def validate_embedded_binding(self) -> "RouteActionBindingDraftV1":
+        if (self.evidence_bundle_id != self.evidence_bundle.bundle_id
+                or self.evidence_bundle_digest != canonical_digest(self.evidence_bundle)):
+            raise ValueError("binding draft evidence bundle identity mismatch")
+        if self.macro_action.stage_id != self.stage.stage_id:
+            raise ValueError("binding draft stage ID mismatch")
+        if self.macro_action.planned_operations != [
+            step.operation for step in self.macro_steps
+        ]:
+            raise ValueError("binding draft operation order mismatch")
+        if any(
+            step.macro_action_id != self.macro_action.macro_action_id
+            or step.sample_id != self.macro_action.experiment_group.sample_id
+            for step in self.macro_steps
+        ):
+            raise ValueError("binding draft action or sample ID mismatch")
+        return self
+
+
+def _plain_snapshot(value: Any) -> Any:
+    """Detach nested model instances too, so Pydantic revalidates their fields."""
+
+    if isinstance(value, BaseModel):
+        return _plain_snapshot(value.model_dump(mode="json"))
+    if isinstance(value, dict):
+        return {copy.deepcopy(key): _plain_snapshot(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_plain_snapshot(item) for item in value]
+    return copy.deepcopy(value)
+
+
+def _fresh(model_type: type[_T], value: _T | dict[str, Any]) -> _T:
+    """Deep-copy and revalidate snapshots, including nested model instances."""
+
+    return model_type.model_validate(_plain_snapshot(value), strict=True)
 
 
 def _require_text(value: str, path: str) -> None:
@@ -140,19 +194,33 @@ def _check_provenance(
         raise ValueError(f"{path} source digest does not match current source")
 
 
-def validate_route_action_intent_v1(
+def _check_paper_parameter_value(path: str, value: Any, unit: str, excerpt: str) -> None:
+    """Require each paper-backed parameter's actual value in its excerpt."""
+
+    if isinstance(value, bool):
+        raise ValueError(f"{path} paper parameter must not be a boolean")
+    if isinstance(value, (int, float)):
+        if not evidence_contains_exact_quantity(excerpt, value, unit):
+            raise ValueError(f"{path} paper excerpt does not support the parameter quantity")
+        return
+    if isinstance(value, str) and value.strip() and not unit.strip():
+        # ScientificParameterV2.value is Any. A numeric string must not avoid
+        # the numeric evidence check, while an explicitly quoted qualitative
+        # setting may remain textual when the paper states it verbatim.
+        if not re.search(r"\d", value) and re.search(
+            rf"(?<!\w){re.escape(value.strip())}(?!\w)", excerpt, re.IGNORECASE,
+        ):
+            return
+    raise ValueError(f"{path} paper parameter is not bound to an exact quoted value")
+
+
+def _validated_binding_inputs(
     intent: RouteActionIntentV1 | dict[str, Any],
     *,
     decision: RouteDecisionV1 | dict[str, Any],
     current_evidence_bundle: EvidenceBundleV2 | dict[str, Any],
-) -> RouteCandidateV1:
-    """Validate exact identities and return a detached selected candidate.
-
-    A valid result is only a binding preflight. It is neither an executable
-    plan nor a substitute for the Research V2 and Device publication gates.
-    ``decision`` and ``current_evidence_bundle`` must come from trusted current
-    evaluators, not from model-authored or restored status claims.
-    """
+) -> tuple[RouteActionIntentV1, RouteDecisionV1, EvidenceBundleV2, RouteCandidateV1]:
+    """Revalidate the trusted inputs once for both preflight and draft binding."""
 
     bound = _fresh(RouteActionIntentV1, intent)
     selected_decision = _fresh(RouteDecisionV1, decision)
@@ -250,6 +318,12 @@ def validate_route_action_intent_v1(
 
     verified_ids = set(receipt.verified_evidence_ids)
     for index, step in enumerate(graph):
+        for parameter_index, parameter in enumerate(step.parameters):
+            if parameter.provenance.kind == "paper":
+                _check_paper_parameter_value(
+                    f"material_graph[{index}].parameters[{parameter_index}].provenance",
+                    parameter.value, parameter.unit, parameter.provenance.excerpt,
+                )
         for requirement_index, requirement in enumerate(step.quantity_requirements):
             if "provenance" not in requirement:
                 raise ValueError(
@@ -273,4 +347,89 @@ def validate_route_action_intent_v1(
                 f"evidence_matrix[{index}].provenance", field.provenance,
                 candidate, bundle, verified_ids, receipt.source_identity_doi,
             )
+    return bound, selected_decision, bundle, candidate
+
+
+def validate_route_action_intent_v1(
+    intent: RouteActionIntentV1 | dict[str, Any],
+    *,
+    decision: RouteDecisionV1 | dict[str, Any],
+    current_evidence_bundle: EvidenceBundleV2 | dict[str, Any],
+) -> RouteCandidateV1:
+    """Validate exact identities and return a detached selected candidate.
+
+    A valid result is only a binding preflight. It is neither an executable
+    plan nor a substitute for the Research V2 and Device publication gates.
+    ``decision`` and ``current_evidence_bundle`` must come from trusted current
+    evaluators, not from model-authored or restored status claims.
+    """
+
+    _, _, _, candidate = _validated_binding_inputs(
+        intent, decision=decision,
+        current_evidence_bundle=current_evidence_bundle,
+    )
     return candidate.model_copy(deep=True)
+
+
+def build_route_action_binding_draft_v1(
+    intent: RouteActionIntentV1 | dict[str, Any],
+    *,
+    decision: RouteDecisionV1 | dict[str, Any],
+    current_evidence_bundle: EvidenceBundleV2 | dict[str, Any],
+) -> RouteActionBindingDraftV1:
+    """Bind explicit intent to the selected typed graph without publishing it.
+
+    The decision and current bundle must be supplied by trusted evaluators.
+    This draft is detached and revalidated, but cannot authorize Research V2
+    publication or Device execution.
+    """
+
+    bound, selected_decision, bundle, candidate = _validated_binding_inputs(
+        intent, decision=decision,
+        current_evidence_bundle=current_evidence_bundle,
+    )
+    return _fresh(RouteActionBindingDraftV1, {
+        "route_id": bound.route_id,
+        "decision_id": selected_decision.decision_id,
+        "candidate_digest": bound.candidate_digest,
+        "evidence_snapshot_hash": selected_decision.evidence_snapshot_hash,
+        "device_contract_snapshot_hash": selected_decision.device_contract_snapshot_hash,
+        "evidence_bundle_id": bundle.bundle_id,
+        "evidence_bundle_digest": bound.evidence_bundle_digest,
+        "stage": bound.stage.model_dump(mode="json"),
+        "macro_action": bound.macro_action.model_dump(mode="json"),
+        "macro_steps": [step.model_dump(mode="json") for step in candidate.material_graph],
+        "evidence_bundle": bundle.model_dump(mode="json"),
+    })
+
+
+def validate_route_action_binding_draft_v1(
+    draft: RouteActionBindingDraftV1 | dict[str, Any],
+    *,
+    decision: RouteDecisionV1 | dict[str, Any],
+    current_evidence_bundle: EvidenceBundleV2 | dict[str, Any],
+) -> RouteActionBindingDraftV1:
+    """Rebind a saved draft to the current trusted decision and evidence.
+
+    A draft's own digests are self-consistency checks, not an authority token.
+    Any later consumer must compare it to a fresh binding from the trusted
+    decision and current evidence before using its graph or action fields.
+    """
+
+    supplied = _fresh(RouteActionBindingDraftV1, draft)
+    intent = RouteActionIntentV1(
+        route_id=supplied.route_id,
+        candidate_digest=supplied.candidate_digest,
+        decision_id=supplied.decision_id,
+        evidence_bundle_id=supplied.evidence_bundle_id,
+        evidence_bundle_digest=supplied.evidence_bundle_digest,
+        stage=supplied.stage,
+        macro_action=supplied.macro_action,
+    )
+    expected = build_route_action_binding_draft_v1(
+        intent, decision=decision,
+        current_evidence_bundle=current_evidence_bundle,
+    )
+    if supplied != expected:
+        raise ValueError("binding draft differs from current selected route graph or snapshots")
+    return expected

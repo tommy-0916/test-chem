@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -14,12 +15,20 @@ from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1, RouteGoalV1, RouteSignatureV1, RouteTargetV1,
 )
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
-from reaserch_agent.route_attestation import AttestedRouteSourceV1
+from reaserch_agent.route_attestation import (
+    AttestedRouteSourceV1, SourceDocumentAttestationV1,
+    TrustedAcquisitionEventV1, attestation_path_for,
+)
 from reaserch_agent.route_pipeline import (
-    evaluate_route_decision_v1, trusted_route_text_sources,
+    _evaluate_route_decision_v1_impl, evaluate_route_decision_v1,
+    trusted_route_text_sources,
 )
 from reaserch_agent.route_pdf_groups import (
     PdfExperimentalGroupV1, PdfGroupEnumerationResultV1,
+)
+from reaserch_agent.route_signed_event import (
+    SIGNED_EVENT_SCHEMA_VERSION_V1, SignedEventVerificationV1,
+    TrustedIssuerPublicKeyV1, signed_trusted_acquisition_event_message_v1,
 )
 from reaserch_agent.tools.paper_registry import PaperRegistry
 from reaserch_agent.state import ResearchAgentState, ResearchEvent
@@ -136,13 +145,18 @@ class RoutePipelineTest(unittest.TestCase):
     def test_path_only_source_is_not_accepted_by_default(self) -> None:
         result = evaluate_route_decision_v1(
             self.goal, [self._protocol()], source_root=self.root,
-            trusted_source_paths={"paper-1": [self.source]},
         )
         self.assertEqual(result.decision.status, "unresolved")
         self.assertEqual(result.discovery.candidates, [])
         self.assertIn(
             "trusted_source_event_missing", result.decision.decision_reasons
         )
+        with self.assertRaises(TypeError):
+            evaluate_route_decision_v1(
+                self.goal, [self._protocol()], source_root=self.root,
+                trusted_source_paths={"paper-1": [self.source]},
+                require_attested_sources=False,
+            )
 
     @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
     def test_registered_pdf_fields_verify_but_unsigned_route_abstains(self) -> None:
@@ -206,7 +220,7 @@ class RoutePipelineTest(unittest.TestCase):
         with patch("reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science), patch(
             "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
         ):
-            result = evaluate_route_decision_v1(
+            result = _evaluate_route_decision_v1_impl(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [pdf]},
                 require_attested_sources=False,
@@ -362,7 +376,7 @@ class RoutePipelineTest(unittest.TestCase):
         with patch("reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science) as science_mock, patch(
             "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
         ):
-            result = evaluate_route_decision_v1(
+            result = _evaluate_route_decision_v1_impl(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
                 require_attested_sources=False,
@@ -380,7 +394,7 @@ class RoutePipelineTest(unittest.TestCase):
     def test_changed_original_source_prevents_candidate_discovery(self) -> None:
         protocol = self._protocol()
         self.source.write_text(self.source.read_text(encoding="utf-8") + "amended\n", encoding="utf-8")
-        result = evaluate_route_decision_v1(
+        result = _evaluate_route_decision_v1_impl(
             self.goal, [protocol], source_root=self.root,
             trusted_source_paths={"paper-1": [self.source]},
             require_attested_sources=False,
@@ -401,7 +415,7 @@ class RoutePipelineTest(unittest.TestCase):
                 "verified_runtime_resolution_fields": [],
                 "verified_convention_field_paths": [],
             }
-            result = evaluate_route_decision_v1(
+            result = _evaluate_route_decision_v1_impl(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
                 require_attested_sources=False,
@@ -429,7 +443,7 @@ class RoutePipelineTest(unittest.TestCase):
         with patch("reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science), patch(
             "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
         ):
-            result = evaluate_route_decision_v1(
+            result = _evaluate_route_decision_v1_impl(
                 self.goal, [self._protocol(), incomplete], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
                 require_attested_sources=False,
@@ -458,7 +472,7 @@ class RoutePipelineTest(unittest.TestCase):
         with patch("reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science), patch(
             "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
         ):
-            result = evaluate_route_decision_v1(
+            result = _evaluate_route_decision_v1_impl(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
                 require_attested_sources=False,
@@ -520,6 +534,206 @@ class RoutePipelineTest(unittest.TestCase):
             "trusted_source_event_missing", result.decision.decision_reasons
         )
         self.assertEqual(state.macro_plan, [])
+
+    def test_unsigned_event_object_cannot_authorize_production_source(self) -> None:
+        event = TrustedAcquisitionEventV1(
+            schema_version="trusted_acquisition_event_v1", paper_id="paper-1",
+            kb_relative_path="_pdf_sources/campaign/paper.pdf",
+            document_digest="sha256_" + "a" * 64,
+            document_kind="primary_paper",
+            attestation_digest="sha256_" + "b" * 64,
+            issuer="untrusted-input", identity_verdict="primary_verified",
+        )
+        with patch(
+            "reaserch_agent.route_pipeline.attested_route_sources",
+            return_value={},
+        ) as indexed:
+            result = evaluate_route_decision_v1(
+                self.goal, [self._protocol()], source_root=self.root,
+                trusted_source_events=[event],
+            )
+        self.assertIsNone(indexed.call_args.args[1])
+        self.assertEqual(result.decision.status, "unresolved")
+        self.assertIn(
+            "unsigned_trusted_source_event_rejected",
+            result.decision.decision_reasons,
+        )
+
+    def test_signed_envelope_reaches_independently_verifying_index(self) -> None:
+        event = TrustedAcquisitionEventV1(
+            schema_version="trusted_acquisition_event_v1", paper_id="paper-1",
+            kb_relative_path="_pdf_sources/campaign/paper.pdf",
+            document_digest="sha256_" + "a" * 64,
+            document_kind="primary_paper",
+            attestation_digest="sha256_" + "b" * 64,
+            issuer="reviewed-issuer", identity_verdict="primary_verified",
+        )
+        signed = {"signed": "opaque input"}
+        keys = {"reviewed-key": TrustedIssuerPublicKeyV1(
+            public_key_bytes=b"x" * 32, allowed_issuer="reviewed-issuer",
+        )}
+        with patch(
+            "reaserch_agent.route_pipeline.verify_signed_trusted_acquisition_event",
+            return_value=SignedEventVerificationV1(
+                verified=True, event=event,
+            ),
+        ) as verifier, patch(
+            "reaserch_agent.route_pipeline.attested_route_sources",
+            return_value={},
+        ) as indexed:
+            evaluate_route_decision_v1(
+                self.goal, [], source_root=self.root,
+                signed_source_events=[signed], trusted_public_keys=keys,
+            )
+        verifier.assert_called_once_with(envelope=signed, trusted_public_keys=keys)
+        self.assertEqual(indexed.call_args.args[1], [signed])
+        self.assertEqual(indexed.call_args.kwargs["trusted_public_keys"], keys)
+
+        with patch(
+            "reaserch_agent.route_pipeline.verify_signed_trusted_acquisition_event",
+            return_value=SignedEventVerificationV1(
+                reason_code="signature_mismatch",
+            ),
+        ), patch(
+            "reaserch_agent.route_pipeline.attested_route_sources",
+            return_value={},
+        ) as indexed:
+            rejected = evaluate_route_decision_v1(
+                self.goal, [], source_root=self.root,
+                signed_source_events=[signed], trusted_public_keys=keys,
+            )
+        self.assertEqual(indexed.call_args.args[1], [signed])
+        self.assertIn(
+            "trusted_source_event_signature_mismatch",
+            rejected.decision.decision_reasons,
+        )
+
+    def test_research_agent_uses_constructor_keys_not_workflow_state(self) -> None:
+        signed = {"signed": "deployment input"}
+        keys = {"deployment-key": TrustedIssuerPublicKeyV1(
+            public_key_bytes=b"x" * 32, allowed_issuer="reviewed-issuer",
+        )}
+        agent = ResearchAgent(
+            model=object(), use_llm=False, knowledge_base_dir=str(self.root),
+            memory_dir=str(self.root), enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[signed],
+            trusted_route_public_keys=keys,
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(
+                event_type="bootstrap", query="prepare product",
+                constraints={"trusted_route_public_keys": {"attacker": "fake"}},
+            ),
+            contract_version="v2", extracted_protocols=[self._protocol()],
+        )
+        with patch(
+            "reaserch_agent.route_pipeline.verify_signed_trusted_acquisition_event",
+            return_value=SignedEventVerificationV1(
+                reason_code="signature_mismatch",
+            ),
+        ) as verifier:
+            result = agent.evaluate_route_decision_v1(state, self.goal)
+        verifier.assert_called_once_with(envelope=signed, trusted_public_keys=keys)
+        self.assertIn(
+            "trusted_source_event_signature_mismatch",
+            result.decision.decision_reasons,
+        )
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("fitz") and importlib.util.find_spec("cryptography"),
+        "PyMuPDF and cryptography required",
+    )
+    def test_real_signed_pdf_reaches_research_group_coverage_audit(self) -> None:
+        import fitz
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        pdf = self.root / "_pdf_sources" / "campaign" / "paper.pdf"
+        pdf.parent.mkdir(parents=True)
+        document = fitz.open()
+        page = document.new_page()
+        for index, (line, size, font) in enumerate((
+            ("Methods", 16, "hebo"),
+            ("control", 14, "hebo"),
+            ("Mix 2 mmol salt in water.", 10, "helv"),
+            ("Recover the control precipitate.", 10, "helv"),
+        )):
+            page.insert_text(fitz.Point(72, 70 + 48 * index), line,
+                             fontsize=size, fontname=font)
+        document.save(str(pdf))
+        document.close()
+        digest = "sha256_" + hashlib.sha256(pdf.read_bytes()).hexdigest()
+        paper_id = "doi_10_1000_example"
+        attestation = SourceDocumentAttestationV1(
+            schema_version="source_document_attestation_v1",
+            paper_id=paper_id, kb_relative_path="_pdf_sources/campaign/paper.pdf",
+            document_digest=digest, document_kind="primary_paper",
+            doi="10.1000/example", parent_doi="",
+            acquisition_url="https://publisher.example/article/example",
+            request_url="https://publisher.example/paper.pdf",
+            final_url="https://publisher.example/paper.pdf",
+            identity_evidence_type="publisher_doi_link",
+            identity_evidence_url="https://publisher.example/article/example",
+            identity_evidence_digest="sha256_" + "a" * 64,
+            identity_status="verified", issuer="independent-reviewer",
+            issued_at="2026-09-27T12:00:00Z",
+        )
+        attestation_path = attestation_path_for(self.root, paper_id, digest)
+        attestation_path.parent.mkdir(parents=True)
+        attestation_path.write_text(
+            json.dumps(attestation.model_dump(mode="json")), encoding="utf-8",
+        )
+        event = TrustedAcquisitionEventV1(
+            schema_version="trusted_acquisition_event_v1",
+            paper_id=paper_id, kb_relative_path=attestation.kb_relative_path,
+            document_digest=digest, document_kind="primary_paper",
+            attestation_digest=canonical_digest(attestation.model_dump(mode="json")),
+            issuer="independent-reviewer", identity_verdict="primary_verified",
+        )
+        private_key = Ed25519PrivateKey.generate()
+        key_id = "reviewer-1"
+        event_json = event.model_dump(mode="json")
+        envelope = {
+            "schema_version": SIGNED_EVENT_SCHEMA_VERSION_V1,
+            "key_id": key_id, "event": event_json,
+            "signature": base64.b64encode(private_key.sign(
+                signed_trusted_acquisition_event_message_v1(
+                    key_id=key_id, event=event_json,
+                )
+            )).decode("ascii"),
+        }
+        public_key = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        PaperRegistry(self.root).upsert(
+            title="Primary study", doi="10.1000/example",
+            verification_status="local_file", full_text_status="parsed",
+            pdf_file=str(pdf),
+        )
+        agent = ResearchAgent(
+            model=object(), use_llm=False, knowledge_base_dir=str(self.root),
+            memory_dir=str(self.root), enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[envelope],
+            trusted_route_public_keys={
+                key_id: TrustedIssuerPublicKeyV1(
+                    public_key_bytes=public_key,
+                    allowed_issuer="independent-reviewer",
+                ),
+            },
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2", extracted_protocols=[],
+        )
+        result = agent.evaluate_route_decision_v1(state, self.goal)
+        self.assertEqual(result.decision.status, "unresolved")
+        self.assertIn("attested_group_not_extracted", result.decision.decision_reasons)
+        self.assertNotIn("attested_source_unavailable", result.decision.decision_reasons)
+        self.assertNotIn("trusted_source_event_missing", result.decision.decision_reasons)
+        self.assertEqual(state.route_decision_v1["decision_id"], result.decision.decision_id)
 
 
 if __name__ == "__main__":

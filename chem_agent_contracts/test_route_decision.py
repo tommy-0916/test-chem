@@ -269,6 +269,12 @@ class RouteDecisionOfflineTest(unittest.TestCase):
         self.assertIn("paper_quantity_excerpt_mismatch:precursor.amount", result.candidates[0].reasons)
         self.assertIsNone(result.selected_route_id)
 
+    def test_numeric_string_cannot_evade_paper_quantity_check(self) -> None:
+        route = candidate(value="999")  # type: ignore[arg-type]
+        result = decide_routes(goal(), [route], receipt)
+        self.assertIn("quantity_value_not_numeric:precursor.amount", result.candidates[0].reasons)
+        self.assertIsNone(result.selected_route_id)
+
     def test_device_blocked_or_unknown_never_selects(self) -> None:
         route = candidate()
         blocked = decide_routes(goal(), [route], lambda value: receipt(value, device_status="blocked"))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from hashlib import sha256
 import importlib.util
 from pathlib import Path
@@ -9,13 +10,28 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from reaserch_agent.route_attestation import AttestedRouteSourceV1
+from reaserch_agent import route_signed_event
+from reaserch_agent.route_attestation import (
+    AttestedRouteSourceV1, TrustedAcquisitionEventV1,
+)
 from reaserch_agent.route_pdf_groups import (
     audit_pdf_group_extraction_coverage,
     audit_pdf_group_roles,
     enumerate_attested_pdf_experimental_groups,
     enumerate_pdf_experimental_groups,
 )
+from reaserch_agent.route_signed_event import (
+    SIGNED_EVENT_SCHEMA_VERSION_V1,
+    TrustedIssuerPublicKeyV1,
+    signed_trusted_acquisition_event_message_v1,
+)
+
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+except ImportError:
+    serialization = None
+    Ed25519PrivateKey = None
 
 
 @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
@@ -161,13 +177,53 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
             attestation_digest="sha256_" + "a" * 64,
         )
 
+    def _signed_event(
+        self, receipt: AttestedRouteSourceV1
+    ) -> tuple[dict, dict[str, TrustedIssuerPublicKeyV1], TrustedAcquisitionEventV1]:
+        if Ed25519PrivateKey is None or serialization is None:
+            self.skipTest("cryptography unavailable")
+        private_key = Ed25519PrivateKey.generate()
+        public_key = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        event = TrustedAcquisitionEventV1(
+            schema_version="trusted_acquisition_event_v1",
+            paper_id=receipt.paper_id,
+            kb_relative_path="_pdf_sources/campaign/source.pdf",
+            document_digest=receipt.document_digest,
+            document_kind="primary_paper",
+            attestation_digest=receipt.attestation_digest,
+            issuer="independent-acquisition-service",
+            identity_verdict="primary_verified",
+        )
+        key_id = "independent-issuer-key"
+        payload = event.model_dump(mode="json")
+        message = signed_trusted_acquisition_event_message_v1(
+            key_id=key_id, event=payload
+        )
+        envelope = {
+            "schema_version": SIGNED_EVENT_SCHEMA_VERSION_V1,
+            "key_id": key_id,
+            "event": payload,
+            "signature": base64.b64encode(private_key.sign(message)).decode("ascii"),
+        }
+        keys = {key_id: TrustedIssuerPublicKeyV1(
+            public_key_bytes=public_key, allowed_issuer=event.issuer,
+        )}
+        return envelope, keys, event
+
     def test_attested_wrapper_preserves_only_matching_original_bytes(self) -> None:
         receipt = self._receipt()
+        envelope, keys, event = self._signed_event(receipt)
         with patch(
-            "reaserch_agent.route_pdf_groups.attested_route_sources",
+            "reaserch_agent.route_pdf_groups._attested_route_sources_for_verified_events",
             return_value={"paper-1": [receipt]},
-        ):
-            result = enumerate_attested_pdf_experimental_groups(self.root, [object()])
+        ) as indexed:
+            result = enumerate_attested_pdf_experimental_groups(
+                self.root, [envelope], trusted_public_keys=keys
+            )
+        self.assertEqual(indexed.call_args.args[1], (event,))
         self.assertEqual(len(result.groups), 2)
         self.assertEqual(result.diagnostics, [])
         self.assertTrue(all(group.source_scope.source_digest == receipt.document_digest
@@ -175,6 +231,7 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
 
     def test_pdf_changed_between_attestation_and_enumeration_drops_groups(self) -> None:
         receipt = self._receipt()
+        envelope, keys, _ = self._signed_event(receipt)
 
         def attest_then_change(_root, _events):
             self.lines[2] = ("Mix 5 mmol salt in water.", 10, "helv")
@@ -183,10 +240,12 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
             return {"paper-1": [receipt]}
 
         with patch(
-            "reaserch_agent.route_pdf_groups.attested_route_sources",
+            "reaserch_agent.route_pdf_groups._attested_route_sources_for_verified_events",
             side_effect=attest_then_change,
         ):
-            result = enumerate_attested_pdf_experimental_groups(self.root, [object()])
+            result = enumerate_attested_pdf_experimental_groups(
+                self.root, [envelope], trusted_public_keys=keys
+            )
         self.assertEqual(result.groups, [])
         self.assertEqual(
             [item.reason_code for item in result.diagnostics],
@@ -194,11 +253,40 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
         )
 
     def test_missing_attestation_cannot_authorize_any_group(self) -> None:
+        result = enumerate_attested_pdf_experimental_groups(
+            self.root, [], trusted_public_keys={}
+        )
+        self.assertEqual(result.groups, [])
+        self.assertEqual(result.diagnostics[0].reason_code,
+                         "attested_pdf_source_missing")
+
+    def test_attested_wrapper_rejects_raw_event_and_tampered_envelope(self) -> None:
+        receipt = self._receipt()
+        envelope, keys, event = self._signed_event(receipt)
+        tampered = {
+            **envelope,
+            "event": {**envelope["event"], "document_digest": "sha256_" + "0" * 64},
+        }
         with patch(
-            "reaserch_agent.route_pdf_groups.attested_route_sources",
-            return_value={},
-        ):
-            result = enumerate_attested_pdf_experimental_groups(self.root, [])
+            "reaserch_agent.route_pdf_groups._attested_route_sources_for_verified_events"
+        ) as indexed:
+            for candidate in (event, tampered):
+                result = enumerate_attested_pdf_experimental_groups(
+                    self.root, [candidate], trusted_public_keys=keys
+                )
+                self.assertEqual(result.groups, [])
+                self.assertEqual(
+                    result.diagnostics[0].reason_code, "attested_pdf_source_missing"
+                )
+            indexed.assert_not_called()
+
+    def test_attested_wrapper_fails_closed_without_ed25519(self) -> None:
+        receipt = self._receipt()
+        envelope, keys, _ = self._signed_event(receipt)
+        with patch.object(route_signed_event, "Ed25519PublicKey", None):
+            result = enumerate_attested_pdf_experimental_groups(
+                self.root, [envelope], trusted_public_keys=keys
+            )
         self.assertEqual(result.groups, [])
         self.assertEqual(result.diagnostics[0].reason_code,
                          "attested_pdf_source_missing")

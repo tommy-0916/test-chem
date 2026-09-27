@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Sequence
 
 if TYPE_CHECKING:
     from .route_attestation import TrustedAcquisitionEventV1
+    from .route_signed_event import TrustedIssuerPublicKeyV1
 
 from pydantic import ValidationError
 from chem_agent_contracts.container_requirements import (
@@ -390,6 +391,8 @@ class ResearchAgent(BaseAgent):
         web_search_client: Any = None,
         contract_version: str = "v1",
         trusted_route_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
+        signed_route_source_events: Sequence[Mapping[str, Any]] | None = None,
+        trusted_route_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
         trusted_route_capabilities_by_group: Mapping[
             tuple[str, str, str], Sequence[str]
         ] | None = None,
@@ -408,9 +411,14 @@ class ResearchAgent(BaseAgent):
         if normalized_contract not in {"v1", "v2"}:
             raise ValueError("contract_version must be 'v1' or 'v2'")
         self._contract_version = normalized_contract
-        # Only a trusted caller may supply independently issued source events.
-        # Never construct them from model output, workflow state, or registry metadata.
+        # An unsigned event object is a legacy input and will be rejected by
+        # the route pipeline. Public keys and signed envelopes must come from
+        # deployment configuration, never workflow/model/KB state.
         self._trusted_route_source_events = tuple(trusted_route_source_events or ())
+        self._signed_route_source_events = tuple(
+            deepcopy(item) for item in (signed_route_source_events or ())
+        )
+        self._trusted_route_public_keys = dict(trusted_route_public_keys or {})
         self._trusted_route_capabilities_by_group = {
             key: tuple(values)
             for key, values in (trusted_route_capabilities_by_group or {}).items()
@@ -1027,6 +1035,8 @@ class ResearchAgent(BaseAgent):
             typed_goal, state.extracted_protocols,
             source_root=kb_root,
             trusted_source_events=self._trusted_route_source_events,
+            signed_source_events=self._signed_route_source_events,
+            trusted_public_keys=self._trusted_route_public_keys,
             verified_capabilities_by_group=self._trusted_route_capabilities_by_group,
             verified_group_roles_by_group=self._trusted_route_group_roles_by_group,
             device_context=device_context if isinstance(device_context, dict) else None,

@@ -37,6 +37,9 @@ from .route_pdf_groups import (
 )
 from .route_pdf_source import verify_route_pdf_source
 from .route_science import audit_route_candidate_science
+from .route_signed_event import (
+    TrustedIssuerPublicKeyV1, verify_signed_trusted_acquisition_event,
+)
 from .route_source import RouteSourceVerificationV1, verify_route_source
 from .tools.paper_registry import PaperRegistry
 
@@ -123,13 +126,15 @@ def _matching_trusted_source(
     return matches[0] if len(matches) == 1 else None
 
 
-def evaluate_route_decision_v1(
+def _evaluate_route_decision_v1_impl(
     goal: RouteGoalV1,
     protocols: Sequence[Mapping[str, Any]],
     *,
     source_root: str | Path,
     trusted_source_paths: RouteSourceIndex | None = None,
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
+    signed_source_events: Sequence[Mapping[str, Any]] | None = None,
+    trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
     verified_capabilities_by_group: Mapping[
         tuple[str, str, str], Sequence[str]
     ] | None = None,
@@ -138,17 +143,33 @@ def evaluate_route_decision_v1(
     ] | None = None,
     device_context: dict[str, Any] | None = None,
     science_agent: Any = None,
-    require_attested_sources: bool = True,
+    require_attested_sources: bool,
 ) -> RoutePipelineResultV1:
-    """Evaluate proposals; source identity is verified inside this boundary.
+    """Shared evaluator; the unattested source mode is for offline fixtures only.
 
     ``trusted_source_paths`` is honored only with the explicit offline fixture
-    opt-out. Production callers supply externally issued events, never a
-    path-only registry index or a preconstructed receipt.
+    opt-out. Production accepts only signed events verified against public
+    keys supplied outside workflow/model/KB state. Legacy unsigned event
+    objects are rejected at this boundary.
     """
     root = Path(source_root).expanduser().resolve()
+    event_issues: list[str] = []
+    if require_attested_sources:
+        if trusted_source_events:
+            event_issues.append("unsigned_trusted_source_event_rejected")
+        for envelope in signed_source_events or ():
+            verified = verify_signed_trusted_acquisition_event(
+                envelope=envelope,
+                trusted_public_keys=trusted_public_keys or {},
+            )
+            if not verified.verified or verified.event is None:
+                event_issues.append(
+                    "trusted_source_event_" + (verified.reason_code or "invalid")
+                )
     source_index: RouteSourceIndex = (
-        attested_route_sources(root, trusted_source_events)
+        attested_route_sources(
+            root, signed_source_events, trusted_public_keys=trusted_public_keys,
+        )
         if require_attested_sources else trusted_source_paths or {}
     )
     scoped_sources: dict[str, list[Path]] = {}
@@ -194,17 +215,23 @@ def evaluate_route_decision_v1(
     discovery = discover_route_candidates(
         goal, compilation.protocols, trusted_source_paths=scoped_sources,
     )
+    for issue_index, reason_code in enumerate(sorted(set(event_issues))):
+        discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+            protocol_index=len(protocols), group_index=issue_index,
+            reason_code=reason_code,
+        ))
     if require_attested_sources and not source_index:
         discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
             protocol_index=len(protocols), group_index=0,
             reason_code=(
                 "trusted_source_event_missing"
-                if not trusted_source_events else "attested_source_unavailable"
+                if not signed_source_events and not trusted_source_events
+                else "attested_source_unavailable"
             ),
         ))
     if require_attested_sources and source_index:
         enumerated = enumerate_attested_pdf_experimental_groups(
-            root, trusted_source_events
+            root, signed_source_events, trusted_public_keys=trusted_public_keys,
         )
         coverage = audit_pdf_group_extraction_coverage(
             enumerated.groups, protocols
@@ -377,6 +404,44 @@ def evaluate_route_decision_v1(
         decision=decision,
         compilation_diagnostics=[vars(item) for item in compilation.diagnostics],
         validation_diagnostics=diagnostics,
+    )
+
+
+def evaluate_route_decision_v1(
+    goal: RouteGoalV1,
+    protocols: Sequence[Mapping[str, Any]],
+    *,
+    source_root: str | Path,
+    trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
+    signed_source_events: Sequence[Mapping[str, Any]] | None = None,
+    trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
+    verified_capabilities_by_group: Mapping[
+        tuple[str, str, str], Sequence[str]
+    ] | None = None,
+    verified_group_roles_by_group: Mapping[
+        tuple[str, str, str], str
+    ] | None = None,
+    device_context: dict[str, Any] | None = None,
+    science_agent: Any = None,
+) -> RoutePipelineResultV1:
+    """Evaluate candidate routes with signed source identity required.
+
+    The public production entrypoint has no path-only or unattested source
+    option. Legacy unsigned event objects are retained only to produce an
+    explicit rejection diagnostic during migration.
+    """
+    return _evaluate_route_decision_v1_impl(
+        goal,
+        protocols,
+        source_root=source_root,
+        trusted_source_events=trusted_source_events,
+        signed_source_events=signed_source_events,
+        trusted_public_keys=trusted_public_keys,
+        verified_capabilities_by_group=verified_capabilities_by_group,
+        verified_group_roles_by_group=verified_group_roles_by_group,
+        device_context=device_context,
+        science_agent=science_agent,
+        require_attested_sources=True,
     )
 
 

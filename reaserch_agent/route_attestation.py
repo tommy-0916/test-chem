@@ -22,7 +22,7 @@ from hashlib import sha256
 import json
 from pathlib import Path, PurePosixPath
 import re
-from typing import Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from pydantic import ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -30,6 +30,9 @@ from pydantic import ConfigDict, Field, ValidationError, field_validator, model_
 from chem_agent_contracts.v2 import StrictModel, canonical_digest
 
 from .tools.paper_registry import PaperRegistry
+
+if TYPE_CHECKING:
+    from .route_signed_event import TrustedIssuerPublicKeyV1
 
 
 _DOCUMENT_DIGEST = re.compile(r"sha256_[0-9a-f]{64}\Z")
@@ -331,16 +334,64 @@ def verify_source_document_attestation(
     )
 
 
+def _verified_events_from_signed_envelopes(
+    signed_events: Sequence[Mapping[str, Any]] | None,
+    trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None,
+) -> tuple[TrustedAcquisitionEventV1, ...]:
+    """Authenticate external envelopes before exposing their event payloads."""
+
+    if not isinstance(signed_events, Sequence) or isinstance(
+        signed_events, (str, bytes, bytearray)
+    ):
+        return ()
+    # The verifier imports TrustedAcquisitionEventV1 from this module.
+    try:
+        from .route_signed_event import verify_signed_trusted_acquisition_event
+    except ImportError:
+        return ()
+    keys = trusted_public_keys if trusted_public_keys is not None else {}
+    verified_events: list[TrustedAcquisitionEventV1] = []
+    for envelope in signed_events:
+        if not isinstance(envelope, Mapping):
+            continue
+        verification = verify_signed_trusted_acquisition_event(
+            envelope=envelope, trusted_public_keys=keys
+        )
+        if verification.verified and verification.event is not None:
+            verified_events.append(verification.event)
+    return tuple(verified_events)
+
+
 def attested_route_sources(
     kb_dir: str | Path,
-    trusted_events: Sequence[TrustedAcquisitionEventV1] | None,
+    signed_events: Sequence[Mapping[str, Any]] | None,
+    *,
+    trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None,
 ) -> dict[str, list[AttestedRouteSourceV1]]:
-    """Index only PDF paths backed by both registry association and event.
+    """Index registered PDFs only after verifying external signed envelopes.
+
+    Public key bindings must come from caller-controlled configuration. Raw
+    ``TrustedAcquisitionEventV1`` objects are not accepted here.
+    """
+
+    events = _verified_events_from_signed_envelopes(
+        signed_events, trusted_public_keys
+    )
+    if not events:
+        return {}
+    return _attested_route_sources_for_verified_events(kb_dir, events)
+
+
+def _attested_route_sources_for_verified_events(
+    kb_dir: str | Path,
+    trusted_events: Sequence[TrustedAcquisitionEventV1],
+) -> dict[str, list[AttestedRouteSourceV1]]:
+    """Index PDF paths backed by registry association and verified events.
 
     The registry is a lookup, never an identity attester.  In particular,
-    ``verified_doi`` and ``local_file`` alone yield no source.  The caller
-    must supply independently authenticated event objects; absent events
-    produce an empty index even when the KB has plausible local PDFs.
+    ``verified_doi`` and ``local_file`` alone yield no source. This private
+    helper only receives events after the public boundary has authenticated
+    their signed envelopes.
     """
 
     if not trusted_events:

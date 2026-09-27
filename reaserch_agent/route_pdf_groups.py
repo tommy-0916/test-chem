@@ -12,14 +12,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
 
 from .route_attestation import (
     AttestedRouteSourceV1,
-    TrustedAcquisitionEventV1,
-    attested_route_sources,
+    _attested_route_sources_for_verified_events,
+    _verified_events_from_signed_envelopes,
 )
 from .route_pdf_source import (
     _MAX_SOURCE_BYTES,
@@ -28,6 +28,9 @@ from .route_pdf_source import (
     _heading,
     _read_pdf_blocks,
 )
+
+if TYPE_CHECKING:
+    from .route_signed_event import TrustedIssuerPublicKeyV1
 
 
 _EXPERIMENTAL_SECTIONS = frozenset({
@@ -302,17 +305,25 @@ def enumerate_pdf_experimental_groups(
 
 def enumerate_attested_pdf_experimental_groups(
     kb_root: str | Path,
-    trusted_events: Sequence[TrustedAcquisitionEventV1] | None,
+    signed_events: Sequence[Mapping[str, Any]] | None,
+    *,
+    trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None,
 ) -> PdfGroupEnumerationResultV1:
     """Enumerate only groups whose bytes still match trusted receipts.
 
-    ``attested_route_sources`` checks the registry association and an
-    independently supplied acquisition/review event.  Enumeration opens the
-    PDF again; this second digest check closes the changed-file interval
-    between attestation and group parsing.  A path-only index is never source
-    identity authority here.
+    This public entrypoint authenticates signed acquisition/review envelopes
+    against caller-supplied public key bindings. Enumeration opens the PDF
+    again; this second digest check closes the changed-file interval between
+    attestation and group parsing. A path-only index is never source identity
+    authority here.
     """
-    receipts = attested_route_sources(kb_root, trusted_events)
+    events = _verified_events_from_signed_envelopes(
+        signed_events, trusted_public_keys
+    )
+    receipts = (
+        _attested_route_sources_for_verified_events(kb_root, events)
+        if events else {}
+    )
     if not receipts:
         return PdfGroupEnumerationResultV1(diagnostics=[
             PdfGroupEnumerationDiagnosticV1(
