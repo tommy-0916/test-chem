@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
 
+from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
+from reaserch_agent.route_pdf_groups import (
+    PdfExperimentalGroupV1, PdfGroupEnumerationResultV1, PdfSourceBlockV1,
+)
+from reaserch_agent.route_pipeline import evaluate_route_decision_v1 as real_route_evaluate
 from reaserch_agent.state import ResearchAgentState, ResearchEvent
 from reaserch_agent.workflow import ResearchAgent
 
@@ -194,6 +200,101 @@ class RouteWorkflowHookTest(unittest.TestCase):
         evaluate.assert_not_called()
         ignored.assert_called_once()
         self.assertEqual(result.research_action_package_v2, {"old": "package"})
+
+    def test_route_evaluation_uses_pdf_group_proposals_not_legacy_summaries(self) -> None:
+        digest = "sha256_" + "a" * 64
+        groups = [
+            PdfExperimentalGroupV1(
+                source_scope=ExperimentalGroupScopeV1(
+                    paper_id="paper-1", experimental_group_id=group_id,
+                    section="Methods", locator=locator,
+                    source_digest=digest,
+                ),
+                source_document="/trusted/source.pdf",
+                blocks=(PdfSourceBlockV1(locator, text),),
+            )
+            for group_id, locator, text in (
+                ("synthesis", "pdf:p1:b1-p1:b1", "Mix 2 mmol salt."),
+                ("testing", "pdf:p1:b2-p1:b2", "Measure current."),
+            )
+        ]
+        keys = [
+            (group.source_scope.paper_id,
+             group.source_scope.experimental_group_id,
+             group.source_scope.source_digest)
+            for group in groups
+        ]
+        agent = ResearchAgent(
+            model=object(), use_llm=True, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[{"signed": "input"}],
+            trusted_route_group_roles_by_group={
+                keys[0]: "synthesis", keys[1]: "testing",
+            },
+            trusted_route_capabilities_by_group={keys[0]: ["mixing"]},
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+            extracted_protocols=[{"source_title": "legacy summary", "steps": []}],
+        )
+        proposals = [
+            {
+                "source_group_ref": {
+                    "paper_id": key[0], "experimental_group_id": key[1],
+                    "source_digest": key[2],
+                },
+                "route_facts": [],
+            }
+            for key in keys
+        ]
+        captured: list[list[dict]] = []
+
+        def evaluate(goal, protocols, **kwargs):
+            captured.append(list(protocols))
+            return real_route_evaluate(goal, protocols, **kwargs)
+
+        with patch(
+            "reaserch_agent.route_pdf_groups.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=groups),
+        ), patch.object(
+            agent, "invoke_text", return_value=json.dumps({"proposals": proposals}),
+        ) as invoke, patch(
+            "reaserch_agent.route_pipeline.evaluate_route_decision_v1",
+            side_effect=evaluate,
+        ):
+            result = agent.evaluate_route_decision_v1(state, GOAL)
+        self.assertEqual(result.decision.status, "unresolved")
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(len(captured[0]), 2)
+        self.assertEqual(
+            [item["group_role"] for item in captured[0]],
+            ["synthesis", "testing"],
+        )
+        self.assertTrue(all(item.get("source", {}).get("source_digest") == digest
+                            for item in captured[0]))
+        self.assertNotIn("legacy summary", repr(captured[0]))
+        self.assertEqual(state.route_group_proposal_diagnostics_v1, [])
+        self.assertEqual(invoke.call_count, 1)
+        self.assertIn("PDF group inventory", invoke.call_args.args[1])
+        self.assertNotIn("legacy summary", "".join(invoke.call_args.args))
+        self.assertLessEqual(sum(len(item) for item in invoke.call_args.args), 48_000)
+        self.assertEqual(state.research_action_package_v2, {})
+
+    def test_failed_route_proposal_attempt_clears_previous_model_output(self) -> None:
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+            raw_llm_outputs={"route_pdf_group_propose": {"proposals": ["stale"]}},
+        )
+        with tempfile.TemporaryDirectory() as kb_dir:
+            protocols = self.agent._propose_attested_route_protocols(state, kb_dir)
+        self.assertEqual(protocols, [])
+        self.assertNotIn("route_pdf_group_propose", state.raw_llm_outputs)
+        self.assertEqual(
+            state.route_group_proposal_diagnostics_v1[0]["reason_code"],
+            "signed_source_events_missing",
+        )
 
 
 if __name__ == "__main__":

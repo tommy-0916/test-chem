@@ -123,7 +123,9 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 
 **阶段 5 当前进度：** `RouteActionIntentV1` 对显式提供的阶段、动作、当前证据包和已选路线做离线绑定预检，逐项核对决策及候选摘要、设备快照、样品与步骤 ID、操作顺序、论文来源和逐字段 provenance，包括每个论文数值参数与其摘录的对应关系；数字字符串不能绕过数值核验。`build_route_action_binding_draft_v1` 在相同预检后生成 `RouteActionBindingDraftV1`：深拷贝并重新校验显式 Stage/Action、选中候选的原样 `MacroStepV2` 图、当前 `EvidenceBundleV2`，以及 decision/candidate/evidence/device 快照身份。读取保存草稿时须调用 `validate_route_action_binding_draft_v1`，用当次可信决策和证据重新绑定并比对整份草稿；单独解析草稿或检查其自带摘要不能作为授权。它只是一份 typed 绑定草稿；不构造 `ResearchActionPackageV2`，未接入 Research 发布门或 Device 重建门，不能因草稿成立就运行设备。
 
-**后续接入：** 让原始论文/SI 的实验组结构化提取产生完整候选，并建立独立的 RouteSignature 来源；把唯一选中 candidate 的原文、证据快照与 material graph **无损**绑定到 macro action/plan，经过现有 Research V2 发布门和 Device hard gate。将预算回路接上真实检索与抽取后再做 A01 黑盒端到端验收。
+**阶段 6 当前进度：** opt-in 路线决策入口现在从已签名 PDF 清单重新枚举实验组，按固定的组数、文本块和输入/输出长度预算向模型请求逐组提案，再由已有的原文块关联器核对完整覆盖、组 ID、文件摘要和逐条摘录。模型调用只接收受控 PDF 组清单和固定系统指令，不注入旧 workflow 摘要、`extracted_protocols`、memory 或工具上下文；预算覆盖实际发送的两段提示。缺独立审阅的组角色或完整设备能力映射时，模型不会被调用；异常、超预算或任何组提案错误均不返回部分协议。路线专用协议提案与旧 `extracted_protocols` 分离，B1/B2 的路线门不再把知识库摘要提取结果当作 PDF 实验组事实。诊断保存到 `route_group_proposal_diagnostics_v1`，新一轮失败会清除上一轮模型提案；协议提案仍须经过 compiler、原文核验、科学和设备审计。当前 PDF 核验器不会从模型提案或普通散文中追认完整 RouteSignature；`source_route_signature=None` 仍会阻断路线选择。
+
+**后续接入：** 建立独立审阅的 RouteSignature 来源与普通论文术语的受控语义映射，不靠提案字段和原文中偶然出现的词判定操作顺序或控制模式；把唯一选中 candidate 的原文、证据快照与 material graph **无损**绑定到 macro action/plan，经过现有 Research V2 发布门和 Device hard gate。将预算回路接上真实检索与抽取后再做 A01 黑盒端到端验收。
 
 ### 真实闭环尚需的两个合同
 
