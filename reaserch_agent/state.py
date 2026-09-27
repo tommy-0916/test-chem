@@ -59,6 +59,9 @@ class ResearchAgentState:
     route_decision_goal_v1: Dict[str, Any] = field(default_factory=dict)
     route_binding_status_v1: str = ""
     route_decision_v1: Dict[str, Any] = field(default_factory=dict)
+    # Present only after an exact selected route is bound to a canonical V2
+    # package. The package carries the same hash-bound identity.
+    route_binding: Optional[Dict[str, Any]] = None
     route_group_proposal_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_compilation_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_discovery_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
@@ -75,6 +78,7 @@ class ResearchAgentState:
     pending_macro_action: Dict[str, Any] = field(default_factory=dict)
     macro_action_history: List[Dict[str, Any]] = field(default_factory=list)
     current_evidence_bundle: Dict[str, Any] = field(default_factory=dict)
+    scientific_completeness: Optional[Dict[str, Any]] = None
     research_action_package_v2: Dict[str, Any] = field(default_factory=dict)
     stage_route_reason: str = ""
     current_stage_reason: str = ""
@@ -143,6 +147,9 @@ class ResearchAgentState:
             "调研报告": self.survey_report,
             "从知识库论文抽取的实验过程": self.extracted_protocols,
             "化学路线决策 V1": self.route_decision_v1,
+            **({"route_binding": self.route_binding} if self.route_binding is not None else {}),
+            **({"observations": self.observations} if self.route_binding is not None else {}),
+            **({"route_binding_status_v1": self.route_binding_status_v1} if self.route_binding is not None else {}),
             "路线实验组提案诊断 V1": self.route_group_proposal_diagnostics_v1,
             "路线计划绑定状态 V1": self.route_binding_status_v1,
             "路线事实编译诊断 V1": self.route_compilation_diagnostics_v1,
@@ -176,6 +183,9 @@ class ResearchAgentState:
             "handoff_type": "research_to_device_adaptation",
             "contract_version": self.contract_version,
             "research_action_package_v2": self.research_action_package_v2,
+            **({"route_binding": self.route_binding} if self.route_binding is not None else {}),
+            **({"observations": self.observations} if self.route_binding is not None else {}),
+            **({"route_binding_status_v1": self.route_binding_status_v1} if self.route_binding is not None else {}),
             "query": self.event.query,
             "stage 路线": self.stage_route,
             "当前 stage": self.current_stage,

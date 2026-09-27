@@ -14516,10 +14516,72 @@ class SingleDeviceAgent:
             raise ValueError(
                 "V2 Device entry requires an embedded canonical Research package"
             )
-        return canonicalize_v2_device_handoff(
+        if raw_package.get("route_binding") is not None:
+            if research_handoff.get("route_binding_status_v1") != "publishable":
+                raise ValueError(
+                    "route-bound V2 Device entry requires Research publishable status"
+                )
+            if "macro_action_steps" not in research_handoff:
+                raise ValueError("route-bound V2 Device entry lacks raw macro steps")
+            if "observations" not in research_handoff:
+                raise ValueError("route-bound V2 Device entry lacks raw observations")
+            raw_binding = research_handoff.get("route_binding")
+            if raw_binding is not None and raw_binding != raw_package["route_binding"]:
+                raise ValueError("route-bound V2 raw route_binding differs from canonical")
+            published_state = research_handoff.get(
+                "route_published_research_state_v2"
+            )
+            if not isinstance(published_state, dict):
+                raise ValueError(
+                    "route-bound V2 Device entry requires the complete published Research state"
+                )
+            from device_agent.run_from_research_state import (
+                validate_v2_research_handoff_consistency,
+            )
+
+            try:
+                verified_package = validate_v2_research_handoff_consistency(
+                    published_state, published_state.get("macro_plan", [])
+                )
+            except (SystemExit, ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"route-bound V2 published Research state failed validation: {exc}"
+                ) from exc
+
+            def same(left: Any, right: Any) -> bool:
+                return json.dumps(
+                    left, ensure_ascii=False, sort_keys=True
+                ) == json.dumps(right, ensure_ascii=False, sort_keys=True)
+
+            if not same(verified_package, raw_package):
+                raise ValueError(
+                    "route-bound V2 direct canonical differs from published Research state"
+                )
+            if not same(
+                published_state["macro_plan"], research_handoff["macro_action_steps"]
+            ):
+                raise ValueError(
+                    "route-bound V2 direct raw steps differ from published Research state"
+                )
+            if not same(
+                published_state["observations"], research_handoff["observations"]
+            ):
+                raise ValueError(
+                    "route-bound V2 direct observations differ from published Research state"
+                )
+        elif research_handoff.get("route_binding") is not None or (
+            research_handoff.get("route_binding_status_v1") in {
+                "selected_bound", "publishable",
+            }
+        ):
+            raise ValueError("route-bound V2 Device entry lacks canonical route_binding")
+        validated = canonicalize_v2_device_handoff(
             research_handoff,
             package=raw_package,
         )
+        if raw_package.get("route_binding") is not None:
+            validated["route_binding_status_v1"] = "publishable"
+        return validated
 
     def run_state(
         self,
@@ -14545,6 +14607,17 @@ class SingleDeviceAgent:
         research_handoff, _ = self._strip_untrusted_approval_fields(
             research_handoff
         )
+        if self._contract_version != "v2" and isinstance(research_handoff, dict):
+            route_package = research_handoff.get("research_action_package_v2")
+            if (
+                isinstance(route_package, dict)
+                and route_package.get("route_binding") is not None
+            ) or research_handoff.get("route_binding") is not None or (
+                research_handoff.get("route_binding_status_v1") in {
+                    "selected_bound", "publishable",
+                }
+            ):
+                raise ValueError("route-bound Research package requires V2 Device entry")
         if relationship_binding_authority is not None and not isinstance(
             relationship_binding_authority, dict
         ):

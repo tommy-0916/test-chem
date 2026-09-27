@@ -1384,6 +1384,75 @@ class ScientificCompletenessV2(StrictModel):
         return self
 
 
+def route_material_graph_digest_v1(steps: List[MacroStepV2]) -> str:
+    """Hash the complete typed graph, excluding only raw transport digests."""
+
+    return canonical_digest([
+        step.model_dump(
+            mode="json",
+            exclude_none=True,
+            exclude={"raw_step_digest_scope", "raw_step_sha256"},
+        )
+        for step in steps
+    ])
+
+
+class RouteBindingV1(StrictModel):
+    """Hash-bound identity of one explicitly selected route and action intent.
+
+    The source and decision digests are references to Research's trusted
+    evaluation. Package validation proves structural consistency with the
+    embedded action, graph and evidence; it does not re-attest a paper source.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal["route-binding/v1"] = "route-binding/v1"
+    origin: Literal["paper_experimental_group", "hypothesis"]
+    route_id: str = Field(min_length=1)
+    candidate_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    decision_id: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    validation_receipt_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    source_paper_id: str = ""
+    experimental_group_id: str = ""
+    source_section: str = ""
+    source_locator: str = ""
+    source_digest: str = Field(default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$")
+    source_attestation_digest: str = Field(
+        default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$"
+    )
+    source_route_signature_review_digest: str = Field(
+        default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$"
+    )
+    source_identity_doi: str = ""
+    required_capabilities: List[str] = Field(default_factory=list)
+    evidence_snapshot_hash: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    evidence_bundle_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    intent_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    material_graph_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    device_contract_snapshot_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_paper_scope(self) -> "RouteBindingV1":
+        if self.origin == "paper_experimental_group" and any(
+            not str(getattr(self, field_name)).strip()
+            for field_name in (
+                "source_paper_id", "experimental_group_id", "source_digest",
+                "source_locator",
+                "source_attestation_digest", "source_route_signature_review_digest",
+                "source_identity_doi",
+            )
+        ):
+            raise ValueError("paper route binding requires an attested experimental-group scope")
+        if bool(self.source_paper_id) != bool(self.experimental_group_id):
+            raise ValueError("route binding paper and experimental-group IDs must be paired")
+        if any(not item.strip() for item in self.required_capabilities) or len(
+            set(self.required_capabilities)
+        ) != len(self.required_capabilities):
+            raise ValueError("route binding required capabilities must be unique nonempty IDs")
+        return self
+
+
 class ResearchActionPackageV2(StrictModel):
     schema_version: Literal["2.0"] = CONTRACT_VERSION_V2
     # Historical V2 packages omitted this field and treated every ID as a
@@ -1403,10 +1472,37 @@ class ResearchActionPackageV2(StrictModel):
     # Phase 3 Scientific Completeness Audit (optional; historical packages
     # simply omit it).  Included in the contract hash like every other field.
     scientific_completeness: Optional[ScientificCompletenessV2] = None
+    # Present only for an explicitly bound typed route. Historical V2 packages
+    # omit this field and retain their original digest semantics.
+    route_binding: Optional[RouteBindingV1] = None
     research_contract_hash: str = ""
 
     @model_validator(mode="after")
     def validate_links_and_hash(self) -> "ResearchActionPackageV2":
+        if self.route_binding is not None:
+            binding = self.route_binding
+            if binding.device_contract_snapshot_hash != self.capability_snapshot_id:
+                raise ValueError("route binding device snapshot differs from package")
+            if not set(binding.required_capabilities).issubset(
+                self.stage.capability_requirements
+            ):
+                raise ValueError("route binding required capabilities differ from stage")
+            if binding.evidence_bundle_digest != canonical_digest(self.evidence_bundle):
+                raise ValueError("route binding evidence bundle digest differs from package")
+            expected_intent = canonical_digest({
+                "schema_version": "route-action-intent/v1",
+                "route_id": binding.route_id,
+                "candidate_digest": binding.candidate_digest,
+                "decision_id": binding.decision_id,
+                "evidence_bundle_id": self.evidence_bundle.bundle_id,
+                "evidence_bundle_digest": binding.evidence_bundle_digest,
+                "stage": self.stage.model_dump(mode="json", exclude_none=True),
+                "macro_action": self.macro_action.model_dump(mode="json", exclude_none=True),
+            })
+            if binding.intent_digest != expected_intent:
+                raise ValueError("route binding intent digest differs from package")
+            if binding.material_graph_digest != route_material_graph_digest_v1(self.macro_steps):
+                raise ValueError("route binding material graph digest differs from package")
         if (self.raw_observations_digest_scope is None) != (
             not self.raw_observations_sha256
         ):
@@ -1775,7 +1871,7 @@ class ResearchActionPackageV2(StrictModel):
                         payload_value.pop(field_name, None)
                 return
             if isinstance(model_value, BaseModel) and isinstance(payload_value, dict):
-                for field_name in model_value.model_fields:
+                for field_name in type(model_value).model_fields:
                     if field_name in payload_value:
                         strip_unset_provenance_extensions(
                             getattr(model_value, field_name), payload_value[field_name]
@@ -1793,10 +1889,20 @@ class ResearchActionPackageV2(StrictModel):
             payload.pop("identity_encoding", None)
         if "scientific_completeness" not in self.model_fields_set:
             payload.pop("scientific_completeness", None)
+        null_binding_digest = None
+        if self.route_binding is None:
+            # A full dump of an unbound historical model may explicitly carry
+            # route_binding=null. Accept that spelling as well as the original
+            # absent-field spelling; new unbound packages keep the old digest.
+            if "route_binding" in self.model_fields_set:
+                null_binding_digest = canonical_digest(payload, prefix="research_v2")
+            payload.pop("route_binding", None)
         digest = canonical_digest(payload, prefix="research_v2")
-        if self.research_contract_hash and self.research_contract_hash != digest:
+        if self.research_contract_hash and self.research_contract_hash not in {
+            digest, null_binding_digest,
+        }:
             raise ValueError("research_contract_hash does not match package content")
-        self.research_contract_hash = digest
+        self.research_contract_hash = self.research_contract_hash or digest
         return self
 
 

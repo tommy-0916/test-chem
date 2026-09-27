@@ -353,7 +353,7 @@ def _material_contract_metadata(
     *,
     source_contract_version: str,
     source_path: str,
-) -> tuple[MaterialContractStatusV2, MaterialContractMigrationV2]:
+) -> tuple[Optional[MaterialContractStatusV2], Optional[MaterialContractMigrationV2]]:
     """Read explicit completeness declarations without inferring semantics.
 
     A nonempty legacy array can still be partial.  Therefore collection
@@ -361,6 +361,7 @@ def _material_contract_metadata(
     """
 
     raw_status = step.get("material_contract_status", _MISSING)
+    raw_migration = step.get("material_contract_migration", _MISSING)
     diagnostics: List[str] = []
     if raw_status is _MISSING:
         status = MaterialContractStatusV2(
@@ -387,6 +388,8 @@ def _material_contract_metadata(
             else:
                 detail = "source field has an invalid non-array value"
             diagnostics.append(f"{status_field}: {detail}; completeness unresolved")
+    elif source_contract_version == "v2" and raw_status is None:
+        status = None
     else:
         if not isinstance(raw_status, dict):
             raise _ContractCollectionError(
@@ -400,6 +403,18 @@ def _material_contract_metadata(
         "no material identities, instances, relations, quantities, or applicability "
         "were inferred from macro sequence, operation category, or prose"
     )
+    if source_contract_version == "v2" and raw_migration is not _MISSING:
+        if raw_migration is None:
+            return status, None
+        if not isinstance(raw_migration, dict):
+            raise _ContractCollectionError(
+                f"{source_path}.material_contract_migration",
+                raw_migration,
+                "expected an explicit V2 migration object or null",
+            )
+        return status, MaterialContractMigrationV2.model_validate(
+            raw_migration, strict=True
+        )
     return status, MaterialContractMigrationV2(
         source_contract_version=source_contract_version,
         migration_mode=(
@@ -757,6 +772,11 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
         action_raw.get("completion_condition")
         or f"获得 {observation} 的有效结果并可判读"
     )
+    stage_completion = str(
+        action_raw.get("stage_completion_condition")
+        if source_version == "v2" and "stage_completion_condition" in action_raw
+        else completion
+    )
     group_raw = _mapping(action_raw.get("experiment_group"))
     group_id = str(group_raw.get("group_id") or f"GRP_{_slug(action_id, 'ACTION')}_01")
     sample_id = str(group_raw.get("sample_id") or f"SAMPLE_{_slug(group_id, 'GROUP')}_01")
@@ -764,7 +784,11 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
         group_id=group_id,
         role=str(group_raw.get("role") or "experimental"),
         sample_id=sample_id,
-        hypothesis=str(group_raw.get("hypothesis") or action_raw.get("objective") or ""),
+        hypothesis=str(
+            group_raw["hypothesis"]
+            if source_version == "v2" and "hypothesis" in group_raw
+            else group_raw.get("hypothesis") or action_raw.get("objective") or ""
+        ),
         comparison_to=[str(item) for item in group_raw.get("comparison_to", []) or []],
         variables=dict(group_raw.get("variables") or {}),
     )
@@ -799,7 +823,14 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             source_contract_version=source_version,
             source_path=source_step_path,
         )
-        if material_status.logical_containers == "declared":
+        effective_material_status = material_status or MaterialContractStatusV2(
+            material_inputs="unresolved",
+            material_intermediates="unresolved",
+            material_outputs="unresolved",
+            logical_containers="unresolved",
+            material_relations="unresolved",
+        )
+        if effective_material_status.logical_containers == "declared":
             raw_containers = _contract_object_list(
                 step.get("container_requirements", _MISSING),
                 f"{source_step_path}.container_requirements",
@@ -819,7 +850,7 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             step.get("material_relations", _MISSING),
             step=step,
             path=f"{source_step_path}.material_relations",
-            declared=material_status.material_relations == "declared",
+            declared=effective_material_status.material_relations == "declared",
             native_v2=native_v2,
         )
         operation_segments = _operation_segments(
@@ -889,7 +920,7 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
                     direction="input",
                     step_id=step_id,
                     path=f"{source_step_path}.material_inputs",
-                    declared=material_status.material_inputs == "declared",
+                    declared=effective_material_status.material_inputs == "declared",
                     native_v2=native_v2,
                 ),
                 material_intermediates=_material_ports(
@@ -898,7 +929,7 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
                     direction="intermediate",
                     step_id=step_id,
                     path=f"{source_step_path}.material_intermediates",
-                    declared=material_status.material_intermediates == "declared",
+                    declared=effective_material_status.material_intermediates == "declared",
                     native_v2=native_v2,
                 ),
                 material_outputs=_material_ports(
@@ -907,7 +938,7 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
                     direction="output",
                     step_id=step_id,
                     path=f"{source_step_path}.material_outputs",
-                    declared=material_status.material_outputs == "declared",
+                    declared=effective_material_status.material_outputs == "declared",
                     native_v2=native_v2,
                 ),
                 parameters=_parameters(
@@ -949,7 +980,7 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             or current_stage
         ),
         observation_point=observation,
-        completion_condition=completion,
+        completion_condition=stage_completion,
         capability_requirements=[
             str(item) for item in action_raw.get("capability_requirements", []) or []
         ],
@@ -999,6 +1030,10 @@ def research_state_to_v2(state: Dict[str, Any]) -> ResearchActionPackageV2:
             ScientificCompletenessV2(**source["scientific_completeness"])
             if isinstance(source.get("scientific_completeness"), dict)
             else None
+        ),
+        **(
+            {"route_binding": source["route_binding"]}
+            if source.get("route_binding") is not None else {}
         ),
     )
     # Hash the representation that actually crosses the JSON boundary.  Some

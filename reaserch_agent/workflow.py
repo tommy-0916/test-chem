@@ -94,6 +94,14 @@ from .tools.query_sanitizer import sanitize_search_queries
 from .tools.web_tool import WebToolExecutor
 from .utils import LLMFactory
 
+
+class RouteResearchPublishError(ValueError):
+    """A selected route failed the existing Research V2 scientific gate."""
+
+
+class RouteHandoffIntegrityError(ValueError):
+    """Published route facts changed across the Research handoff boundary."""
+
 logger = logging.getLogger(__name__)
 
 
@@ -1156,11 +1164,10 @@ class ResearchAgent(BaseAgent):
     ) -> bool:
         """Opt-in B1/B2 decision boundary, before any new macro action.
 
-        A selected route is not yet an executable plan. The existing raw-plan
-        adapter regenerates parameters from prose and reassigns action/sample
-        identities, so projecting a verified candidate graph through it would
-        lose field-level provenance. Until that binding is lossless, abstain
-        even on selection instead of letting the legacy planner switch routes.
+        Selection alone does not publish an action. If this invocation also
+        supplies explicit typed action intent and matching current evidence,
+        bind the selected graph and run the ordinary Research V2 gates.
+        Otherwise retain the selected_unbound manual boundary.
         """
         constraints = state.event.constraints or {}
         if "route_decision_goal_v1" in constraints:
@@ -1173,10 +1180,12 @@ class ResearchAgent(BaseAgent):
             return False
 
         state.route_decision_v1 = {}
+        state.route_binding = None
         state.route_group_proposal_diagnostics_v1 = []
         state.route_compilation_diagnostics_v1 = []
         state.route_discovery_diagnostics_v1 = []
         state.route_validation_diagnostics_v1 = {}
+        binding_failure_category = ""
         try:
             if not state.route_decision_goal_v1:
                 raise ValueError("route_decision_goal_v1 is required")
@@ -1190,8 +1199,42 @@ class ResearchAgent(BaseAgent):
                 state.route_binding_status_v1 = "selected_unbound"
                 reason = (
                     "route_plan_binding_unavailable: selected candidate has no "
-                    "lossless material-graph-to-action binding"
+                    "current explicit action intent"
                 )
+                intent_raw = constraints.get("route_action_intent_v1")
+                bundle_raw = constraints.get("route_current_evidence_bundle_v2")
+                if intent_raw is not None or bundle_raw is not None:
+                    try:
+                        if branch != "B1":
+                            raise ValueError(
+                                "B2 route binding awaits the previous action's "
+                                "observation and stage-progress closure"
+                            )
+                        if bundle_raw is not None:
+                            raise ValueError(
+                                "route_current_evidence_bundle_v2 cannot be supplied "
+                                "through event constraints; Research builds it from "
+                                "the current trusted route evaluation"
+                            )
+                        if not isinstance(intent_raw, dict):
+                            raise ValueError("route_action_intent_v1 must be an object")
+                        self._bind_selected_route(
+                            state,
+                            result=result,
+                            intent_raw=intent_raw,
+                            branch=branch,
+                        )
+                        return True
+                    except Exception as exc:
+                        binding_failure_category = (
+                            "route_research_publish_gate_failed"
+                            if isinstance(exc, RouteResearchPublishError)
+                            else "route_handoff_integrity_failed"
+                            if isinstance(exc, RouteHandoffIntegrityError)
+                            else "route_binding_contract_failed"
+                        )
+                        reason = f"{binding_failure_category}: {exc}"
+                        state.add_error(reason)
             else:
                 state.route_binding_status_v1 = "decision_unresolved"
                 reason = "route_decision_" + decision.status
@@ -1211,12 +1254,13 @@ class ResearchAgent(BaseAgent):
         state.pending_macro_action = {}
         state.current_evidence_bundle = {}
         state.research_action_package_v2 = {}
+        state.scientific_completeness = None
         state.device_adaptation_handoff = {}
         state.status = "manual_required"
         state.current_branch = branch
         state.next_branch = "B8"
         state.failure_category = (
-            "route_plan_binding_unavailable"
+            binding_failure_category or "route_plan_binding_unavailable"
             if state.route_binding_status_v1 == "selected_unbound"
             else "route_decision_error"
             if state.route_binding_status_v1 == "decision_error"
@@ -1227,6 +1271,171 @@ class ResearchAgent(BaseAgent):
         state.persistent_outputs = state.research_layer_internal_outputs()
         state.add_log(reason)
         return True
+
+    @staticmethod
+    def _current_route_evidence_bundle_v2(
+        state: ResearchAgentState,
+        result: Any,
+        macro_action: Any,
+    ) -> Any:
+        """Build the action evidence bundle from this trusted evaluation only."""
+
+        from chem_agent_contracts.v2 import EvidenceBundleV2, MacroActionV2
+
+        if not isinstance(macro_action, MacroActionV2):
+            raise TypeError("macro_action must be a typed MacroActionV2")
+        decision = result.decision
+        if decision.status != "selected_for_planning":
+            raise ValueError("no selected route for current evidence bundle")
+        selected_record = next(
+            item for item in decision.candidates
+            if item.route_id == decision.selected_route_id
+        )
+        selected = selected_record.candidate
+        items = [item.model_copy(deep=True) for item in selected.evidence_bundle]
+        receipt = selected_record.validation
+        verified_ids = (
+            set(receipt.verified_evidence_ids)
+            if receipt is not None and receipt.source_scope_verified else set()
+        )
+        # Candidate item status is proposal data. Recreate the same trusted
+        # projection used by the route science audit from this validation
+        # receipt; never copy a proposed verified/parsed claim into Research.
+        for item in items:
+            trusted = item.evidence_id in verified_ids
+            item.verification_status = "local_file" if trusted else "unknown"
+            item.full_text_status = "local_parsed" if trusted else "unknown"
+        bundle_id = canonical_digest({
+            "schema_version": "route-current-evidence/v1",
+            "decision_id": decision.decision_id,
+            "route_id": selected.route_id,
+            "macro_action_id": macro_action.macro_action_id,
+            "query": state.event.query,
+            "items": [item.model_dump(mode="json") for item in items],
+        })
+        return EvidenceBundleV2(
+            bundle_id=bundle_id,
+            scope="macro_action",
+            query=state.event.query,
+            objective=macro_action.objective,
+            retrieval_status="success" if items else "empty",
+            current_invocation_only=True,
+            items=items,
+            errors=[],
+        )
+
+    def _bind_selected_route(
+        self,
+        state: ResearchAgentState,
+        *,
+        result: Any,
+        intent_raw: Dict[str, Any],
+        branch: str,
+    ) -> None:
+        """Publish a freshly evaluated selected route through the ordinary V2 gate.
+
+        The decision must be the result of this invocation's trusted route
+        evaluator. All raw mirrors are projected from its selected typed graph;
+        the explicit intent supplies the action identity and stage, never new
+        chemistry facts. Work on a copy so a failed gate cannot expose a draft.
+        """
+
+        from chem_agent_contracts.route_action_intent import (
+            RouteActionIntentV1, build_route_action_binding_draft_v1,
+        )
+        from chem_agent_contracts.route_saved_state import (
+            build_selected_route_saved_state_v2,
+            validate_selected_route_saved_state_v2,
+        )
+        from chem_agent_contracts.v2 import ResearchActionPackageV2
+
+        decision = result.decision
+        if decision.status != "selected_for_planning" or (
+            state.route_decision_v1 != decision.model_dump(mode="json")
+        ):
+            raise ValueError("route decision is not the current selected evaluation")
+        intent = RouteActionIntentV1.model_validate(intent_raw, strict=True)
+        bundle = self._current_route_evidence_bundle_v2(
+            state, result, intent.macro_action,
+        )
+        draft = build_route_action_binding_draft_v1(
+            intent, decision=decision, current_evidence_bundle=bundle,
+        )
+        projected = build_selected_route_saved_state_v2(
+            draft,
+            decision=decision,
+            current_evidence_bundle=bundle,
+            campaign_id=state.campaign_id,
+            observations=state.observations,
+        )
+        selected = ResearchActionPackageV2.model_validate(
+            projected["research_action_package_v2"], strict=True,
+        )
+        candidate_state = deepcopy(state)
+        candidate_state.contract_version = "v2"
+        candidate_state.current_stage = selected.stage.name
+        candidate_state.current_stage_plan = selected.stage.objective
+        if selected.stage.name not in candidate_state.stage_route:
+            candidate_state.stage_route = [*candidate_state.stage_route, selected.stage.name]
+        candidate_state.macro_action = deepcopy(projected["macro_action"])
+        candidate_state.macro_plan = deepcopy(projected["macro_plan"])
+        candidate_state.current_evidence_bundle = deepcopy(
+            projected["current_evidence_bundle"]
+        )
+        candidate_state.device_snapshot_id = selected.capability_snapshot_id
+        candidate_state.route_binding = deepcopy(projected["route_binding"])
+        candidate_state.route_binding_status_v1 = "selected_unbound"
+
+        try:
+            self._publish_v2_contract(candidate_state)
+        except Exception as exc:
+            raise RouteResearchPublishError(str(exc)) from exc
+        published = ResearchActionPackageV2.model_validate(
+            candidate_state.research_action_package_v2, strict=True,
+        )
+        for field in (
+            "campaign_id", "capability_snapshot_id", "stage", "macro_action",
+            "macro_steps", "evidence_bundle", "route_binding",
+            "raw_observations_digest_scope", "raw_observations_sha256",
+        ):
+            if getattr(published, field) != getattr(selected, field):
+                raise RouteHandoffIntegrityError(
+                    f"Research publication changed selected route field: {field}"
+                )
+
+        candidate_state.route_binding_status_v1 = "publishable"
+        candidate_state.persistent_outputs = (
+            candidate_state.research_layer_internal_outputs()
+        )
+        candidate_state.device_adaptation_handoff = (
+            candidate_state.device_adaptation_external_handoff()
+        )
+        try:
+            validate_selected_route_saved_state_v2(candidate_state.to_dict())
+        except Exception as exc:
+            raise RouteHandoffIntegrityError(str(exc)) from exc
+        candidate_state.status = "completed"
+        candidate_state.current_branch = "B0"
+        candidate_state.next_branch = "B0"
+        candidate_state.last_completed_branch = branch
+        if not candidate_state.branch_history or candidate_state.branch_history[-1] != "B0":
+            candidate_state.branch_history.append("B0")
+        candidate_state.route_message = (
+            "selected route passed Research V2 publication gate"
+        )
+        candidate_state.add_log(candidate_state.route_message)
+        self._record_plan_revision(
+            candidate_state,
+            event="initial",
+            scope="full_plan",
+            trigger="route_decision",
+            branch_path=f"{branch}/selected_route",
+            reason=(
+                "selected and bound route "
+                f"{published.route_binding.route_id}"
+            ),
+        )
+        state.__dict__.update(candidate_state.__dict__)
 
     def _attach_protocol_provenance(self, state: ResearchAgentState) -> None:
         """Tag extracted protocols with registry identity + verification status."""
@@ -3821,6 +4030,7 @@ class ResearchAgent(BaseAgent):
         # Never leave a previous action's valid package visible after this
         # candidate fails the final contract boundary.
         state.research_action_package_v2 = {}
+        state.scientific_completeness = None
         # The same deterministic stamp is applied by the generator quality
         # check.  Recheck it here for restored or secondary producer states.
         self._stamp_current_evidence_provenance(state, state.macro_plan)
@@ -3881,8 +4091,8 @@ class ResearchAgent(BaseAgent):
                 "broken_material_lineage="
                 f"{completeness['broken_material_lineage']}"
             )
+        state.scientific_completeness = completeness
         state_payload = state.to_dict()
-        state_payload["scientific_completeness"] = completeness
         package = research_state_to_v2(state_payload)
         state.research_action_package_v2 = package.model_dump(
             mode="json", exclude_none=True

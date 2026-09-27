@@ -129,7 +129,11 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 
 **阶段 7 当前进度：** `reviewed_route_signature_manifest_v1` 定义了外部审阅者对完整 RouteSignature 的逐组声明，`signed_reviewed_route_signature_manifest_v1` 将其与签发者和独立部署公钥做 Ed25519 验签。签名载荷明确列出操作顺序、角色、控制模式、状态转变和全部目标字段；缺字段、别名归一化、改动签名字段、错误密钥或签发者均拒绝。生产管线从当次原 PDF 枚举结果、已验签来源审计和任务目标构造期望作用域，不从模型候选或审阅件复制期望值。每份已验签的来源事件必须进入受信索引，每份受信来源必须成功枚举；被静默丢弃的 PDF、审计文件或 registry 关联会阻断整个候选集。只有原文逐字段核验通过、所有已知组的覆盖与角色审计完整、候选与目标一致、审阅作用域和当前 PDF 字节/实验组定位完全一致且只有一份有效审阅时，审阅路线签名和审阅摘要才进入 `RouteValidationReceiptV1`。相同审阅字节重复输入会去重，不同有效审阅或混入无效审阅会弃权。候选的路线家族与审阅家族也须一致。审阅者对化学语义的判断仍需独立完成；验签只能证明声明来自被配置的审阅者，不能证明声明本身化学正确。当前没有签发服务、生产审阅件或审阅公钥配置，默认仍保持 unresolved。`decision_id` 和 `evidence_snapshot_hash` 覆盖决策记录内的审阅摘要；单独保存的 validation diagnostics 不包含在这两个哈希中。
 
-**阶段 8 当前进度：** `build_route_research_package_draft_v2` 要求显式 campaign ID，并用本次可信决策和当前证据重新校验绑定草稿；它保留 Stage/Action、参数、物料图和逐字段 provenance，验证 JSON 往返后的 Research V2 包哈希。它不制造原始步骤或观测摘要，因此结果仍是不可发布草稿。原生 V2 adapter 已能直接保留显式结构化参数，不再从展示文本重解析这些值。Device CLI 仍会从保存的 raw plan 重建 Research 包；当前 adapter 对 material contract migration 等字段的投影与 typed 草稿不一致，Research 的旧发布门也要求 raw 步骤字段。必须让两条入口按同一 typed 图逐字段重建，并通过原有 Research 科学发布门和 Device raw/canonical 一致性门，才能将 `selected_unbound` 改为可发布。
+**阶段 8 当前进度：** `build_route_research_package_draft_v2` 要求显式 campaign ID，并用本次可信决策和当前证据重新校验绑定草稿；它保留 Stage/Action、参数、物料图和逐字段 provenance。`RouteBindingV1` 把路线、论文实验组、来源定位、决策、证据、意图和物料图摘要纳入 Research V2 包哈希。`build_selected_route_saved_state_v2` 从 typed 草稿投影原始步骤及观测镜像，再通过现有 adapter 重建并逐字段比较；投影结果仍标记 `selected_unbound`，不能交给 Device 执行。
+
+**阶段 9 当前进度：** B1 路线门在本次可信 evaluator 选中唯一候选且收到显式 `RouteActionIntentV1` 时，由 Research 根据当次验证回执构造当前证据包，绑定 typed 图后调用原有 `_publish_v2_contract`。质量门、convention、双图、scientific completeness 与 V2 adapter 均照常运行；任一失败保持 `selected_unbound`，成功且发布前后科学字段无损才设 `publishable`。Device CLI 对 route-bound 包要求完整 saved state、raw/canonical 镜像、观测摘要与哈希一致；直接入口同样须验证发布态的保存状态。通用合成论文实验组测试覆盖 selected → Research 发布 → JSON 重载 → Device canonical，以及缺证据、未解析物料和镜像篡改的阻断。此测试只证明数据流和门槛行为，不代替真实来源独立审阅；尚未运行 A01。B2 前置路线门位于旧 action 的观测收束之前，因此目前只可弃权，不能从该位置发布新的 selected route。
+
+主 CLI 用独立的 `--route-trust-config` JSON 文件注入签名来源事件、来源公钥、签名路线审阅、公钥及逐组角色/能力映射。文件必须在 KB 目录之外，采用 `route-trust-config/v1` 模式，不能从 event constraints、保存状态或模型输出读取。缺文件时保持空信任配置；签名、PDF 路径或逐组映射无效时明确阻断。部署者仍须在独立环境完成原始论文/SI 身份及路线语义审阅并签发；CLI 验签不能替代该审阅。B1 的显式 `route_action_intent_v1` 应绑定本次 Research 构造的证据包 ID/摘要；外部通过 constraints 自报 `route_current_evidence_bundle_v2` 会被拒绝。
 
 **后续接入：** 建立独立审阅的 RouteSignature 签发流程与普通论文术语的受控语义映射，不靠提案字段和原文中偶然出现的词判定操作顺序或控制模式；把唯一选中 candidate 的原文、证据快照与 material graph **无损**绑定到 macro action/plan，经过现有 Research V2 发布门和 Device hard gate。将预算回路接上真实检索与抽取后再做 A01 黑盒端到端验收。
 
@@ -141,6 +145,6 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 
 后续可信签发者应保存 DOI 登记记录和出版者页面的原始响应摘要，从该页面明确指向的正文或 SI 链接获取 PDF，并保留请求、逐跳重定向、终跳、内容类型和原字节哈希。正文需核对 DOI 与标题；SI 需核对其链接来自对应正文的出版者页面。签发者在独立环境中审核这些事实并签名，ResearchAgent 使用部署公钥验签。签名只认证事件由持有私钥的签发者发出，不替代签发者的来源身份审核。当前纯 `TrustedAcquisitionEventV1` 对象会被生产管线拒绝，不能从用户输入、模型输出或 KB 文件反序列化后直接当作受信事件。
 
-**选中路线到 V2 计划。** `RouteCandidateV1` 没有 `StageV2` 和 `MacroActionV2` 必需的观测点、完成判据、执行样品组等字段；从目标材料推这些字段会造出实验意图。现有 raw-plan adapter 会重新解析参数文本并丢逐字段 provenance，Device 入口还会从 raw plan 重建包并比较哈希。当前 typed 草稿只接受外部显式提供且通过预检的阶段/动作，不重解析 raw 参数或补造缺失字段。`selected_for_planning` 在生产工作流中仍保持 `selected_unbound`，直到共用 Research 发布门的无损 typed adapter 与 Device 重建核对完成。
+**选中路线到 V2 计划。** `RouteCandidateV1` 没有 `StageV2` 和 `MacroActionV2` 必需的观测点、完成判据、执行样品组等字段；从目标材料推这些字段会造出实验意图。typed 绑定只接受外部显式提供且通过预检的阶段/动作，不重解析显示文本或补造缺失科学字段。B1 现在可在同次可信路线评估、显式 action intent 和完整当前证据同时具备时走共用 Research 发布门；只有该门及无损重建均通过才成为 `publishable`。缺 intent、真实来源独立审阅、完整物料图或设备能力时仍保持 `selected_unbound` 或 `unresolved`。B2 的旧 action 观测尚未收束前不得直接发布新路线。
 
 A01/Huang 仅作黑盒回归：尿素及 PBA 路线不得向共沉淀路线输参数；同论文 control、后处理/蚀刻及 OER 测试实验组不得混参；旧冻结值不能追认论文出处；同路线 primary-paper 实验组可独立成候选；缺 pH-feedback 等必需能力时由 capability layer 阻断；没有合法路线时返回 `unresolved`，不猜配方。当前仓库有 frozen A01 包与合成测试记录，但尚无可供直接核验的 Huang 原文实验组 fixture；补齐原始来源与定位后才能将它用于实证回归。

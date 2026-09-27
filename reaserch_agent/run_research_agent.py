@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import re
@@ -24,6 +26,14 @@ from reaserch_agent.tools import load_device_context
 from reaserch_agent.tools.device_context import default_workstations_dir
 from reaserch_agent.tools.ingestion import KnowledgeIngestion, classify_reference
 from reaserch_agent.utils.llm_factory import LLMFactory
+from reaserch_agent.route_signed_event import (
+    TrustedIssuerPublicKeyV1,
+    verify_signed_trusted_acquisition_event,
+)
+from reaserch_agent.route_signature_review import (
+    ReviewedRouteSignatureScopeV1,
+    verify_reviewed_route_signature_manifest,
+)
 
 
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent / "logs"
@@ -57,6 +67,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--constraints-json",
         default="{}",
         help='JSON object passed as event constraints, e.g. \'{"目标":"先生成首轮macro plan"}\'',
+    )
+    parser.add_argument(
+        "--route-trust-config",
+        help=(
+            "Independent deployment JSON containing signed PDF acquisition events, "
+            "issuer-scoped public keys, signed route reviews, and group policy. "
+            "Never read route trust from event constraints or a saved state."
+        ),
     )
     parser.add_argument(
         "--payload-json",
@@ -263,6 +281,174 @@ def parse_json_dict(raw_text: str, label: str) -> Dict[str, Any]:
     if not isinstance(parsed, dict):
         raise SystemExit(f"{label} 必须是 JSON object。")
     return parsed
+
+
+def load_route_trust_config(
+    path_text: str | None, knowledge_base_dir: str | None,
+) -> Dict[str, Any]:
+    """Load deployment-owned route trust separately from workflow input.
+
+    Signature checks here catch bad configuration early. The route pipeline
+    still verifies each signature and compares each review to the independently
+    enumerated PDF group and requested target before selecting a route.
+    """
+
+    if not path_text:
+        return {}
+
+    from reaserch_agent.tools.literature_acquisition import default_kb_dir
+
+    path = Path(path_text).expanduser().resolve()
+    kb_root = Path(knowledge_base_dir).expanduser().resolve() if knowledge_base_dir else default_kb_dir().resolve()
+    if path.is_relative_to(kb_root):
+        raise SystemExit("route-trust-config must be outside the knowledge base")
+    if not path.is_file():
+        raise SystemExit(f"route-trust-config must be an existing JSON file: {path}")
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise SystemExit(f"invalid route-trust-config: {exc}") from exc
+    fields = {
+        "schema_version", "signed_route_source_events", "trusted_route_public_keys",
+        "signed_route_signature_reviews", "trusted_route_signature_public_keys",
+        "trusted_route_capabilities_by_group", "trusted_route_group_roles_by_group",
+    }
+    if not isinstance(raw, dict) or set(raw) != fields or raw["schema_version"] != "route-trust-config/v1":
+        raise SystemExit("route-trust-config must contain exactly the v1 trust fields")
+
+    def parse_keys(value: Any, label: str) -> Dict[str, TrustedIssuerPublicKeyV1]:
+        if not isinstance(value, dict):
+            raise SystemExit(f"{label} must be an object")
+        parsed: Dict[str, TrustedIssuerPublicKeyV1] = {}
+        for key_id, record in value.items():
+            if not isinstance(key_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", key_id):
+                raise SystemExit(f"{label} contains an invalid key ID")
+            if not isinstance(record, dict) or set(record) != {"public_key_base64", "allowed_issuer"}:
+                raise SystemExit(f"{label}.{key_id} must contain public_key_base64 and allowed_issuer")
+            encoded, issuer = record["public_key_base64"], record["allowed_issuer"]
+            if not isinstance(encoded, str) or not isinstance(issuer, str) or not issuer.strip() or issuer != issuer.strip():
+                raise SystemExit(f"{label}.{key_id} has invalid key or issuer")
+            try:
+                key_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise SystemExit(f"{label}.{key_id} has invalid base64") from exc
+            if len(key_bytes) != 32 or base64.b64encode(key_bytes).decode("ascii") != encoded:
+                raise SystemExit(f"{label}.{key_id} must be a canonical 32-byte Ed25519 public key")
+            parsed[key_id] = TrustedIssuerPublicKeyV1(key_bytes, issuer)
+        return parsed
+
+    source_keys = parse_keys(raw["trusted_route_public_keys"], "trusted_route_public_keys")
+    review_keys = parse_keys(
+        raw["trusted_route_signature_public_keys"],
+        "trusted_route_signature_public_keys",
+    )
+    sources = raw["signed_route_source_events"]
+    reviews = raw["signed_route_signature_reviews"]
+    if not isinstance(sources, list) or not sources or not source_keys:
+        raise SystemExit("route-trust-config requires signed source events and source public keys")
+    if not isinstance(reviews, list) or bool(reviews) != bool(review_keys):
+        raise SystemExit("signed route reviews and review public keys must be supplied together")
+    source_scopes: set[tuple[str, str, str]] = set()
+    source_identities: set[tuple[str, str]] = set()
+    for index, envelope in enumerate(sources):
+        verdict = verify_signed_trusted_acquisition_event(
+            envelope=envelope, trusted_public_keys=source_keys,
+        )
+        if not verdict.verified or verdict.event is None:
+            raise SystemExit(f"signed_route_source_events[{index}] invalid: {verdict.reason_code}")
+        event = verdict.event
+        identity = (event.paper_id, event.document_digest)
+        if identity in source_identities:
+            raise SystemExit(f"duplicate signed source identity at index {index}")
+        source_identities.add(identity)
+        resolved_pdf = (kb_root / event.kb_relative_path).resolve()
+        if not resolved_pdf.is_relative_to(kb_root) or not resolved_pdf.is_file():
+            raise SystemExit(f"signed_route_source_events[{index}] PDF path is missing or outside the KB")
+        source_scopes.add((event.paper_id, event.document_digest, event.attestation_digest))
+
+    review_scopes: set[tuple[str, str, str, str, str, str]] = set()
+    for index, envelope in enumerate(reviews):
+        manifest = envelope.get("manifest") if isinstance(envelope, dict) else None
+        try:
+            expected = ReviewedRouteSignatureScopeV1.model_validate(
+                {name: manifest[name] for name in ReviewedRouteSignatureScopeV1.model_fields},
+                strict=True,
+            )
+        except (TypeError, KeyError, ValueError) as exc:
+            raise SystemExit(f"signed_route_signature_reviews[{index}] has invalid scope") from exc
+        verdict = verify_reviewed_route_signature_manifest(
+            envelope=envelope, trusted_public_keys=review_keys, expected_scope=expected,
+        )
+        if not verdict.verified or verdict.receipt is None:
+            raise SystemExit(f"signed_route_signature_reviews[{index}] invalid: {verdict.reason_code}")
+        review = verdict.receipt.manifest
+        if (review.paper_id, review.source_digest, review.source_attestation_digest) not in source_scopes:
+            raise SystemExit(f"signed_route_signature_reviews[{index}] has no signed source")
+        scope = (
+            review.paper_id, review.experimental_group_id, review.source_digest,
+            review.target_material, review.target_state, review.target_objective,
+        )
+        if scope in review_scopes:
+            raise SystemExit(f"duplicate signed route review at index {index}")
+        review_scopes.add(scope)
+
+    digest_pattern = re.compile(r"sha256_[0-9a-f]{64}\Z")
+    def parse_groups(value: Any, field: str, leaf: str) -> Dict[tuple[str, str, str], Any]:
+        if not isinstance(value, list):
+            raise SystemExit(f"{field} must be an array")
+        parsed: Dict[tuple[str, str, str], Any] = {}
+        for index, record in enumerate(value):
+            if not isinstance(record, dict) or set(record) != {"paper_id", "experimental_group_id", "source_digest", leaf}:
+                raise SystemExit(f"{field}[{index}] has invalid fields")
+            group = tuple(record[name] for name in ("paper_id", "experimental_group_id", "source_digest"))
+            if any(not isinstance(item, str) or not item.strip() or item != item.strip() for item in group) or not digest_pattern.fullmatch(group[2]):
+                raise SystemExit(f"{field}[{index}] has invalid group identity")
+            if group in parsed:
+                raise SystemExit(f"{field}[{index}] repeats a group identity")
+            if not any(paper == group[0] and digest == group[2] for paper, digest, _ in source_scopes):
+                raise SystemExit(f"{field}[{index}] has no signed source")
+            parsed[group] = record[leaf]
+        return parsed
+
+    capabilities = parse_groups(
+        raw["trusted_route_capabilities_by_group"],
+        "trusted_route_capabilities_by_group", "required_capabilities",
+    )
+    roles = parse_groups(
+        raw["trusted_route_group_roles_by_group"],
+        "trusted_route_group_roles_by_group", "group_role",
+    )
+    for group, values in capabilities.items():
+        if (not isinstance(values, list) or not values
+                or any(not isinstance(item, str) or not item.strip() or item != item.strip() for item in values)
+                or len(set(values)) != len(values)):
+            raise SystemExit(f"trusted_route_capabilities_by_group has invalid capabilities for {group}")
+        if group not in roles:
+            raise SystemExit(f"trusted_route_capabilities_by_group lacks a role for {group}")
+    for group, role in roles.items():
+        if not isinstance(role, str) or role not in {
+            "synthesis", "material_processing", "characterization", "testing",
+            "performance_testing",
+        }:
+            raise SystemExit(f"trusted_route_group_roles_by_group has invalid role for {group}")
+
+    return {
+        "signed_route_source_events": sources,
+        "trusted_route_public_keys": source_keys,
+        "signed_route_signature_reviews": reviews,
+        "trusted_route_signature_public_keys": review_keys,
+        "trusted_route_capabilities_by_group": capabilities,
+        "trusted_route_group_roles_by_group": roles,
+    }
 
 
 def attach_device_context(args: argparse.Namespace, constraints: Dict[str, Any]) -> Dict[str, Any]:
@@ -477,6 +663,11 @@ def main() -> int:
         args,
         parse_json_dict(args.constraints_json, "constraints_json"),
     )
+    if args.route_trust_config and args.contract_version != "v2":
+        raise SystemExit("--route-trust-config requires --contract-version v2")
+    route_trust = load_route_trust_config(
+        args.route_trust_config, args.knowledge_base_dir,
+    )
     payload = parse_json_dict(args.payload_json, "payload_json")
     if args.observation and "observation" not in payload:
         payload["observation"] = {"summary": args.observation.strip()}
@@ -539,6 +730,7 @@ def main() -> int:
         enable_web_search=(
             False if args.no_web_search else (True if args.web_search else None)
         ),
+        **route_trust,
     )
 
     state = agent.run(

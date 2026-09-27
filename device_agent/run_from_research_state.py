@@ -536,6 +536,26 @@ def build_device_agent_input_package(
             "V2 Device input construction requires a validated canonical Research package"
         )
     if canonical:
+        published_route_state: Dict[str, Any] | None = None
+        if canonical.get("route_binding") is not None:
+            # This builder is also a public Python API. Re-run the same saved
+            # Research state check used by the CLI before supplying a direct
+            # Device caller with a route-bound handoff.
+            try:
+                verified_canonical = validate_v2_research_handoff_consistency(
+                    research_state, macro_plan
+                )
+            except SystemExit as exc:
+                raise ValueError(
+                    f"route-bound Device input requires a published Research state: {exc}"
+                ) from exc
+            if json.dumps(verified_canonical, sort_keys=True) != json.dumps(
+                canonical, sort_keys=True
+            ):
+                raise ValueError(
+                    "route-bound Device input canonical differs from the published Research state"
+                )
+            published_route_state = copy.deepcopy(research_state)
         package["research_action_package_v2"] = copy.deepcopy(canonical)
         package["contract_version"] = "v2"
         # V2 callers receive only the signed package projection plus the two
@@ -544,7 +564,106 @@ def build_device_agent_input_package(
         from chem_agent_contracts.v2 import canonicalize_v2_device_handoff
 
         package = canonicalize_v2_device_handoff(package, package=canonical)
+        # The route publication status is a Research workflow gate marker. It
+        # is checked against every saved-state mirror before this projection;
+        # the canonicalizer intentionally carries only package-backed science.
+        if canonical.get("route_binding") is not None:
+            package["route_binding_status_v1"] = research_state.get(
+                "route_binding_status_v1"
+            )
+            package["route_published_research_state_v2"] = published_route_state
     return package
+
+
+def _route_bound_saved_state_claim(research_state: Dict[str, Any]) -> bool:
+    """Recognize a selected route even if one canonical mirror was removed."""
+
+    containers = [research_state]
+    for key in (
+        "device_adaptation_handoff",
+        "persistent_outputs",
+        "A. research layer 内部持久化输出",
+        "B. 发给下游 device adaptation layer agent 的外部交接输出",
+    ):
+        value = research_state.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    for container in containers:
+        if "route_binding" in container and container["route_binding"] is not None:
+            return True
+        if container.get("route_binding_status_v1") in {
+            "selected_bound", "publishable",
+        } or container.get("路线计划绑定状态 V1") in {
+            "selected_bound", "publishable",
+        }:
+            return True
+        package = container.get("research_action_package_v2")
+        if isinstance(package, dict) and package.get("route_binding") is not None:
+            return True
+    return False
+
+
+def _validate_route_bound_saved_state_mirrors(
+    research_state: Dict[str, Any],
+) -> None:
+    """Require the complete published route transport before CLI Device entry."""
+
+    if not _route_bound_saved_state_claim(research_state):
+        return
+
+    package = research_state.get("research_action_package_v2")
+    binding = research_state.get("route_binding")
+    raw_steps = research_state.get("macro_plan")
+    observations = research_state.get("observations")
+    if not isinstance(package, dict) or not isinstance(package.get("route_binding"), dict):
+        raise SystemExit("route-bound V2 state lacks a top-level canonical route package")
+    if not isinstance(binding, dict) or not binding:
+        raise SystemExit("route-bound V2 state lacks its top-level route_binding mirror")
+    if not isinstance(raw_steps, list) or not raw_steps or any(
+        not isinstance(item, dict) for item in raw_steps
+    ):
+        raise SystemExit("route-bound V2 state lacks explicit top-level raw macro steps")
+    if not isinstance(observations, list):
+        raise SystemExit("route-bound V2 state lacks explicit top-level observations")
+    if research_state.get("route_binding_status_v1") != "publishable":
+        raise SystemExit("route-bound V2 state has not passed the Research publish gate")
+
+    def same(left: Any, right: Any) -> bool:
+        return json.dumps(left, ensure_ascii=False, sort_keys=True) == json.dumps(
+            right, ensure_ascii=False, sort_keys=True
+        )
+
+    if not same(binding, package["route_binding"]):
+        raise SystemExit("route-bound V2 top-level route_binding differs from canonical")
+    for name in ("device_adaptation_handoff", "persistent_outputs"):
+        container = research_state.get(name)
+        if not isinstance(container, dict):
+            raise SystemExit(f"route-bound V2 state lacks required {name} mirror")
+        for key, expected in (
+            ("待执行 macro plan", raw_steps),
+            ("observations", observations),
+            ("route_binding", binding),
+            ("research_action_package_v2", package),
+            ("route_binding_status_v1", "publishable"),
+        ):
+            if key not in container or not same(container[key], expected):
+                raise SystemExit(f"route-bound V2 {name}.{key} mirror is missing or divergent")
+
+    for name in (
+        "A. research layer 内部持久化输出",
+        "B. 发给下游 device adaptation layer agent 的外部交接输出",
+    ):
+        container = research_state.get(name)
+        if not isinstance(container, dict):
+            continue
+        for key, expected in (
+            ("待执行 macro plan", raw_steps),
+            ("observations", observations),
+            ("route_binding", binding),
+            ("research_action_package_v2", package),
+        ):
+            if key in container and not same(container[key], expected):
+                raise SystemExit(f"route-bound V2 {name}.{key} mirror is divergent")
 
 
 def validate_v2_research_handoff_consistency(
@@ -573,6 +692,8 @@ def validate_v2_research_handoff_consistency(
         ResearchActionPackageV2,
         validate_raw_steps_against_canonical,
     )
+
+    _validate_route_bound_saved_state_mirrors(research_state)
 
     for container_key in (
         "device_adaptation_handoff",
@@ -802,6 +923,7 @@ def validate_v2_research_handoff_consistency(
 
 def device_input_package_to_text(package: Dict[str, Any]) -> str:
     printable = copy.deepcopy(package)
+    printable.pop("route_published_research_state_v2", None)
     validation = printable.get("human_quantity_approval_validation")
     if isinstance(validation, dict):
         validation.pop("approval_capability_token", None)
@@ -866,6 +988,8 @@ def main() -> int:
     from single_agent import SingleDeviceAgent
 
     research_state = load_json_object(args.research_state)
+    if _route_bound_saved_state_claim(research_state) and args.contract_version != "v2":
+        raise SystemExit("route-bound Research package requires V2 Device entry")
     device_plan_override = (
         load_json_object(args.device_plan_override)
         if args.device_plan_override
