@@ -140,6 +140,9 @@ class RoutePipelineTest(unittest.TestCase):
         )
         self.assertEqual(result.decision.status, "unresolved")
         self.assertEqual(result.discovery.candidates, [])
+        self.assertIn(
+            "trusted_source_event_missing", result.decision.decision_reasons
+        )
 
     @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
     def test_registered_pdf_fields_verify_but_unsigned_route_abstains(self) -> None:
@@ -235,6 +238,26 @@ class RoutePipelineTest(unittest.TestCase):
         self.assertEqual(verified.source_identity_doi, "10.1000/paper")
         self.assertEqual(verified.source_document_kind, "primary_paper")
         self.assertEqual(verified.source_attestation_digest, receipt.attestation_digest)
+        self.assertEqual(verified.device_preflight.status, "unknown")
+        self.assertIn(
+            "capability_requirements_unverified",
+            verified.device_preflight.reasons,
+        )
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
+        ), patch(
+            "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
+        ):
+            mapped = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+                verified_capabilities_by_group={
+                    ("paper-1", "control", digest): ["capability-1"]
+                },
+            )
+        self.assertEqual(
+            mapped.decision.candidates[0].validation.device_preflight.status,
+            "preflight_supported",
+        )
 
         extra_group = PdfExperimentalGroupV1(
             source_scope=ExperimentalGroupScopeV1(
@@ -259,6 +282,30 @@ class RoutePipelineTest(unittest.TestCase):
             "attested_group_not_extracted",
             missing_sibling.decision.decision_reasons,
         )
+        control_group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-1", experimental_group_id="control",
+                section="Methods", locator="pdf:p1:b2-p1:b4",
+                source_digest=digest,
+            ),
+            source_document=str(pdf), blocks=(),
+        )
+        protocol["group_role"] = "characterization"
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=[control_group]),
+        ):
+            false_exclusion = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+                verified_group_roles_by_group={
+                    ("paper-1", "control", digest): "synthesis"
+                },
+            )
+        self.assertIn(
+            "extracted_group_role_mismatch",
+            false_exclusion.decision.decision_reasons,
+        )
+        protocol["group_role"] = "synthesis"
         protocol["evidence_bundle"][0]["doi"] = "10.1000/other"
         with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
             "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
@@ -469,6 +516,9 @@ class RoutePipelineTest(unittest.TestCase):
         self.assertEqual(result.decision.status, "unresolved")
         self.assertIsNone(result.decision.selected_route_id)
         self.assertEqual(result.discovery.candidates, [])
+        self.assertIn(
+            "trusted_source_event_missing", result.decision.decision_reasons
+        )
         self.assertEqual(state.macro_plan, [])
 
 

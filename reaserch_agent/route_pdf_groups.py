@@ -75,6 +75,20 @@ class PdfGroupCoverageReportV1:
     missing_scopes: tuple[ExperimentalGroupScopeV1, ...]
 
 
+@dataclass(frozen=True)
+class PdfGroupRoleIssueV1:
+    source_scope: ExperimentalGroupScopeV1
+    reason_code: str
+    trusted_role: str = ""
+    extracted_role: str = ""
+
+
+@dataclass(frozen=True)
+class PdfGroupRoleAuditV1:
+    verified_group_count: int
+    issues: tuple[PdfGroupRoleIssueV1, ...]
+
+
 def _block_locator(first: _PdfBlock, last: _PdfBlock) -> str:
     return f"pdf:p{first.page}:b{first.number}-p{last.page}:b{last.number}"
 
@@ -395,11 +409,92 @@ def audit_pdf_group_extraction_coverage(
     )
 
 
+def audit_pdf_group_roles(
+    enumerated_groups: Sequence[PdfExperimentalGroupV1],
+    protocols: Sequence[Mapping[str, Any]],
+    *,
+    group_roles_by_group: Mapping[tuple[str, str, str], str] | None,
+) -> PdfGroupRoleAuditV1:
+    """Require independently assigned roles for every known source group.
+
+    The mapping key is ``(paper_id, experimental_group_id, source_digest)``.
+    It must come from a reviewed channel independent of extractor output.
+    This audit prevents a model from excluding a known synthesis arm by
+    self-reporting ``characterization`` or ``performance_testing``.
+    """
+    allowed_roles = frozenset({
+        "synthesis", "material_processing", "characterization", "testing",
+        "performance_testing",
+    })
+    extracted: dict[tuple[str, str, str], list[str]] = {}
+    for protocol in protocols:
+        if not isinstance(protocol, Mapping):
+            continue
+        raw_groups = protocol.get("experimental_groups")
+        groups: Sequence[Any] = (
+            raw_groups if isinstance(raw_groups, list) else [protocol]
+        )
+        for group in groups:
+            if not isinstance(group, Mapping):
+                continue
+            paper_id = group.get("paper_id") or protocol.get("paper_id")
+            group_id = group.get("experimental_group_id")
+            source = group.get("source")
+            digest = source.get("source_digest") if isinstance(source, Mapping) else None
+            if not all(isinstance(value, str) and value.strip()
+                       for value in (paper_id, group_id, digest)):
+                continue
+            role = group.get("group_role")
+            extracted.setdefault((paper_id, group_id, digest), []).append(
+                role.strip() if isinstance(role, str) else ""
+            )
+
+    issues: list[PdfGroupRoleIssueV1] = []
+    verified = 0
+    for group in enumerated_groups:
+        scope = group.source_scope
+        key = (scope.paper_id, scope.experimental_group_id, scope.source_digest)
+        trusted_role = (
+            group_roles_by_group.get(key) if group_roles_by_group is not None
+            else None
+        )
+        reported = extracted.get(key, [])
+        if trusted_role is None:
+            reason = "trusted_group_role_missing"
+        elif not isinstance(trusted_role, str) or trusted_role not in allowed_roles:
+            reason = "trusted_group_role_invalid"
+        elif not reported:
+            reason = "experimental_group_not_extracted"
+        elif len(reported) != 1:
+            reason = "experimental_group_extraction_duplicate"
+        elif not reported[0]:
+            reason = "extracted_group_role_missing"
+        elif reported[0] != trusted_role:
+            reason = "extracted_group_role_mismatch"
+        else:
+            reason = ""
+        if reason:
+            issues.append(PdfGroupRoleIssueV1(
+                source_scope=scope,
+                reason_code=reason,
+                trusted_role=trusted_role if isinstance(trusted_role, str) else "",
+                extracted_role=reported[0] if len(reported) == 1 else "",
+            ))
+        else:
+            verified += 1
+    return PdfGroupRoleAuditV1(
+        verified_group_count=verified,
+        issues=tuple(issues),
+    )
+
+
 __all__ = [
     "PdfSourceBlockV1", "PdfExperimentalGroupV1",
     "PdfGroupEnumerationDiagnosticV1", "PdfGroupEnumerationResultV1",
     "PdfGroupCoverageReportV1",
+    "PdfGroupRoleIssueV1", "PdfGroupRoleAuditV1",
     "enumerate_pdf_experimental_groups",
     "enumerate_attested_pdf_experimental_groups",
     "audit_pdf_group_extraction_coverage",
+    "audit_pdf_group_roles",
 ]

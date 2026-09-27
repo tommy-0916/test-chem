@@ -12,6 +12,7 @@ from unittest.mock import patch
 from reaserch_agent.route_attestation import AttestedRouteSourceV1
 from reaserch_agent.route_pdf_groups import (
     audit_pdf_group_extraction_coverage,
+    audit_pdf_group_roles,
     enumerate_attested_pdf_experimental_groups,
     enumerate_pdf_experimental_groups,
 )
@@ -234,6 +235,90 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
         self.assertEqual(coverage.matched_group_count, 0)
         self.assertEqual({scope.experimental_group_id for scope in coverage.missing_scopes},
                          {"control", "treated"})
+
+    def _role_protocols(self, digest: str) -> list[dict]:
+        return [{
+            "paper_id": "paper-1",
+            "experimental_groups": [
+                {
+                    "experimental_group_id": "control",
+                    "group_role": "synthesis",
+                    "source": {"source_digest": digest},
+                },
+                {
+                    "experimental_group_id": "treated",
+                    "group_role": "synthesis",
+                    "source": {"source_digest": digest},
+                },
+            ],
+        }]
+
+    def test_independent_role_audit_accepts_only_complete_matching_map(self) -> None:
+        groups = self._enumerate().groups
+        digest = groups[0].source_scope.source_digest
+        identities = [
+            (group.source_scope.paper_id,
+             group.source_scope.experimental_group_id,
+             group.source_scope.source_digest)
+            for group in groups
+        ]
+        result = audit_pdf_group_roles(
+            groups, self._role_protocols(digest),
+            group_roles_by_group={key: "synthesis" for key in identities},
+        )
+        self.assertEqual(result.verified_group_count, 2)
+        self.assertEqual(result.issues, ())
+
+    def test_model_cannot_hide_synthesis_group_as_characterization(self) -> None:
+        groups = self._enumerate().groups
+        digest = groups[0].source_scope.source_digest
+        protocols = self._role_protocols(digest)
+        protocols[0]["experimental_groups"][1]["group_role"] = "characterization"
+        roles = {
+            (group.source_scope.paper_id,
+             group.source_scope.experimental_group_id,
+             group.source_scope.source_digest): "synthesis"
+            for group in groups
+        }
+        result = audit_pdf_group_roles(
+            groups, protocols, group_roles_by_group=roles,
+        )
+        self.assertEqual(result.verified_group_count, 1)
+        self.assertEqual(len(result.issues), 1)
+        self.assertEqual(result.issues[0].source_scope.experimental_group_id,
+                         "treated")
+        self.assertEqual(result.issues[0].reason_code,
+                         "extracted_group_role_mismatch")
+        self.assertEqual(result.issues[0].extracted_role, "characterization")
+
+    def test_missing_trusted_role_or_group_is_reported(self) -> None:
+        groups = self._enumerate().groups
+        digest = groups[0].source_scope.source_digest
+        protocols = self._role_protocols(digest)
+        protocols[0]["experimental_groups"].pop()
+        key = (
+            groups[0].source_scope.paper_id,
+            groups[0].source_scope.experimental_group_id,
+            groups[0].source_scope.source_digest,
+        )
+        result = audit_pdf_group_roles(
+            groups, protocols,
+            group_roles_by_group={key: "synthesis"},
+        )
+        self.assertEqual(result.verified_group_count, 1)
+        self.assertEqual(result.issues[0].reason_code,
+                         "trusted_group_role_missing")
+        complete_roles = {
+            (group.source_scope.paper_id,
+             group.source_scope.experimental_group_id,
+             group.source_scope.source_digest): "synthesis"
+            for group in groups
+        }
+        result = audit_pdf_group_roles(
+            groups, protocols, group_roles_by_group=complete_roles,
+        )
+        self.assertEqual(result.issues[0].reason_code,
+                         "experimental_group_not_extracted")
 
 
 if __name__ == "__main__":

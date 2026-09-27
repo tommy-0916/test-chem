@@ -24,6 +24,10 @@ from .route_candidate import (
     RouteSignatureV1,
     RouteTargetV1,
 )
+from .route_action_intent import (
+    RouteActionIntentV1,
+    validate_route_action_intent_v1,
+)
 from .route_decision import (
     DevicePreflightV1,
     RouteCandidateDecisionV1,
@@ -68,6 +72,7 @@ __all__ = [
     "ExperimentalGroupScopeV1",
     "RouteCandidateDecisionV1",
     "RouteCandidateV1",
+    "RouteActionIntentV1",
     "RouteDecisionV1",
     "RouteFieldEvidenceV1",
     "RouteGoalV1",
@@ -116,4 +121,5 @@ __all__ = [
     "research_state_to_v2",
     "route_signature_mismatches",
     "targeted_search_status",
+    "validate_route_action_intent_v1",
 ]

@@ -13,7 +13,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Sequence
 
 if TYPE_CHECKING:
     from .route_attestation import TrustedAcquisitionEventV1
@@ -390,6 +390,12 @@ class ResearchAgent(BaseAgent):
         web_search_client: Any = None,
         contract_version: str = "v1",
         trusted_route_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
+        trusted_route_capabilities_by_group: Mapping[
+            tuple[str, str, str], Sequence[str]
+        ] | None = None,
+        trusted_route_group_roles_by_group: Mapping[
+            tuple[str, str, str], str
+        ] | None = None,
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
@@ -405,6 +411,13 @@ class ResearchAgent(BaseAgent):
         # Only a trusted caller may supply independently issued source events.
         # Never construct them from model output, workflow state, or registry metadata.
         self._trusted_route_source_events = tuple(trusted_route_source_events or ())
+        self._trusted_route_capabilities_by_group = {
+            key: tuple(values)
+            for key, values in (trusted_route_capabilities_by_group or {}).items()
+        }
+        self._trusted_route_group_roles_by_group = dict(
+            trusted_route_group_roles_by_group or {}
+        )
         self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
         self._enable_memory = self._resolve_enable_memory(enable_memory)
@@ -1014,6 +1027,8 @@ class ResearchAgent(BaseAgent):
             typed_goal, state.extracted_protocols,
             source_root=kb_root,
             trusted_source_events=self._trusted_route_source_events,
+            verified_capabilities_by_group=self._trusted_route_capabilities_by_group,
+            verified_group_roles_by_group=self._trusted_route_group_roles_by_group,
             device_context=device_context if isinstance(device_context, dict) else None,
             science_agent=self,
         )

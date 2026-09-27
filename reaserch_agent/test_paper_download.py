@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import threading
 import unittest
@@ -114,6 +115,190 @@ class PdfWebClient(EmptyWebClient):
 
 
 class PaperDownloadTest(unittest.TestCase):
+    def test_raw_fetch_receipt_records_bytes_http_and_kb_relative_path(self) -> None:
+        payload = b"%PDF-1.7\noriginal bytes\n%%EOF"
+        requested = "https://publisher.example/article.pdf"
+        final = "https://cdn.publisher.example/article.pdf"
+
+        def opener(request, *, timeout):
+            response = RedirectingResponse(payload, "application/pdf", final)
+            response.status = 200
+            return response
+
+        downloader = OpenAccessPdfDownloader(
+            opener=opener, web_search_client=EmptyWebClient(),
+            url_validator=lambda url: None,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "_pdf_sources" / "campaign"
+            result = downloader.download(ExternalPaper(title="", pdf_url=requested), output)
+            receipt = result.to_dict()
+            self.assertEqual(result.path.read_bytes(), payload)
+
+        self.assertEqual(receipt["url"], requested)
+        self.assertEqual(receipt["request_url"], requested)
+        self.assertEqual(receipt["final_url"], final)
+        self.assertEqual(receipt["http_status"], 200)
+        self.assertEqual(receipt["content_type"], "application/pdf")
+        self.assertEqual(
+            receipt["raw_pdf_sha256"], "sha256_" + hashlib.sha256(payload).hexdigest()
+        )
+        self.assertTrue(receipt["kb_relative_path"].startswith("_pdf_sources/campaign/"))
+        self.assertFalse(receipt["redirect_history_complete"])
+        self.assertEqual(receipt["attempts"][-1]["raw_pdf_sha256"], receipt["raw_pdf_sha256"])
+
+    def test_default_safe_opener_records_each_redirect_hop(self) -> None:
+        requested = "https://publisher.example/article.pdf"
+        first = "https://cdn.publisher.example/first.pdf"
+        final = "https://cdn.publisher.example/final.pdf"
+        payload = b"%PDF-1.7\nredirected original\n%%EOF"
+
+        class SimulatedOpener:
+            def __init__(self, redirect_handler):
+                self.handler = redirect_handler
+
+            def open(self, request, *, timeout):
+                first_request = self.handler.redirect_request(
+                    request, None, 302, "Found", {}, first,
+                )
+                second_request = self.handler.redirect_request(
+                    first_request, None, 301, "Moved", {}, final,
+                )
+                response = RedirectingResponse(
+                    payload, "application/pdf", second_request.full_url,
+                )
+                response.status = 200
+                return response
+
+        with mock.patch(
+            "reaserch_agent.tools.paper_download.urllib.request.build_opener",
+            side_effect=lambda handler: SimulatedOpener(handler),
+        ):
+            downloader = OpenAccessPdfDownloader(
+                web_search_client=EmptyWebClient(), url_validator=lambda url: None,
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            receipt = downloader.download(
+                ExternalPaper(title="", pdf_url=requested), tmp,
+            ).to_dict()
+        self.assertTrue(receipt["downloaded"])
+        self.assertTrue(receipt["redirect_history_complete"])
+        self.assertEqual(receipt["final_url"], final)
+        self.assertEqual(receipt["redirects"], [
+            {"from_url": requested, "to_url": first, "http_status": 302,
+             "followed": True},
+            {"from_url": first, "to_url": final, "http_status": 301,
+             "followed": True},
+        ])
+
+    def test_rejected_redirect_is_recorded_without_following(self) -> None:
+        requested = "https://publisher.example/article.pdf"
+        blocked = "http://127.0.0.1/private.pdf"
+
+        class SimulatedOpener:
+            def __init__(self, redirect_handler):
+                self.handler = redirect_handler
+
+            def open(self, request, *, timeout):
+                self.handler.redirect_request(
+                    request, None, 302, "Found", {}, blocked,
+                )
+                raise AssertionError("blocked redirect must never continue")
+
+        def validator(url):
+            if "127.0.0.1" in url:
+                raise ValueError("blocked private destination")
+
+        with mock.patch(
+            "reaserch_agent.tools.paper_download.urllib.request.build_opener",
+            side_effect=lambda handler: SimulatedOpener(handler),
+        ):
+            downloader = OpenAccessPdfDownloader(
+                web_search_client=EmptyWebClient(), url_validator=validator,
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            result = downloader.download(
+                ExternalPaper(title="", pdf_url=requested), tmp,
+            )
+        attempt = next(a for a in result.attempts if a.provider == "metadata")
+        self.assertEqual(attempt.status, "download_failed")
+        self.assertIn("blocked private destination", attempt.error)
+        self.assertEqual(attempt.redirects, [{
+            "from_url": requested, "to_url": blocked,
+            "http_status": 302, "followed": False,
+        }])
+        self.assertFalse(attempt.redirect_history_complete)
+
+    def test_failed_fetch_preserves_http_facts_and_reason(self) -> None:
+        requested = "https://publisher.example/wrong-content.pdf"
+
+        def opener(request, *, timeout):
+            response = RedirectingResponse(
+                b"<html>not a PDF</html>", "text/html", requested,
+            )
+            response.status = 200
+            return response
+
+        downloader = OpenAccessPdfDownloader(
+            opener=opener, web_search_client=EmptyWebClient(),
+            url_validator=lambda url: None,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            result = downloader.download(ExternalPaper(title="", pdf_url=requested), tmp)
+        attempt = next(a for a in result.attempts if a.provider == "metadata")
+        self.assertEqual(attempt.request_url, requested)
+        self.assertEqual(attempt.final_url, requested)
+        self.assertEqual(attempt.http_status, 200)
+        self.assertEqual(attempt.content_type, "text/html")
+        self.assertIn("unexpected Content-Type", attempt.to_dict()["failure_reason"])
+        self.assertEqual(attempt.raw_pdf_sha256, "")
+        self.assertEqual(attempt.kb_relative_path, "")
+
+    def test_http_error_status_and_response_type_are_retained(self) -> None:
+        requested = "https://publisher.example/forbidden.pdf"
+
+        def opener(request, *, timeout):
+            raise urllib.error.HTTPError(
+                requested, 403, "Forbidden", {"Content-Type": "text/html"}, None,
+            )
+
+        downloader = OpenAccessPdfDownloader(
+            opener=opener, web_search_client=EmptyWebClient(),
+            url_validator=lambda url: None,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            result = downloader.download(ExternalPaper(title="", pdf_url=requested), tmp)
+        attempt = next(a for a in result.attempts if a.provider == "metadata")
+        self.assertEqual(attempt.http_status, 403)
+        self.assertEqual(attempt.content_type, "text/html")
+        self.assertEqual(attempt.final_url, requested)
+        self.assertIn("HTTPError", attempt.to_dict()["failure_reason"])
+
+    def test_candidate_validator_must_not_change_retained_original_bytes(self) -> None:
+        requested = "https://publisher.example/article.pdf"
+        downloader = OpenAccessPdfDownloader(
+            opener=lambda request, timeout: FakeResponse(
+                b"%PDF-1.7\noriginal\n%%EOF", "application/pdf"
+            ),
+            web_search_client=EmptyWebClient(),
+            url_validator=lambda url: None,
+        )
+
+        def mutate(path):
+            path.write_bytes(b"%PDF-1.7\nchanged\n%%EOF")
+            return True
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = downloader.download(
+                ExternalPaper(title="", pdf_url=requested), tmp,
+                candidate_validator=mutate,
+            )
+        self.assertFalse(result.downloaded)
+        attempt = next(a for a in result.attempts if a.provider == "metadata")
+        self.assertEqual(attempt.status, "parse_failed")
+        self.assertIn("modified downloaded PDF bytes", attempt.error)
+        self.assertEqual(attempt.kb_relative_path, "")
+
     def test_arxiv_failure_falls_back_to_semantic_scholar_oa(self) -> None:
         paper = ExternalPaper(
             title="Fallback paper",
@@ -383,6 +568,57 @@ class InvalidPdfDownloader:
 
 
 class DownloadStatusIntegrationTest(unittest.TestCase):
+    def test_fetch_receipt_flows_into_corpus_and_registry_without_identity_claim(self) -> None:
+        paper = ExternalPaper(
+            title="Source transport only", doi="10.1000/source-transport",
+            source="crossref", pdf_url="https://publisher.example/source.pdf",
+        )
+        payload = b"%PDF-1.7\noriginal transport bytes\n%%EOF"
+        downloader = OpenAccessPdfDownloader(
+            opener=lambda request, timeout: FakeResponse(payload, "application/pdf"),
+            web_search_client=EmptyWebClient(), url_validator=lambda url: None,
+        )
+        for resolver in [
+            "_resolve_semantic_scholar", "_resolve_unpaywall", "_resolve_core",
+        ]:
+            setattr(downloader, resolver, lambda paper: [])
+        with tempfile.TemporaryDirectory() as tmp:
+            ingestion = KnowledgeIngestion(tmp, pdf_downloader=downloader)
+
+            def parse_candidate(path):
+                return ingestion.record_from_text(
+                    title=paper.title,
+                    text="Synthesis conditions and materials. " * 8,
+                    source_path=str(path), source_type="pdf",
+                )
+
+            with mock.patch.object(
+                ingestion, "record_from_file", side_effect=parse_candidate,
+            ):
+                acquisition = LiteratureAcquisition(
+                    kb_dir=tmp, campaign_id="transport", ingestion=ingestion,
+                    download_pdfs=True, client=mock.MagicMock(last_errors=[]),
+                )
+                written, _ = acquisition._archive_paper(paper, role="seed")
+
+            corpus = json.loads(Path(written[0]).read_text(encoding="utf-8"))
+            download = corpus["_ingestion_metadata"]["pdf_download"]
+            record = PaperRegistry(tmp).find(doi=paper.doi)
+            expected_hash = "sha256_" + hashlib.sha256(payload).hexdigest()
+            self.assertEqual(download["raw_pdf_sha256"], expected_hash)
+            self.assertEqual(download["attempts"][-1]["raw_pdf_sha256"], expected_hash)
+            self.assertEqual(record["download_attempts"][-1]["raw_pdf_sha256"], expected_hash)
+            self.assertTrue(
+                record["download_attempts"][-1]["kb_relative_path"].startswith(
+                    "_pdf_sources/transport/"
+                )
+            )
+            self.assertEqual(record["verification_status"], "verified_doi")
+            self.assertNotIn("identity_status", record)
+            self.assertFalse(
+                (Path(tmp) / "registry" / "route_source_attestations_v1").exists()
+            )
+
     def test_failed_download_keeps_metadata_and_is_not_marked_parsed(self) -> None:
         paper = ExternalPaper(
             title="Metadata survives download failure",

@@ -3,6 +3,8 @@
 The downloader resolves one paper through independent providers in order and
 stops at the first payload that passes PDF validation. Provider failures are
 returned to callers instead of being hidden or raised into the agent workflow.
+Fetch receipts describe transport and exact bytes only.  They do not establish
+that a PDF is the article/SI named by its metadata or DOI.
 """
 
 from __future__ import annotations
@@ -22,8 +24,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .network_safety import (
+    SafeRedirectHandler,
     UrlValidator,
-    build_safe_opener,
     validate_public_http_url,
 )
 from .web_search import WebSearchClient
@@ -64,6 +66,14 @@ class PdfDownloadAttempt:
     url: str = ""
     error: str = ""
     bytes_written: int = 0
+    request_url: str = ""
+    redirects: List[Dict[str, Any]] = field(default_factory=list)
+    redirect_history_complete: bool = False
+    final_url: str = ""
+    http_status: Optional[int] = None
+    content_type: str = ""
+    raw_pdf_sha256: str = ""
+    kb_relative_path: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -72,6 +82,15 @@ class PdfDownloadAttempt:
             "url": self.url,
             "error": self.error,
             "bytes_written": self.bytes_written,
+            "request_url": self.request_url or self.url,
+            "redirects": [dict(hop) for hop in self.redirects],
+            "redirect_history_complete": self.redirect_history_complete,
+            "final_url": self.final_url,
+            "http_status": self.http_status,
+            "content_type": self.content_type,
+            "raw_pdf_sha256": self.raw_pdf_sha256,
+            "kb_relative_path": self.kb_relative_path,
+            "failure_reason": self.error,
         }
 
 
@@ -111,9 +130,48 @@ class PdfDownloadResult:
             "path": str(self.path) if self.path else "",
             "provider": success.provider if success else "",
             "url": success.url if success else "",
+            "request_url": (success.request_url or success.url) if success else "",
+            "redirects": [dict(hop) for hop in success.redirects] if success else [],
+            "redirect_history_complete": (
+                success.redirect_history_complete if success else False
+            ),
+            "final_url": success.final_url if success else "",
+            "http_status": success.http_status if success else None,
+            "content_type": success.content_type if success else "",
+            "raw_pdf_sha256": success.raw_pdf_sha256 if success else "",
+            "kb_relative_path": success.kb_relative_path if success else "",
             "attempts": [attempt.to_dict() for attempt in self.attempts],
             "errors": self.errors,
         }
+
+
+class _RecordingSafeRedirectHandler(SafeRedirectHandler):
+    """Keep a request-local hop trail while retaining SafeRedirectHandler."""
+
+    def __init__(self, validator: UrlValidator, state: threading.local) -> None:
+        super().__init__(validator)
+        self._state = state
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        destination = urllib.parse.urljoin(req.full_url, newurl)
+        hops = getattr(self._state, "redirect_hops", None)
+        try:
+            redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        except Exception:
+            if hops is not None:
+                hops.append({
+                    "from_url": req.full_url, "to_url": destination,
+                    "http_status": int(code), "followed": False,
+                })
+            raise
+        if hops is not None:
+            hops.append({
+                "from_url": req.full_url,
+                "to_url": redirected.full_url if redirected is not None else destination,
+                "http_status": int(code),
+                "followed": redirected is not None,
+            })
+        return redirected
 
 
 class OpenAccessPdfDownloader:
@@ -155,7 +213,11 @@ class OpenAccessPdfDownloader:
         self.timeout_seconds = max(1, int(timeout_seconds))
         self.max_pdf_bytes = max(1024, int(max_pdf_bytes))
         self._url_validator = url_validator or validate_public_http_url
-        self._opener = opener or build_safe_opener(self._url_validator)
+        self._redirect_state = threading.local()
+        self._redirects_observable = opener is None
+        self._opener = opener or urllib.request.build_opener(
+            _RecordingSafeRedirectHandler(self._url_validator, self._redirect_state)
+        ).open
         self.web_search_client = web_search_client
         self.max_candidates_per_provider = max(1, int(max_candidates_per_provider))
         self.max_total_download_attempts = max(1, int(max_total_download_attempts))
@@ -275,6 +337,11 @@ class OpenAccessPdfDownloader:
                             accepted = candidate_validator(target)
                             if accepted is False:
                                 raise ValueError("candidate validator returned false")
+                            if (
+                                "sha256_" + hashlib.sha256(target.read_bytes()).hexdigest()
+                                != attempt.raw_pdf_sha256
+                            ):
+                                raise ValueError("candidate validator modified downloaded PDF bytes")
                         except Exception as exc:
                             self._reset_reservation(target)
                             attempt.status = "parse_failed"
@@ -291,6 +358,7 @@ class OpenAccessPdfDownloader:
                         )
                         return result
                     result.path = target
+                    attempt.kb_relative_path = self._kb_relative_pdf_path(target)
                     return result
         return result
 
@@ -500,7 +568,12 @@ class OpenAccessPdfDownloader:
         url: str,
         target: Path,
     ) -> PdfDownloadAttempt:
+        attempt = PdfDownloadAttempt(
+            provider=provider, status="download_failed", url=url, request_url=url,
+        )
         temp_path: Optional[Path] = None
+        previous_hops = getattr(self._redirect_state, "redirect_hops", None)
+        self._redirect_state.redirect_hops = []
         try:
             self._validate_remote_url(url)
             request = urllib.request.Request(
@@ -511,8 +584,15 @@ class OpenAccessPdfDownloader:
                 final_url = str(
                     response.geturl() if hasattr(response, "geturl") else url
                 )
+                attempt.final_url = final_url
+                attempt.http_status = self._response_status(response)
                 self._url_validator(final_url or url)
                 content_type = self._response_header(response, "Content-Type")
+                attempt.content_type = content_type
+                if attempt.http_status is not None and not (
+                    200 <= attempt.http_status < 300
+                ):
+                    raise ValueError(f"unexpected HTTP status {attempt.http_status}")
                 media_type = content_type.split(";", 1)[0].strip().lower()
                 if media_type not in _PDF_CONTENT_TYPES:
                     raise ValueError(
@@ -539,6 +619,7 @@ class OpenAccessPdfDownloader:
                     temp_path = Path(handle.name)
                     prefix = b""
                     total = 0
+                    body_hash = hashlib.sha256()
                     while True:
                         chunk = response.read(64 * 1024)
                         if not chunk:
@@ -551,29 +632,74 @@ class OpenAccessPdfDownloader:
                         if len(prefix) < 1024:
                             prefix += chunk[: 1024 - len(prefix)]
                         handle.write(chunk)
+                        body_hash.update(chunk)
                     handle.flush()
                     os.fsync(handle.fileno())
 
+                attempt.bytes_written = total
                 if b"%PDF-" not in prefix:
                     raise ValueError("payload is missing the PDF magic header")
+                attempt.raw_pdf_sha256 = "sha256_" + body_hash.hexdigest()
                 os.replace(temp_path, target)
                 temp_path = None
-                return PdfDownloadAttempt(
-                    provider=provider,
-                    status="downloaded",
-                    url=url,
-                    bytes_written=total,
-                )
+                attempt.status = "downloaded"
+                return attempt
+        except urllib.error.HTTPError as exc:
+            try:
+                error_url = str(exc.geturl() or "")
+            except Exception:
+                error_url = ""
+            attempt.final_url = error_url or url
+            attempt.http_status = int(exc.code)
+            headers = getattr(exc, "headers", None)
+            if headers is not None and hasattr(headers, "get"):
+                attempt.content_type = str(headers.get("Content-Type", "") or "")
+            attempt.error = f"{type(exc).__name__}: {exc}"
+            return attempt
         except Exception as exc:
-            return PdfDownloadAttempt(
-                provider=provider,
-                status="download_failed",
-                url=url,
-                error=f"{type(exc).__name__}: {exc}",
-            )
+            attempt.error = f"{type(exc).__name__}: {exc}"
+            return attempt
         finally:
+            hops = getattr(self._redirect_state, "redirect_hops", [])
+            attempt.redirects = [dict(hop) for hop in hops]
+            expected_final = hops[-1]["to_url"] if hops else url
+            attempt.redirect_history_complete = (
+                self._redirects_observable
+                and attempt.status == "downloaded"
+                and all(hop["followed"] for hop in hops)
+                and attempt.final_url == expected_final
+            )
+            if previous_hops is None:
+                try:
+                    del self._redirect_state.redirect_hops
+                except AttributeError:
+                    pass
+            else:
+                self._redirect_state.redirect_hops = previous_hops
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _kb_relative_pdf_path(path: Path) -> str:
+        """Describe retained KB PDFs; arbitrary output paths have no KB claim."""
+
+        resolved = path.resolve()
+        for parent in resolved.parents:
+            if parent.name == "_pdf_sources":
+                return resolved.relative_to(parent.parent).as_posix()
+        return ""
+
+    @staticmethod
+    def _response_status(response: Any) -> Optional[int]:
+        raw = getattr(response, "status", None)
+        if raw is None:
+            raw = getattr(response, "code", None)
+        if raw is None and hasattr(response, "getcode"):
+            raw = response.getcode()
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def _get_json(
         self,

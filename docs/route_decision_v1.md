@@ -52,7 +52,7 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
   → 现有 Phase 1–5 发布门 → Device hard gate
 ```
 
-现有 `SearchHit` 和 `extracted_protocols` 仍以论文/步骤为主。抽取提示现在要求逐实验组拆分，归一化已保留实验组 ID、角色和步骤原文定位；但当前 live prompt 不产生完整 `RouteSignatureV1`、`EvidenceMatrix`、`MacroStepV2` 图和设备能力声明，因此 discovery 对普通 live output 会返回 `structured_route_field_missing`，不会凭摘要补齐。可提取文本的受信 PDF 现在可枚举明确的实验组；进入决策管线的每个已知组都须在抽取结果中以相同论文 ID、组 ID 和文件摘要出现，否则决策返回 `attested_group_not_extracted`，组边界模糊也会阻断。当前抽取最多覆盖有限的 top hits/protocols，不应将其视为完整候选全集。`MacroActionV2.experiment_group` 是计划执行的样品组，不能充当论文实验组 ID。
+现有 `SearchHit` 和 `extracted_protocols` 仍以论文/步骤为主。抽取提示现在要求逐实验组拆分，归一化已保留实验组 ID、角色和步骤原文定位；但当前 live prompt 不产生完整 `RouteSignatureV1`、`EvidenceMatrix`、`MacroStepV2` 图和设备能力声明，因此 discovery 对普通 live output 会返回 `structured_route_field_missing`，不会凭摘要补齐。可提取文本的受信 PDF 现在可枚举明确的实验组；进入决策管线的每个已知组都须在抽取结果中以相同论文 ID、组 ID 和文件摘要出现，否则决策返回 `attested_group_not_extracted`，组边界模糊也会阻断。实验组的合成/表征/测试角色还须与独立可信映射一致；模型把合成组自报为 characterization 不能让该组消失。当前抽取最多覆盖有限的 top hits/protocols，不应将其视为完整候选全集。`MacroActionV2.experiment_group` 是计划执行的样品组，不能充当论文实验组 ID。
 
 ## 候选与决策合同
 
@@ -84,7 +84,7 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 
 1. **SourceVerifier**：核对受控本地文本的原始字节哈希、实验组边界、字段行号、证据包整段摘录和物料图所有论文引用；PDF 采用原始文件哈希与 `pdf:p1:b2-p2:b4` 页/文本块定位。文本中即使已有机器可读路线签名，签名每个关键字段仍须有同组原文逐项引文才能成为已验证签名。DOI、搜索摘要或论文级 `evidence_excerpt` 本身不足以证明一个数值属于某实验组。`ExperimentalGroupScope.source_digest` 是整篇源文件的 SHA256；`ProvenanceV2.source_digest` 继续按 V2 合同绑定 `EvidenceItemV2.excerpt` 的 canonical digest，两者不可混用。PDF 核验只证明本地 PDF 中的组和摘录，未认证出版者身份或路线签名；扫描 PDF/JSON 仍保持未核验。
 2. **ScientificAudit**：把候选的步骤、物料和来源映射到既有 chemistry conventions、material state/lineage graph、provenance 校验及 Scientific Completeness Audit。convention 只可扩展其已授权的状态与谱系语义，不能产生新数值。图中数值如果没有同路径 evidence matrix 绑定，就保持 unresolved；明确错误的摘要、数值或 provenance 进入 gate issues。候选缺现有规则所需的上下文时返回未评估，不复制一套较宽松的平行科学规则。
-3. **CapabilityPreflight**：当前候选级实现从现有 workstation 能力索引核验抽象 capability ID、经审核的操作映射与明确设备状态，并将限制一并纳入快照。容器、控制细节、规模及测量反馈仍需成型步骤和 Device 合同核验。现有 Research `strict_entry` 是基于 plan/package 的诊断层，不能单独证明候选路线完全可执行。没有权威能力回执时返回 `unknown`，缺少必需能力时返回 `blocked`；不能静默 fallback 或替换化学路线。
+3. **CapabilityPreflight**：当前候选级实现从现有 workstation 能力索引核验抽象 capability ID、经审核的操作映射与明确设备状态，并将限制一并纳入快照。生产还要求另一个可信编译结果逐实验组确认**完整**的 required capability 列表；模型自报的短列表即使全部可用也只能得到 `unknown`。容器、控制细节、规模及测量反馈仍需成型步骤和 Device 合同核验。现有 Research `strict_entry` 是基于 plan/package 的诊断层，不能单独证明候选路线完全可执行。没有权威能力回执时返回 `unknown`，缺少必需能力时返回 `blocked`；不能静默 fallback 或替换化学路线。
 
 候选级审查只是选出可继续规划的路线。后续 macro plan 仍须经过现有 Phase 1–5 的完整发布门，Device 仍保留最终 hard gate。任何候选审查回执不得替代这些最终校验。
 
@@ -118,13 +118,17 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 
 **阶段 3 当前进度：** PDF 页/块核验、实验组逐事实编译、有预算的补证回路和 B1/B2 显式阻断门已实现。该门保证路线未决时不会继续生成新 action；选中仍停在 `selected_unbound`，避免旧 raw-plan adapter 丢逐字段 provenance。完整 RouteSignature 仍需独立核验，普通 live 提取还不能输出完整结构化候选。
 
-**阶段 4 当前进度：** 来源身份回执模型、原字节/DOI 交叉核验、PDF 实验组枚举和漏抽组阻断已实现。外部受信事件的签发与认证、完整实验组事实抽取、路线签名核验以及无损 V2 绑定仍未实现。现有下载记录不含足够的出版者链接、终跳和身份依据，不能由 `verified_doi` 自动签发受信事件。
+**阶段 4 当前进度：** 来源身份回执模型、原字节/DOI 交叉核验、PDF 实验组枚举、漏抽组/角色核验和候选能力完整性核验已实现。逐组提案关联器可把模型的逐块摘录与受信枚举组对齐，模型无法写入来源身份、组角色或设备能力。缺可信来源事件时决策明确报告 `trusted_source_event_missing`。外部受信事件的签发与认证、完整实验组事实抽取、独立组角色与能力编译、路线签名核验以及无损 V2 绑定仍未实现。受信事件集合须由当前目标的有限额检索确定；把整个知识库都送入决策会令无关实验组阻断选路。下载器已保留请求、跳转、终跳、内容类型和原字节哈希，但仍没有出版者身份依据，不能由 `verified_doi` 自动签发受信事件。
+
+**阶段 5 当前进度：** `RouteActionIntentV1` 对显式提供的阶段、动作、当前证据包和已选路线做离线绑定预检，逐项核对决策及候选摘要、设备快照、样品与步骤 ID、操作顺序、论文来源和逐字段 provenance，并返回独立的候选副本。这还不是计划构造器，也不发布 V2；目前没有把它接到 Research 的发布门或 Device 重建门，不能因预检通过就运行设备。
 
 **后续接入：** 让原始论文/SI 的实验组结构化提取产生完整候选，并建立独立的 RouteSignature 来源；把唯一选中 candidate 的原文、证据快照与 material graph **无损**绑定到 macro action/plan，经过现有 Research V2 发布门和 Device hard gate。将预算回路接上真实检索与抽取后再做 A01 黑盒端到端验收。
 
 ### 真实闭环尚需的两个合同
 
 **原始来源身份。** PaperRegistry 的 `verified_doi` 目前只表示检索记录带 DOI，`local_file` 也不能单独证明文件是相应论文/SI。下载后的 PDF 存在 registry 的 `pdf_files`，JSON 摘要存在 `corpus_files`。低层离线索引仍可读取本地 MD/TXT/PDF 文件供合成测试使用；公开的路线决策管线默认自行核验受信事件，只在测试显式关闭此要求时使用传入路径。生产 `ResearchAgent.evaluate_route_decision_v1` 只接受原 PDF，并同时要求：受控 KB 中的 `SourceDocumentAttestationV1`、PDF 原字节 SHA256、PaperRegistry 的 PDF 关联及 DOI/父 DOI、从工作流状态和模型输出以外显式注入的 `TrustedAcquisitionEventV1` 全部匹配。受信文件哈希与候选哈希持续比对，证据条目的非空 DOI 须与受信 DOI 一致；来源身份及回执摘要进入决策记录。证据条目的标题和 URL 仍是提案文本，不视作已核验身份。回执中的 URL 与身份依据内容须由独立签发方核验；本模块不联网复核，也没有自行生成可信事件的服务。无此事件时生产来源索引为空。当前知识库登记记录没有可直接用于路线核验的原始实验组，不能仅凭现有 JSON 摘要自动产生 `paper_explicit`。
+
+后续可信签发者应保存 DOI 登记记录和出版者页面的原始响应摘要，从该页面明确指向的正文或 SI 链接获取 PDF，并保留请求、逐跳重定向、终跳、内容类型和原字节哈希。正文需核对 DOI 与标题；SI 需核对其链接来自对应正文的出版者页面。签发者在独立环境中审核这些事实并签名，ResearchAgent 再以部署时配置的公钥验签。当前纯 `TrustedAcquisitionEventV1` 对象没有内建签名验证，不能从用户输入、模型输出或 KB 文件反序列化后直接当作受信事件。
 
 **选中路线到 V2 计划。** `RouteCandidateV1` 没有 `StageV2` 和 `MacroActionV2` 必需的观测点、完成判据、执行样品组等字段；从目标材料推这些字段会造出实验意图。现有 raw-plan adapter 会重新解析参数文本并丢逐字段 provenance，Device 入口还会从 raw plan 重建包并比较哈希。因此 `selected_for_planning` 必须保持 `selected_unbound`，直到完整阶段/动作意图有证据，且共用 Research 发布门的无损 typed adapter 与 Device 重建核对完成。
 

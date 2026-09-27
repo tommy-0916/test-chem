@@ -32,6 +32,7 @@ from .route_discovery import (
 from .route_group_compiler import compile_experimental_group_protocols
 from .route_pdf_groups import (
     audit_pdf_group_extraction_coverage,
+    audit_pdf_group_roles,
     enumerate_attested_pdf_experimental_groups,
 )
 from .route_pdf_source import verify_route_pdf_source
@@ -129,6 +130,12 @@ def evaluate_route_decision_v1(
     source_root: str | Path,
     trusted_source_paths: RouteSourceIndex | None = None,
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
+    verified_capabilities_by_group: Mapping[
+        tuple[str, str, str], Sequence[str]
+    ] | None = None,
+    verified_group_roles_by_group: Mapping[
+        tuple[str, str, str], str
+    ] | None = None,
     device_context: dict[str, Any] | None = None,
     science_agent: Any = None,
     require_attested_sources: bool = True,
@@ -187,12 +194,24 @@ def evaluate_route_decision_v1(
     discovery = discover_route_candidates(
         goal, compilation.protocols, trusted_source_paths=scoped_sources,
     )
+    if require_attested_sources and not source_index:
+        discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+            protocol_index=len(protocols), group_index=0,
+            reason_code=(
+                "trusted_source_event_missing"
+                if not trusted_source_events else "attested_source_unavailable"
+            ),
+        ))
     if require_attested_sources and source_index:
         enumerated = enumerate_attested_pdf_experimental_groups(
             root, trusted_source_events
         )
         coverage = audit_pdf_group_extraction_coverage(
             enumerated.groups, protocols
+        )
+        role_audit = audit_pdf_group_roles(
+            enumerated.groups, protocols,
+            group_roles_by_group=verified_group_roles_by_group,
         )
         for index, diagnostic in enumerate(enumerated.diagnostics):
             discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
@@ -208,6 +227,17 @@ def evaluate_route_decision_v1(
                 paper_id=scope.paper_id,
                 experimental_group_id=scope.experimental_group_id,
                 reason_code="attested_group_not_extracted",
+            ))
+        for index, issue in enumerate(role_audit.issues):
+            discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+                protocol_index=len(protocols),
+                group_index=(
+                    len(enumerated.diagnostics)
+                    + len(coverage.missing_scopes) + index
+                ),
+                paper_id=issue.source_scope.paper_id,
+                experimental_group_id=issue.source_scope.experimental_group_id,
+                reason_code=issue.reason_code,
             ))
     diagnostics: dict[str, list[str]] = {}
 
@@ -254,7 +284,33 @@ def evaluate_route_decision_v1(
             item.verification_status = "local_file" if trusted else "unknown"
             item.full_text_status = "local_parsed" if trusted else "unknown"
         science = audit_route_candidate_science(science_candidate, agent=science_agent)
-        device = preflight_route_capabilities(candidate.required_capabilities, device_context)
+        device = dict(preflight_route_capabilities(
+            candidate.required_capabilities, device_context
+        ))
+        device["reasons"] = list(device.get("reasons", []))
+        if require_attested_sources:
+            group_key = (
+                scope.paper_id, scope.experimental_group_id, scope.source_digest
+            ) if scope else None
+            trusted_capabilities = (
+                verified_capabilities_by_group.get(group_key)
+                if group_key and verified_capabilities_by_group else None
+            )
+            requirements_verified = (
+                isinstance(trusted_capabilities, Sequence)
+                and not isinstance(trusted_capabilities, (str, bytes))
+                and bool(trusted_capabilities)
+                and all(
+                    isinstance(item, str) and item.strip() == item and item
+                    for item in trusted_capabilities
+                )
+                and len(set(trusted_capabilities)) == len(trusted_capabilities)
+                and set(trusted_capabilities) == set(candidate.required_capabilities)
+            )
+            if not requirements_verified:
+                if device["status"] == "preflight_supported":
+                    device["status"] = "unknown"
+                device["reasons"].append("capability_requirements_unverified")
         diagnostics[candidate.route_id] = [
             *("source:" + reason for reason in source.reasons),
             *("science:" + issue for issue in science["scientific_gate_issues"]),
