@@ -55,6 +55,31 @@ NiFe Control 只覆盖一个合成实验组；A01 任务还要求不同 Fe 引�
 
 ## 继续条件
 
+### 同路线原文的有界补查
+
+在旧配方的硝酸镍/硝酸铁、Ni:Fe = 4:1、NaOH-only 分批加料、60 °C 熟化 6 h、8000 rpm/10 min 离心和 60 °C/12 h 干燥这一组联合条件下，本次有界查找未找到可以逐字段支撑它的 primary paper/SI。最接近的 [Zhao 等，*Materials* 2025 §2.2.1](https://doi.org/10.3390/ma18040911)虽有 Ni:Fe = 4:1 和 NaOH 滴加，却使用 NiCl₂/FeCl₃、pH 9–10、反应 30 min、陈化 24 h、60 °C 干燥 48 h，研究终点还是甲基橙去除；不能替旧 A01 的 OER 样品矩阵和不同参数背书。[Görlin 等，*Chemical Communications* 2019](https://doi.org/10.1039/C8CC06410E)研究 Ni/Fe 氧羟化物的物理混合 OER 对照，但其制备路线也不能补足旧方案的共沉淀数值。相似字段不得跨论文、跨实验组拼成一个 `paper_explicit` 配方。
+
+这不是对所有文献的穷尽性否定；它说明**当前可审计来源集**没有旧配方所需的同路线证据。若后来找到原始论文/SI，应从原文字节、具体实验组和字段 locator 重新核验。旧冻结包的 `agent_inferred` 字段仍为 unsupported，不能自动升级。
+
+### 开放任务与历史配方的边界
+
+A01 原始 query 没有锁定 NaOH、Ni:Fe = 4:1 或 60 °C/6 h；旧配方是 agent 当时生成的一个方案。因此“复现历史冻结配方”和“满足原始开放任务”是两个不同的验证目标。对后者，路线决策层可以在具备合法来源与完整任务约束时自行选择一个合规实验组；若多条路线并列，仍要保留 `needs_route_choice`。但 A01 原始任务要求不同 Fe 引入/配位、Ni 基与物理混合样品及多项 OER/结构终点。当前 `RouteGoalV1`/`RouteDecisionV1` 选择一个候选，action binding 也限定单一 `sample_id`；尚没有对整套多臂样品矩阵的来源覆盖判定。不能把任何一个 NiFe Control 实验组的单 action publish 当成整个 A01 已就绪，也不能把新选路线回填到旧冻结配方后声称其被原文支持。
+
+有界查找找到两套与**原始开放目标**更贴近的真实实验矩阵，均尚未进入受信 KB、独立审阅或 Research gate：
+
+| Primary source | 已报告的实验组和可比内容 | 对 A01 的明确缺口 |
+| --- | --- | --- |
+| [Görlin 等，*Chemical Communications*，DOI 10.1039/C8CC06410E](https://doi.org/10.1039/C8CC06410E)，[机构主文及 SI](https://refubium.fu-berlin.de/handle/fub188/25756) | Ni(OH)₂、FeOOH、共合成 Ni–Fe、Ni+Fe 物理混合；SI p. S2 为合成/混合方法，主文比较 OER、Tafel、形貌和原位 XAS/UV-vis。 | 使用 190 °C 溶剂热等不同制备条件；未核实 XRD、XPS、ECSA、EIS、长期稳定性，303 能力未知。 |
+| [Sondermann 等，*Molecules* 2025，DOI 10.3390/molecules30020208](https://doi.org/10.3390/molecules30020208)，[作者机构 PDF](https://www.ac1.hhu.de/fileadmin/redaktion/Fakultaeten/Mathematisch-Naturwissenschaftliche_Fakultaet/Chemie/AnorganischeChemie/AnorganischeChemie_I/Publikations-Dateien_ab_743/744.pdf) | Ni/Fe MOF 系列，另有 Ni(OH)₂+FeOOH 物理混合对照；原文分别报告 PXRD、SEM-EDX、OER、Tafel、EIS 和稳定性。 | MOF 与氢氧化物是不同组；不能把 MOF 组的 EIS/稳定性移给物理混合组。未见 XPS/ECSA，整体也不能直接覆盖全部 A01 终点。 |
+
+这些文献提供**候选组**，不是已核验可发布的 A01 Evidence Bundle。任何跨论文实验组合都必须把各样品臂及各终点的来源分别审计；原文未报告的终点可设计为新测量，但不能伪称原文已有该结果。
+
+### v5 启动判据
+
+用户已授权在准备完成后自动运行 A01 v5。启动前必须逐项核实：受控 PDF 与独立签名来源事件、逐实验组签名审阅、覆盖原始多臂任务的 RouteGoal/Action intents、路线选择与逐字段 evidence、Research V2 保存重建和 publish gate、Device canonical V2 与能力预检均通过。若某项缺失，记录该项 reason code 并停在对应门；新选实验组不得静默改写旧冻结配方的来源。当前三份旧 `extracted_protocols` 没有 experimental-group 候选，尚无独立签名来源与审阅回执，也没有多臂覆盖证明，因此 v5 **未启动**。
+
+当前 `run_campaign.py` 的 `--forward-only` 最多验证到 Device 规划/下发检查；现有 `real` execution adapter 不提供实际 303 任务创建。因此即使后续科学与设备门通过，也须把“本地 v5 通过”与“303 已接收并返回任务 id”分开记录。
+
 1. 若保留旧 A01 路线，找到与其前驱体、比例、有序操作、加料控制模式和终点一致的 primary paper/SI 实验组；不能从近似路线拼参数。
-2. 若显式改选 Huang NiFe Control，先对机构 PDF 的来源身份和实验组路线作独立审阅并签发机器可验回执；PDF 枚举器还需通用、保守地识别这种双栏内嵌标题格式。之后重新建立 RouteGoal、逐组 facts、物料图和 Stage/Action intent，并核实 pH 反馈等设备能力。
+2. 若为原始开放任务采用 Huang NiFe Control 作为其中一个样品臂，先对机构 PDF 的来源身份和实验组路线作独立审阅并签发机器可验回执；PDF 枚举器还需通用、保守地识别这种双栏内嵌标题格式。之后重新建立 RouteGoal、逐组 facts、物料图和 Stage/Action intent，补齐其他对照臂的证据及覆盖判定，并核实 pH 反馈等设备能力。
 3. 只有路线 evaluator 选中、Research 完整性审计和发布门通过，才运行 Device hard preflight；两者都通过后才考虑 A01 v5。

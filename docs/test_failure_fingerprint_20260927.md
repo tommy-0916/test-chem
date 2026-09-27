@@ -29,3 +29,15 @@ The comparison keys are test ID, outcome, exception type, reason after replacing
 Research's 29 failures include 13 Windows `PermissionError [WinError 32]` SQLite cleanup errors, eight assertion failures, four `RuntimeError`s and four `ValueError`s. Device's 50 failures have their individual messages and origins in the JSON.
 
 The Windows PowerShell redirection replaced some Chinese characters in native test output. The comparison retained matching English reason codes, exception types, test IDs and stack functions; the temporary directory also contains the full console logs and JUnit XML from both runs.
+
+## Campaign CLI follow-up: `fc964b1` → `b993219`
+
+The v5 entry wiring was checked with `python -m unittest orchestrator.test_run_campaign_args`: **14/14 passed**. The broader `orchestrator.test_runner orchestrator.test_v2_runner -q` command ran 43 tests in a clean `git archive fc964b1` snapshot and the modified checkout; both had the same one failure and two errors. The test IDs, exception classes, messages and origin functions matched; only source line numbers moved:
+
+| Test | Same baseline signature |
+| --- | --- |
+| `test_quantity_structured_errors_survive_in_device_repair_request` | `DeviceRepairResumeError: V2 feasibility_certificate version is unsupported or missing` from `_write_device_repair_artifacts` |
+| `test_translation_repair_exhaustion_stays_at_device_and_emits_handoff` | Same `DeviceRepairResumeError` and origin |
+| `test_device_repair_resume_rejects_unbound_successor_certificates` (`version`) | `AssertionError`: expected `version 2.4`, implementation requires `version 2.5` |
+
+These three are existing baseline debt, not new failures introduced by the route-trust/bootstrap argument forwarding.
