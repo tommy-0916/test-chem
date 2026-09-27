@@ -246,6 +246,19 @@ class RouteDecisionOfflineTest(unittest.TestCase):
             "locked_source_route_family_mismatch", result.candidates[0].reasons,
         )
 
+    def test_open_goal_does_not_accept_proposed_family_conflicting_with_review(self) -> None:
+        route = candidate(family="precipitation")
+        reviewed = route.route_signature.model_copy(deep=True)
+        reviewed.route_family = "reflux"
+        result = decide_routes(
+            goal(), [route],
+            lambda item: receipt(item, source_route_signature=reviewed),
+        )
+        self.assertEqual(result.status, "unresolved")
+        self.assertIn(
+            "route_signature_mismatch:route_family", result.candidates[0].reasons,
+        )
+
     def test_same_paper_other_group_cannot_supply_field(self) -> None:
         route = candidate(field_group_id="treated")
         result = decide_routes(goal(), [route], receipt)

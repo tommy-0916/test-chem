@@ -37,6 +37,9 @@ from .route_pdf_groups import (
 )
 from .route_pdf_source import verify_route_pdf_source
 from .route_science import audit_route_candidate_science
+from .route_signature_review import (
+    ReviewedRouteSignatureScopeV1, verify_reviewed_route_signature_manifest,
+)
 from .route_signed_event import (
     TrustedIssuerPublicKeyV1, verify_signed_trusted_acquisition_event,
 )
@@ -135,6 +138,10 @@ def _evaluate_route_decision_v1_impl(
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     signed_source_events: Sequence[Mapping[str, Any]] | None = None,
     trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
+    signed_route_signature_reviews: Sequence[Mapping[str, Any]] | None = None,
+    trusted_route_signature_public_keys: Mapping[
+        str, TrustedIssuerPublicKeyV1
+    ] | None = None,
     verified_capabilities_by_group: Mapping[
         tuple[str, str, str], Sequence[str]
     ] | None = None,
@@ -154,6 +161,7 @@ def _evaluate_route_decision_v1_impl(
     """
     root = Path(source_root).expanduser().resolve()
     event_issues: list[str] = []
+    verified_events: list[TrustedAcquisitionEventV1] = []
     if require_attested_sources:
         if trusted_source_events:
             event_issues.append("unsigned_trusted_source_event_rejected")
@@ -166,6 +174,8 @@ def _evaluate_route_decision_v1_impl(
                 event_issues.append(
                     "trusted_source_event_" + (verified.reason_code or "invalid")
                 )
+            else:
+                verified_events.append(verified.event)
     source_index: RouteSourceIndex = (
         attested_route_sources(
             root, signed_source_events, trusted_public_keys=trusted_public_keys,
@@ -211,6 +221,31 @@ def _evaluate_route_decision_v1_impl(
                         paths.append(path)
             except (OSError, ValueError):
                 continue
+    if require_attested_sources:
+        # The source index intentionally drops stale or unregistered files.
+        # A dropped signed source may contain another synthesis group, so it
+        # must also make the whole candidate set incomplete.
+        indexed_events = {
+            (
+                paper_id, path, digest, kind, attestation_digest
+            )
+            for (paper_id, path, digest), identities in attested_identity.items()
+            for _, kind, attestation_digest in identities
+        }
+        for event in verified_events:
+            try:
+                event_path = root.joinpath(
+                    *event.kb_relative_path.split("/")
+                ).resolve()
+            except (OSError, ValueError):
+                event_issues.append("trusted_source_event_not_attested")
+                continue
+            event_key = (
+                event.paper_id, event_path, event.document_digest,
+                event.document_kind, event.attestation_digest,
+            )
+            if event_key not in indexed_events:
+                event_issues.append("trusted_source_event_not_attested")
     compilation = compile_experimental_group_protocols(protocols)
     discovery = discover_route_candidates(
         goal, compilation.protocols, trusted_source_paths=scoped_sources,
@@ -229,6 +264,8 @@ def _evaluate_route_decision_v1_impl(
                 else "attested_source_unavailable"
             ),
         ))
+    enumerated_groups: dict[tuple[str, str, str], list[Any]] = {}
+    group_audit_clean = False
     if require_attested_sources and source_index:
         enumerated = enumerate_attested_pdf_experimental_groups(
             root, signed_source_events, trusted_public_keys=trusted_public_keys,
@@ -240,12 +277,40 @@ def _evaluate_route_decision_v1_impl(
             enumerated.groups, protocols,
             group_roles_by_group=verified_group_roles_by_group,
         )
+        enumerated_source_keys = set()
+        for group in enumerated.groups:
+            try:
+                group_path = Path(group.source_document).resolve(strict=True)
+            except (OSError, ValueError):
+                continue
+            enumerated_source_keys.add((
+                group.source_scope.paper_id, group_path,
+                group.source_scope.source_digest,
+            ))
+        missing_attested_sources = set(attested_identity) - enumerated_source_keys
+        group_audit_clean = bool(enumerated.groups) and not (
+            event_issues or enumerated.diagnostics or coverage.missing_scopes
+            or role_audit.issues or missing_attested_sources
+        )
+        for group in enumerated.groups:
+            group_scope = group.source_scope
+            enumerated_groups.setdefault((
+                group_scope.paper_id, group_scope.experimental_group_id,
+                group_scope.source_digest,
+            ), []).append(group)
         for index, diagnostic in enumerate(enumerated.diagnostics):
             discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
                 protocol_index=len(protocols), group_index=index,
                 paper_id=diagnostic.paper_id,
                 experimental_group_id=diagnostic.experimental_group_id,
                 reason_code="source_group_" + diagnostic.reason_code,
+            ))
+        for index, (paper_id, _, _) in enumerate(sorted(missing_attested_sources)):
+            discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+                protocol_index=len(protocols),
+                group_index=len(enumerated.diagnostics) + index,
+                paper_id=paper_id,
+                reason_code="attested_source_not_enumerated",
             ))
         for index, scope in enumerate(coverage.missing_scopes):
             discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
@@ -301,6 +366,93 @@ def _evaluate_route_decision_v1_impl(
                     source_path=source.source_path,
                     reasons=("evidence_doi_attestation_mismatch",),
                 )
+        # The PDF verifier checks quoted fields, not a complete chemical
+        # route. Production can obtain that signature only from a separately
+        # authenticated review of this exact PDF experimental group.
+        source_signature = None if require_attested_sources else source.source_route_signature
+        signature_review_digest = ""
+        review_reasons: list[str] = []
+        if require_attested_sources:
+            if not source.source_scope_verified or not path or not scope or not source_identity:
+                review_reasons.append("source_unverified")
+            elif not group_audit_clean:
+                review_reasons.append("source_group_audit_incomplete")
+            elif candidate.target != goal.target:
+                review_reasons.append("target_goal_mismatch")
+            else:
+                group_key = (
+                    scope.paper_id, scope.experimental_group_id, scope.source_digest
+                )
+                matched_groups = enumerated_groups.get(group_key, [])
+                if len(matched_groups) != 1:
+                    review_reasons.append("source_group_not_uniquely_enumerated")
+                else:
+                    group = matched_groups[0]
+                    group_scope = group.source_scope
+                    try:
+                        group_path = Path(group.source_document).resolve(strict=True)
+                    except (OSError, ValueError):
+                        group_path = None
+                    if (
+                        group_path != path
+                        or group_scope.section != scope.section
+                        or group_scope.locator != scope.locator
+                    ):
+                        review_reasons.append("source_group_scope_mismatch")
+                    else:
+                        expected_review_scope = ReviewedRouteSignatureScopeV1(
+                            paper_id=group_scope.paper_id,
+                            experimental_group_id=group_scope.experimental_group_id,
+                            source_digest=group_scope.source_digest,
+                            source_attestation_digest=source_identity[2],
+                            group_locator=group_scope.locator,
+                            section=group_scope.section,
+                            document_kind=source_identity[1],
+                            source_doi=source_identity[0],
+                            target_material=goal.target.material,
+                            target_state=goal.target.desired_state,
+                            target_objective=goal.target.objective,
+                        )
+                        verified_reviews = {}
+                        review_failures: list[str] = []
+                        for envelope in signed_route_signature_reviews or ():
+                            manifest = (
+                                envelope.get("manifest")
+                                if isinstance(envelope, Mapping) else None
+                            )
+                            # Untrusted identity is used only to route reviews
+                            # to the right group; the verifier authenticates
+                            # every field before it can grant authority.
+                            if isinstance(manifest, Mapping) and (
+                                manifest.get("paper_id") != group_scope.paper_id
+                                or manifest.get("experimental_group_id")
+                                != group_scope.experimental_group_id
+                            ):
+                                continue
+                            verification = verify_reviewed_route_signature_manifest(
+                                envelope=envelope,
+                                trusted_public_keys=(
+                                    trusted_route_signature_public_keys or {}
+                                ),
+                                expected_scope=expected_review_scope,
+                            )
+                            if verification.verified and verification.receipt:
+                                verified_reviews[
+                                    verification.receipt.review_digest
+                                ] = verification.receipt
+                            elif verification.reason_code:
+                                review_failures.append(verification.reason_code)
+                        review_reasons.extend(review_failures)
+                        if len(verified_reviews) == 1 and not review_failures:
+                            only_review = next(iter(verified_reviews.values()))
+                            source_signature = only_review.route_signature
+                            signature_review_digest = only_review.review_digest
+                        elif len(verified_reviews) > 1:
+                            review_reasons.append("multiple_matching_reviews")
+                        elif verified_reviews:
+                            review_reasons.append("mixed_valid_invalid_reviews")
+                        else:
+                            review_reasons.append("review_missing_or_unverified")
         # Candidate evidence status is proposal data. Only the independently
         # verified source IDs may enter the existing V2 provenance gate as
         # parsed local evidence; all other item flags are stripped.
@@ -340,6 +492,7 @@ def _evaluate_route_decision_v1_impl(
                 device["reasons"].append("capability_requirements_unverified")
         diagnostics[candidate.route_id] = [
             *("source:" + reason for reason in source.reasons),
+            *("review:" + reason for reason in sorted(set(review_reasons))),
             *("science:" + issue for issue in science["scientific_gate_issues"]),
             *("device:" + reason for reason in device["reasons"]),
         ]
@@ -359,7 +512,8 @@ def _evaluate_route_decision_v1_impl(
                 source_identity[2] if source.source_scope_verified and source_identity
                 else ""
             ),
-            source_route_signature=source.source_route_signature,
+            source_route_signature=source_signature,
+            source_route_signature_review_digest=signature_review_digest,
             verified_evidence_ids=list(source.verified_evidence_ids),
             verified_field_paths=list(source.verified_field_paths),
             audited_field_paths=list(science["audited_field_paths"]),
@@ -415,6 +569,10 @@ def evaluate_route_decision_v1(
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     signed_source_events: Sequence[Mapping[str, Any]] | None = None,
     trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
+    signed_route_signature_reviews: Sequence[Mapping[str, Any]] | None = None,
+    trusted_route_signature_public_keys: Mapping[
+        str, TrustedIssuerPublicKeyV1
+    ] | None = None,
     verified_capabilities_by_group: Mapping[
         tuple[str, str, str], Sequence[str]
     ] | None = None,
@@ -437,6 +595,8 @@ def evaluate_route_decision_v1(
         trusted_source_events=trusted_source_events,
         signed_source_events=signed_source_events,
         trusted_public_keys=trusted_public_keys,
+        signed_route_signature_reviews=signed_route_signature_reviews,
+        trusted_route_signature_public_keys=trusted_route_signature_public_keys,
         verified_capabilities_by_group=verified_capabilities_by_group,
         verified_group_roles_by_group=verified_group_roles_by_group,
         device_context=device_context,

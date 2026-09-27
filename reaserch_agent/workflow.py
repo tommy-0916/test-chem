@@ -393,6 +393,10 @@ class ResearchAgent(BaseAgent):
         trusted_route_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
         signed_route_source_events: Sequence[Mapping[str, Any]] | None = None,
         trusted_route_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
+        signed_route_signature_reviews: Sequence[Mapping[str, Any]] | None = None,
+        trusted_route_signature_public_keys: Mapping[
+            str, TrustedIssuerPublicKeyV1
+        ] | None = None,
         trusted_route_capabilities_by_group: Mapping[
             tuple[str, str, str], Sequence[str]
         ] | None = None,
@@ -419,6 +423,12 @@ class ResearchAgent(BaseAgent):
             deepcopy(item) for item in (signed_route_source_events or ())
         )
         self._trusted_route_public_keys = dict(trusted_route_public_keys or {})
+        self._signed_route_signature_reviews = tuple(
+            deepcopy(item) for item in (signed_route_signature_reviews or ())
+        )
+        self._trusted_route_signature_public_keys = dict(
+            trusted_route_signature_public_keys or {}
+        )
         self._trusted_route_capabilities_by_group = {
             key: tuple(values)
             for key, values in (trusted_route_capabilities_by_group or {}).items()
@@ -1038,6 +1048,10 @@ class ResearchAgent(BaseAgent):
             trusted_source_events=self._trusted_route_source_events,
             signed_source_events=self._signed_route_source_events,
             trusted_public_keys=self._trusted_route_public_keys,
+            signed_route_signature_reviews=self._signed_route_signature_reviews,
+            trusted_route_signature_public_keys=(
+                self._trusted_route_signature_public_keys
+            ),
             verified_capabilities_by_group=self._trusted_route_capabilities_by_group,
             verified_group_roles_by_group=self._trusted_route_group_roles_by_group,
             device_context=device_context if isinstance(device_context, dict) else None,

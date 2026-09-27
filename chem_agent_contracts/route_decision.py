@@ -61,6 +61,9 @@ class RouteValidationReceiptV1(StrictModel):
         default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$"
     )
     source_route_signature: Optional[RouteSignatureV1] = None
+    source_route_signature_review_digest: str = Field(
+        default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$"
+    )
     verified_evidence_ids: List[str] = Field(default_factory=list)
     verified_field_paths: List[str] = Field(default_factory=list)
     audited_field_paths: List[str] = Field(default_factory=list)
@@ -325,6 +328,8 @@ def route_signature_mismatches(
     """Compare route structure exactly; family labels confer no equivalence."""
 
     mismatches: List[str] = []
+    if proposed.route_family != verified_source.route_family:
+        mismatches.append("route_family")
     if proposed.target_transformation != verified_source.target_transformation:
         mismatches.append("target_transformation")
     if Counter(proposed.precursor_roles) != Counter(verified_source.precursor_roles):
@@ -602,6 +607,10 @@ def decide_routes(
             "source_route_signature": (
                 receipts[candidate.route_id].source_route_signature
                 if candidate.route_id in receipts else None
+            ),
+            "source_route_signature_review_digest": (
+                receipts[candidate.route_id].source_route_signature_review_digest
+                if candidate.route_id in receipts else ""
             ),
             "source_document_kind": (
                 receipts[candidate.route_id].source_document_kind
