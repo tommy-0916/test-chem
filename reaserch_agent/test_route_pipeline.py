@@ -10,10 +10,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from chem_agent_contracts.route_candidate import RouteGoalV1, RouteSignatureV1, RouteTargetV1
+from chem_agent_contracts.route_candidate import (
+    ExperimentalGroupScopeV1, RouteGoalV1, RouteSignatureV1, RouteTargetV1,
+)
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
+from reaserch_agent.route_attestation import AttestedRouteSourceV1
 from reaserch_agent.route_pipeline import (
     evaluate_route_decision_v1, trusted_route_text_sources,
+)
+from reaserch_agent.route_pdf_groups import (
+    PdfExperimentalGroupV1, PdfGroupEnumerationResultV1,
 )
 from reaserch_agent.tools.paper_registry import PaperRegistry
 from reaserch_agent.state import ResearchAgentState, ResearchEvent
@@ -127,11 +133,20 @@ class RoutePipelineTest(unittest.TestCase):
         self.assertEqual(len(indexed), 1)
         self.assertEqual(next(iter(indexed.values())), [self.source])
 
+    def test_path_only_source_is_not_accepted_by_default(self) -> None:
+        result = evaluate_route_decision_v1(
+            self.goal, [self._protocol()], source_root=self.root,
+            trusted_source_paths={"paper-1": [self.source]},
+        )
+        self.assertEqual(result.decision.status, "unresolved")
+        self.assertEqual(result.discovery.candidates, [])
+
     @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
     def test_registered_pdf_fields_verify_but_unsigned_route_abstains(self) -> None:
         import fitz
 
-        pdf = self.root / "primary_methods.pdf"
+        pdf = self.root / "_pdf_sources" / "campaign" / "primary_methods.pdf"
+        pdf.parent.mkdir(parents=True)
         pdf_excerpt = "Mix 2 mmol metal salt with base to pH 10."
         document = fitz.open()
         page = document.new_page()
@@ -168,7 +183,7 @@ class RoutePipelineTest(unittest.TestCase):
         registry = PaperRegistry(self.root)
         registry.upsert(
             title="PDF primary study", verification_status="local_file",
-            full_text_status="parsed", corpus_file=str(pdf),
+            full_text_status="parsed", pdf_file=str(pdf),
         )
         sources = trusted_route_text_sources(self.root)
         self.assertIn(pdf, next(iter(sources.values())))
@@ -191,6 +206,7 @@ class RoutePipelineTest(unittest.TestCase):
             result = evaluate_route_decision_v1(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [pdf]},
+                require_attested_sources=False,
             )
         self.assertTrue(result.decision.candidates, result.discovery.diagnostics)
         receipt = result.decision.candidates[0].validation
@@ -199,6 +215,83 @@ class RoutePipelineTest(unittest.TestCase):
         self.assertIsNone(receipt.source_route_signature)
         self.assertIn("route_signature_unverified", result.decision.candidates[0].reasons)
         self.assertEqual(result.decision.status, "unresolved")
+
+        receipt = AttestedRouteSourceV1(
+            paper_id="paper-1", path=pdf, document_digest=digest,
+            document_kind="primary_paper", doi="10.1000/paper",
+            attestation_digest="sha256_" + "a" * 64,
+        )
+        protocol["evidence_bundle"][0]["doi"] = "10.1000/paper"
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
+        ), patch(
+            "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
+        ):
+            matched = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+            )
+        verified = matched.decision.candidates[0].validation
+        self.assertTrue(verified.source_scope_verified)
+        self.assertEqual(verified.source_identity_doi, "10.1000/paper")
+        self.assertEqual(verified.source_document_kind, "primary_paper")
+        self.assertEqual(verified.source_attestation_digest, receipt.attestation_digest)
+
+        extra_group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-1", experimental_group_id="treated",
+                section="Methods", locator="pdf:p1:b4-p1:b4",
+                source_digest=digest,
+            ),
+            source_document=str(pdf), blocks=(),
+        )
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=[extra_group]),
+        ), patch(
+            "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
+        ), patch(
+            "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
+        ):
+            missing_sibling = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+            )
+        self.assertIn(
+            "attested_group_not_extracted",
+            missing_sibling.decision.decision_reasons,
+        )
+        protocol["evidence_bundle"][0]["doi"] = "10.1000/other"
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
+        ), patch(
+            "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
+        ):
+            wrong_doi = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+            )
+        self.assertFalse(wrong_doi.decision.candidates[0].validation.source_scope_verified)
+        self.assertIn(
+            "source:evidence_doi_attestation_mismatch",
+            wrong_doi.validation_diagnostics[wrong_doi.decision.candidates[0].route_id],
+        )
+
+        protocol["evidence_bundle"][0]["doi"] = "10.1000/paper"
+        pdf.write_bytes(pdf.read_bytes() + b"\nchanged")
+        changed_digest = "sha256_" + hashlib.sha256(pdf.read_bytes()).hexdigest()
+        protocol["source"]["source_digest"] = changed_digest
+        protocol["evidence_matrix"][0]["source_scope"]["source_digest"] = changed_digest
+        with patch("reaserch_agent.route_pipeline.attested_route_sources", return_value={"paper-1": [receipt]}), patch(
+            "reaserch_agent.route_pipeline.audit_route_candidate_science", return_value=science,
+        ), patch(
+            "reaserch_agent.route_pipeline.preflight_route_capabilities", return_value=device,
+        ):
+            changed_bytes = evaluate_route_decision_v1(
+                self.goal, [protocol], source_root=self.root,
+            )
+        self.assertFalse(changed_bytes.decision.candidates[0].validation.source_scope_verified)
+        self.assertIn(
+            "source:source_attestation_digest_mismatch",
+            changed_bytes.validation_diagnostics[changed_bytes.decision.candidates[0].route_id],
+        )
 
     def test_independent_receipts_reach_deterministic_decider(self) -> None:
         protocol = self._protocol()
@@ -225,6 +318,7 @@ class RoutePipelineTest(unittest.TestCase):
             result = evaluate_route_decision_v1(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
+                require_attested_sources=False,
             )
         self.assertEqual(result.decision.status, "selected_for_planning")
         receipt = result.decision.candidates[0].validation
@@ -242,6 +336,7 @@ class RoutePipelineTest(unittest.TestCase):
         result = evaluate_route_decision_v1(
             self.goal, [protocol], source_root=self.root,
             trusted_source_paths={"paper-1": [self.source]},
+            require_attested_sources=False,
         )
         self.assertEqual(result.decision.status, "unresolved")
         self.assertEqual(result.discovery.candidates, [])
@@ -262,6 +357,7 @@ class RoutePipelineTest(unittest.TestCase):
             result = evaluate_route_decision_v1(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
+                require_attested_sources=False,
             )
         science_input = science_mock.call_args.args[0]
         self.assertEqual(science_input.evidence_bundle[0].verification_status, "unknown")
@@ -289,6 +385,7 @@ class RoutePipelineTest(unittest.TestCase):
             result = evaluate_route_decision_v1(
                 self.goal, [self._protocol(), incomplete], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
+                require_attested_sources=False,
             )
         self.assertEqual(result.decision.status, "unresolved")
         self.assertIsNone(result.decision.selected_route_id)
@@ -317,6 +414,7 @@ class RoutePipelineTest(unittest.TestCase):
             result = evaluate_route_decision_v1(
                 self.goal, [protocol], source_root=self.root,
                 trusted_source_paths={"paper-1": [self.source]},
+                require_attested_sources=False,
             )
         self.assertEqual(result.decision.status, "unresolved")
         self.assertIsNone(result.decision.selected_route_id)
@@ -338,7 +436,7 @@ class RoutePipelineTest(unittest.TestCase):
             contract_version="v2", extracted_protocols=[self._protocol()],
         )
         with patch(
-            "reaserch_agent.route_pipeline.trusted_route_text_sources",
+            "reaserch_agent.route_pipeline.attested_route_sources",
             return_value={"paper-1": [self.source]},
         ):
             result = agent.evaluate_route_decision_v1(state, self.goal)
@@ -350,6 +448,28 @@ class RoutePipelineTest(unittest.TestCase):
         )
         self.assertEqual(state.macro_plan, [])
         self.assertEqual(state.research_action_package_v2, {})
+
+    def test_research_agent_registry_file_without_external_event_abstains(self) -> None:
+        PaperRegistry(self.root).upsert(
+            title="Primary study", doi="10.1000/local",
+            verification_status="verified_doi", full_text_status="parsed",
+            corpus_file=str(self.source),
+        )
+        agent = ResearchAgent(
+            model=object(), use_llm=False, knowledge_base_dir=str(self.root),
+            memory_dir=str(self.root), enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2",
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2", extracted_protocols=[self._protocol()],
+        )
+        result = agent.evaluate_route_decision_v1(state, self.goal)
+        self.assertEqual(result.decision.status, "unresolved")
+        self.assertIsNone(result.decision.selected_route_id)
+        self.assertEqual(result.discovery.candidates, [])
+        self.assertEqual(state.macro_plan, [])
 
 
 if __name__ == "__main__":

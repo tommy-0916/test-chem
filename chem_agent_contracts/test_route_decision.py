@@ -366,6 +366,27 @@ class RouteDecisionOfflineTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             RouteDecisionV1.model_validate(payload)
 
+    def test_source_attestation_change_invalidates_decision_snapshot(self) -> None:
+        route = candidate()
+        first = decide_routes(
+            goal(), [route],
+            lambda value: receipt(value).model_copy(update={
+                "source_attestation_digest": "sha256_" + "a" * 64,
+                "source_identity_doi": "10.1000/source",
+                "source_document_kind": "primary_paper",
+            }),
+        )
+        changed = decide_routes(
+            goal(), [route],
+            lambda value: receipt(value).model_copy(update={
+                "source_attestation_digest": "sha256_" + "b" * 64,
+                "source_identity_doi": "10.1000/source",
+                "source_document_kind": "primary_paper",
+            }),
+        )
+        self.assertNotEqual(first.decision_id, changed.decision_id)
+        self.assertNotEqual(first.evidence_snapshot_hash, changed.evidence_snapshot_hash)
+
     def test_unknown_field_status_cannot_select(self) -> None:
         route = candidate()
         payload = route.model_dump(mode="json")

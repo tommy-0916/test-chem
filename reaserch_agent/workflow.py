@@ -13,7 +13,10 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from difflib import SequenceMatcher
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Sequence
+
+if TYPE_CHECKING:
+    from .route_attestation import TrustedAcquisitionEventV1
 
 from pydantic import ValidationError
 from chem_agent_contracts.container_requirements import (
@@ -386,6 +389,7 @@ class ResearchAgent(BaseAgent):
         enable_web_search: bool | None = None,
         web_search_client: Any = None,
         contract_version: str = "v1",
+        trusted_route_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
@@ -398,6 +402,9 @@ class ResearchAgent(BaseAgent):
         if normalized_contract not in {"v1", "v2"}:
             raise ValueError("contract_version must be 'v1' or 'v2'")
         self._contract_version = normalized_contract
+        # Only a trusted caller may supply independently issued source events.
+        # Never construct them from model output, workflow state, or registry metadata.
+        self._trusted_route_source_events = tuple(trusted_route_source_events or ())
         self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
         self._enable_memory = self._resolve_enable_memory(enable_memory)
@@ -997,9 +1004,7 @@ class ResearchAgent(BaseAgent):
         if self._contract_version != "v2":
             raise ValueError("RouteDecisionV1 requires the V2 Research contract")
         from chem_agent_contracts.route_candidate import RouteGoalV1
-        from .route_pipeline import (
-            evaluate_route_decision_v1, trusted_route_text_sources,
-        )
+        from .route_pipeline import evaluate_route_decision_v1
         from .tools.literature_acquisition import default_kb_dir
 
         typed_goal = RouteGoalV1.model_validate(goal, strict=True)
@@ -1008,7 +1013,7 @@ class ResearchAgent(BaseAgent):
         result = evaluate_route_decision_v1(
             typed_goal, state.extracted_protocols,
             source_root=kb_root,
-            trusted_source_paths=trusted_route_text_sources(kb_root),
+            trusted_source_events=self._trusted_route_source_events,
             device_context=device_context if isinstance(device_context, dict) else None,
             science_agent=self,
         )

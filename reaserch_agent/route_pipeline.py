@@ -21,12 +21,22 @@ from chem_agent_contracts.route_decision import (
 )
 from chem_agent_contracts.v2 import StrictModel, canonical_digest
 
+from .route_attestation import (
+    AttestedRouteSourceV1, TrustedAcquisitionEventV1, attested_route_sources,
+)
 from .route_device import preflight_route_capabilities
-from .route_discovery import RouteDiscoveryResultV1, discover_route_candidates
+from .route_discovery import (
+    RouteDiscoveryDiagnosticV1, RouteDiscoveryResultV1,
+    discover_route_candidates,
+)
 from .route_group_compiler import compile_experimental_group_protocols
+from .route_pdf_groups import (
+    audit_pdf_group_extraction_coverage,
+    enumerate_attested_pdf_experimental_groups,
+)
 from .route_pdf_source import verify_route_pdf_source
 from .route_science import audit_route_candidate_science
-from .route_source import verify_route_source
+from .route_source import RouteSourceVerificationV1, verify_route_source
 from .tools.paper_registry import PaperRegistry
 
 
@@ -34,6 +44,10 @@ _TRUSTED_IDENTITY_STATUSES = frozenset({
     "verified_doi", "verified_arxiv", "verified_semantic_scholar", "local_file",
 })
 _PARSED_TEXT_STATUSES = frozenset({"parsed", "local_parsed"})
+RouteSourceInput = str | Path | AttestedRouteSourceV1
+RouteSourceIndex = Mapping[
+    str, Sequence[RouteSourceInput] | RouteSourceInput
+]
 
 
 class RoutePipelineResultV1(StrictModel):
@@ -62,7 +76,9 @@ def trusted_route_text_sources(kb_dir: str | Path) -> dict[str, list[Path]]:
         if str(record.get("full_text_status") or "") not in _PARSED_TEXT_STATUSES:
             continue
         paths: list[Path] = []
-        for raw in record.get("corpus_files", []) or []:
+        for raw in list(record.get("corpus_files", []) or []) + list(
+            record.get("pdf_files", []) or []
+        ):
             if not isinstance(raw, str) or not raw.strip():
                 continue
             try:
@@ -111,16 +127,39 @@ def evaluate_route_decision_v1(
     protocols: Sequence[Mapping[str, Any]],
     *,
     source_root: str | Path,
-    trusted_source_paths: Mapping[str, Sequence[str | Path] | str | Path],
+    trusted_source_paths: RouteSourceIndex | None = None,
+    trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     device_context: dict[str, Any] | None = None,
     science_agent: Any = None,
+    require_attested_sources: bool = True,
 ) -> RoutePipelineResultV1:
-    """Evaluate route proposals with independently constructed receipts."""
+    """Evaluate proposals; source identity is verified inside this boundary.
+
+    ``trusted_source_paths`` is honored only with the explicit offline fixture
+    opt-out. Production callers supply externally issued events, never a
+    path-only registry index or a preconstructed receipt.
+    """
     root = Path(source_root).expanduser().resolve()
+    source_index: RouteSourceIndex = (
+        attested_route_sources(root, trusted_source_events)
+        if require_attested_sources else trusted_source_paths or {}
+    )
     scoped_sources: dict[str, list[Path]] = {}
-    for paper_id, raw in trusted_source_paths.items():
-        names: Sequence[str | Path] = [raw] if isinstance(raw, (str, Path)) else raw or []
-        for name in names:
+    attested_identity: dict[
+        tuple[str, Path, str], set[tuple[str, str, str]]
+    ] = {}
+    for paper_id, raw in source_index.items():
+        names: Sequence[RouteSourceInput] = (
+            [raw] if isinstance(raw, (str, Path, AttestedRouteSourceV1))
+            else raw or []
+        )
+        for entry in names:
+            is_attested = isinstance(entry, AttestedRouteSourceV1)
+            if require_attested_sources and not is_attested:
+                continue
+            if is_attested and entry.paper_id != paper_id:
+                continue
+            name = entry.path if is_attested else entry
             if not isinstance(name, (str, Path)):
                 continue
             try:
@@ -128,6 +167,17 @@ def evaluate_route_decision_v1(
                 if (path.is_file() and path.is_relative_to(root)
                         and path.suffix.lower() in {".txt", ".md", ".pdf"}
                         and path.stat().st_size <= 8 * 1024 * 1024):
+                    if is_attested:
+                        if path.suffix.lower() != ".pdf":
+                            continue
+                        attested_identity.setdefault(
+                            (paper_id, path, entry.document_digest), set()
+                        ).add(
+                            (
+                                entry.doi.strip().lower(), entry.document_kind,
+                                entry.attestation_digest,
+                            )
+                        )
                     paths = scoped_sources.setdefault(paper_id, [])
                     if path not in paths:
                         paths.append(path)
@@ -137,6 +187,28 @@ def evaluate_route_decision_v1(
     discovery = discover_route_candidates(
         goal, compilation.protocols, trusted_source_paths=scoped_sources,
     )
+    if require_attested_sources and source_index:
+        enumerated = enumerate_attested_pdf_experimental_groups(
+            root, trusted_source_events
+        )
+        coverage = audit_pdf_group_extraction_coverage(
+            enumerated.groups, protocols
+        )
+        for index, diagnostic in enumerate(enumerated.diagnostics):
+            discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+                protocol_index=len(protocols), group_index=index,
+                paper_id=diagnostic.paper_id,
+                experimental_group_id=diagnostic.experimental_group_id,
+                reason_code="source_group_" + diagnostic.reason_code,
+            ))
+        for index, scope in enumerate(coverage.missing_scopes):
+            discovery.diagnostics.append(RouteDiscoveryDiagnosticV1(
+                protocol_index=len(protocols),
+                group_index=len(enumerated.diagnostics) + index,
+                paper_id=scope.paper_id,
+                experimental_group_id=scope.experimental_group_id,
+                reason_code="attested_group_not_extracted",
+            ))
     diagnostics: dict[str, list[str]] = {}
 
     def validate(candidate: RouteCandidateV1) -> RouteValidationReceiptV1:
@@ -145,11 +217,33 @@ def evaluate_route_decision_v1(
             verify_route_pdf_source if path and path.suffix.lower() == ".pdf"
             else verify_route_source
         )
-        source = source_verifier(
-            candidate,
-            source_paths={candidate.source_scope.paper_id: path} if path and candidate.source_scope else {},
-            source_root=root,
+        scope = candidate.source_scope
+        identities = (
+            attested_identity.get((scope.paper_id, path, scope.source_digest), set())
+            if path and scope else set()
         )
+        source_identity = next(iter(identities)) if len(identities) == 1 else None
+        if require_attested_sources and path and len(identities) != 1:
+            source = RouteSourceVerificationV1(
+                reasons=("source_attestation_digest_mismatch",)
+            )
+        else:
+            source = source_verifier(
+                candidate,
+                source_paths={scope.paper_id: path} if path and scope else {},
+                source_root=root,
+            )
+        if source.source_scope_verified and require_attested_sources:
+            attested_doi = source_identity[0] if source_identity else ""
+            if any(
+                item.doi.strip().lower() != attested_doi
+                for item in candidate.evidence_bundle if item.doi.strip()
+            ):
+                source = RouteSourceVerificationV1(
+                    document_digest=source.document_digest,
+                    source_path=source.source_path,
+                    reasons=("evidence_doi_attestation_mismatch",),
+                )
         # Candidate evidence status is proposal data. Only the independently
         # verified source IDs may enter the existing V2 provenance gate as
         # parsed local evidence; all other item flags are stripped.
@@ -170,6 +264,18 @@ def evaluate_route_decision_v1(
             route_id=candidate.route_id,
             candidate_digest=canonical_digest(candidate),
             source_scope_verified=source.source_scope_verified,
+            source_document_kind=(
+                source_identity[1] if source.source_scope_verified and source_identity
+                else ""
+            ),
+            source_identity_doi=(
+                source_identity[0] if source.source_scope_verified and source_identity
+                else ""
+            ),
+            source_attestation_digest=(
+                source_identity[2] if source.source_scope_verified and source_identity
+                else ""
+            ),
             source_route_signature=source.source_route_signature,
             verified_evidence_ids=list(source.verified_evidence_ids),
             verified_field_paths=list(source.verified_field_paths),

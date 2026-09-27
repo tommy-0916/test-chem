@@ -55,6 +55,11 @@ class RouteValidationReceiptV1(StrictModel):
     route_id: str = Field(min_length=1)
     candidate_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
     source_scope_verified: bool = False
+    source_document_kind: Literal["", "primary_paper", "supporting_information"] = ""
+    source_identity_doi: str = ""
+    source_attestation_digest: str = Field(
+        default="", pattern=r"^(?:|sha256_[0-9a-f]{64})$"
+    )
     source_route_signature: Optional[RouteSignatureV1] = None
     verified_evidence_ids: List[str] = Field(default_factory=list)
     verified_field_paths: List[str] = Field(default_factory=list)
@@ -589,6 +594,26 @@ def decide_routes(
             "verified_evidence_ids": (
                 receipts[candidate.route_id].verified_evidence_ids
                 if candidate.route_id in receipts else []
+            ),
+            "verified_field_paths": (
+                receipts[candidate.route_id].verified_field_paths
+                if candidate.route_id in receipts else []
+            ),
+            "source_route_signature": (
+                receipts[candidate.route_id].source_route_signature
+                if candidate.route_id in receipts else None
+            ),
+            "source_document_kind": (
+                receipts[candidate.route_id].source_document_kind
+                if candidate.route_id in receipts else ""
+            ),
+            "source_identity_doi": (
+                receipts[candidate.route_id].source_identity_doi
+                if candidate.route_id in receipts else ""
+            ),
+            "source_attestation_digest": (
+                receipts[candidate.route_id].source_attestation_digest
+                if candidate.route_id in receipts else ""
             ),
         }
         for candidate in candidates
