@@ -26,7 +26,7 @@ from .route_pdf_groups import PdfExperimentalGroupV1
 
 _ROUTE_ROLES = frozenset({"synthesis", "material_processing"})
 _REVIEWED_ROLES = _ROUTE_ROLES | frozenset({
-    "characterization", "testing", "performance_testing",
+    "characterization", "testing", "performance_testing", "non_procedural",
 })
 _ENVELOPE_KEYS = frozenset({"proposals"})
 
@@ -36,7 +36,7 @@ class PdfGroupExtractionBudgetV1:
     """Hard limits for one proposal request, including prompt serialization."""
 
     max_groups: int = 8
-    max_blocks: int = 96
+    max_blocks: int = 512
     max_prompt_chars: int = 48_000
     max_response_chars: int = 96_000
 
@@ -109,12 +109,26 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "you may add role_hint, target, route_signature, material_graph, and "
         "route_facts only. role_hint is a non-authoritative suggestion. For "
         "synthesis or material-processing procedures, propose a complete target, "
-        "RouteSignatureV1-shaped route_signature, MacroStepV2-shaped "
-        "material_graph, and route_facts. Each route_fact has fact_id, field_path, "
+        "RouteSignatureV1-shaped route_signature, a JSON ARRAY of MacroStepV2 "
+        "objects in material_graph, and route_facts. Never wrap the graph in "
+        "{macro_steps: ...}. Every graph step needs macro_step_id, "
+        "macro_action_id, sequence, operation, sample_id, provenance, and "
+        "material_inputs/material_intermediates/material_outputs arrays. A "
+        "material port needs material_id, name, state, provenance, and an "
+        "optional quantity object with value and unit. Use exactly these "
+        "field names, not inputs/outputs/conditions aliases. Each route_fact "
+        "has fact_id, field_path, "
         "value, unit, excerpt, block_locator, and required=true. Its excerpt "
-        "must be an exact substring of the named block in this same group and "
-        "must state its value literally (including exact number and unit for "
-        "quantities). Use a separate fact for every proposed route-defining "
+        "must be a unique literal quotation within this same group, stating "
+        "its value literally (including exact number and unit for quantities). "
+        "Only PDF layout whitespace may differ. The quotation may span at "
+        "most three adjacent blocks; block_locator must name one of those "
+        "blocks. Include enough surrounding text to distinguish repeated "
+        "short phrases. field_path uses roots such as "
+        "material_graph[0].operation, "
+        "material_graph[0].material_inputs[0].quantity.value, or "
+        "route_signature.operations[0]; never use "
+        "material_graph.macro_steps. Use a separate fact for every proposed route-defining "
         "signature value, material identity/state, operation, and numeric graph "
         "leaf. Paper references in graph provenance use "
         "{\"kind\":\"paper\",\"reference\":\"fact:<fact_id>\"}. "
@@ -129,74 +143,44 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
     )
 
 
-def propose_pdf_group_protocols(
+def _snapshot_group_inventory(
     enumerated_groups: Sequence[PdfExperimentalGroupV1],
-    invoke_json: Callable[[str], Mapping[str, Any]],
-    *,
-    group_roles_by_group: Mapping[tuple[str, str, str], str],
-    required_capabilities_by_group: Mapping[
-        tuple[str, str, str], Sequence[str]
-    ],
-    budget: PdfGroupExtractionBudgetV1 = PdfGroupExtractionBudgetV1(),
-) -> PdfGroupProposalAssociationResultV1:
-    """Request one bounded model proposal per source-enumerated group.
-
-    This pure adapter never opens files or verifies signatures. The caller must
-    pass the exact signed-enumeration inventory and independent reviewed maps.
-    Map shape is checked here; whether a capability list is truly complete is
-    the reviewer's assertion and is rechecked by the downstream route pipeline.
-    Any error returns no partial protocols and at least one diagnostic.
-    """
-
-    if not isinstance(budget, PdfGroupExtractionBudgetV1):
-        raise TypeError("budget must be PdfGroupExtractionBudgetV1")
+    budget: PdfGroupExtractionBudgetV1,
+) -> tuple[tuple[PdfExperimentalGroupV1, ...], PdfGroupProposalAssociationResultV1 | None]:
     if not isinstance(enumerated_groups, Sequence) or isinstance(
         enumerated_groups, (str, bytes, bytearray)
     ) or not enumerated_groups:
-        return _diagnostic("enumerated_group_inventory_empty")
+        return (), _diagnostic("enumerated_group_inventory_empty")
     if len(enumerated_groups) > budget.max_groups:
-        return _diagnostic("group_budget_exceeded")
-    if not isinstance(group_roles_by_group, Mapping):
-        return _diagnostic("trusted_group_role_map_missing")
-    if not isinstance(required_capabilities_by_group, Mapping):
-        return _diagnostic("trusted_capability_map_missing")
+        return (), _diagnostic("group_budget_exceeded")
 
     seen: set[tuple[str, str, str]] = set()
     seen_group_names: set[tuple[str, str]] = set()
-    reviewed_roles: dict[tuple[str, str, str], str] = {}
-    reviewed_capabilities: dict[tuple[str, str, str], tuple[str, ...]] = {}
     block_count = 0
     for group in enumerated_groups:
         if not isinstance(group, PdfExperimentalGroupV1):
-            return _diagnostic("enumerated_group_invalid")
+            return (), _diagnostic("enumerated_group_invalid")
         key = _group_key(group)
-        group_name = key[:2]
-        if key in seen or group_name in seen_group_names:
-            return _diagnostic("enumerated_group_duplicate", group)
+        if key in seen or key[:2] in seen_group_names:
+            return (), _diagnostic("enumerated_group_duplicate", group)
         seen.add(key)
-        seen_group_names.add(group_name)
+        seen_group_names.add(key[:2])
         if not all(key) or not group.blocks:
-            return _diagnostic("enumerated_group_invalid", group)
+            return (), _diagnostic("enumerated_group_invalid", group)
         block_count += len(group.blocks)
         if block_count > budget.max_blocks:
-            return _diagnostic("block_budget_exceeded")
-        role = group_roles_by_group.get(key)
-        if role is None:
-            return _diagnostic("trusted_group_role_missing", group)
-        if not isinstance(role, str) or role not in _REVIEWED_ROLES:
-            return _diagnostic("trusted_group_role_invalid", group)
-        reviewed_roles[key] = role
-        if role in _ROUTE_ROLES:
-            capabilities = required_capabilities_by_group.get(key)
-            if capabilities is None:
-                return _diagnostic("trusted_capability_mapping_missing", group)
-            if not _valid_capabilities(capabilities):
-                return _diagnostic("trusted_capability_mapping_invalid", group)
-            reviewed_capabilities[key] = tuple(capabilities)
+            return (), _diagnostic("block_budget_exceeded")
+    return tuple(deepcopy(group) for group in enumerated_groups), None
 
-    # The callback receives only text. Snapshot the reviewed inputs so a caller
-    # mutating its mappings during invocation cannot alter the association.
-    source_groups = tuple(deepcopy(group) for group in enumerated_groups)
+
+def _invoke_bounded_proposals(
+    source_groups: tuple[PdfExperimentalGroupV1, ...],
+    invoke_json: Callable[[str], Mapping[str, Any]],
+    budget: PdfGroupExtractionBudgetV1,
+    *,
+    reviewed_capabilities: Mapping[tuple[str, str, str], Sequence[str]] | None = None,
+    reviewed_roles: Mapping[tuple[str, str, str], str] | None = None,
+) -> PdfGroupProposalAssociationResultV1:
     prompt = _build_prompt(source_groups)
     if len(prompt) > budget.max_prompt_chars:
         return _diagnostic("prompt_char_budget_exceeded")
@@ -225,4 +209,85 @@ def propose_pdf_group_protocols(
     )
 
 
-__all__ = ["PdfGroupExtractionBudgetV1", "propose_pdf_group_protocols"]
+def propose_pdf_group_unreviewed(
+    enumerated_groups: Sequence[PdfExperimentalGroupV1],
+    invoke_json: Callable[[str], Mapping[str, Any]],
+    *,
+    budget: PdfGroupExtractionBudgetV1 = PdfGroupExtractionBudgetV1(),
+) -> PdfGroupProposalAssociationResultV1:
+    """Extract quote-bound proposals before independent role/capability review.
+
+    The caller supplies groups from a signed PDF enumeration. These proposals
+    retain ``group_role='unclassified'`` and contain no trusted capabilities;
+    they are review input, not admissible route candidates or chemical review.
+    Complete coverage and literal block quotations are enforced before any
+    proposal is returned. Source identity is not authenticated here.
+    """
+    if not isinstance(budget, PdfGroupExtractionBudgetV1):
+        raise TypeError("budget must be PdfGroupExtractionBudgetV1")
+    source_groups, issue = _snapshot_group_inventory(enumerated_groups, budget)
+    if issue is not None:
+        return issue
+    return _invoke_bounded_proposals(source_groups, invoke_json, budget)
+
+
+def propose_pdf_group_protocols(
+    enumerated_groups: Sequence[PdfExperimentalGroupV1],
+    invoke_json: Callable[[str], Mapping[str, Any]],
+    *,
+    group_roles_by_group: Mapping[tuple[str, str, str], str],
+    required_capabilities_by_group: Mapping[
+        tuple[str, str, str], Sequence[str]
+    ],
+    budget: PdfGroupExtractionBudgetV1 = PdfGroupExtractionBudgetV1(),
+) -> PdfGroupProposalAssociationResultV1:
+    """Request one bounded model proposal per source-enumerated group.
+
+    This pure adapter never opens files or verifies signatures. The caller must
+    pass the exact signed-enumeration inventory and independent reviewed maps.
+    Map shape is checked here; whether a capability list is truly complete is
+    the reviewer's assertion and is rechecked by the downstream route pipeline.
+    Any error returns no partial protocols and at least one diagnostic.
+    """
+
+    if not isinstance(budget, PdfGroupExtractionBudgetV1):
+        raise TypeError("budget must be PdfGroupExtractionBudgetV1")
+    source_groups, issue = _snapshot_group_inventory(enumerated_groups, budget)
+    if issue is not None:
+        return issue
+    if not isinstance(group_roles_by_group, Mapping):
+        return _diagnostic("trusted_group_role_map_missing")
+    if not isinstance(required_capabilities_by_group, Mapping):
+        return _diagnostic("trusted_capability_map_missing")
+
+    reviewed_roles: dict[tuple[str, str, str], str] = {}
+    reviewed_capabilities: dict[tuple[str, str, str], tuple[str, ...]] = {}
+    for group in source_groups:
+        key = _group_key(group)
+        role = group_roles_by_group.get(key)
+        if role is None:
+            return _diagnostic("trusted_group_role_missing", group)
+        if not isinstance(role, str) or role not in _REVIEWED_ROLES:
+            return _diagnostic("trusted_group_role_invalid", group)
+        reviewed_roles[key] = role
+        if role in _ROUTE_ROLES:
+            capabilities = required_capabilities_by_group.get(key)
+            if capabilities is None:
+                return _diagnostic("trusted_capability_mapping_missing", group)
+            if not _valid_capabilities(capabilities):
+                return _diagnostic("trusted_capability_mapping_invalid", group)
+            reviewed_capabilities[key] = tuple(capabilities)
+
+    # The callback receives only text. Reviewed maps are also copied before it
+    # runs, so caller mutation cannot turn a proposal into a reviewed protocol.
+    return _invoke_bounded_proposals(
+        source_groups, invoke_json, budget,
+        reviewed_capabilities=reviewed_capabilities,
+        reviewed_roles=reviewed_roles,
+    )
+
+
+__all__ = [
+    "PdfGroupExtractionBudgetV1", "propose_pdf_group_protocols",
+    "propose_pdf_group_unreviewed",
+]

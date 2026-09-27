@@ -198,6 +198,20 @@ class RouteDiscoveryTest(unittest.TestCase):
         self.assertEqual(result.diagnostics[0].reason_code,
                          "non_route_experimental_group")
 
+    def test_independently_marked_context_section_is_excluded(self) -> None:
+        result = self._discover([{
+            "paper_id": "paper-1",
+            "experimental_groups": [
+                _group(self.source, "A"),
+                {"experimental_group_id": "Materials", "group_role": "non_procedural"},
+            ],
+        }])
+        self.assertEqual(len(result.candidates), 1)
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertEqual(result.diagnostics[0].status, "excluded")
+        self.assertEqual(result.diagnostics[0].reason_code,
+                         "non_route_experimental_group")
+
     def test_field_from_other_experimental_group_is_not_imported(self) -> None:
         group = _group(self.source, "A")
         group["evidence_matrix"][0]["source_scope"]["experimental_group_id"] = "B"

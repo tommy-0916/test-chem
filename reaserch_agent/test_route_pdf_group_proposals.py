@@ -15,7 +15,8 @@ from reaserch_agent.route_discovery import discover_route_candidates
 from reaserch_agent.route_group_compiler import compile_experimental_group_protocols
 from reaserch_agent.route_pdf_group_proposals import associate_pdf_group_proposals
 from reaserch_agent.route_pdf_groups import (
-    PdfGroupEnumerationResultV1, enumerate_pdf_experimental_groups,
+    PdfExperimentalGroupV1, PdfGroupEnumerationResultV1, PdfSourceBlockV1,
+    enumerate_pdf_experimental_groups,
 )
 from reaserch_agent.route_pdf_source import verify_route_pdf_source
 from reaserch_agent.route_pipeline import evaluate_route_decision_v1
@@ -217,6 +218,88 @@ class PdfGroupProposalAssociationTest(unittest.TestCase):
         self.assertEqual(result.protocols, [])
         self.assertIn("fact_excerpt_not_in_block",
                       [item.reason_code for item in result.diagnostics])
+
+    def test_split_layout_quote_binds_exact_short_source_range(self) -> None:
+        group = self.groups[0]
+        split_group = PdfExperimentalGroupV1(
+            source_scope=group.source_scope,
+            source_document=group.source_document,
+            blocks=(
+                group.blocks[0],
+                PdfSourceBlockV1("pdf:p1:b3-p1:b3", "mix 2 mmol"),
+                PdfSourceBlockV1(
+                    "pdf:p1:b4-p1:b4", "salt solution into product retained_wet_solid",
+                ),
+            ),
+        )
+        proposal_a = self._proposal(0)
+        for fact in proposal_a["route_facts"]:
+            fact["excerpt"] = "mix 2 mmol\n salt solution into product retained_wet_solid"
+        keys = {
+            (item.source_scope.paper_id, item.source_scope.experimental_group_id,
+             item.source_scope.source_digest): "synthesis"
+            for item in (split_group, self.groups[1])
+        }
+        result = associate_pdf_group_proposals(
+            [split_group, self.groups[1]], [proposal_a, self._proposal(1)],
+            group_roles_by_group=keys,
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(
+            result.protocols[0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b3-p1:b4",
+        )
+        proposal_a["route_facts"][0]["block_locator"] = group.blocks[0].locator
+        wrong = associate_pdf_group_proposals(
+            [split_group, self.groups[1]], [proposal_a, self._proposal(1)],
+            group_roles_by_group=keys,
+        )
+        self.assertEqual(wrong.protocols, [])
+        self.assertIn("fact_block_locator_not_in_excerpt_span",
+                      [item.reason_code for item in wrong.diagnostics])
+
+    def test_parser_marked_caption_is_skipped_only_between_prose_blocks(self) -> None:
+        group = self.groups[0]
+        split_group = PdfExperimentalGroupV1(
+            source_scope=group.source_scope.model_copy(update={
+                "locator": "pdf:p1:b2-p2:b2",
+            }),
+            source_document=group.source_document,
+            blocks=(
+                group.blocks[0],
+                PdfSourceBlockV1("pdf:p1:b3-p1:b3", "mix 2 mmol"),
+                PdfSourceBlockV1("pdf:p2:b1-p2:b1", "Scheme 1. Layout caption", True),
+                PdfSourceBlockV1(
+                    "pdf:p2:b2-p2:b2",
+                    "salt solution into product retained_wet_solid.",
+                ),
+            ),
+        )
+        proposal_a = self._proposal(0)
+        for fact in proposal_a["route_facts"]:
+            fact["excerpt"] = "mix 2 mmol salt solution into product retained_wet_solid."
+        result = associate_pdf_group_proposals(
+            [split_group, self.groups[1]], [proposal_a, self._proposal(1)],
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(
+            result.protocols[0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b3-p2:b2",
+        )
+        unmarked_group = PdfExperimentalGroupV1(
+            source_scope=split_group.source_scope,
+            source_document=split_group.source_document,
+            blocks=tuple(
+                PdfSourceBlockV1(block.locator, block.text)
+                for block in split_group.blocks
+            ),
+        )
+        blocked = associate_pdf_group_proposals(
+            [unmarked_group, self.groups[1]], [proposal_a, self._proposal(1)],
+        )
+        self.assertEqual(blocked.protocols, [])
+        self.assertIn("fact_excerpt_not_in_block",
+                      [item.reason_code for item in blocked.diagnostics])
 
     def test_stale_digest_group_reference_abstains(self) -> None:
         proposal_a = self._proposal(0)

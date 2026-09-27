@@ -9,6 +9,7 @@ from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
 from reaserch_agent.route_pdf_group_extraction import (
     PdfGroupExtractionBudgetV1,
     propose_pdf_group_protocols,
+    propose_pdf_group_unreviewed,
 )
 from reaserch_agent.route_pdf_groups import (
     PdfExperimentalGroupV1,
@@ -140,6 +141,89 @@ class PdfGroupExtractionTest(unittest.TestCase):
         self.assertNotIn("route_facts", result.protocols[1])
         self.assertNotIn("required_capabilities", result.protocols[1])
 
+    def test_independently_marked_context_section_needs_no_route_capabilities(self) -> None:
+        roles = dict(self.roles)
+        roles[self.keys[1]] = "non_procedural"
+        proposal = self._proposal(1)
+        proposal["role_hint"] = "synthesis"
+        result = self._extract(
+            lambda _prompt: {"proposals": [self._proposal(0), proposal]},
+            group_roles_by_group=roles,
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(result.protocols[1]["group_role"], "non_procedural")
+        self.assertNotIn("route_facts", result.protocols[1])
+        self.assertNotIn("required_capabilities", result.protocols[1])
+
+    def test_unreviewed_proposals_are_quote_bound_and_not_route_admissible(self) -> None:
+        result = propose_pdf_group_unreviewed(
+            self.groups,
+            lambda _prompt: {
+                "proposals": [self._proposal(1), self._proposal(0)]
+            },
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(len(result.protocols), 2)
+        self.assertEqual(
+            [item["group_role"] for item in result.protocols],
+            ["unclassified", "unclassified"],
+        )
+        self.assertTrue(all(
+            "required_capabilities" not in item for item in result.protocols
+        ))
+        self.assertEqual(
+            result.protocols[0]["route_facts"][0]["source"]["locator"],
+            "pdf:p1:b3-p1:b3",
+        )
+        self.assertEqual(
+            result.protocols[0]["source"]["source_document"],
+            "/trusted/paper.pdf",
+        )
+        self.assertEqual(result.protocols[0]["role_hint"], "synthesis")
+
+    def test_unreviewed_proposals_fail_closed_on_incomplete_or_forged_output(self) -> None:
+        good = [self._proposal(0), self._proposal(1)]
+        forged = deepcopy(good)
+        forged[0]["group_role"] = "synthesis"
+        outside = deepcopy(good)
+        outside[0]["route_facts"][0]["block_locator"] = (
+            self.groups[1].blocks[1].locator
+        )
+        for proposals, reason in (
+            (good[:1], "enumerated_group_proposal_missing"),
+            (forged, "proposal_source_or_status_field_forbidden"),
+            (outside, "fact_block_outside_group"),
+        ):
+            with self.subTest(reason=reason):
+                result = propose_pdf_group_unreviewed(
+                    self.groups, lambda _prompt: {"proposals": proposals}
+                )
+                self.assertEqual(result.protocols, [])
+                self.assertIn(
+                    reason, [item.reason_code for item in result.diagnostics]
+                )
+
+    def test_unreviewed_proposals_obey_input_and_response_budgets(self) -> None:
+        def forbidden(_prompt: str) -> dict:
+            self.fail("model must not be called")
+
+        limited = propose_pdf_group_unreviewed(
+            self.groups, forbidden,
+            budget=PdfGroupExtractionBudgetV1(max_groups=1),
+        )
+        self.assertEqual(limited.protocols, [])
+        self.assertEqual(limited.diagnostics[0].reason_code, "group_budget_exceeded")
+        large_response = propose_pdf_group_unreviewed(
+            self.groups,
+            lambda _prompt: {"proposals": [self._proposal(0), self._proposal(1)]},
+            budget=PdfGroupExtractionBudgetV1(max_response_chars=100),
+        )
+        self.assertEqual(large_response.protocols, [])
+        self.assertEqual(
+            large_response.diagnostics[0].reason_code,
+            "response_char_budget_exceeded",
+        )
+
     def test_empty_inventory_and_input_budgets_never_call_model(self) -> None:
         def forbidden(_prompt: str) -> dict:
             self.fail("model must not be called")
@@ -163,6 +247,32 @@ class PdfGroupExtractionTest(unittest.TestCase):
                 )
                 self.assertEqual(result.protocols, [])
                 self.assertEqual(result.diagnostics[0].reason_code, reason)
+
+    def test_long_methods_section_within_char_budget_can_be_proposed(self) -> None:
+        # Real Methods sections may have many short extracted PDF lines. The
+        # block cap must not reject them before the prompt character cap runs.
+        original = self.groups[0]
+        many = PdfExperimentalGroupV1(
+            source_scope=original.source_scope.model_copy(deep=True),
+            source_document=original.source_document,
+            blocks=tuple(
+                PdfSourceBlockV1(f"pdf:p1:b{index}-p1:b{index}", f"Line {index}.")
+                for index in range(1, 351)
+            ),
+        )
+        result = propose_pdf_group_unreviewed(
+            [many, self.groups[1]],
+            lambda _prompt: {"proposals": [
+                {"source_group_ref": {
+                    "paper_id": self.keys[0][0],
+                    "experimental_group_id": self.keys[0][1],
+                    "source_digest": self.keys[0][2],
+                }, "route_facts": []},
+                self._proposal(1),
+            ]},
+        )
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(len(result.protocols), 2)
 
     def test_reviewed_maps_are_required_before_invocation(self) -> None:
         def forbidden(_prompt: str) -> dict:

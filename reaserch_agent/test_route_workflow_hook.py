@@ -296,6 +296,174 @@ class RouteWorkflowHookTest(unittest.TestCase):
             "signed_source_events_missing",
         )
 
+    def test_signed_pdf_can_yield_unreviewed_facts_without_route_authority(self) -> None:
+        digest = "sha256_" + "a" * 64
+        groups = [
+            PdfExperimentalGroupV1(
+                source_scope=ExperimentalGroupScopeV1(
+                    paper_id="paper-1", experimental_group_id=group_id,
+                    section="Methods", locator=locator, source_digest=digest,
+                ),
+                source_document="/trusted/source.pdf",
+                blocks=(PdfSourceBlockV1(locator, text),),
+            )
+            for group_id, locator, text in (
+                ("Sample synthesis", "pdf:p1:b1-p1:b1", "Mix 2 mmol salt."),
+                ("Materials", "pdf:p1:b2-p1:b2", "Materials were purchased."),
+            )
+        ]
+        proposals = []
+        for group in groups:
+            scope = group.source_scope
+            proposal = {"source_group_ref": {
+                "paper_id": scope.paper_id,
+                "experimental_group_id": scope.experimental_group_id,
+                "source_digest": scope.source_digest,
+            }, "route_facts": []}
+            if scope.experimental_group_id == "Sample synthesis":
+                proposal["route_facts"] = [{
+                    "fact_id": "mix", "field_path": "route_signature.operations[0]",
+                    "value": "Mix", "unit": "", "excerpt": "Mix 2 mmol salt.",
+                    "block_locator": scope.locator, "required": True,
+                }]
+            proposals.append(proposal)
+        agent = ResearchAgent(
+            model=object(), use_llm=True, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[{"signed": "input"}],
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+        )
+        with patch(
+            "reaserch_agent.route_pdf_groups.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=groups),
+        ), patch.object(
+            agent, "invoke_text", return_value=json.dumps({"proposals": proposals}),
+        ) as invoke:
+            reviewed_protocols = agent._propose_attested_route_protocols(state, ".")
+        self.assertEqual(reviewed_protocols, [])
+        self.assertEqual(invoke.call_count, 1)
+        self.assertEqual(len(state.route_unreviewed_group_proposals_v1), 2)
+        self.assertTrue(all(
+            item["group_role"] == "unclassified"
+            and "required_capabilities" not in item
+            for item in state.route_unreviewed_group_proposals_v1
+        ))
+        self.assertIn("route_pdf_group_propose", state.raw_llm_outputs)
+        self.assertIn("review_work_orders", state.route_group_fact_receipts_v1)
+        self.assertFalse(any(
+            order["human_chemical_review_completed"]
+            for order in state.route_group_fact_receipts_v1["review_work_orders"]
+        ))
+        self.assertIn(
+            "trusted_group_role_missing",
+            [item["reason_code"] for item in state.route_group_proposal_diagnostics_v1],
+        )
+
+    def test_bad_pdf_quote_keeps_scoped_review_work_order(self) -> None:
+        digest = "sha256_" + "b" * 64
+        group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-2", experimental_group_id="Preparation",
+                section="Methods", locator="pdf:p1:b1-p1:b1",
+                source_digest=digest,
+            ),
+            source_document="/trusted/other.pdf",
+            blocks=(PdfSourceBlockV1("pdf:p1:b1-p1:b1", "Mix 2 mmol salt."),),
+        )
+        proposal = {"source_group_ref": {
+            "paper_id": "paper-2", "experimental_group_id": "Preparation",
+            "source_digest": digest,
+        }, "route_facts": [{
+            "fact_id": "bad", "field_path": "route_signature.operations[0]",
+            "value": "mix", "unit": "", "excerpt": "Mix 3 mmol salt.",
+            "block_locator": "pdf:p1:b1-p1:b1", "required": True,
+        }]}
+        agent = ResearchAgent(
+            model=object(), use_llm=True, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[{"signed": "input"}],
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+        )
+        with patch(
+            "reaserch_agent.route_pdf_groups.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=[group]),
+        ), patch.object(
+            agent, "invoke_text", return_value=json.dumps({"proposals": [proposal]}),
+        ):
+            self.assertEqual(agent._propose_attested_route_protocols(state, "."), [])
+        self.assertEqual(state.route_unreviewed_group_proposals_v1, [])
+        self.assertIn(
+            "fact_excerpt_not_in_block",
+            [item["reason_code"] for item in state.route_group_proposal_diagnostics_v1],
+        )
+        self.assertEqual(
+            len(state.route_group_fact_receipts_v1["review_work_orders"]), 1,
+        )
+        self.assertFalse(
+            state.route_group_fact_receipts_v1["review_work_orders"][0]
+            ["human_chemical_review_completed"],
+        )
+
+    def test_blocked_literal_receipt_never_reaches_reviewed_association(self) -> None:
+        digest = "sha256_" + "c" * 64
+        locator = "pdf:p1:b1-p1:b1"
+        group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-3", experimental_group_id="Preparation",
+                section="Methods", locator=locator, source_digest=digest,
+            ),
+            source_document="/trusted/paper.pdf",
+            blocks=(PdfSourceBlockV1(locator, "Mix 2 mmol salt."),),
+        )
+        key = ("paper-3", "Preparation", digest)
+        proposal = {
+            "source_group_ref": {
+                "paper_id": key[0], "experimental_group_id": key[1],
+                "source_digest": key[2],
+            },
+            "route_facts": [{
+                "fact_id": "mix", "field_path": "route_signature.operations[0]",
+                "value": "Mix", "unit": 123, "excerpt": "Mix 2 mmol salt.",
+                "block_locator": locator, "required": True,
+            }],
+        }
+        agent = ResearchAgent(
+            model=object(), use_llm=True, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2", signed_route_source_events=[{"signed": "input"}],
+            trusted_route_group_roles_by_group={key: "synthesis"},
+            trusted_route_capabilities_by_group={key: ["mixing"]},
+        )
+        state = ResearchAgentState(
+            event=ResearchEvent(event_type="bootstrap", query="prepare product"),
+            contract_version="v2",
+        )
+        with patch(
+            "reaserch_agent.route_pdf_groups.enumerate_attested_pdf_experimental_groups",
+            return_value=PdfGroupEnumerationResultV1(groups=[group]),
+        ), patch.object(
+            agent, "invoke_text", return_value=json.dumps({"proposals": [proposal]}),
+        ), patch(
+            "reaserch_agent.route_pdf_group_extraction.propose_pdf_group_protocols",
+        ) as reviewed:
+            self.assertEqual(agent._propose_attested_route_protocols(state, "."), [])
+        reviewed.assert_not_called()
+        self.assertEqual(state.route_group_fact_receipts_v1["status"], "blocked")
+        self.assertIn(
+            "fact[0]:fact_unit_invalid",
+            state.route_group_fact_receipts_v1["group_results"][0]["reason_codes"],
+        )
+        self.assertIn(
+            "group_literal_check_failed",
+            [item["reason_code"] for item in state.route_group_proposal_diagnostics_v1],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -437,7 +437,7 @@ def load_route_trust_config(
     for group, role in roles.items():
         if not isinstance(role, str) or role not in {
             "synthesis", "material_processing", "characterization", "testing",
-            "performance_testing",
+            "performance_testing", "non_procedural",
         }:
             raise SystemExit(f"trusted_route_group_roles_by_group has invalid role for {group}")
 

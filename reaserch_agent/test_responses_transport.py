@@ -580,6 +580,109 @@ class DirectResponsesTransportTest(unittest.TestCase):
         self.assertEqual(completed[0]["component"], "research")
         self.assertEqual(completed[0]["transport"], "research_codex_cli")
 
+    def test_cli_account_factory_needs_model_but_no_api_key_or_endpoint(self) -> None:
+        with patch.object(LLMFactory, "load_env"), patch.dict(
+            os.environ,
+            {
+                "REFINER_LLM_WIRE_API": "codex_responses",
+                "REFINER_RESPONSES_TRANSPORT": "cli_account",
+                "REFINER_LLM_MODEL_NAME": "gpt-6-sol",
+            },
+            clear=True,
+        ), patch("reaserch_agent.utils.llm_factory.OpenAI") as openai_client:
+            model = LLMFactory.create_or_none()
+
+        self.assertIsInstance(model, CodexResponsesModel)
+        self.assertTrue(model._cli_account_only)
+        self.assertIsNone(model._client)
+        self.assertEqual(model._model, "gpt-6-sol")
+        openai_client.assert_not_called()
+
+    def test_cli_account_uses_signed_in_home_without_copying_auth_or_config(self) -> None:
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured.update({"cmd": cmd, **kwargs})
+            output_path = Path(cmd[cmd.index("--output-last-message") + 1])
+            self.assertEqual(list(Path(kwargs["cwd"]).iterdir()), [])
+            output_path.write_text('{"ok":true}', encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as account_home, patch.dict(
+            os.environ,
+            {
+                "REFINER_RESPONSES_TRANSPORT": "cli_account",
+                "CODEX_HOME": account_home,
+                "OPENAI_API_KEY": "unused-provider-key",
+                "REFINER_LLM_API_KEY": "unused-refiner-key",
+                "OPENAI_BASE_URL": "https://provider.invalid",
+            },
+        ):
+            model = CodexResponsesModel(
+                model="gpt-6-sol",
+                api_key="",
+                base_url="",
+                reasoning_effort="high",
+                cli_account_only=True,
+            )
+            with patch(
+                "reaserch_agent.utils.llm_factory.subprocess.run",
+                side_effect=fake_run,
+            ), patch.object(model, "_invoke_direct") as direct, patch.object(
+                model, "_invoke_cli"
+            ) as key_copy_cli:
+                result = model.invoke([{"role": "user", "content": "Return JSON."}])
+
+        self.assertEqual(result.content, '{"ok":true}')
+        self.assertEqual(captured["env"]["CODEX_HOME"], account_home)
+        for name in ("OPENAI_API_KEY", "REFINER_LLM_API_KEY", "OPENAI_BASE_URL"):
+            self.assertNotIn(name, captured["env"])
+        cmd = captured["cmd"]
+        self.assertIn("--ephemeral", cmd)
+        self.assertIn("--ignore-user-config", cmd)
+        self.assertIn("--ignore-rules", cmd)
+        self.assertEqual(cmd[cmd.index("--model") + 1], "gpt-6-sol")
+        self.assertIn('model_reasoning_effort="high"', cmd)
+        self.assertEqual(cmd[cmd.index("--sandbox") + 1], "read-only")
+        self.assertIn("Do not call tools", captured["input"])
+        self.assertIn("Return JSON.", captured["input"])
+        self.assertTrue(Path(captured["cwd"]).name.startswith("research-codex-account-"))
+        direct.assert_not_called()
+        key_copy_cli.assert_not_called()
+
+    def test_cli_account_failure_is_redacted_and_does_not_fall_back(self) -> None:
+        model = CodexResponsesModel(
+            model="gpt-6-sol",
+            api_key="",
+            base_url="",
+            cli_account_only=True,
+        )
+        model._transport_max_retries = 0
+        private_detail = "account-provider-secret"
+        with patch.dict(os.environ, {"REFINER_RESPONSES_TRANSPORT": "cli_account"}), patch(
+            "reaserch_agent.utils.llm_factory.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                ["codex"], 1, stdout="", stderr=f"HTTP status 401 {private_detail}"
+            ),
+        ), patch.object(model, "_invoke_direct") as direct, patch.object(
+            model, "_invoke_cli"
+        ) as key_copy_cli:
+            with self.assertRaises(RuntimeError) as caught:
+                model.invoke([{"role": "user", "content": "Return JSON."}])
+
+        self.assertNotIn(private_detail, str(caught.exception))
+        direct.assert_not_called()
+        key_copy_cli.assert_not_called()
+
+    def test_cli_account_rejects_native_tool_binding(self) -> None:
+        from agent_skills.native_tools import NativeToolConfigurationError
+
+        model = CodexResponsesModel(
+            model="gpt-6-sol", api_key="", base_url="", cli_account_only=True
+        )
+        with self.assertRaises(NativeToolConfigurationError):
+            model.bind_tools([])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -62,10 +62,22 @@ class ResearchAgentState:
     # Present only after an exact selected route is bound to a canonical V2
     # package. The package carries the same hash-bound identity.
     route_binding: Optional[Dict[str, Any]] = None
+    # Quote-bound PDF proposals are retained for audit only. They have no
+    # trusted role/capabilities and cannot authorize RouteDecision or publish.
+    route_unreviewed_group_proposals_v1: List[Dict[str, Any]] = field(default_factory=list)
+    route_group_fact_receipts_v1: Dict[str, Any] = field(default_factory=dict)
     route_group_proposal_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_compilation_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_discovery_diagnostics_v1: List[Dict[str, Any]] = field(default_factory=list)
     route_validation_diagnostics_v1: Dict[str, List[str]] = field(default_factory=dict)
+    # Opt-in current-stage decomposition. Each arm keeps its own route
+    # decision; a single published action never implies multi-arm coverage.
+    stage_task_production_v1: Dict[str, Any] = field(default_factory=dict)
+    stage_task_requirements_v1: Dict[str, Any] = field(default_factory=dict)
+    stage_route_decisions_v1: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    stage_coverage_report_v1: Dict[str, Any] = field(default_factory=dict)
+    stage_observation_protocol_v1: Dict[str, Any] = field(default_factory=dict)
+    stage_action_queue_v1: Dict[str, Any] = field(default_factory=dict)
     survey_report: Dict[str, Any] = field(default_factory=dict)
 
     stage_route: List[str] = field(default_factory=list)
@@ -151,10 +163,24 @@ class ResearchAgentState:
             **({"observations": self.observations} if self.route_binding is not None else {}),
             **({"route_binding_status_v1": self.route_binding_status_v1} if self.route_binding is not None else {}),
             "路线实验组提案诊断 V1": self.route_group_proposal_diagnostics_v1,
+            "路线未审阅逐组提案 V1": self.route_unreviewed_group_proposals_v1,
+            "路线逐组字面核验记录 V1": self.route_group_fact_receipts_v1,
             "路线计划绑定状态 V1": self.route_binding_status_v1,
             "路线事实编译诊断 V1": self.route_compilation_diagnostics_v1,
             "路线候选发现诊断 V1": self.route_discovery_diagnostics_v1,
             "路线验证诊断 V1": self.route_validation_diagnostics_v1,
+            **({"stage_task_production_v1": self.stage_task_production_v1}
+               if self.stage_task_production_v1 else {}),
+            **({"stage_task_requirements_v1": self.stage_task_requirements_v1}
+               if self.stage_task_requirements_v1 else {}),
+            **({"stage_route_decisions_v1": self.stage_route_decisions_v1}
+               if self.stage_route_decisions_v1 else {}),
+            **({"stage_coverage_report_v1": self.stage_coverage_report_v1}
+               if self.stage_coverage_report_v1 else {}),
+            **({"stage_observation_protocol_v1": self.stage_observation_protocol_v1}
+               if self.stage_observation_protocol_v1 else {}),
+            **({"stage_action_queue_v1": self.stage_action_queue_v1}
+               if self.stage_action_queue_v1 else {}),
             "最新 observation": self.latest_observation,
             "observation 与当前 stage 的一致性判断": self.observation_stage_fit,
             "当前 observation 的结构化科学解释": self.observation_interpretation,
@@ -183,6 +209,12 @@ class ResearchAgentState:
             "handoff_type": "research_to_device_adaptation",
             "contract_version": self.contract_version,
             "research_action_package_v2": self.research_action_package_v2,
+            **({"stage_action_queue_v1": self.stage_action_queue_v1}
+               if self.stage_action_queue_v1 else {}),
+            **({"stage_coverage_report_v1": self.stage_coverage_report_v1}
+               if self.stage_coverage_report_v1 else {}),
+            **({"stage_observation_protocol_v1": self.stage_observation_protocol_v1}
+               if self.stage_observation_protocol_v1 else {}),
             **({"route_binding": self.route_binding} if self.route_binding is not None else {}),
             **({"observations": self.observations} if self.route_binding is not None else {}),
             **({"route_binding_status_v1": self.route_binding_status_v1} if self.route_binding is not None else {}),

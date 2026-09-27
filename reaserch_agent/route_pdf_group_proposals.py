@@ -2,7 +2,7 @@
 
 The trusted group inventory provides every source identity and locator. A
 proposal may identify one enumerated group and suggest scientific structure
-plus exact per-block quotations. It cannot provide or override source scope,
+plus exact, short layout-block quotations. It cannot provide or override source scope,
 digest, evidence status, group role, or a claim about source authenticity.
 This is a pure association step, not chemistry interpretation or candidate
 admission.
@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from .route_pdf_groups import PdfExperimentalGroupV1
+from .route_pdf_quote_binding import bind_pdf_quote
 
 
 _ALLOWED_PROPOSAL_KEYS = frozenset({
@@ -30,7 +31,7 @@ _SOURCE_REF_KEYS = frozenset({
 })
 _REVIEWED_GROUP_ROLES = frozenset({
     "synthesis", "material_processing", "characterization", "testing",
-    "performance_testing",
+    "performance_testing", "non_procedural",
 })
 _ROUTE_GROUP_ROLES = frozenset({"synthesis", "material_processing"})
 
@@ -158,7 +159,10 @@ def associate_pdf_group_proposals(
         if not isinstance(facts, list):
             diagnose("proposal_route_facts_invalid")
             continue
-        blocks = {block.locator: block.text for block in group.blocks}
+        blocks = [(block.locator, block.text) for block in group.blocks]
+        caption_locators = {
+            block.locator for block in group.blocks if block.caption
+        }
         prepared_facts: list[dict[str, Any]] = []
         fact_issue = ""
         for raw_fact in facts:
@@ -169,21 +173,21 @@ def associate_pdf_group_proposals(
                 fact_issue = "proposal_fact_source_or_status_field_forbidden"
                 break
             locator = _text(raw_fact.get("block_locator"))
-            block_text = blocks.get(locator)
-            if block_text is None:
-                fact_issue = "fact_block_outside_group"
-                break
             excerpt = raw_fact.get("excerpt")
-            if not isinstance(excerpt, str) or not excerpt.strip() or excerpt not in block_text:
-                fact_issue = "fact_excerpt_not_in_block"
+            binding, fact_issue = bind_pdf_quote(
+                blocks, excerpt, asserted_block_locator=locator,
+                caption_block_locators=caption_locators,
+            )
+            if fact_issue:
                 break
+            assert binding is not None
             prepared_fact = deepcopy(dict(raw_fact))
             del prepared_fact["block_locator"]
             prepared_fact["source"] = {
                 "paper_id": paper_id,
                 "experimental_group_id": group_id,
                 "section": group.source_scope.section,
-                "locator": locator,
+                "locator": binding.locator,
                 "source_digest": group.source_scope.source_digest,
             }
             prepared_facts.append(prepared_fact)
@@ -205,8 +209,8 @@ def associate_pdf_group_proposals(
         }
         # Keep a reviewed non-route group in the inventory for coverage and
         # role audit, but do not ask the route-fact compiler to compile it.
-        # An empty fact list is correct for characterization/testing, whereas
-        # it is an unresolved extraction for a synthesis group.
+        # An empty fact list is correct for a reviewed non-route or context
+        # section, whereas it is unresolved extraction for a synthesis group.
         if group_role in _ROUTE_GROUP_ROLES or group_role == "unclassified":
             protocol["route_facts"] = prepared_facts
         for key_name in (

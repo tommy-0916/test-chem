@@ -179,6 +179,9 @@ class RoutePipelineTest(unittest.TestCase):
         document.close()
         digest = "sha256_" + hashlib.sha256(pdf.read_bytes()).hexdigest()
         protocol = self._protocol()
+        # The PDF says "metal salt"; the amount must bind to that exact
+        # material label rather than to a shorter, ambiguous alias.
+        protocol["material_graph"][0]["material_inputs"][0]["name"] = "metal salt"
         protocol["evidence_matrix"] = protocol["evidence_matrix"][:1]
         protocol["evidence_bundle"][0]["excerpt"] = pdf_excerpt
         protocol["evidence_matrix"][0]["provenance"]["excerpt"] = (

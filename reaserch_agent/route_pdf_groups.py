@@ -24,9 +24,12 @@ from .route_attestation import (
 from .route_pdf_source import (
     _MAX_SOURCE_BYTES,
     _PdfBlock,
+    _caption,
+    _group_boundary,
     _group_range,
     _heading,
     _read_pdf_blocks,
+    _section_body_size,
 )
 
 if TYPE_CHECKING:
@@ -48,6 +51,8 @@ _EXPERIMENTAL_SECTIONS = frozenset({
 class PdfSourceBlockV1:
     locator: str
     text: str
+    # Parser-owned layout type; never supplied by a route proposal.
+    caption: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,7 +114,8 @@ def _section_groups(
     section_size = section_block.font_size
     section_end = next((
         index for index in range(section_index + 1, len(blocks))
-        if blocks[index].font_size >= section_size - 0.1
+        if not _caption(blocks[index])
+        and blocks[index].font_size >= section_size - 0.1
     ), len(blocks))
     if section_end < len(blocks) and not _heading(blocks[section_end]):
         return [], "section_boundary_unmarked"
@@ -117,6 +123,7 @@ def _section_groups(
     group_indexes = [
         index for index in range(section_index + 1, section_end)
         if _heading(blocks[index])
+        and not _caption(blocks[index])
         and blocks[index].font_size < section_size - 0.1
     ]
     if not group_indexes:
@@ -129,12 +136,10 @@ def _section_groups(
         return [], "duplicate_group_heading"
 
     results: list[PdfExperimentalGroupV1] = []
+    body_size = _section_body_size(blocks, section_index + 1, section_end)
     for group_index in group_indexes:
         heading = blocks[group_index]
-        next_boundary = next((
-            index for index in range(group_index + 1, section_end)
-            if blocks[index].font_size >= heading.font_size - 0.1
-        ), section_end)
+        next_boundary = _group_boundary(blocks, group_index, section_end, body_size)
         if next_boundary < section_end and next_boundary not in group_indexes:
             return [], "group_boundary_unmarked"
         end_index = next_boundary - 1
@@ -154,7 +159,9 @@ def _section_groups(
             source_scope=scope,
             source_document=str(path),
             blocks=tuple(
-                PdfSourceBlockV1(_block_locator(block, block), block.text)
+                PdfSourceBlockV1(
+                    _block_locator(block, block), block.text, _caption(block),
+                )
                 for block in blocks[group_index:end_index + 1]
             ),
         ))
@@ -435,7 +442,7 @@ def audit_pdf_group_roles(
     """
     allowed_roles = frozenset({
         "synthesis", "material_processing", "characterization", "testing",
-        "performance_testing",
+        "performance_testing", "non_procedural",
     })
     extracted: dict[tuple[str, str, str], list[str]] = {}
     for protocol in protocols:

@@ -87,7 +87,8 @@ class SourceDocumentAttestationV1(_AttestationStrictModel):
     request_url: str = Field(min_length=1)
     final_url: str = Field(min_length=1)
     identity_evidence_type: Literal[
-        "publisher_doi_link", "publisher_si_link", "reviewed_identity"
+        "publisher_doi_link", "publisher_si_link", "reviewed_identity",
+        "source_host_doi_metadata_match",
     ]
     identity_evidence_url: str = Field(min_length=1)
     identity_evidence_digest: str = Field(min_length=1)
@@ -139,6 +140,10 @@ class SourceDocumentAttestationV1(_AttestationStrictModel):
             self.identity_evidence_type not in {"publisher_si_link", "reviewed_identity"}
         ):
             raise ValueError("SI requires a publisher SI link or reviewed identity")
+        if self.identity_evidence_type == "source_host_doi_metadata_match" and (
+            self.document_kind != "primary_paper"
+        ):
+            raise ValueError("source-host DOI metadata match only verifies primary papers")
         return self
 
 

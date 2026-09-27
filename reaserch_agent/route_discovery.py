@@ -30,7 +30,7 @@ from chem_agent_contracts.v2 import EvidenceItemV2, MacroStepV2, StrictModel
 
 _ROUTE_GROUP_ROLES = frozenset({"synthesis", "material_processing"})
 _NON_ROUTE_GROUP_ROLES = frozenset(
-    {"characterization", "testing", "performance_testing"}
+    {"characterization", "testing", "performance_testing", "non_procedural"}
 )
 
 

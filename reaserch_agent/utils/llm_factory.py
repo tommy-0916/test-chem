@@ -158,7 +158,7 @@ def default_env_file() -> Path:
 
 
 class CodexResponsesModel:
-    """Stateless direct Responses adapter with an optional CLI fallback."""
+    """Stateless Responses adapter with explicit API and CLI transports."""
 
     # Direct Responses and the isolated CLI fallback are both timed at their
     # concrete request boundaries, so BaseAgent must not add an outer timer.
@@ -175,6 +175,7 @@ class CodexResponsesModel:
         max_output_tokens: Optional[int] = None,
         codex_path: Optional[str] = None,
         client: Optional[Any] = None,
+        cli_account_only: bool = False,
     ) -> None:
         self._model = model
         self._api_key = api_key
@@ -185,19 +186,30 @@ class CodexResponsesModel:
         self._transport_max_retries = configured_max_retries()
         self.handles_transport_retries = True
         self._codex_path = codex_path or shutil.which("codex") or "/Applications/Codex.app/Contents/Resources/codex"
-        self._client = client or OpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            # Chem Agent owns the only retry loop so provider Retry-After
-            # cannot silently multiply a logical Research request.
-            max_retries=0,
+        self._cli_account_only = cli_account_only
+        self._client = client if client is not None else (
+            None if cli_account_only else OpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+                # Chem Agent owns the only retry loop so provider Retry-After
+                # cannot silently multiply a logical Research request.
+                max_retries=0,
+            )
         )
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
         """Native tools use direct Responses messages, never the text/CLI path."""
-        from agent_skills.native_tools import make_native_openai_model, require_direct_tool_transport
+        from agent_skills.native_tools import (
+            NativeToolConfigurationError,
+            make_native_openai_model,
+            require_direct_tool_transport,
+        )
 
+        if self._cli_account_only or os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower() == "cli_account":
+            raise NativeToolConfigurationError(
+                "Native tools require direct API transport; cli_account is text-only."
+            )
         require_direct_tool_transport()
         if getattr(self, "_native_tool_model", None) is None:
             self._native_tool_model = make_native_openai_model(
@@ -216,6 +228,14 @@ class CodexResponsesModel:
         deadline = logical_deadline(self._timeout)
         prompt = self._messages_to_prompt(messages)
         transport = os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower()
+        if self._cli_account_only or transport == "cli_account":
+            return call_with_gateway_retry(
+                lambda: self._invoke_cli_account(prompt),
+                max_retries=self._transport_max_retries,
+                deadline=deadline,
+                logger=logger,
+                operation_name="Research Codex CLI account request",
+            )
         if transport not in {"cli", "codex_cli"}:
             try:
                 return call_with_gateway_retry(
@@ -349,6 +369,83 @@ class CodexResponsesModel:
             text = output_path.read_text(encoding="utf-8").strip()
             if not text:
                 raise RuntimeError("Codex responses call returned empty output")
+            return SimpleNamespace(content=text)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def _invoke_cli_account(self, prompt: str) -> Any:
+        """Use the local Codex sign-in without reading or copying its auth files.
+
+        Ignore the user's model/provider configuration while keeping the
+        existing CODEX_HOME solely for CLI-managed authentication. Running in
+        an empty temporary directory prevents project instructions or files
+        from entering this one text-only inference request.
+        """
+        tmpdir = tempfile.mkdtemp(prefix="research-codex-account-")
+        try:
+            tmp_path = Path(tmpdir)
+            output_path = tmp_path / "last_message.txt"
+            stateless_prompt = (
+                "You are serving one stateless structured-inference request. "
+                "All evidence needed to answer is already included below. Do not call "
+                "tools, inspect files, browse the network, or discuss your work. Return "
+                "the requested final JSON/text directly.\n\n"
+                + prompt
+            )
+            cmd = [
+                self._codex_path,
+                "exec",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+                "--model",
+                self._model,
+                "--config",
+                f"model_reasoning_effort={json.dumps(self._reasoning_effort)}",
+                "--config",
+                "disable_response_storage=true",
+                "--sandbox",
+                "read-only",
+                "--skip-git-repo-check",
+                "--output-last-message",
+                str(output_path),
+                "--json",
+                "-",
+            ]
+            env = dict(os.environ)
+            # The CLI uses its own existing sign-in from CODEX_HOME (or the
+            # default home). Never place an API key in arguments, temp files,
+            # or its child environment.
+            for name in (
+                "OPENAI_API_KEY", "REFINER_LLM_API_KEY", "GEMINI_API_KEY",
+                "GOOGLE_API_KEY", "OPENAI_BASE_URL", "REFINER_LLM_ENDPOINT_URL",
+            ):
+                env.pop(name, None)
+            with measure_llm_request(
+                component=os.getenv("CHEM_LLM_COMPONENT", "research"),
+                model=self._model,
+                transport="research_codex_cli_account",
+            ):
+                completed = subprocess.run(
+                    cmd,
+                    input=stateless_prompt,
+                    text=True,
+                    capture_output=True,
+                    timeout=self._timeout,
+                    env=env,
+                    cwd=tmp_path,
+                    check=False,
+                )
+            if completed.returncode != 0:
+                diagnostic = self._cli_failure_diagnostic(completed)
+                if self._is_retryable_cli_failure(completed):
+                    raise RetryableGatewayError(diagnostic)
+                raise RuntimeError(diagnostic)
+            if not output_path.exists():
+                raise RuntimeError("Codex account call did not produce output-last-message")
+            text = output_path.read_text(encoding="utf-8").strip()
+            if not text:
+                raise RuntimeError("Codex account call returned empty output")
             return SimpleNamespace(content=text)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -540,6 +637,27 @@ class LLMFactory:
             or os.getenv("OPENAI_BASE_URL")
         )
 
+        wire_api = os.getenv("REFINER_LLM_WIRE_API", "").strip().lower()
+        account_transport = (
+            wire_api == "codex_responses"
+            and os.getenv("REFINER_RESPONSES_TRANSPORT", "direct").strip().lower() == "cli_account"
+        )
+        if account_transport:
+            if not provider_model:
+                return None
+            return CodexResponsesModel(
+                model=provider_model,
+                api_key="",
+                base_url="",
+                reasoning_effort=os.getenv("REFINER_LLM_REASONING_EFFORT", "xhigh"),
+                timeout=LLMFactory._openai_compatible_timeout(),
+                max_output_tokens=int(
+                    os.getenv("REFINER_LLM_RESPONSES_MAX_OUTPUT_TOKENS", "32768")
+                ),
+                codex_path=os.getenv("REFINER_CODEX_CLI_PATH"),
+                cli_account_only=True,
+            )
+
         if not provider_model or not provider_key:
             if provider_url:
                 provider_model = LLMFactory._extract_gemini_model_from_url(provider_url)
@@ -555,7 +673,7 @@ class LLMFactory:
                 **kwargs,
             )
 
-        if os.getenv("REFINER_LLM_WIRE_API", "").strip().lower() == "codex_responses":
+        if wire_api == "codex_responses":
             if not provider_url:
                 return None
             return CodexResponsesModel(

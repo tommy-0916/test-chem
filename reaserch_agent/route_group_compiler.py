@@ -26,6 +26,20 @@ _SOURCE_LOCATOR = re.compile(
     r"pdf:p[1-9][0-9]*:b[1-9][0-9]*-p[1-9][0-9]*:b[1-9][0-9]*)\Z"
 )
 _DOCUMENT_DIGEST = re.compile(r"sha256_[0-9a-f]{64}\Z")
+_MATERIAL_AMOUNT_PATH = re.compile(
+    r"(material_graph\[(?:0|[1-9][0-9]*)\]"
+    r"(?:\.material_(?:inputs|intermediates|outputs)\[(?:0|[1-9][0-9]*)\])?)"
+    r"\.(?:quantity\.value|concentration_value)\Z"
+)
+_LOCAL_CLAUSE = re.compile(
+    r"[,;，；。]|\.(?=\s|$)|\b(?:and|plus|with)\b|[、与和及]",
+    re.IGNORECASE,
+)
+_LINK_WORDS = frozenset({
+    "a", "an", "about", "added", "approximately", "are", "as", "at",
+    "containing", "dissolved", "in", "is", "of", "precursor", "solution",
+    "solid", "the", "to", "used", "was", "weighed", "were",
+})
 
 
 @dataclass(frozen=True)
@@ -45,6 +59,132 @@ class RouteGroupCompilationResultV1:
 
 def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _node_value(node: Any, name: str) -> Any:
+    return node.get(name) if isinstance(node, Mapping) else getattr(node, name, None)
+
+
+def literal_quantity_present(excerpt: Any, value: Any, unit: Any) -> bool:
+    """Malformed untrusted numbers or units abstain instead of crashing."""
+    try:
+        return evidence_contains_exact_quantity(excerpt, value, unit)
+    except (OverflowError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def material_identity_for_amount_path(
+    field_path: str, graph: Any = None,
+    facts: Sequence[Mapping[str, Any]] = (),
+) -> tuple[str, bool]:
+    """Return an exact proposed material label, never a chemical synonym.
+
+    The boolean says whether this is a material amount that must have a
+    resolvable literal identity. A sibling name fact can supply the label
+    before the graph is compiled; conflicting names deliberately abstain.
+    """
+    match = _MATERIAL_AMOUNT_PATH.fullmatch(field_path)
+    if match is None:
+        return "", False
+    prefix = match.group(1)
+    port_match = re.search(
+        r"\.material_(inputs|intermediates|outputs)\[([0-9]+)\]\Z",
+        prefix,
+    )
+    label_paths = {prefix + ".name"}
+    if port_match is None:
+        label_paths.add(prefix + ".reagent_or_object")
+    fact_names = {
+        _text(fact.get("value")) for fact in facts
+        if isinstance(fact, Mapping)
+        and _text(fact.get("field_path")) in label_paths
+        and _text(fact.get("value"))
+    }
+    graph_name = ""
+    try:
+        step_index = int(prefix.split("[", 1)[1].split("]", 1)[0])
+        step = graph[step_index]
+        node = step
+        if port_match is not None:
+            ports = _node_value(step, "material_" + port_match.group(1))
+            node = ports[int(port_match.group(2))]
+        graph_name = _text(_node_value(node, "name")) if port_match else (
+            _text(_node_value(node, "reagent_or_object"))
+            or _text(_node_value(node, "name"))
+        )
+    except (IndexError, KeyError, TypeError, ValueError, AttributeError):
+        pass
+    labels = fact_names | ({graph_name} if graph_name else set())
+    required = port_match is not None or bool(labels)
+    return (next(iter(labels)), required) if len(labels) == 1 else ("", required)
+
+
+def quantity_has_local_attribution(
+    excerpt: str, value: int | float, unit: str, *, identity: str = "",
+    identity_required: bool = False,
+) -> bool:
+    """Check a literal amount belongs to one local clause and named entity.
+
+    Exact value/unit presence alone would permit a sentence such as
+    ``A 1 mmol and B 2 mmol`` to support the false claim ``A = 2 mmol``.
+    This is intentionally conservative: ambiguous coordinated amounts are
+    deferred to independent review, without deriving chemistry or synonyms.
+    """
+    if not literal_quantity_present(excerpt, value, unit):
+        return False
+    if identity_required and not identity:
+        return False
+    normalized = re.sub(r"\s+", " ", excerpt.replace("−", "-").replace("–", "-").replace("µ", "u"))
+    normalized_unit = unit.strip().replace("µ", "u")
+    unit_pattern = r"\s*".join(
+        re.escape(piece) for piece in re.split(r"\s+", normalized_unit)
+    )
+    amount_pattern = re.compile(
+        rf"(?<![\w.])([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+        rf"\s*{unit_pattern}(?![\w/])",
+        re.IGNORECASE,
+    )
+    clauses = [part.strip() for part in _LOCAL_CLAUSE.split(normalized) if part.strip()]
+    amount_matches = [list(amount_pattern.finditer(part)) for part in clauses]
+    try:
+        amounts_by_clause = [
+            [float(match.group(1)) for match in matches]
+            for matches in amount_matches
+        ]
+    except (ValueError, OverflowError):
+        return False
+    if identity:
+        literal_identity = re.sub(r"\s+", " ", identity.strip().replace("µ", "u"))
+        identity_pattern = re.compile(
+            rf"(?<!\w){re.escape(literal_identity)}(?!\w)"
+        )
+        labeled = [
+            (part, numbers, matches, list(identity_pattern.finditer(part)))
+            for part, numbers, matches in zip(
+                clauses, amounts_by_clause, amount_matches,
+            )
+            if numbers and identity_pattern.search(part)
+        ]
+        if len(labeled) != 1 or len(labeled[0][1]) != 1 or len(labeled[0][3]) != 1:
+            return False
+        _, numbers, matches, identities = labeled[0]
+        amount, material = matches[0], identities[0]
+        between = (
+            labeled[0][0][material.end():amount.start()]
+            if material.end() <= amount.start()
+            else labeled[0][0][amount.end():material.start()]
+        )
+        if any(word.casefold() not in _LINK_WORDS for word in re.findall(
+            r"[^\W\d_]\w*", between,
+        )):
+            return False
+        return math.isclose(
+            numbers[0], float(value), rel_tol=1e-12, abs_tol=1e-12,
+        )
+    amounts = [number for numbers in amounts_by_clause for number in numbers]
+    return len(amounts) == 1 and math.isclose(
+        amounts[0], float(value), rel_tol=1e-12, abs_tol=1e-12,
+    )
 
 
 def _scoped_claim(
@@ -206,7 +346,10 @@ def _fact_issue(
     fact_id = _text(raw.get("fact_id"))
     field_path = _text(raw.get("field_path"))
     excerpt = _text(raw.get("excerpt"))
-    unit = _text(raw.get("unit"))
+    raw_unit = raw.get("unit", "")
+    if not isinstance(raw_unit, str):
+        return "route_fact_unit_invalid"
+    unit = raw_unit.strip()
     source = raw.get("source")
     if not fact_id or not field_path:
         return "route_fact_identity_missing"
@@ -237,8 +380,16 @@ def _fact_issue(
     if isinstance(claimed, (int, float)):
         if not unit:
             return "route_fact_numeric_unit_missing"
-        if not evidence_contains_exact_quantity(excerpt, claimed, unit):
+        if not literal_quantity_present(excerpt, claimed, unit):
             return "route_fact_quantity_absent_from_excerpt"
+        identity, identity_required = material_identity_for_amount_path(
+            field_path, graph,
+        )
+        if not quantity_has_local_attribution(
+            excerpt, claimed, unit, identity=identity,
+            identity_required=identity_required,
+        ):
+            return "route_fact_quantity_attribution_unresolved"
     elif not claimed.strip() or re.search(
         rf"(?<!\w){re.escape(claimed.strip())}(?!\w)", excerpt
     ) is None:

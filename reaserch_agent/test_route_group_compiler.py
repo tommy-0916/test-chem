@@ -11,7 +11,10 @@ import unittest
 
 from chem_agent_contracts.route_candidate import RouteGoalV1, RouteTargetV1
 from reaserch_agent.route_discovery import discover_route_candidates
-from reaserch_agent.route_group_compiler import compile_experimental_group_protocols
+from reaserch_agent.route_group_compiler import (
+    compile_experimental_group_protocols, material_identity_for_amount_path,
+    quantity_has_local_attribution,
+)
 from reaserch_agent.route_source import verify_route_source
 
 
@@ -148,6 +151,30 @@ class RouteGroupCompilerTest(unittest.TestCase):
         self.assertTrue(verification.source_scope_verified, verification.reasons)
         self.assertTrue(set(goal.required_fields).issubset(verification.verified_field_paths))
 
+    def test_nonstring_unit_cannot_be_erased_into_discoverable_evidence(self) -> None:
+        protocol = self._protocol()
+        # A qualitative claim normally has an empty unit. A malformed unit
+        # must not be coerced to "" and published as a paper-explicit fact.
+        protocol["experimental_groups"][0]["route_facts"][0]["unit"] = 123
+        result = self._compile(protocol)
+        self.assertEqual(
+            result.diagnostics[0].reason_code, "route_fact_unit_invalid",
+        )
+        group = result.protocols[0]["experimental_groups"][0]
+        self.assertNotIn("evidence_matrix", group)
+        goal = RouteGoalV1(
+            goal_id="goal", target=RouteTargetV1.model_validate(self.target),
+            constraint="open", required_fields=[
+                "material_graph[0].material_inputs[0].quantity.value",
+            ],
+        )
+        discovery = discover_route_candidates(
+            goal, result.protocols,
+            trusted_source_paths={"paper-A": [self.source]},
+        )
+        self.assertEqual(discovery.candidates, [])
+        # There is no candidate to present to SourceVerifier as verified.
+
     def test_cross_group_fact_does_not_compile(self) -> None:
         protocol = self._protocol()
         protocol["experimental_groups"][0]["route_facts"][0]["source"][
@@ -159,6 +186,53 @@ class RouteGroupCompilerTest(unittest.TestCase):
             "route_fact_experimental_group_mismatch",
         )
         self.assertNotIn("evidence_matrix", result.protocols[0]["experimental_groups"][0])
+
+    def test_same_quote_other_material_quantity_cannot_compile(self) -> None:
+        protocol = self._protocol()
+        group = protocol["experimental_groups"][0]
+        wrong_quote = self.excerpt.replace(
+            "2 mmol metal salt (salt)",
+            "1 mmol metal salt (salt) and 2 mmol other salt",
+        )
+        for fact in group["route_facts"]:
+            fact["excerpt"] = wrong_quote
+        result = self._compile(protocol)
+        self.assertEqual(result.diagnostics[0].reason_code,
+                         "route_fact_quantity_attribution_unresolved")
+        self.assertNotIn("evidence_matrix", result.protocols[0]["experimental_groups"][0])
+
+        group["material_graph"][0]["material_inputs"][0]["quantity"]["value"] = 1
+        for fact in group["route_facts"]:
+            if fact["field_path"].endswith("quantity.value"):
+                fact["value"] = 1
+        correct = self._compile(protocol)
+        self.assertEqual(correct.diagnostics, [])
+
+    def test_step_concentration_without_material_port_uses_unique_literal(self) -> None:
+        identity, required = material_identity_for_amount_path(
+            "material_graph[0].concentration_value", [{}],
+        )
+        self.assertEqual((identity, required), ("", False))
+        self.assertTrue(quantity_has_local_attribution(
+            "The solution was 1 M.", 1, "M", identity=identity,
+            identity_required=required,
+        ))
+        self.assertFalse(quantity_has_local_attribution(
+            "A 1 M and B 2 M.", 2, "M", identity=identity,
+            identity_required=required,
+        ))
+
+    def test_intervening_entity_is_not_an_attribution_link(self) -> None:
+        self.assertFalse(quantity_has_local_attribution(
+            "A b 2 mmol", 2, "mmol", identity="A", identity_required=True,
+        ))
+        self.assertTrue(quantity_has_local_attribution(
+            "2 mmol of A", 2, "mmol", identity="A", identity_required=True,
+        ))
+        self.assertFalse(quantity_has_local_attribution(
+            "A 2 mmol", 10 ** 5000, "mmol", identity="A",
+            identity_required=True,
+        ))
 
     def test_missing_excerpt_does_not_compile(self) -> None:
         protocol = self._protocol()

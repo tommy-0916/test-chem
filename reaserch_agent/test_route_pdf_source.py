@@ -15,7 +15,10 @@ from chem_agent_contracts.route_candidate import (
     RouteSignatureV1,
     RouteTargetV1,
 )
-from chem_agent_contracts.v2 import EvidenceItemV2, ProvenanceV2, canonical_digest
+from chem_agent_contracts.v2 import (
+    EvidenceItemV2, MacroStepV2, MaterialPortV2, ProvenanceV2,
+    QuantityV2, canonical_digest,
+)
 from reaserch_agent.route_pdf_source import verify_route_pdf_source
 
 
@@ -134,6 +137,86 @@ class RoutePdfSourceVerificationTest(unittest.TestCase):
         self.assertFalse(result.source_scope_verified)
         self.assertEqual(result.verified_evidence_ids, ())
         self.assertIn("field_excerpt_not_in_source_group:precursor.amount", result.reasons)
+
+    def test_source_quantity_must_belong_to_named_material(self) -> None:
+        self.lines[2] = ("A 1 mmol and B 2 mmol.", 10, "helv")
+        self._write_pdf()
+        candidate = self._candidate()
+        candidate.source_scope.source_digest = self.digest
+        excerpt = self.lines[2][0]
+        candidate.evidence_bundle[0].excerpt = excerpt
+        field = candidate.evidence_matrix[0]
+        field.field_path = "material_graph[0].material_inputs[0].quantity.value"
+        field.source_scope.source_digest = self.digest
+        field.provenance.excerpt = excerpt
+        field.provenance.source_digest = canonical_digest(excerpt)
+        inferred = ProvenanceV2(kind="agent_inferred", rationale="test candidate")
+        candidate.material_graph = [MacroStepV2(
+            macro_step_id="S1", macro_action_id="A1", sequence=1,
+            operation="mix", sample_id="sample-A", provenance=inferred,
+            material_inputs=[MaterialPortV2(
+                material_id="A", material_instance_id="A1", name="A",
+                state="solution", quantity=QuantityV2(value=2, unit="mmol"),
+                provenance=inferred,
+            )],
+        )]
+        wrong = self._verify(candidate)
+        self.assertFalse(wrong.source_scope_verified)
+        self.assertIn(
+            "field_quantity_attribution_unresolved:material_graph[0].material_inputs[0].quantity.value",
+            wrong.reasons,
+        )
+
+        field.value = 1
+        candidate.material_graph[0].material_inputs[0].quantity.value = 1
+        correct = self._verify(candidate)
+        self.assertTrue(correct.source_scope_verified, correct.reasons)
+
+    def test_cross_block_literal_quote_verifies_only_with_exact_span_locator(self) -> None:
+        candidate = self._candidate()
+        excerpt = self.control_excerpt + "\n" + self.lines[3][0]
+        candidate.evidence_bundle[0].excerpt = excerpt
+        field = candidate.evidence_matrix[0]
+        field.source_scope.locator = "pdf:p1:b3-p1:b4"
+        field.provenance.excerpt = excerpt
+        field.provenance.source_digest = canonical_digest(excerpt)
+        verified = self._verify(candidate)
+        self.assertTrue(verified.source_scope_verified, verified.reasons)
+        self.assertEqual(verified.verified_field_paths, ("precursor.amount",))
+
+        field.source_scope.locator = "pdf:p1:b3-p1:b3"
+        wrong_range = self._verify(candidate)
+        self.assertIn("field_excerpt_not_in_source_group:precursor.amount",
+                      wrong_range.reasons)
+
+    def test_duplicate_quote_in_group_is_not_a_unique_source_binding(self) -> None:
+        self.lines[3] = (self.control_excerpt, 10, "helv")
+        self._write_pdf()
+        candidate = self._candidate()
+        candidate.source_scope.source_digest = self.digest
+        candidate.evidence_matrix[0].source_scope.source_digest = self.digest
+        result = self._verify(candidate)
+        self.assertFalse(result.source_scope_verified)
+        self.assertIn("field_excerpt_not_in_source_group:precursor.amount",
+                      result.reasons)
+
+    def test_string_value_may_cross_layout_whitespace_without_inference(self) -> None:
+        self.lines[2] = ("Mix 2 mmol", 10, "helv")
+        self.lines[3] = ("metal salt with base to pH 10.", 10, "helv")
+        self._write_pdf()
+        candidate = self._candidate()
+        candidate.source_scope.source_digest = self.digest
+        excerpt = "Mix 2 mmol\nmetal salt with base to pH 10."
+        candidate.evidence_bundle[0].excerpt = excerpt
+        field = candidate.evidence_matrix[0]
+        field.source_scope.source_digest = self.digest
+        field.source_scope.locator = "pdf:p1:b3-p1:b4"
+        field.value = "mmol metal salt"
+        field.unit = ""
+        field.provenance.excerpt = excerpt
+        field.provenance.source_digest = canonical_digest(excerpt)
+        result = self._verify(candidate)
+        self.assertTrue(result.source_scope_verified, result.reasons)
 
     def test_changed_pdf_bytes_do_not_reuse_a_prior_receipt(self) -> None:
         candidate = self._candidate()

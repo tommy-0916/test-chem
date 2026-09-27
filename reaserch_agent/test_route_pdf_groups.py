@@ -98,6 +98,131 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
         self.assertEqual(result.diagnostics, [])
         self.assertEqual(result.groups[0].source_scope.locator, "pdf:p1:b2-p2:b1")
 
+    def test_two_column_inline_headings_preserve_group_boundaries(self) -> None:
+        self.path.unlink()
+        document = self._fitz.open()
+        page = document.new_page(width=600, height=800)
+
+        def inline_heading(x: float, y: float, heading: str, body: str, size: int = 10) -> None:
+            page.insert_text((x, y), heading, fontsize=size, fontname="hebo")
+            body_x = x + self._fitz.get_text_length(heading, fontname="hebo", fontsize=size)
+            page.insert_text((body_x, y), " " + body, fontsize=size, fontname="helv")
+
+        for number in range(8):
+            page.insert_text((50, 70 + number * 20), f"Background sentence {number}.",
+                             fontsize=10, fontname="helv")
+        page.insert_text((50, 250), "Experimental", fontsize=12, fontname="hebo")
+        inline_heading(50, 280, "Materials.", "List the salts.")
+        inline_heading(50, 310, "Control.", "Mix 2 mmol salt.")
+        page.insert_text((50, 330), "Keep the control at room temperature.",
+                         fontsize=10, fontname="helv")
+
+        page.insert_text((315, 70), "Continue the control recovery.",
+                         fontsize=10, fontname="helv")
+        page.insert_text((315, 90), "Wash the control one time.",
+                         fontsize=10, fontname="helv")
+        inline_heading(315, 110, "Scheme 1.", "Control workup illustration.", size=11)
+        inline_heading(315, 140, "Treated.", "Mix 9 mmol salt.")
+        page.insert_text((315, 160), "Heat the treated sample.",
+                         fontsize=10, fontname="helv")
+        for number in range(6):
+            page.insert_text((315, 180 + number * 20),
+                             f"Treated observation {number}.",
+                             fontsize=10, fontname="helv")
+        document.save(str(self.path))
+        document.close()
+
+        result = self._enumerate()
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(
+            [group.source_scope.experimental_group_id for group in result.groups],
+            ["Materials.", "Control.", "Treated."],
+        )
+        control = "\n".join(block.text for block in result.groups[1].blocks)
+        treated = "\n".join(block.text for block in result.groups[2].blocks)
+        self.assertIn("Wash the control one time", control)
+        self.assertNotIn("9 mmol", control)
+        self.assertIn("9 mmol", treated)
+        self.assertNotIn("2 mmol", treated)
+
+    def _write_midpage_spanning_methods(self, *, overlapping_row: bool = False) -> None:
+        self.path.unlink()
+        document = self._fitz.open()
+        page = document.new_page(width=500, height=800)
+        for number in range(8):
+            page.insert_text((40, 70 + number * 25),
+                             f"Earlier left context {number}.",
+                             fontsize=10, fontname="helv")
+            page.insert_text((275, 70 + number * 25),
+                             f"Earlier right context {number}.",
+                             fontsize=10, fontname="helv")
+        # This recognized section title spans both column interiors halfway
+        # down the page. It must follow the earlier two-column material.
+        page.insert_text((40, 360), "Materials and Methods",
+                         fontsize=30, fontname="hebo")
+        if overlapping_row:
+            # The regular-font row and spanning title have effectively the
+            # same top coordinate, so neither reading order is trustworthy.
+            page.insert_text((275, 340), "Overlapping column prose.",
+                             fontsize=10, fontname="helv")
+        page.insert_text((40, 400), "control", fontsize=14, fontname="hebo")
+        page.insert_text((40, 430), "Mix 2 mmol control salt.",
+                         fontsize=10, fontname="helv")
+        page.insert_text((40, 450), "Recover the control sample.",
+                         fontsize=10, fontname="helv")
+        page.insert_text((275, 400), "treated", fontsize=14, fontname="hebo")
+        page.insert_text((275, 430), "Mix 9 mmol treated salt.",
+                         fontsize=10, fontname="helv")
+        document.save(str(self.path))
+        document.close()
+
+    def test_midpage_spanning_title_preserves_before_after_column_bands(self) -> None:
+        self._write_midpage_spanning_methods()
+        result = self._enumerate()
+        self.assertEqual(result.diagnostics, [])
+        self.assertEqual(
+            [group.source_scope.experimental_group_id for group in result.groups],
+            ["control", "treated"],
+        )
+        control = "\n".join(block.text for block in result.groups[0].blocks)
+        treated = "\n".join(block.text for block in result.groups[1].blocks)
+        self.assertIn("2 mmol control salt", control)
+        self.assertNotIn("Earlier", control)
+        self.assertNotIn("9 mmol treated salt", control)
+        self.assertIn("9 mmol treated salt", treated)
+        self.assertNotIn("2 mmol control salt", treated)
+
+    def test_overlapping_midpage_spanning_title_abstains(self) -> None:
+        self._write_midpage_spanning_methods(overlapping_row=True)
+        result = self._enumerate()
+        self.assertEqual(result.groups, [])
+        self.assertEqual(
+            [item.reason_code for item in result.diagnostics],
+            ["pdf_column_layout_ambiguous"],
+        )
+
+    def test_real_two_column_pdf_if_available(self) -> None:
+        source = (
+            Path(__file__).resolve().parent.parent / "result" /
+            "a01-evidence-audit-20260927" / "huang-2023-institutional-copy.pdf"
+        )
+        if not source.is_file():
+            self.skipTest("local original PDF fixture unavailable")
+        result = enumerate_pdf_experimental_groups(
+            {"local-paper": source}, source_root=source.parent,
+        )
+        self.assertEqual(result.diagnostics, [])
+        groups = result.groups
+        control = next(group for group in groups if "NiFe Control" in group.source_scope.experimental_group_id)
+        etching = next(group for group in groups if "Etching Method" in group.source_scope.experimental_group_id)
+        control_text = "\n".join(block.text for block in control.blocks)
+        etching_text = "\n".join(block.text for block in etching.blocks)
+        self.assertIn("37.5 mmol Ni(NO3)2", control_text)
+        self.assertIn("12.5 mmol Fe(NO3)3", control_text)
+        self.assertNotIn("0.9 M", control_text)
+        self.assertIn("0.9 M", etching_text)
+        self.assertNotIn("37.5 mmol", etching_text)
+
     def test_duplicate_group_title_abstains_for_entire_section(self) -> None:
         self.lines.extend([
             ("control", 14, "hebo"),
@@ -353,6 +478,26 @@ class PdfExperimentalGroupEnumerationTest(unittest.TestCase):
         result = audit_pdf_group_roles(
             groups, self._role_protocols(digest),
             group_roles_by_group={key: "synthesis" for key in identities},
+        )
+        self.assertEqual(result.verified_group_count, 2)
+        self.assertEqual(result.issues, ())
+
+    def test_independent_role_audit_accepts_explicit_context_role(self) -> None:
+        groups = self._enumerate().groups
+        digest = groups[0].source_scope.source_digest
+        protocols = self._role_protocols(digest)
+        protocols[0]["experimental_groups"][1]["group_role"] = "non_procedural"
+        roles = {
+            (group.source_scope.paper_id,
+             group.source_scope.experimental_group_id,
+             group.source_scope.source_digest): (
+                "non_procedural" if group.source_scope.experimental_group_id == "treated"
+                else "synthesis"
+            )
+            for group in groups
+        }
+        result = audit_pdf_group_roles(
+            groups, protocols, group_roles_by_group=roles,
         )
         self.assertEqual(result.verified_group_count, 2)
         self.assertEqual(result.issues, ())
