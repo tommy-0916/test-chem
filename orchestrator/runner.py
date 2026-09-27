@@ -623,12 +623,15 @@ class CampaignConfig:
     transient_device_retry_limit: int = 0
     campaigns_root: Optional[Path] = None
     research_args: List[str] = field(default_factory=list)
+    bootstrap_constraints: Dict[str, Any] = field(default_factory=dict)
     device_args: List[str] = field(default_factory=list)
     resume_device_repair: Optional[Path] = None
     device_plan_override: Optional[Path] = None
     forward_only: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.bootstrap_constraints, dict):
+            raise ValueError("bootstrap_constraints must be a JSON object")
         if self.requested_contract_version not in {"v1", "v2"}:
             raise ValueError(
                 "requested_contract_version must be 'v1' or 'v2'"
@@ -2081,6 +2084,11 @@ class CampaignRunner:
             command += ["--payload-json", json.dumps(payload, ensure_ascii=False)]
         for reference in references:
             command += ["--reference", reference]
+        if event_type == "bootstrap" and self.config.bootstrap_constraints:
+            command += [
+                "--constraints-json",
+                json.dumps(self.config.bootstrap_constraints, ensure_ascii=False),
+            ]
         command += self.config.research_args
         if not _contract_versions_from_args(self.config.research_args):
             command += [

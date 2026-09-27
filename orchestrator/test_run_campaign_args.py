@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
+import io
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import run_campaign
+from orchestrator.execution_adapters import MockExecutionAdapter
+from orchestrator.runner import CampaignConfig, CampaignRunner
 
 
 class RunCampaignArgsTest(unittest.TestCase):
@@ -60,6 +68,103 @@ class RunCampaignArgsTest(unittest.TestCase):
             device_args[device_args.index("--contract-version") + 1],
             "v1",
         )
+
+    def test_route_trust_config_is_forwarded_only_to_research(self) -> None:
+        args = run_campaign.build_parser().parse_args(
+            [
+                "--query", "test query",
+                "--knowledge-base-dir", "kb",
+                "--route-trust-config", "reviewed-route-trust.json",
+            ]
+        )
+
+        research_args, device_args = run_campaign.build_step_args(args)
+
+        self.assertEqual(
+            research_args[research_args.index("--route-trust-config") + 1],
+            "reviewed-route-trust.json",
+        )
+        self.assertNotIn("--route-trust-config", device_args)
+
+    def test_route_trust_config_is_not_added_by_default(self) -> None:
+        args = run_campaign.build_parser().parse_args(["--query", "test query"])
+
+        research_args, _ = run_campaign.build_step_args(args)
+
+        self.assertNotIn("--route-trust-config", research_args)
+
+    def test_bootstrap_constraints_are_not_added_to_shared_research_args(self) -> None:
+        args = run_campaign.build_parser().parse_args(
+            [
+                "--query", "test query",
+                "--bootstrap-constraints-json", '{"route_decision_goal_v1":{"goal_id":"G1"}}',
+            ]
+        )
+
+        research_args, device_args = run_campaign.build_step_args(args)
+
+        self.assertNotIn("--constraints-json", research_args)
+        self.assertNotIn("--constraints-json", device_args)
+        self.assertEqual(
+            json.loads(args.bootstrap_constraints_json)["route_decision_goal_v1"],
+            {"goal_id": "G1"},
+        )
+
+    def test_bootstrap_constraints_reject_invalid_or_non_object_json(self) -> None:
+        for value in ("{", "[]"):
+            with self.subTest(value=value):
+                with patch("sys.argv", [
+                    "run_campaign.py", "--query", "test query",
+                    "--bootstrap-constraints-json", value,
+                ]), patch("sys.stderr", new_callable=io.StringIO):
+                    with self.assertRaises(SystemExit) as failure:
+                        run_campaign.main()
+                self.assertEqual(failure.exception.code, 2)
+
+    def test_bootstrap_constraints_reach_only_bootstrap_research_subprocess(self) -> None:
+        constraints = {
+            "route_decision_goal_v1": {"goal_id": "G1"},
+            "route_action_intent_v1": {"route_id": "R1"},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iteration_dir = root / "iteration_00"
+            iteration_dir.mkdir()
+            runner = CampaignRunner(
+                CampaignConfig(
+                    query="test query", campaign_id="cmp_bootstrap_constraints",
+                    campaigns_root=root, bootstrap_constraints=constraints,
+                    research_args=["--route-trust-config", "reviewed-route-trust.json"],
+                ),
+                MockExecutionAdapter(),
+            )
+            calls: list[list[str]] = []
+
+            def fake_run(command: list[str], **_: object) -> SimpleNamespace:
+                calls.append(command)
+                output = Path(command[command.index("--save-state") + 1])
+                output.write_text('{"status":"completed"}', encoding="utf-8")
+                return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+            with patch("orchestrator.runner.subprocess.run", side_effect=fake_run):
+                runner._research_step_subprocess(
+                    "bootstrap", query="test query", previous_state_path=None,
+                    payload=None, iteration_dir=iteration_dir, references=[],
+                )
+                runner._research_step_subprocess(
+                    "new_observation", query="", previous_state_path=iteration_dir / "research_state.json",
+                    payload={"observation": {"summary": "done"}},
+                    iteration_dir=iteration_dir, references=[],
+                )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            json.loads(calls[0][calls[0].index("--constraints-json") + 1]),
+            constraints,
+        )
+        self.assertNotIn("--constraints-json", calls[1])
+        self.assertIn("--route-trust-config", calls[0])
+        self.assertIn("--route-trust-config", calls[1])
 
     def test_new_campaign_rejects_explicit_network_opt_out(self) -> None:
         args = run_campaign.build_parser().parse_args(

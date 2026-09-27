@@ -154,6 +154,21 @@ def build_parser() -> argparse.ArgumentParser:
     research.add_argument("--enable-memory", action="store_true")
     research.add_argument("--knowledge-base-dir")
     research.add_argument(
+        "--bootstrap-constraints-json",
+        default="{}",
+        help=(
+            "JSON object of Research event constraints for bootstrap only. "
+            "It is not replayed on observation rounds."
+        ),
+    )
+    research.add_argument(
+        "--route-trust-config",
+        help=(
+            "Independent signed PDF source and route-review trust JSON for "
+            "the Research route gate. The file must live outside the knowledge base."
+        ),
+    )
+    research.add_argument(
         "--online-literature",
         action="store_true",
         help="Enable scholarly retrieval before the first plan. Enabled by default.",
@@ -283,6 +298,8 @@ def build_step_args(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         research_args.append("--enable-memory")
     if args.knowledge_base_dir:
         research_args += ["--knowledge-base-dir", args.knowledge_base_dir]
+    if args.route_trust_config:
+        research_args += ["--route-trust-config", args.route_trust_config]
     if args.no_online_literature:
         research_args.append("--no-online-literature")
     elif args.online_literature:
@@ -351,6 +368,12 @@ def main() -> int:
         research_args, device_args = build_step_args(args)
     except ValueError as exc:
         parser.error(str(exc))
+    try:
+        bootstrap_constraints = json.loads(args.bootstrap_constraints_json)
+    except json.JSONDecodeError as exc:
+        parser.error(f"--bootstrap-constraints-json is invalid JSON: {exc}")
+    if not isinstance(bootstrap_constraints, dict):
+        parser.error("--bootstrap-constraints-json must be a JSON object")
 
     adapter = build_adapter(
         args.execution_adapter,
@@ -372,6 +395,7 @@ def main() -> int:
         if args.campaigns_root
         else None,
         research_args=research_args,
+        bootstrap_constraints=bootstrap_constraints,
         device_args=device_args,
         resume_device_repair=Path(args.resume_device_repair).expanduser().resolve()
         if args.resume_device_repair
