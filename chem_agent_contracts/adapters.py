@@ -571,6 +571,16 @@ def _parameters(
     native_v2: bool,
     path: str,
 ) -> List[ScientificParameterV2]:
+    if native_v2 and isinstance(step.get("parameters"), list):
+        # A typed V2 producer has already supplied individual values and
+        # provenance. Re-parsing display prose here would discard those facts
+        # and create unrelated numeric_parameter_* entries.
+        return [
+            ScientificParameterV2.model_validate(item, strict=True)
+            for item in _contract_object_list(
+                step["parameters"], f"{path}.parameters"
+            )
+        ]
     provenance = _source(
         (
             step.get("provenance")

@@ -127,6 +127,41 @@ def research_with_ids(identifiers):
 
 
 class V2ContractTest(unittest.TestCase):
+    def test_native_v2_structured_parameters_keep_values_and_provenance(self):
+        provenance = {"kind": "agent_inferred", "rationale": "test input"}
+        state = {
+            "contract_version": "v2", "campaign_id": "CMP_TYPED_PARAMETERS",
+            "current_stage": "preparation",
+            "macro_action": {
+                "macro_action_id": "MA1", "stage_id": "ST1",
+                "observation_point_id": "OP1", "objective": "prepare sample",
+                "planned_operations": ["mix"],
+                "expected_observation": "mixture",
+                "completion_condition": "mixture obtained",
+                "experiment_group": {"group_id": "G1", "sample_id": "S1"},
+            },
+            "macro_plan": [{
+                "macro_step_id": "MS1", "macro_action_id": "MA1",
+                "operation": "mix", "reagent_or_object": "salt",
+                "parameters": [{
+                    "name": "salt_amount", "value": 2, "unit": "mmol",
+                    "provenance": provenance,
+                }],
+                "provenance": provenance,
+            }],
+        }
+        package = research_state_to_v2(state)
+        self.assertEqual(len(package.macro_steps[0].parameters), 1)
+        self.assertEqual(package.macro_steps[0].parameters[0].name, "salt_amount")
+        self.assertEqual(package.macro_steps[0].parameters[0].value, 2)
+        self.assertEqual(
+            package.macro_steps[0].parameters[0].provenance.rationale,
+            "test input",
+        )
+        state["macro_plan"][0]["parameters"] = [{"name": "salt_amount"}]
+        with self.assertRaises(ValueError):
+            research_state_to_v2(state)
+
     def test_research_contract_is_hashed_and_one_group(self):
         research = research_fixture()
         self.assertTrue(research.research_contract_hash.startswith("research_v2_"))

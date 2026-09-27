@@ -21,6 +21,7 @@
 | B1/B2 决策门 | `event.constraints.route_decision_goal_v1` 可显式启用；新 action 之前核验，未决或选中但尚未无损绑定计划时停止发布；旧流程没有自动启用 |
 | Typed 路线动作绑定草稿 | `build_route_action_binding_draft_v1` 在既有 intent 预检后保存独立、重新校验的 Stage/Action、选中候选原样步骤图、当前证据包及决策/候选/设备快照身份；仅供审查，未接发布门 |
 | 独立路线签名审阅 | 已接入经 Ed25519 签名的逐实验组审阅回执；与当前原 PDF、来源审计摘要、组定位、DOI、目标和候选路线结构逐项绑定。缺审阅或不匹配时保持 unresolved；尚无审阅签发服务或生产审阅件 |
+| Typed Research 包草稿 | 已能把当次可信决策、当前证据、显式 Stage/Action 和选中路线图无损投影为可重新验证的 V2 包草稿；不含原始步骤/观测摘要，不能作为 Device handoff 发布 |
 | A01 黑盒回归 | 未启动 |
 
 因此当前代码已有**可审查的路线决策门**，还不是能够自动完成目标到计划的生产代理。合成夹具中可形成 `selected_for_planning`；实际知识库多为生成 JSON 摘要，目前没有已登记、具独立身份回执、可供这条管线直接核验的 PDF 原文实验组和完整结构化候选，不能据此宣称 A01 已具备选路条件。低层离线测试使用 `.md/.txt` 文件及路线签名注释，只证明候选与测试文件一致；生产入口不将它们当作 primary paper/SI。`selected_for_planning` 也不会绕开原有 Research 发布门及 Device 硬门。
@@ -127,6 +128,8 @@ B2 的 post-observation 规划也调用 `_step_macro_action_design`。显式启�
 **阶段 6 当前进度：** opt-in 路线决策入口现在从已签名 PDF 清单重新枚举实验组，按固定的组数、文本块和输入/输出长度预算向模型请求逐组提案，再由已有的原文块关联器核对完整覆盖、组 ID、文件摘要和逐条摘录。模型调用只接收受控 PDF 组清单和固定系统指令，不注入旧 workflow 摘要、`extracted_protocols`、memory 或工具上下文；预算覆盖实际发送的两段提示。缺独立审阅的组角色或完整设备能力映射时，模型不会被调用；异常、超预算或任何组提案错误均不返回部分协议。路线专用协议提案与旧 `extracted_protocols` 分离，B1/B2 的路线门不再把知识库摘要提取结果当作 PDF 实验组事实。诊断保存到 `route_group_proposal_diagnostics_v1`，新一轮失败会清除上一轮模型提案；协议提案仍须经过 compiler、原文核验、科学和设备审计。当前 PDF 核验器不会从模型提案或普通散文中追认完整 RouteSignature；`source_route_signature=None` 仍会阻断路线选择。
 
 **阶段 7 当前进度：** `reviewed_route_signature_manifest_v1` 定义了外部审阅者对完整 RouteSignature 的逐组声明，`signed_reviewed_route_signature_manifest_v1` 将其与签发者和独立部署公钥做 Ed25519 验签。签名载荷明确列出操作顺序、角色、控制模式、状态转变和全部目标字段；缺字段、别名归一化、改动签名字段、错误密钥或签发者均拒绝。生产管线从当次原 PDF 枚举结果、已验签来源审计和任务目标构造期望作用域，不从模型候选或审阅件复制期望值。每份已验签的来源事件必须进入受信索引，每份受信来源必须成功枚举；被静默丢弃的 PDF、审计文件或 registry 关联会阻断整个候选集。只有原文逐字段核验通过、所有已知组的覆盖与角色审计完整、候选与目标一致、审阅作用域和当前 PDF 字节/实验组定位完全一致且只有一份有效审阅时，审阅路线签名和审阅摘要才进入 `RouteValidationReceiptV1`。相同审阅字节重复输入会去重，不同有效审阅或混入无效审阅会弃权。候选的路线家族与审阅家族也须一致。审阅者对化学语义的判断仍需独立完成；验签只能证明声明来自被配置的审阅者，不能证明声明本身化学正确。当前没有签发服务、生产审阅件或审阅公钥配置，默认仍保持 unresolved。`decision_id` 和 `evidence_snapshot_hash` 覆盖决策记录内的审阅摘要；单独保存的 validation diagnostics 不包含在这两个哈希中。
+
+**阶段 8 当前进度：** `build_route_research_package_draft_v2` 要求显式 campaign ID，并用本次可信决策和当前证据重新校验绑定草稿；它保留 Stage/Action、参数、物料图和逐字段 provenance，验证 JSON 往返后的 Research V2 包哈希。它不制造原始步骤或观测摘要，因此结果仍是不可发布草稿。原生 V2 adapter 已能直接保留显式结构化参数，不再从展示文本重解析这些值。Device CLI 仍会从保存的 raw plan 重建 Research 包；当前 adapter 对 material contract migration 等字段的投影与 typed 草稿不一致，Research 的旧发布门也要求 raw 步骤字段。必须让两条入口按同一 typed 图逐字段重建，并通过原有 Research 科学发布门和 Device raw/canonical 一致性门，才能将 `selected_unbound` 改为可发布。
 
 **后续接入：** 建立独立审阅的 RouteSignature 签发流程与普通论文术语的受控语义映射，不靠提案字段和原文中偶然出现的词判定操作顺序或控制模式；把唯一选中 candidate 的原文、证据快照与 material graph **无损**绑定到 macro action/plan，经过现有 Research V2 发布门和 Device hard gate。将预算回路接上真实检索与抽取后再做 A01 黑盒端到端验收。
 
