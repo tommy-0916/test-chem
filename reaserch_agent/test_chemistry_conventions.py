@@ -192,6 +192,27 @@ class ExpansionTest(unittest.TestCase):
             )
         )
 
+    def test_expansion_preserves_paper_output_provenance(self):
+        plan = [{
+            "macro_step_id": "S1", "operation": "split",
+            "试剂/对象": "split solution into two parts",
+            "material_inputs": [{
+                "material_id": "solution", "material_instance_id": "parent",
+                "name": "solution A", "state": "solution",
+            }],
+            "material_outputs": [{
+                "material_id": "solution", "material_instance_id": "child",
+                "name": "solution A", "state": "solution",
+                "provenance": {
+                    "kind": "paper", "reference": "name-fact",
+                    "evidence_class": "paper_explicit", "excerpt": "solution A",
+                },
+            }],
+        }]
+        before = copy.deepcopy(plan[0]["material_outputs"][0]["provenance"])
+        self.agent._expand_chemistry_conventions(plan)
+        self.assertEqual(plan[0]["material_outputs"][0]["provenance"], before)
+
     def test_supernatant_rule_retains_supernatant(self):
         plan = centrifuge_plan("离心后保留上清液")
         records = self.agent._expand_chemistry_conventions(plan)

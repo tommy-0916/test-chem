@@ -16,13 +16,15 @@ from typing import Any
 
 from chem_agent_contracts.route_field_basis import (
     controlled_state_mapping, is_material_port_state_path,
-    state_source_locally_attributed,
+    output_state_parent_role_issue, state_source_locally_attributed,
 )
+from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
 
 from .route_group_compiler import (
     _scoped_claim, classify_route_field_basis,
     dimensionless_numeric_field_pending, literal_quantity_present,
     material_identity_for_amount_path,
+    output_quantity_role_issue,
     quantity_has_local_attribution,
 )
 from .route_pdf_group_proposals import PdfGroupProposalAssociationResultV1
@@ -74,6 +76,7 @@ class PdfGroupLiteralStatusV1:
     status: str
     verified_field_paths: tuple[str, ...]
     reason_codes: tuple[str, ...]
+    derived_state_field_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -246,26 +249,37 @@ def _literal_fact_reason(
     if not isinstance(unit, str):
         return "fact_unit_invalid"
     field_path = _text(fact.get("field_path"))
+    derived, _derivation_issue = derive_unreviewed_output_state(
+        graph if isinstance(graph, list) else [], facts, field_path,
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
+    ) if field_path.endswith(".state") else (None, "")
     if is_material_port_state_path(field_path):
-        scoped = _scoped_claim(
-            graph if isinstance(graph, list) else [], {}, field_path,
-        )
-        if scoped is None:
-            return "fact_graph_path_missing"
-        _mapping, mapping_issue = controlled_state_mapping(
-            field_path, value, scoped[0],
-        )
-        if mapping_issue:
-            return mapping_issue
-        owner = scoped[1]
-        if (not isinstance(owner, Mapping)
-                or not state_source_locally_attributed(
-                    value, excerpt, owner.get("name"),
-                )):
-            return "semantic_binding_pending"
+        if derived is None:
+            if output_state_parent_role_issue(field_path, graph, value, excerpt):
+                return "parent_state_not_child_evidence"
+            scoped = _scoped_claim(
+                graph if isinstance(graph, list) else [], {}, field_path,
+            )
+            if scoped is None:
+                return "fact_graph_path_missing"
+            _mapping, mapping_issue = controlled_state_mapping(
+                field_path, value, scoped[0],
+            )
+            if mapping_issue:
+                return mapping_issue
+            owner = scoped[1]
+            if (not isinstance(owner, Mapping)
+                    or not state_source_locally_attributed(
+                        value, excerpt, owner.get("name"),
+                    )):
+                return "semantic_binding_pending"
     if isinstance(value, bool):
         return "fact_value_type_unverifiable"
     if isinstance(value, (int, float)):
+        if output_quantity_role_issue(field_path, graph, unit):
+            return "fact_quantity_role_mismatch"
         if not unit.strip():
             return (
                 "dimensionless_semantic_pending"
@@ -287,9 +301,9 @@ def _literal_fact_reason(
             return "fact_unit_non_numeric"
         literal = normalize_pdf_quote_whitespace(value)
         normalized_excerpt = normalize_pdf_quote_whitespace(excerpt)
-        if not literal or re.search(
+        if derived is None and (not literal or re.search(
             rf"(?<!\w){re.escape(literal)}(?!\w)", normalized_excerpt,
-        ) is None:
+        ) is None):
             return (
                 "semantic_binding_pending"
                 if classify_route_field_basis(_text(fact.get("field_path")))
@@ -397,6 +411,7 @@ def produce_pdf_group_fact_receipt(
         fact_ids: dict[str, tuple[str, Any]] = {}
         field_paths: set[str] = set()
         verified_paths: list[str] = []
+        derived_paths: list[str] = []
         for index, fact in enumerate(facts):
             if not isinstance(fact, Mapping):
                 reasons.append(f"fact[{index}]:fact_invalid")
@@ -419,7 +434,16 @@ def produce_pdf_group_fact_receipt(
             if reason:
                 reasons.append(f"fact[{index}]:{reason}")
             else:
-                verified_paths.append(field_path)
+                derived, _ = derive_unreviewed_output_state(
+                    protocol.get("material_graph", []), facts, field_path,
+                    paper_id=scope.paper_id,
+                    experimental_group_id=scope.experimental_group_id,
+                    source_digest=scope.source_digest,
+                ) if field_path.endswith(".state") else (None, "")
+                if derived is not None:
+                    derived_paths.append(field_path)
+                else:
+                    verified_paths.append(field_path)
         if not facts and not reasons:
             status = "no_facts_to_check_pending_role"
         else:
@@ -435,6 +459,7 @@ def produce_pdf_group_fact_receipt(
             status=status,
             verified_field_paths=tuple(verified_paths),
             reason_codes=tuple(reasons),
+            derived_state_field_paths=tuple(derived_paths),
         ))
         work_orders.append(_work_order(
             group, role_hint=role_hint.strip(), status=status,

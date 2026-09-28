@@ -10,6 +10,7 @@ digests; this module does not manufacture them.
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ from .v2 import (
     MacroActionV2,
     ResearchActionPackageV2,
     RouteBindingV1,
+    RouteConventionStateProofV1,
     RouteControlledStateMappingV1,
     StageV2,
     canonical_digest,
@@ -112,7 +114,25 @@ def build_route_research_package_draft_v2(
     candidate = selected.candidate
     scope = candidate.source_scope
     controlled_state_mappings: list[RouteControlledStateMappingV1] = []
+    convention_state_proofs: list[RouteConventionStateProofV1] = []
     for field in candidate.evidence_matrix:
+        provenance = field.provenance
+        if (provenance is not None and provenance.kind == "agent_inferred"
+                and provenance.derivation):
+            try:
+                derived = json.loads(provenance.derivation)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("selected convention state derivation is invalid") from exc
+            if (not isinstance(derived, dict)
+                    or derived.get("schema_version") != "route-convention-state/v1"
+                    or field.field_path not in receipt.verified_convention_field_paths
+                    or derived.get("field_path") != field.field_path
+                    or derived.get("target_state") != field.value
+                    or derived.get("rule_id") != provenance.inference_rule):
+                raise ValueError("selected convention state lacks verified field proof")
+            convention_state_proofs.append(
+                RouteConventionStateProofV1.model_validate(derived, strict=True)
+            )
         mapping = field.controlled_mapping
         if mapping is None:
             continue
@@ -165,6 +185,7 @@ def build_route_research_package_draft_v2(
         controlled_state_mappings=(
             controlled_state_mappings or None
         ),
+        convention_state_proofs=(convention_state_proofs or None),
     )
 
     package = ResearchActionPackageV2.model_validate({

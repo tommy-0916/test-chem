@@ -8,12 +8,17 @@ existing Research checks passed.  Source authentication is a separate receipt.
 from __future__ import annotations
 
 import re
+import json
 from typing import Any
 
 from chem_agent_contracts.route_candidate import RouteCandidateV1
 from chem_agent_contracts.route_field_basis import (
     is_material_port_state_path, state_source_locally_attributed,
+    output_state_parent_role_issue,
     verify_controlled_state_mapping,
+)
+from chem_agent_contracts.route_convention_basis import (
+    output_quantity_role_issue, verify_bound_output_state,
 )
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
 
@@ -147,6 +152,101 @@ def _paper_field_bound_to_port(
         and bool(provenance.excerpt.strip())
         and provenance.excerpt in item.excerpt
         and provenance.source_digest == canonical_digest(item.excerpt)
+    )
+
+
+def _port_name_paper_anchor(
+    candidate: RouteCandidateV1, steps: list[dict[str, Any]], field_path: str,
+    owner_provenance: dict[str, Any], fields_by_path: dict[str, Any],
+) -> bool:
+    """A derived state may share a port whose entity name is paper backed."""
+    match = _PORT_FIELD.fullmatch(field_path)
+    if match is None or match.group(2) != "state":
+        return False
+    name_path = match.group(1) + ".name"
+    name_field = fields_by_path.get(name_path)
+    resolved = _graph_field(steps, name_path)
+    scope = candidate.source_scope
+    return bool(
+        name_field is not None and name_field.status == "supported"
+        and name_field.provenance is not None
+        and name_field.provenance.kind == "paper"
+        and name_field.evidence_id == name_field.provenance.reference
+        and any(item.evidence_id == name_field.evidence_id
+                for item in candidate.evidence_bundle)
+        and scope is not None and name_field.source_scope is not None
+        and (name_field.source_scope.paper_id,
+             name_field.source_scope.experimental_group_id,
+             name_field.source_scope.source_digest)
+        == (scope.paper_id, scope.experimental_group_id, scope.source_digest)
+        and resolved is not None
+        and name_field.value == resolved[0]
+        and name_field.provenance.model_dump(mode="json", exclude_none=True)
+        == owner_provenance
+    )
+
+
+def _verified_convention_state_field(
+    candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
+    fields_by_path: dict[str, Any],
+) -> bool:
+    """Bind a derived state to exact, separately source-verified paper fields."""
+    provenance = field.provenance
+    scope = candidate.source_scope
+    if (provenance is None or provenance.kind != "agent_inferred"
+            or provenance.evidence_class != "chemistry_convention"
+            or field.evidence_id or scope is None):
+        return False
+    try:
+        proof = json.loads(provenance.derivation)
+    except (TypeError, ValueError):
+        return False
+    if (not isinstance(proof, dict)
+            or proof.get("field_path") != field.field_path
+            or proof.get("target_state") != field.value
+            or proof.get("rule_id") != provenance.inference_rule
+            or provenance.reference != proof.get("operation_evidence_id")
+            or field.controlled_mapping is not None
+            or field.unit != ""):
+        return False
+    for path_key, evidence_key in (
+        ("parent_state_path", "parent_evidence_id"),
+        ("operation_path", "operation_evidence_id"),
+    ):
+        support = fields_by_path.get(proof.get(path_key))
+        if (support is None or support.status != "supported"
+                or support.provenance is None
+                or support.provenance.kind != "paper"
+                or support.provenance.evidence_class != "paper_explicit"
+                or support.evidence_id != proof.get(evidence_key)
+                or support.provenance.reference != support.evidence_id
+                or support.source_scope is None
+                or (support.source_scope.paper_id,
+                    support.source_scope.experimental_group_id,
+                    support.source_scope.source_digest)
+                != (scope.paper_id, scope.experimental_group_id, scope.source_digest)):
+            return False
+    parent_field = fields_by_path[proof["parent_state_path"]]
+    if parent_field.value != proof.get("parent_source_value"):
+        return False
+    resolved_parent = _graph_field(steps, proof["parent_state_path"])
+    if resolved_parent is None or verify_controlled_state_mapping(
+        proof["parent_state_path"], parent_field.value, resolved_parent[0],
+        parent_field.controlled_mapping.model_dump(mode="json")
+        if parent_field.controlled_mapping is not None else None,
+    ):
+        return False
+    operation_field = fields_by_path[proof["operation_path"]]
+    resolved_operation = _graph_field(steps, proof["operation_path"])
+    if (resolved_operation is None
+            or operation_field.value != resolved_operation[0]):
+        return False
+    evidence_by_id = {item.evidence_id: item for item in candidate.evidence_bundle}
+    return not verify_bound_output_state(
+        proof, steps, evidence_by_id,
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
     )
 
 
@@ -456,32 +556,56 @@ def audit_route_candidate_science(
             continue
         value, owner_provenance, step_index = resolved
         field_value = field.value
+        convention_state_verified = False
         if is_material_port_state_path(field.field_path):
-            mapping = field.controlled_mapping
-            issue = verify_controlled_state_mapping(
-                field.field_path, field.value, value,
-                mapping.model_dump(mode="json") if mapping is not None else None,
-            )
-            if issue:
-                issues.append(
-                    f"evidence_matrix_controlled_mapping_invalid:{field.field_path}"
+            if field.provenance.kind == "agent_inferred":
+                convention_state_verified = _verified_convention_state_field(
+                    candidate, steps, field, fields_by_path,
                 )
-                continue
-            if field.provenance.kind == "paper":
-                name = _graph_field(
-                    steps, field.field_path.rsplit(".", 1)[0] + ".name",
-                )
-                if (name is None or not state_source_locally_attributed(
-                    field.value, field.provenance.excerpt, name[0],
-                )):
-                    # Ambiguous attribution is pending, not an audited fact.
-                    # RouteDecision reports semantic_binding_pending.
+                if not convention_state_verified:
+                    issues.append(
+                        f"evidence_matrix_convention_state_invalid:{field.field_path}"
+                    )
                     continue
-            if mapping is not None:
-                field_value = mapping.target_value
+            else:
+                if (field.provenance.kind == "paper"
+                        and output_state_parent_role_issue(
+                            field.field_path, steps, field.value,
+                            field.provenance.excerpt,
+                        )):
+                    issues.append(
+                        f"evidence_matrix_parent_state_reused_for_output:{field.field_path}"
+                    )
+                    continue
+                mapping = field.controlled_mapping
+                issue = verify_controlled_state_mapping(
+                    field.field_path, field.value, value,
+                    mapping.model_dump(mode="json") if mapping is not None else None,
+                )
+                if issue:
+                    issues.append(
+                        f"evidence_matrix_controlled_mapping_invalid:{field.field_path}"
+                    )
+                    continue
+                if field.provenance.kind == "paper":
+                    name = _graph_field(
+                        steps, field.field_path.rsplit(".", 1)[0] + ".name",
+                    )
+                    if (name is None or not state_source_locally_attributed(
+                        field.value, field.provenance.excerpt, name[0],
+                    )):
+                        # Ambiguous attribution is pending, not an audited fact.
+                        # RouteDecision reports semantic_binding_pending.
+                        continue
+                if mapping is not None:
+                    field_value = mapping.target_value
         claimed_provenance = field.provenance.model_dump(mode="json", exclude_none=True)
         if not _same_value(value, field_value) or (
             owner_provenance != claimed_provenance
+            and not (convention_state_verified and _port_name_paper_anchor(
+                candidate, steps, field.field_path,
+                owner_provenance, fields_by_path,
+            ))
             and not _paper_field_bound_to_port(
                 candidate, steps, field, owner_provenance, fields_by_path,
             )
@@ -496,9 +620,13 @@ def audit_route_candidate_science(
                 field.field_path,
             ))
             verified = (
-                graph_verified and is_convention_state
+                is_convention_state
                 and field.provenance.evidence_class == "chemistry_convention"
-                and (step_index, field.provenance.inference_rule) in applied_rules
+                and (
+                    (convention_state_verified and not source_pending)
+                    or (graph_verified and not field.provenance.derivation
+                        and (step_index, field.provenance.inference_rule) in applied_rules)
+                )
             )
             if verified:
                 result["verified_convention_field_paths"].append(field.field_path)
@@ -511,6 +639,13 @@ def audit_route_candidate_science(
     audited_paths = set(result["audited_field_paths"])
     numeric_pending = False
     for path, _value, unit in _numeric_graph_fields(steps):
+        if output_quantity_role_issue(path, steps, unit):
+            issues.append(f"numeric_graph_quantity_role_mismatch:{path}")
+            result["audited_field_paths"] = [
+                audited for audited in result["audited_field_paths"]
+                if audited != path
+            ]
+            continue
         field = field_by_path.get(path)
         if field is None:
             numeric_pending = True

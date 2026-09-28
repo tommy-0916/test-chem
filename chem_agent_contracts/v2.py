@@ -1432,6 +1432,30 @@ class RouteControlledStateMappingV1(StrictModel):
         return self
 
 
+class RouteConventionStateProofV1(StrictModel):
+    """Field-level same-state derivation from a selected route candidate."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal["route-convention-state/v1"]
+    field_path: str = Field(min_length=1)
+    target_state: str = Field(min_length=1)
+    parent_state_path: str = Field(min_length=1)
+    parent_source_value: str = Field(min_length=1)
+    parent_evidence_id: str = Field(min_length=1)
+    operation_path: str = Field(min_length=1)
+    operation_evidence_id: str = Field(min_length=1)
+    relation_id: str = Field(min_length=1)
+    parent_instance_id: str = Field(min_length=1)
+    child_instance_id: str = Field(min_length=1)
+    rule_id: Literal["SPLIT_V1", "TRANSFER_V1"]
+    rule_version: str = Field(min_length=1)
+    resource_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+    paper_id: str = Field(min_length=1)
+    experimental_group_id: str = Field(min_length=1)
+    source_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+
+
 class RouteBindingV1(StrictModel):
     """Hash-bound identity of one explicitly selected route and action intent.
 
@@ -1469,6 +1493,7 @@ class RouteBindingV1(StrictModel):
     # This is a projection of the selected candidate's verified field records,
     # not a substitute for the source review or its candidate digest.
     controlled_state_mappings: Optional[List[RouteControlledStateMappingV1]] = None
+    convention_state_proofs: Optional[List[RouteConventionStateProofV1]] = None
 
     @model_validator(mode="after")
     def require_paper_scope(self) -> "RouteBindingV1":
@@ -1492,6 +1517,10 @@ class RouteBindingV1(StrictModel):
             paths = [item.field_path for item in self.controlled_state_mappings]
             if not paths or len(paths) != len(set(paths)):
                 raise ValueError("route binding controlled state mappings must be nonempty and unique")
+        if self.convention_state_proofs is not None:
+            paths = [item.field_path for item in self.convention_state_proofs]
+            if not paths or len(paths) != len(set(paths)):
+                raise ValueError("route binding convention state proofs must be nonempty and unique")
         return self
 
 
@@ -1523,6 +1552,16 @@ class ResearchActionPackageV2(StrictModel):
     def validate_links_and_hash(self) -> "ResearchActionPackageV2":
         if self.route_binding is not None:
             binding = self.route_binding
+            from .route_convention_basis import output_quantity_role_issue
+
+            for step_index, step in enumerate(self.macro_steps):
+                for output_index, port in enumerate(step.material_outputs):
+                    if port.quantity is not None and output_quantity_role_issue(
+                        f"material_graph[{step_index}].material_outputs"
+                        f"[{output_index}].quantity.value",
+                        self.macro_steps, port.quantity.unit,
+                    ):
+                        raise ValueError("route binding output quantity role differs")
             if binding.device_contract_snapshot_hash != self.capability_snapshot_id:
                 raise ValueError("route binding device snapshot differs from package")
             if not set(binding.required_capabilities).issubset(
@@ -1584,6 +1623,20 @@ class ResearchActionPackageV2(StrictModel):
                         ports[port_index].state, mapping_record,
                     ):
                         raise ValueError("route binding controlled mapping rule differs")
+            if binding.convention_state_proofs:
+                from .route_convention_basis import verify_bound_output_state
+
+                evidence_by_id = {
+                    item.evidence_id: item for item in self.evidence_bundle.items
+                }
+                for proof in binding.convention_state_proofs:
+                    if verify_bound_output_state(
+                        proof.model_dump(mode="json"), self.macro_steps,
+                        evidence_by_id, paper_id=binding.source_paper_id,
+                        experimental_group_id=binding.experimental_group_id,
+                        source_digest=binding.source_digest,
+                    ):
+                        raise ValueError("route binding convention state proof differs")
         if (self.raw_observations_digest_scope is None) != (
             not self.raw_observations_sha256
         ):
@@ -1978,9 +2031,12 @@ class ResearchActionPackageV2(StrictModel):
             if "route_binding" in self.model_fields_set:
                 null_binding_digest = canonical_digest(payload, prefix="research_v2")
             payload.pop("route_binding", None)
-        elif self.route_binding.controlled_state_mappings is None:
-            # Historical bound V2 packages predate this optional snapshot.
-            payload["route_binding"].pop("controlled_state_mappings", None)
+        else:
+            # Historical bound V2 packages predate these optional snapshots.
+            if self.route_binding.controlled_state_mappings is None:
+                payload["route_binding"].pop("controlled_state_mappings", None)
+            if self.route_binding.convention_state_proofs is None:
+                payload["route_binding"].pop("convention_state_proofs", None)
         digest = canonical_digest(payload, prefix="research_v2")
         if self.research_contract_hash and self.research_contract_hash not in {
             digest, null_binding_digest,

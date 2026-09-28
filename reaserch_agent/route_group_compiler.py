@@ -18,7 +18,12 @@ from typing import Any, Mapping, Sequence
 
 from chem_agent_contracts.route_field_basis import (
     classify_route_field_basis, controlled_state_mapping,
-    is_material_port_state_path, state_source_locally_attributed,
+    is_material_port_state_path, output_state_parent_role_issue,
+    state_source_locally_attributed,
+)
+from chem_agent_contracts.route_convention_basis import (
+    canonical_state_derivation, derive_unreviewed_output_state,
+    output_quantity_role_issue,
 )
 from chem_agent_contracts.v2 import (
     canonical_digest, evidence_contains_exact_quantity,
@@ -588,6 +593,7 @@ def _replace_paper_placeholders(
 def _fact_issue(
     raw: Any, *, paper_id: str, group_id: str, section: str,
     document_digest: str, graph: list[Any], signature: Mapping[str, Any],
+    facts: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     if not isinstance(raw, Mapping):
         return "route_fact_invalid"
@@ -625,22 +631,31 @@ def _fact_issue(
         return "route_fact_value_invalid"
     if isinstance(claimed, float) and not math.isfinite(claimed):
         return "route_fact_value_invalid"
+    derived_proof, _derived_issue = derive_unreviewed_output_state(
+        graph, facts, field_path, paper_id=paper_id,
+        experimental_group_id=group_id, source_digest=document_digest,
+    ) if facts and field_path.endswith(".state") else (None, "")
     if is_material_port_state_path(field_path):
-        _mapping, mapping_issue = controlled_state_mapping(
-            field_path, claimed, actual,
-        )
-        if mapping_issue:
-            return mapping_issue
-        if (not isinstance(owner, Mapping)
-                or not state_source_locally_attributed(
-                    claimed, excerpt, owner.get("name"),
-                )):
-            return "semantic_binding_pending"
+        if derived_proof is None:
+            if output_state_parent_role_issue(field_path, graph, claimed, excerpt):
+                return "parent_state_not_child_evidence"
+            _mapping, mapping_issue = controlled_state_mapping(
+                field_path, claimed, actual,
+            )
+            if mapping_issue:
+                return mapping_issue
+            if (not isinstance(owner, Mapping)
+                    or not state_source_locally_attributed(
+                        claimed, excerpt, owner.get("name"),
+                    )):
+                return "semantic_binding_pending"
     elif isinstance(actual, bool) or actual != claimed:
         return "route_fact_graph_value_mismatch"
     if unit != graph_unit:
         return "route_fact_graph_value_mismatch"
     if isinstance(claimed, (int, float)):
+        if output_quantity_role_issue(field_path, graph, unit):
+            return "route_fact_quantity_role_mismatch"
         if not unit:
             return (
                 "dimensionless_semantic_pending"
@@ -657,9 +672,9 @@ def _fact_issue(
             identity_required=identity_required,
         ):
             return "route_fact_quantity_attribution_unresolved"
-    elif not claimed.strip() or re.search(
+    elif derived_proof is None and (not claimed.strip() or re.search(
         rf"(?<!\w){re.escape(claimed.strip())}(?!\w)", excerpt
-    ) is None:
+    ) is None):
         return (
             "semantic_binding_pending"
             if classify_route_field_basis(field_path) == "controlled_mapping"
@@ -712,6 +727,7 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
 
     seen_paths: set[str] = set()
     state_mapping_by_path: dict[str, dict[str, str]] = {}
+    derived_state_by_path: dict[str, dict[str, str]] = {}
     excerpts_by_id: dict[str, tuple[str, Mapping[str, Any]]] = {}
     owner_fact_ids: dict[int, set[str]] = {}
     owner_nodes: dict[int, Mapping[str, Any]] = {}
@@ -719,7 +735,7 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         issue = _fact_issue(
             raw, paper_id=paper_id, group_id=group_id,
             section=section, document_digest=document_digest, graph=graph,
-            signature=signature,
+            signature=signature, facts=raw_facts,
         )
         if issue:
             return issue
@@ -727,12 +743,20 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         field_path = raw["field_path"].strip()
         scoped = _scoped_claim(graph, signature, field_path)
         if scoped is not None and is_material_port_state_path(field_path):
-            state_mapping, _ = controlled_state_mapping(
-                field_path, raw["value"], scoped[0],
+            derived, _ = derive_unreviewed_output_state(
+                graph, raw_facts, field_path, paper_id=paper_id,
+                experimental_group_id=group_id, source_digest=document_digest,
             )
-            if state_mapping is not None:
-                state_mapping_by_path[field_path] = state_mapping
-        if scoped is not None and scoped[1] is not None:
+            if derived is not None:
+                derived_state_by_path[field_path] = derived
+            else:
+                state_mapping, _ = controlled_state_mapping(
+                    field_path, raw["value"], scoped[0],
+                )
+                if state_mapping is not None:
+                    state_mapping_by_path[field_path] = state_mapping
+        if (scoped is not None and scoped[1] is not None
+                and field_path not in derived_state_by_path):
             owner = scoped[1]
             owner_fact_ids.setdefault(id(owner), set()).add(fact_id)
             owner_nodes[id(owner)] = owner
@@ -781,16 +805,24 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         return "route_fact_signature_claim_missing"
     if missing_graph:
         return "route_fact_qualitative_graph_claim_missing"
+    derived_fact_ids = {
+        _text(raw.get("fact_id")) for raw in raw_facts
+        if isinstance(raw, Mapping)
+        and _text(raw.get("field_path")) in derived_state_by_path
+    }
     for placeholder in _paper_placeholders(graph):
         reference = _text(placeholder.get("reference"))
         if set(placeholder) != {"kind", "reference"} or not reference.startswith("fact:"):
             return "route_fact_graph_provenance_mismatch"
-        if reference[len("fact:"):] not in excerpts_by_id:
+        if (reference[len("fact:"):] not in excerpts_by_id
+                or reference[len("fact:"):] in derived_fact_ids):
             return "route_fact_graph_reference_missing"
 
     evidence_bundle: list[dict[str, Any]] = []
     provenance_by_fact_id: dict[str, dict[str, Any]] = {}
     for fact_id, (excerpt, _source) in excerpts_by_id.items():
+        if fact_id in derived_fact_ids:
+            continue
         evidence_id = "route_fact_" + sha256(
             f"{paper_id}\0{group_id}\0{fact_id}".encode("utf-8")
         ).hexdigest()[:24]
@@ -815,14 +847,27 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
     for raw in raw_facts:
         fact_id = raw["fact_id"].strip()
         source = raw["source"]
+        field_path = raw["field_path"].strip()
+        derivation = derived_state_by_path.get(field_path)
+        field_provenance = (
+            {
+                "kind": "agent_inferred",
+                "reference": derivation["operation_evidence_id"],
+                "rationale": "same-state material lineage under a verified chemistry convention",
+                "evidence_class": "chemistry_convention",
+                "inference_rule": derivation["rule_id"],
+                "derivation": canonical_state_derivation(derivation),
+            }
+            if derivation is not None else deepcopy(provenance_by_fact_id[fact_id])
+        )
         matrix.append({
-            "field_path": raw["field_path"].strip(),
+            "field_path": field_path,
             "value": raw["value"],
             "unit": _text(raw.get("unit")),
             "required": True,
             "status": "supported",
-            "provenance": deepcopy(provenance_by_fact_id[fact_id]),
-            "evidence_id": provenance_by_fact_id[fact_id]["reference"],
+            "provenance": field_provenance,
+            "evidence_id": "" if derivation is not None else provenance_by_fact_id[fact_id]["reference"],
             "source_scope": {
                 "paper_id": paper_id,
                 "experimental_group_id": group_id,

@@ -3721,13 +3721,31 @@ class ResearchAgent(BaseAgent):
                     str(pattern).lower()
                     for pattern in (preconditions.get("operation_patterns") or [])
                 ]
-                if not any(pattern in operation_blob for pattern in operation_patterns):
+                if str(rule.get("rule_id") or "") == "SPLIT_V1":
+                    from chem_agent_contracts.route_field_basis import split_rule_pattern_matches
+
+                    operation_match = any(
+                        split_rule_pattern_matches(pattern, operation_blob)
+                        for pattern in operation_patterns
+                    )
+                else:
+                    operation_match = any(
+                        pattern in operation_blob for pattern in operation_patterns
+                    )
+                if not operation_match:
                     continue
                 intent_patterns = [
                     str(pattern).lower()
                     for pattern in (preconditions.get("intent_patterns") or [])
                 ]
-                if not any(pattern in intent_blob for pattern in intent_patterns):
+                if str(rule.get("rule_id") or "") == "SPLIT_V1":
+                    intent_match = any(
+                        split_rule_pattern_matches(pattern, intent_blob)
+                        for pattern in intent_patterns
+                    )
+                else:
+                    intent_match = any(pattern in intent_blob for pattern in intent_patterns)
+                if not intent_match:
                     continue
                 allowed_inputs = {
                     str(state).strip()
@@ -3831,13 +3849,13 @@ class ResearchAgent(BaseAgent):
             provenance = material.setdefault("provenance", {})
             if isinstance(provenance, dict):
                 provenance.setdefault("kind", "agent_inferred")
-                if not str(provenance.get("rationale") or "").strip():
-                    provenance["rationale"] = (
-                        f"chemistry convention expansion ({rule.get('rule_id')})"
-                    )
                 # Boundary A: only convention-backed inference is labelled.
                 # Paper/user-bound facts keep their own evidence class.
                 if str(provenance.get("kind") or "") == "agent_inferred":
+                    if not str(provenance.get("rationale") or "").strip():
+                        provenance["rationale"] = (
+                            f"chemistry convention expansion ({rule.get('rule_id')})"
+                        )
                     provenance["evidence_class"] = "chemistry_convention"
                     provenance["inference_rule"] = str(rule.get("rule_id") or "")
 

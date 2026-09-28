@@ -177,11 +177,11 @@
     },
     {
       "rule_id": "SPLIT_V1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "operation": "split",
       "preconditions": {
-        "operation_patterns": ["split", "分装", "分液", "分成", "分配"],
-        "intent_patterns": ["split", "分成", "分装", "分为", "各取"],
+        "operation_patterns": ["split", "splits", "splitting", "divided into", "分装", "分液", "分成", "分配"],
+        "intent_patterns": ["split", "splits", "splitting", "divided into", "分成", "分装", "分为", "各取"],
         "input_states": ["solution", "suspension", "powder", "dry_solid"]
       },
       "allowed_input_states": ["solution", "suspension", "powder", "dry_solid"],

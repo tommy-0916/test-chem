@@ -19,6 +19,7 @@ from typing import Any
 from chem_agent_contracts.route_field_basis import (
     canonicalize_unreviewed_state_facts,
 )
+from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
 
 from .route_pdf_group_proposals import (
     PdfGroupProposalAssociationResultV1,
@@ -188,10 +189,35 @@ def _prepare_unsigned_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
     mapped, state_rows = canonicalize_unreviewed_state_facts(proposal)
     proposal.clear()
     proposal.update(mapped)
+    source_ref = proposal.get("source_group_ref")
+    source_ref = source_ref if isinstance(source_ref, Mapping) else {}
+    graph = proposal.get("material_graph")
+    facts = proposal.get("route_facts")
+    state_proofs: list[dict[str, Any]] = []
+    if isinstance(graph, list) and isinstance(facts, list):
+        for fact in facts:
+            if not isinstance(fact, Mapping):
+                continue
+            path = fact.get("field_path")
+            if not isinstance(path, str) or not path.endswith(".state"):
+                continue
+            proof, _ = derive_unreviewed_output_state(
+                graph, facts, path,
+                paper_id=str(source_ref.get("paper_id") or ""),
+                experimental_group_id=str(source_ref.get("experimental_group_id") or ""),
+                source_digest=str(source_ref.get("source_digest") or ""),
+            )
+            if proof is not None:
+                state_proofs.append({
+                    "status": "unreviewed_prerequisites_only",
+                    "field_path": path,
+                    "proof": proof,
+                })
     return {
         "required_fact_normalizations": required_rows,
         "qualitative_unit_normalizations": unit_rows,
         "controlled_state_normalizations": state_rows,
+        "convention_state_candidates": state_proofs,
     }
 
 
@@ -227,7 +253,8 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "{macro_steps: ...}. Every graph step needs macro_step_id, "
         "macro_action_id, sequence, operation, sample_id, provenance, and "
         "material_inputs/material_intermediates/material_outputs arrays. A "
-        "material port needs material_id, name, state, provenance, and an "
+        "material port needs material_id, material_instance_id, name, state, "
+        "provenance, and an "
         "optional quantity object with value and unit. Use exactly these "
         "field names, not inputs/outputs/conditions aliases. material_id and "
         "material_instance_id are only local co-reference symbols; the program "
@@ -237,14 +264,37 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "has fact_id, field_path, "
         "value, unit, excerpt, and required=true. The unit must always be a "
         "string: use an empty string for textual values and the exact quoted "
-        "unit for numeric values. A textual value must appear literally in "
+        "unit for numeric values. A paper-literal textual value must appear literally in "
         "its excerpt; do not substitute a paraphrase or controlled-vocabulary "
-        "name for a paper quotation. Keep each fact atomic and tied to one "
+        "name for a paper quotation. For an output state inherited unchanged "
+        "through an explicit split or transfer, you may propose the canonical "
+        "state in the graph and output-state fact, quoting the operation "
+        "sentence; it is a machine claim, not a paper-literal state quote. "
+        "Provide the exact input-state fact, source-bound operation fact, "
+        "operation_segments and material_relations with parent/child instance "
+        "IDs. An operation segment needs segment_id, material_effect, "
+        "source_operation_ref and paper fact provenance. A relation needs "
+        "relation_id, event_kind, input_material_instance_ids, "
+        "output_material_instance_ids, quantity_basis, source_operation_ref "
+        "pointing to that segment_id, and paper fact provenance. Transfer "
+        "uses a one-to-one process_same_material edge; split uses distinct "
+        "children and split_same_material. Both remain subject to V2 graph "
+        "and quantity checks. Declare the matching lineage_relation with "
+        "relation_type transfer_of or split_from_parent and those same exact "
+        "parent/child instance IDs. The program checks rule applicability and records the derived "
+        "state; do not supply a rule ID or assert review. A split needs "
+        "distinct child ports for every explicitly counted part; a part count "
+        "is never an output material quantity. A solution's concentration "
+        "belongs in concentration_value/concentration_unit, not output "
+        "quantity.value/unit; an output quantity is a material amount and "
+        "needs its own material-bound evidence or runtime resolver. If these premises are unclear, "
+        "leave the state unresolved. Keep each fact atomic and tied to one "
         "material, operation, and field path. A block_locator hint is "
         "optional and never authoritative; the program locates the excerpt "
         "in the source group. Its excerpt "
         "must be a unique literal quotation within this same group, stating "
-        "its value literally (including exact number and unit for quantities). "
+        "its paper-literal value (including exact number and unit for quantities) "
+        "or the operation supporting a proposed inherited state. "
         "Only PDF layout whitespace may differ. The quotation may span at "
         "most three adjacent blocks. Include enough surrounding text to distinguish repeated "
         "short phrases. field_path uses roots such as "
@@ -336,6 +386,7 @@ def _invoke_bounded_proposals(
         required_fact_rows: list[dict[str, Any]] = []
         qualitative_unit_rows: list[dict[str, Any]] = []
         controlled_state_rows: list[dict[str, Any]] = []
+        convention_state_rows: list[dict[str, Any]] = []
         canonicalized: list[Any] = []
         for proposal_index, proposal in enumerate(proposals):
             if isinstance(proposal, Mapping):
@@ -354,6 +405,9 @@ def _invoke_bounded_proposals(
                 controlled_state_rows.extend({
                     "proposal_index": proposal_index, **row,
                 } for row in normalizations["controlled_state_normalizations"])
+                convention_state_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in normalizations["convention_state_candidates"])
             else:
                 canonicalized.append(proposal)
         proposals = canonicalized
@@ -371,6 +425,7 @@ def _invoke_bounded_proposals(
         locator_artifact["required_fact_normalizations"] = required_fact_rows
         locator_artifact["qualitative_unit_normalizations"] = qualitative_unit_rows
         locator_artifact["controlled_state_normalizations"] = controlled_state_rows
+        locator_artifact["convention_state_candidates"] = convention_state_rows
         locator_artifact["local_revision"] = local_revision
         if located.diagnostics:
             # Partial location records remain visible, but no partial batch

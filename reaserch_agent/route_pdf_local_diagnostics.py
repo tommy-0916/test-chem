@@ -17,6 +17,7 @@ from typing import Any
 from chem_agent_contracts.route_field_basis import (
     controlled_state_mapping, is_material_port_state_path,
 )
+from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
 
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
@@ -222,10 +223,21 @@ def assess_pdf_group_proposal_fields(
                     fact_unit = fact.get("unit", "")
                     state_match = False
                     if is_material_port_state_path(path):
-                        _mapping, state_issue = controlled_state_mapping(
-                            path, fact.get("value"), actual,
+                        source_ref = proposal.get("source_group_ref")
+                        source_ref = source_ref if isinstance(source_ref, Mapping) else {}
+                        derived, _ = derive_unreviewed_output_state(
+                            graph, facts, path,
+                            paper_id=str(source_ref.get("paper_id") or ""),
+                            experimental_group_id=str(source_ref.get("experimental_group_id") or ""),
+                            source_digest=str(source_ref.get("source_digest") or ""),
                         )
-                        state_match = not state_issue
+                        if derived is not None:
+                            state_match = True
+                        else:
+                            _mapping, state_issue = controlled_state_mapping(
+                                path, fact.get("value"), actual,
+                            )
+                            state_match = not state_issue
                     if ((not state_match and actual != fact.get("value"))
                             or (isinstance(fact_unit, str)
                                 and graph_unit != fact_unit.strip())):

@@ -26,6 +26,8 @@ from chem_agent_contracts.route_candidate import (
     RouteCandidateV1,
     RouteSignatureV1,
 )
+from chem_agent_contracts.route_convention_basis import verify_bound_output_state
+from chem_agent_contracts.route_field_basis import output_state_parent_role_issue
 from chem_agent_contracts.v2 import canonical_digest, evidence_contains_exact_quantity
 
 
@@ -211,6 +213,10 @@ def _field_source_issue(
         return "field_excerpt_not_in_source_group"
     if field.value is None:
         return "field_value_missing"
+    if output_state_parent_role_issue(
+        field.field_path, candidate.material_graph, field.value, excerpt,
+    ):
+        return "parent_state_not_child_evidence"
     if field.unit:
         if isinstance(field.value, bool) or not isinstance(field.value, (int, float)):
             return "field_quantity_not_numeric"
@@ -384,6 +390,41 @@ def verify_route_source(
             continue
         verified_fields.append(field.field_path)
         verified_items.add(field.evidence_id)
+    fields_by_path = {field.field_path: field for field in candidate.evidence_matrix}
+    for field in candidate.evidence_matrix:
+        provenance = field.provenance
+        if (provenance is None or provenance.kind != "agent_inferred"
+                or not provenance.derivation):
+            continue
+        try:
+            proof = json.loads(provenance.derivation)
+        except (TypeError, ValueError):
+            proof = None
+        if (not isinstance(proof, dict)
+                or proof.get("schema_version") != "route-convention-state/v1"):
+            continue
+        support_ok = True
+        for path_key, evidence_key in (
+            ("parent_state_path", "parent_evidence_id"),
+            ("operation_path", "operation_evidence_id"),
+        ):
+            support = fields_by_path.get(proof.get(path_key))
+            if (support is None or support.field_path not in verified_fields
+                    or support.evidence_id != proof.get(evidence_key)
+                    or support.evidence_id not in verified_items):
+                support_ok = False
+        if (field.status != "supported" or field.field_path != proof.get("field_path")
+                or field.value != proof.get("target_state")
+                or field.evidence_id or not support_ok
+                or verify_bound_output_state(
+                    proof, candidate.material_graph,
+                    {item.evidence_id: item for item in candidate.evidence_bundle},
+                    paper_id=scope.paper_id,
+                    experimental_group_id=scope.experimental_group_id,
+                    source_digest=scope.source_digest,
+                )):
+            reasons.append(f"convention_state_support_unverified:{field.field_path}")
+            field_invalid = True
     evidence_by_id = {
         item.evidence_id: (index, item.excerpt)
         for index, item in enumerate(candidate.evidence_bundle)

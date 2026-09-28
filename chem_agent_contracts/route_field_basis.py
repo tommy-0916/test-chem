@@ -7,7 +7,7 @@ import json
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .v2 import normalize_material_state
 
@@ -24,6 +24,39 @@ _PORT_STATE_PATH = re.compile(
     r"\[(0|[1-9][0-9]*)\]\.state\Z"
 )
 _STATE_LINK_WORDS = frozenset({"a", "an", "as", "in", "is", "of", "the", "was"})
+_OUTPUT_STATE_PATH = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\.material_outputs"
+    r"\[(0|[1-9][0-9]*)\]\.state\Z"
+)
+_PASSIVE_SPLIT = re.compile(
+    r"\s*(?:\([^()]{0,100}\)\s*)?(?:was|were)\s+"
+    r"(?!not\b|never\b)(?:split(?:\s+into)?|divided\s+into)\b",
+    re.IGNORECASE,
+)
+_PASSIVE_TRANSFER = re.compile(
+    r"\s*(?:\([^()]{0,100}\)\s*)?(?:was|were)\s+"
+    r"(?!not\b|never\b)transferred\b",
+    re.IGNORECASE,
+)
+_PASSIVE_PARENT_SPLIT = re.compile(
+    r"\s*(?:\([^()]{0,100}\)\s*)?"
+    r"(?:was|were)(?:n't|\s+(?:not|never))?\s+"
+    r"(?:split(?:\s+into)?|divided\s+into)\b",
+    re.IGNORECASE,
+)
+_PASSIVE_PARENT_TRANSFER = re.compile(
+    r"\s*(?:\([^()]{0,100}\)\s*)?"
+    r"(?:was|were)(?:n't|\s+(?:not|never))?\s+transferred\b",
+    re.IGNORECASE,
+)
+_SPLIT_STEP_OPERATION = re.compile(
+    r"\b(?:split|splits|splitting|divided\s+into)\b|分装|分液|分成|分配",
+    re.IGNORECASE,
+)
+_TRANSFER_STEP_OPERATION = re.compile(
+    r"\b(?:transfer|transfers|transferred|transferring)\b|转移|移液|移取|换瓶",
+    re.IGNORECASE,
+)
 
 
 _GENERATED_MATERIAL_ID_PATH = re.compile(
@@ -123,6 +156,212 @@ def state_source_locally_attributed(
             for word in re.findall(r"[^\W\d_]\w*", between)
         )
     )
+
+
+def split_rule_pattern_matches(pattern: str, text: str) -> bool:
+    """Match listed English split forms at word boundaries, never a stem."""
+    if not isinstance(pattern, str) or not isinstance(text, str) or not pattern:
+        return False
+    if all(character.isascii() and (character.isalpha() or character.isspace())
+           for character in pattern):
+        expression = re.compile(
+            rf"(?<!\w){re.escape(pattern).replace(r'\ ', r'\s+')}(?!\w)",
+            flags=re.IGNORECASE,
+        )
+        return any(not re.search(
+            r"\b(?:not|never|wasn't|weren't)\s*$",
+            text[max(0, match.start() - 25):match.start()],
+            flags=re.IGNORECASE,
+        ) for match in expression.finditer(text))
+    return pattern in text
+
+
+def passive_material_operation_span(
+    excerpt: str, material_name: str, operation: str,
+) -> tuple[int, int] | None:
+    """Locate a passive split/transfer whose grammatical subject is material."""
+    if not isinstance(excerpt, str) or not isinstance(material_name, str):
+        return None
+    names = list(re.finditer(
+        rf"(?<!\w){re.escape(material_name.strip())}(?!\w)", excerpt,
+        flags=re.IGNORECASE,
+    )) if material_name.strip() else []
+    if len(names) != 1:
+        return None
+    predicate = _PASSIVE_SPLIT if operation == "split" else (
+        _PASSIVE_TRANSFER if operation == "transfer" else None
+    )
+    if predicate is None:
+        return None
+    verb = predicate.match(excerpt, names[0].end())
+    return (names[0].start(), verb.end()) if verb is not None else None
+
+
+def _parent_role_passive_span(
+    excerpt: str, material_name: str, operation: str,
+) -> tuple[int, int] | None:
+    """A negated operation still describes the parent's pre-operation state."""
+    if not isinstance(material_name, str) or not material_name.strip():
+        return None
+    mentions = list(re.finditer(
+        rf"(?<!\w){re.escape(material_name.strip())}(?!\w)", excerpt,
+        flags=re.IGNORECASE,
+    ))
+    if len(mentions) != 1:
+        return None
+    predicate = (_PASSIVE_PARENT_SPLIT if operation == "split" else
+                 _PASSIVE_PARENT_TRANSFER if operation == "transfer" else None)
+    verb = predicate.match(excerpt, mentions[0].end()) if predicate else None
+    return (mentions[0].start(), verb.end()) if verb is not None else None
+
+
+def _active_material_operation_span(
+    excerpt: str, material_name: str, operation: str,
+    *, allow_modifier_words: bool = True,
+) -> tuple[int, int] | None:
+    if operation == "split":
+        verb = r"(?:split|splits)"
+        boundary = r"\binto\b"
+    elif operation == "transfer":
+        verb = r"(?:transfer|transfers|transferred)"
+        boundary = r"\b(?:to|into)\b"
+    else:
+        return None
+    modifiers = r"(?:[\w-]+\s+){0,3}" if allow_modifier_words else ""
+    expression = re.compile(
+        rf"(?<!\w){verb}\s+(?:the\s+)?{modifiers}"
+        rf"{re.escape(material_name.strip())}(?!\w)",
+        flags=re.IGNORECASE,
+    )
+    matches = list(expression.finditer(excerpt))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    remainder = excerpt[match.end():match.end() + 100]
+    end = re.search(boundary, remainder, flags=re.IGNORECASE)
+    if end is not None and not re.search(r"[,;.]", remainder[:end.start()]):
+        return match.start(), match.end() + end.start()
+    return match.start(), match.end()
+
+
+def affirmative_material_operation_span(
+    excerpt: str, material_name: str, operation: str,
+) -> tuple[int, int] | None:
+    """Bind an affirmative split/transfer to its material, not a nearby word."""
+    passive = passive_material_operation_span(excerpt, material_name, operation)
+    if passive is not None:
+        return passive
+    active = _active_material_operation_span(
+        excerpt, material_name, operation, allow_modifier_words=False,
+    )
+    if active is None:
+        return None
+    clause = re.split(r"[.;:]", excerpt[:active[0]])[-1][-60:]
+    if re.search(
+        r"\b(?:not|never|without)\b|\b(?:didn't|doesn't|don't|won't)\b",
+        clause, flags=re.IGNORECASE,
+    ):
+        return None
+    return active
+
+
+def output_state_parent_role_issue(
+    field_path: str, graph: Sequence[Any], source_value: Any, excerpt: Any,
+) -> bool:
+    """A parent's state mention in a split/transfer sentence is not a child fact.
+
+    A separately quoted, explicit child-state sentence remains eligible for
+    the existing paper-literal check. This predicate supplies no child state.
+    """
+    match = _OUTPUT_STATE_PATH.fullmatch(field_path)
+    if (match is None or not isinstance(source_value, str)
+            or not isinstance(excerpt, str)):
+        return False
+    if not isinstance(graph, (list, tuple)):
+        return False
+    step_index, output_index = int(match.group(1)), int(match.group(2))
+    if step_index >= len(graph):
+        return False
+    step = graph[step_index]
+    operation_value = (step.get("operation") if isinstance(step, Mapping)
+                       else getattr(step, "operation", None))
+    operation_text = operation_value if isinstance(operation_value, str) else ""
+    relevant = bool(
+        _SPLIT_STEP_OPERATION.search(operation_text)
+        or _TRANSFER_STEP_OPERATION.search(operation_text)
+    )
+    if not relevant:
+        outputs = (step.get("material_outputs") if isinstance(step, Mapping)
+                   else getattr(step, "material_outputs", None))
+        if isinstance(outputs, (list, tuple)) and output_index < len(outputs):
+            output = outputs[output_index]
+            child_id = (output.get("material_instance_id")
+                        if isinstance(output, Mapping)
+                        else getattr(output, "material_instance_id", None))
+            relations = (step.get("material_relations")
+                         if isinstance(step, Mapping)
+                         else getattr(step, "material_relations", None))
+            if isinstance(relations, (list, tuple)) and child_id:
+                for relation in relations:
+                    event = (relation.get("event_kind")
+                             if isinstance(relation, Mapping)
+                             else getattr(relation, "event_kind", None))
+                    ids = (relation.get("output_material_instance_ids")
+                           if isinstance(relation, Mapping)
+                           else getattr(relation, "output_material_instance_ids", None))
+                    if (event in {"split_same_material", "process_same_material"}
+                            and isinstance(ids, (list, tuple)) and child_id in ids):
+                        relevant = True
+                        break
+    if not relevant:
+        return False
+    state_mentions = list(re.finditer(
+        rf"(?<!\w){re.escape(source_value.strip())}(?!\w)", excerpt,
+        flags=re.IGNORECASE,
+    )) if source_value.strip() else []
+    if len(state_mentions) != 1:
+        return False
+    # The quote itself can establish that its state word names the material
+    # *before* a split/transfer. Do not let an incorrect or missing graph
+    # input disguise that grammatical role as paper evidence for a child.
+    for operation in ("split", "transfer"):
+        span = _parent_role_passive_span(excerpt, source_value, operation)
+        if span is not None and state_mentions[0].end() <= span[1]:
+            return True
+        span = _active_material_operation_span(excerpt, source_value, operation)
+        if (span is not None and span[0] <= state_mentions[0].start()
+                and state_mentions[0].end() <= span[1]):
+            return True
+    inputs = (step.get("material_inputs") if isinstance(step, Mapping)
+              else getattr(step, "material_inputs", None))
+    if not isinstance(inputs, (list, tuple)):
+        return False
+    for raw_parent in inputs:
+        parent = raw_parent if isinstance(raw_parent, Mapping) else {
+            "name": getattr(raw_parent, "name", ""),
+            "state": getattr(raw_parent, "state", ""),
+        }
+        name = parent.get("name")
+        possible_parent_subjects = []
+        if state_source_locally_attributed(source_value, excerpt, name):
+            possible_parent_subjects.append(name)
+        # A proposal may use a normalized parent name while the paper calls
+        # it only by its state ("the suspension"). The state word is still
+        # the grammatical parent, not literal evidence for every child.
+        parent_state = parent.get("state")
+        if (isinstance(parent_state, str)
+                and parent_state.casefold() == source_value.casefold()):
+            possible_parent_subjects.append(source_value)
+        for subject in possible_parent_subjects:
+            for operation in ("split", "transfer"):
+                span = _parent_role_passive_span(excerpt, subject, operation)
+                if span is not None and state_mentions[0].end() <= span[1]:
+                    return True
+                span = _active_material_operation_span(excerpt, subject, operation)
+                if (span is not None and span[0] <= state_mentions[0].start()
+                        and state_mentions[0].end() <= span[1]):
+                    return True
+    return False
 
 
 def _state_resource() -> tuple[dict[str, str], str]:

@@ -24,6 +24,7 @@ from .route_candidate import (
 )
 from .route_field_basis import (
     classify_route_field_basis, is_material_port_state_path,
+    output_state_parent_role_issue,
     state_source_locally_attributed, verify_controlled_state_mapping,
 )
 from .v2 import (
@@ -259,6 +260,12 @@ def _field_issue(
         )
         if mapping_issue:
             return mapping_issue
+        if (provenance.kind == "paper"
+                and output_state_parent_role_issue(
+                    field.field_path, candidate.material_graph,
+                    field.value, provenance.excerpt,
+                )):
+            return "parent_state_not_child_evidence"
         if (provenance.kind == "paper"
                 and not state_source_locally_attributed(
                     field.value, provenance.excerpt,
