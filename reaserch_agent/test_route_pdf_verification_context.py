@@ -18,6 +18,7 @@ from __future__ import annotations
 from copy import deepcopy
 from hashlib import sha256
 import importlib.util
+import json
 import unittest
 
 from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
@@ -227,6 +228,27 @@ class PdfVerificationContextBindingTest(unittest.TestCase):
         self.assertEqual(reason, "")
 
 
+def _group_for(
+    lines: list[tuple[str, int, str]], digest: str,
+) -> PdfExperimentalGroupV1:
+    """Mirror the PDF body lines as a source group for the producer step."""
+    body = [text for text, _size, _font in lines]
+    return PdfExperimentalGroupV1(
+        source_scope=ExperimentalGroupScopeV1(
+            paper_id="paper-1",
+            experimental_group_id="control",
+            section="Methods",
+            locator=f"pdf:p2:b1-p2:b{len(body)}",
+            source_digest=digest,
+        ),
+        source_document="/attested/context_methods.pdf",
+        blocks=tuple(
+            PdfSourceBlockV1(f"pdf:p2:b{index}-p2:b{index}", text)
+            for index, text in enumerate(body, start=1)
+        ),
+    )
+
+
 @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
 class PdfVerificationContextRebuildTest(unittest.TestCase):
     """Compile/save/rebuild re-verification keeps the same full context."""
@@ -238,10 +260,14 @@ class PdfVerificationContextRebuildTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.path = self.root / "context_methods.pdf"
+        # NOTE: base-14 PDF fonts substitute U+223C/U+2212 with a middle
+        # dot on text extraction, so the fixture sentence stays ASCII; the
+        # binder matches the bytes the PDF actually contains.
         self.long_context = (
-            "After 1 h around 200 mL of the suspension (~500 mg samples) "
-            "was divided into 8 parts, followed by washing with water "
-            "three times in total."
+            "After a total reaction time of 1 h, around 200 mL of the "
+            "suspension (~500 mg samples) was divided into 8 parts, followed "
+            "by a centrifugation-redispersion protocol using deionized "
+            "water three times before the portions were collected."
         )
         self.short_located = (
             "around 200 mL of the suspension (~500 mg samples) was divided "
@@ -250,10 +276,10 @@ class PdfVerificationContextRebuildTest(unittest.TestCase):
         self.lines = [
             ("Methods", 16, "hebo"),
             ("control", 14, "hebo"),
-            ("After 1 h around 200 mL of the", 10, "helv"),
-            ("suspension (~500 mg samples) was divided into 8", 10, "helv"),
-            ("parts, followed by washing with water", 10, "helv"),
-            ("three times in total.", 10, "helv"),
+            ("After a total reaction time of 1 h, around 200 mL of", 10, "helv"),
+            ("the suspension (~500 mg samples) was divided into 8 parts, followed", 10, "helv"),
+            ("by a centrifugation-redispersion protocol using deionized water three", 10, "helv"),
+            ("times before the portions were collected.", 10, "helv"),
         ]
         self._fitz = fitz
         doc = self._fitz.open()
@@ -285,10 +311,10 @@ class PdfVerificationContextRebuildTest(unittest.TestCase):
             source_digest=self.digest,
         )
         # The stored field locator anchors the short located excerpt
-        # (three blocks); the carried evidence text is the full context
+        # (two blocks); the carried evidence text is the full context
         # (four blocks), exactly what semantic verification used.
         field_scope = group_scope.model_copy(
-            update={"locator": "pdf:p1:b3-p1:b5"})
+            update={"locator": "pdf:p1:b3-p1:b4"})
         return RouteCandidateV1(
             route_id="route-1",
             target=RouteTargetV1(
@@ -378,6 +404,219 @@ class PdfVerificationContextRebuildTest(unittest.TestCase):
             "field_provenance_excerpt_digest_mismatch" in reason
             for reason in worse.reasons
         ), worse.reasons)
+
+    def test_compiled_serialized_reloaded_evidence_keeps_full_context(self) -> None:
+        """A real proposal through the real compiler, then save/reload/PDF verify."""
+        from chem_agent_contracts.route_candidate import RouteCandidateV1
+        from chem_agent_contracts.route_candidate import (
+            RouteFieldEvidenceV1, RouteSignatureV1, RouteTargetV1,
+        )
+        from chem_agent_contracts.v2 import (
+            EvidenceItemV2, MacroStepV2, ProvenanceV2, canonical_digest,
+        )
+        from reaserch_agent.route_group_compiler import (
+            compile_experimental_group_protocols,
+        )
+        from reaserch_agent.route_pdf_clause_quote_tightening import (
+            tighten_unreviewed_clause_quotes,
+        )
+
+        long_context = (
+            "After a total reaction time of 1 h, around 200 mL of the "
+            "suspension (~500 mg samples) was divided into 8 parts, followed "
+            "by a centrifugation-redispersion protocol using deionized "
+            "water three times before the portions were collected."
+        )
+        short_located = (
+            "around 200 mL of the suspension (~500 mg samples) was divided "
+            "into 8 parts"
+        )
+        suffix = (
+            "followed by a centrifugation-redispersion protocol using "
+            "deionized water three times before the portions were collected."
+        )
+
+        def fact(fact_id, path, value, unit, excerpt, anchor):
+            return {
+                "fact_id": fact_id, "field_path": path, "value": value,
+                "unit": unit, "excerpt": excerpt, "required": True,
+                "source": {
+                    "paper_id": "paper-1",
+                    "experimental_group_id": "control",
+                    "section": "Methods",
+                    "locator": anchor,
+                    "source_digest": self.digest,
+                },
+            }
+
+        facts = [
+            fact("rf", "route_signature.route_family", "centrifugation", "",
+                 suffix, "pdf:p1:b5-p1:b5"),
+            fact("tt", "route_signature.target_transformation",
+                 "redispersion", "", suffix, "pdf:p1:b5-p1:b5"),
+            fact("ep", "route_signature.endpoint_state", "suspension", "",
+                 short_located, "pdf:p1:b3-p1:b3"),
+            fact("opsig", "route_signature.operations[0]",
+                 "divided into 8 parts", "", short_located,
+                 "pdf:p1:b3-p1:b3"),
+            fact("op", "material_graph[0].operation", "divided into 8 parts",
+                 "", short_located, "pdf:p1:b3-p1:b3"),
+            fact("name", "material_graph[0].material_inputs[0].name",
+                 "suspension", "", short_located, "pdf:p1:b3-p1:b3"),
+            fact("state", "material_graph[0].material_inputs[0].state",
+                 "suspension", "", short_located, "pdf:p1:b3-p1:b3"),
+            fact("qty", "material_graph[0].material_inputs[0].quantity.value",
+                 200, "mL", long_context, "pdf:p1:b3-p1:b3"),
+        ]
+        graph = [{
+            "macro_step_id": "S1", "macro_action_id": "A1", "sequence": 1,
+            "operation": "divided into 8 parts", "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": "fact:op"},
+            "material_inputs": [{
+                "material_id": "mat_suspension",
+                "material_instance_id": "inst_susp_1",
+                "name": "suspension", "state": "suspension",
+                "material_origin": "external_inventory",
+                "quantity": {"mode": "exact", "value": 200, "unit": "mL"},
+                "provenance": {"kind": "paper", "reference": "fact:qty"},
+            }],
+            "material_outputs": [],
+        }]
+        signature = {
+            "route_family": "centrifugation",
+            "target_transformation": "redispersion",
+            "precursor_roles": [], "reagent_roles": [],
+            "operations": ["divided into 8 parts"],
+            "control_modes": [], "phase_transitions": [],
+            "endpoint_state": "suspension",
+        }
+        group = {
+            "experimental_group_id": "control", "group_role": "synthesis",
+            "source": {
+                "source_document": str(self.path), "section": "Methods",
+                "locator": "pdf:p1:b2-p1:b6", "source_digest": self.digest,
+            },
+            "target": {
+                "material": "suspension parts", "desired_state": "suspension",
+                "objective": "divide the suspension",
+            },
+            "route_signature": signature,
+            "material_graph": graph,
+            "required_capabilities": ["split"],
+            "route_facts": facts,
+        }
+        # Producer step: the overlong quantity excerpt is tightened, which
+        # attaches the full context under verification_excerpt.
+        tightened, _audit, issues = tighten_unreviewed_clause_quotes({
+            "source_group_ref": {
+                "paper_id": "paper-1",
+                "experimental_group_id": "control",
+                "source_digest": self.digest,
+            },
+            "material_graph": graph,
+            "route_facts": facts,
+        }, _group_for(self.lines, self.digest))
+        self.assertEqual(issues, [])
+        qty_fact = next(
+            item for item in tightened["route_facts"]
+            if item["fact_id"] == "qty"
+        )
+        self.assertEqual(qty_fact["excerpt"], short_located)
+        self.assertEqual(qty_fact["verification_excerpt"], long_context)
+        group["route_facts"] = tightened["route_facts"]
+
+        compiled = compile_experimental_group_protocols([{
+            "paper_id": "paper-1", "source_title": "Context study",
+            "experimental_groups": [group],
+        }])
+        self.assertEqual(compiled.diagnostics, [])
+        compiled_group = compiled.protocols[0]["experimental_groups"][0]
+
+        # Formal evidence carries the full context the semantic gates used.
+        evidence_by_fact_span = {
+            item["evidence_id"]: item["excerpt"]
+            for item in compiled_group["evidence_bundle"]
+        }
+        qty_row = next(
+            row for row in compiled_group["evidence_matrix"]
+            if row["field_path"]
+            == "material_graph[0].material_inputs[0].quantity.value"
+        )
+        self.assertEqual(
+            evidence_by_fact_span[qty_row["evidence_id"]], long_context)
+        self.assertEqual(qty_row["provenance"]["excerpt"], long_context)
+        self.assertEqual(
+            qty_row["provenance"]["source_digest"],
+            canonical_digest(long_context),
+        )
+        self.assertEqual(
+            qty_row["source_scope"]["locator"], "pdf:p1:b3-p1:b3")
+
+        # Serialize and reload exactly what a saved artifact would hold.
+        reloaded = json.loads(json.dumps(
+            compiled_group, ensure_ascii=False))
+
+        candidate = RouteCandidateV1(
+            route_id="route-1",
+            target=RouteTargetV1.model_validate(reloaded["target"]),
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-1",
+                experimental_group_id="control",
+                section="Methods",
+                locator="pdf:p1:b2-p1:b6",
+                source_digest=self.digest,
+            ),
+            route_signature=RouteSignatureV1.model_validate(
+                reloaded["route_signature"]),
+            material_graph=[
+                MacroStepV2.model_validate(step)
+                for step in reloaded["material_graph"]
+            ],
+            evidence_bundle=[
+                EvidenceItemV2.model_validate(item)
+                for item in reloaded["evidence_bundle"]
+            ],
+            evidence_matrix=[
+                RouteFieldEvidenceV1(
+                    field_path=row["field_path"], value=row["value"],
+                    unit=row["unit"], status=row["status"],
+                    source_scope=ExperimentalGroupScopeV1.model_validate(
+                        row["source_scope"]),
+                    evidence_id=row.get("evidence_id", ""),
+                    provenance=ProvenanceV2.model_validate(row["provenance"]),
+                )
+                for row in reloaded["evidence_matrix"]
+            ],
+            origin="paper_experimental_group",
+        )
+        ok = self._verify(candidate)
+        self.assertTrue(ok.source_scope_verified, ok.reasons)
+        self.assertIn(
+            "material_graph[0].material_inputs[0].quantity.value",
+            ok.verified_field_paths,
+        )
+
+        # The reloaded artifact still carries the full context and the
+        # located anchor; a content change is rejected against the recorded
+        # digest rather than silently re-anchored to the short excerpt.
+        self.assertEqual(candidate.evidence_bundle[
+            next(
+                index for index, item in enumerate(candidate.evidence_bundle)
+                if item.evidence_id == qty_row["evidence_id"]
+            )].excerpt, long_context)
+        tampered = candidate.model_copy(deep=True)
+        tampered.evidence_matrix[
+            next(index for index, row in enumerate(tampered.evidence_matrix)
+                 if row.field_path
+                 == "material_graph[0].material_inputs[0].quantity.value")
+        ].provenance.excerpt = long_context.replace("200 mL", "300 mL")
+        bad = self._verify(tampered)
+        self.assertFalse(bad.source_scope_verified)
+        self.assertTrue(any(
+            "field_provenance_excerpt_digest_mismatch" in reason
+            or "field_excerpt_not_in_source_group" in reason
+            for reason in bad.reasons
+        ), bad.reasons)
 
 
 from pathlib import Path  # noqa: E402  (kept close to the fitz-gated class)
