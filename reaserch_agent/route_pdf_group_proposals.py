@@ -24,7 +24,7 @@ _ALLOWED_PROPOSAL_KEYS = frozenset({
 })
 _ALLOWED_FACT_KEYS = frozenset({
     "fact_id", "field_path", "value", "unit", "excerpt", "block_locator",
-    "required",
+    "required", "verification_excerpt",
 })
 _SOURCE_REF_KEYS = frozenset({
     "paper_id", "experimental_group_id", "source_digest",

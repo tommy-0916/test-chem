@@ -1,8 +1,13 @@
 """Narrow, auditable quotation shortening for unsigned operation proposals.
 
 The parser's unique short source-operation quote may replace an overlong
-model quote only when it is literal source text from that same quote. Values,
-units, graph topology, fact IDs and scientific claims are never changed.
+model quote only when it is literal source text from that same quote, the
+dropped context carries no retraction, limitation, or hedge, and the kept
+quote still contains the fact's literal value. The trim is used for location
+and display only; the fact keeps the full original quotation as
+``verification_excerpt`` for attribution, semantic, and review checks.
+Values, units, graph topology, fact IDs and scientific claims are never
+changed.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_quote_binding import (
     bind_pdf_quote, normalize_pdf_quote_whitespace,
 )
+from .route_pdf_quote_markers import NEGATION_OR_CONTRAST, RETRACTION_LIMITATION
 
 
 _OPERATION_PATH = re.compile(r"material_graph\[([0-9]+)\]\.operation\Z")
@@ -191,7 +197,26 @@ def tighten_unreviewed_operation_quotes(
                 # Existing short quotes need no rewrite. Absent or ambiguous
                 # original quotes cannot gain authority from a nearby event.
                 continue
+            produced_at = original_normalized.find(quote_normalized)
+            dropped = (
+                f"{original_normalized[:produced_at]}"
+                f"{original_normalized[produced_at + len(quote_normalized):]}"
+            )
+            if (RETRACTION_LIMITATION.search(dropped)
+                    or NEGATION_OR_CONTRAST.search(dropped)):
+                # Dropped context retracts, limits, or hedges the claim; the
+                # full quotation stays the fact's evidence of record.
+                issues.append({
+                    "step_index": step_index,
+                    "fact_id": fact.get("fact_id"),
+                    "field_path": path,
+                    "reason_code": "operation_subquote_drops_limiting_context",
+                })
+                continue
             fact["excerpt"] = quote
+            # Location and display use the tightened event quote; the full
+            # original quotation stays available for verification.
+            fact["verification_excerpt"] = original
             audit.append({
                 "version": "route_pdf_operation_quote_tightening/v1",
                 "paper_id": scope.paper_id,

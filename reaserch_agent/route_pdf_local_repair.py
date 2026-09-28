@@ -28,7 +28,7 @@ _PROPOSAL_KEYS = frozenset({
 })
 _FACT_KEYS = frozenset({
     "fact_id", "field_path", "value", "unit", "excerpt", "block_locator",
-    "required",
+    "required", "verification_excerpt",
 })
 PDF_LOCAL_REPAIR_VERSION = "pdf_group_local_repair/v1"
 _GRAPH_STEP_PATH = re.compile(r"material_graph\[([0-9]+)\]\Z")

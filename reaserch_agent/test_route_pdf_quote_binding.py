@@ -128,6 +128,34 @@ class PdfQuoteBindingTest(unittest.TestCase):
                          "fact_excerpt_not_in_block")
         self.assertEqual(bind_pdf_quote(hydrate, "Fe(NO3)3·10H2O")[1],
                          "fact_excerpt_not_in_block")
+    def test_same_text_different_chunking_keeps_evidence_verdict(self) -> None:
+        """Only the budget verdict may change with layout, never evidence-found."""
+        prose = "alpha beta gamma delta epsilon zeta eta theta"
+        coarse = [
+            ("pdf:p1:b1-p1:b1", "alpha beta gamma delta"),
+            ("pdf:p1:b2-p1:b2", "epsilon zeta eta theta"),
+        ]
+        fine = [
+            (f"pdf:p1:b{index}-p1:b{index}", word)
+            for index, word in enumerate(prose.split(), start=1)
+        ]
+        binding, reason = bind_pdf_quote(coarse, prose)
+        self.assertEqual(reason, "")
+        self.assertEqual(binding.locator, "pdf:p1:b1-p1:b2")
+        # The identical quote is still found uniquely under the finer layout;
+        # the block budget is reported on its own, not as absent evidence.
+        _, fine_reason = bind_pdf_quote(fine, prose)
+        self.assertEqual(fine_reason, "fact_excerpt_span_too_long")
+        # A span inside the budget binds in both layouts alike.
+        short = "beta gamma delta"
+        self.assertEqual(bind_pdf_quote(coarse, short)[1], "")
+        fine_binding, fine_short = bind_pdf_quote(fine, short)
+        self.assertEqual(fine_short, "")
+        self.assertEqual(fine_binding.locator, "pdf:p1:b2-p1:b4")
+        medium = "beta gamma delta epsilon zeta"
+        self.assertEqual(bind_pdf_quote(coarse, medium)[1], "")
+        self.assertEqual(bind_pdf_quote(fine, medium)[1],
+                         "fact_excerpt_span_too_long")
 
 
 if __name__ == "__main__":

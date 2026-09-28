@@ -26,6 +26,9 @@ from .route_pdf_group_proposals import (
     PdfGroupProposalDiagnosticV1,
     associate_pdf_group_proposals,
 )
+from .route_pdf_clause_quote_tightening import (
+    tighten_unreviewed_clause_quotes,
+)
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_locator_production import produce_pdf_proposal_locators
 from .route_pdf_material_structure import (
@@ -430,6 +433,8 @@ def _invoke_bounded_proposals(
         generated_id_rows: list[dict[str, Any]] = []
         quote_tightening_rows: list[dict[str, Any]] = []
         quote_tightening_issues: list[dict[str, Any]] = []
+        clause_tightening_rows: list[dict[str, Any]] = []
+        clause_tightening_issues: list[dict[str, Any]] = []
         operation_coverage_rows: list[dict[str, Any]] = []
         operation_coverage_issues: list[dict[str, Any]] = []
         material_structure_rows: list[dict[str, Any]] = []
@@ -454,6 +459,15 @@ def _invoke_bounded_proposals(
                     quote_tightening_issues.extend({
                         "proposal_index": proposal_index, **row,
                     } for row in quote_issues)
+                    tightened, clause_rows, clause_issues = (
+                        tighten_unreviewed_clause_quotes(tightened, group)
+                    )
+                    clause_tightening_rows.extend({
+                        "proposal_index": proposal_index, **row,
+                    } for row in clause_rows)
+                    clause_tightening_issues.extend({
+                        "proposal_index": proposal_index, **row,
+                    } for row in clause_issues)
                     coverage_rows, coverage_issues = (
                         audit_unreviewed_operation_coverage(
                             tightened, group, source_operation_inventory,
@@ -510,6 +524,8 @@ def _invoke_bounded_proposals(
             locator_artifact["source_operation_coverage_issues"] = operation_coverage_issues
             locator_artifact["operation_quote_tightening"] = quote_tightening_rows
             locator_artifact["operation_quote_tightening_issues"] = quote_tightening_issues
+            locator_artifact["clause_quote_tightening"] = clause_tightening_rows
+            locator_artifact["clause_quote_tightening_issues"] = clause_tightening_issues
             locator_artifact["material_structure"] = material_structure_rows
             locator_artifact["material_structure_issues"] = material_structure_issues
             locator_artifact["structured_unreviewed_proposals"] = deepcopy(proposals)
@@ -529,8 +545,18 @@ def _invoke_bounded_proposals(
         def _tighten_revised(
             proposal: Mapping[str, Any], group: PdfExperimentalGroupV1,
         ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
-            return tighten_unreviewed_operation_quotes(
-                proposal, group, source_operation_inventory,
+            tightened, quote_rows, quote_issues = (
+                tighten_unreviewed_operation_quotes(
+                    proposal, group, source_operation_inventory,
+                )
+            )
+            tightened, clause_rows, clause_issues = (
+                tighten_unreviewed_clause_quotes(tightened, group)
+            )
+            # Each row carries its own version, so the two bounded mechanisms
+            # remain distinguishable inside the local-revision record.
+            return tightened, quote_rows + clause_rows, (
+                quote_issues + clause_issues
             )
 
         proposals, local_revision = revise_pdf_group_proposals_locally(
@@ -567,6 +593,8 @@ def _invoke_bounded_proposals(
             locator_artifact["source_operation_coverage_issues"] = final_coverage_issues
             locator_artifact["operation_quote_tightening"] = quote_tightening_rows
             locator_artifact["operation_quote_tightening_issues"] = quote_tightening_issues
+            locator_artifact["clause_quote_tightening"] = clause_tightening_rows
+            locator_artifact["clause_quote_tightening_issues"] = clause_tightening_issues
             locator_artifact["local_revision"] = local_revision
             locator_artifact["structured_unreviewed_proposals"] = deepcopy(proposals)
             locator_artifact["structured_proposals_status"] = "blocked_unreviewed"
@@ -590,6 +618,8 @@ def _invoke_bounded_proposals(
         locator_artifact["source_operation_coverage_issues"] = operation_coverage_issues
         locator_artifact["operation_quote_tightening"] = quote_tightening_rows
         locator_artifact["operation_quote_tightening_issues"] = quote_tightening_issues
+        locator_artifact["clause_quote_tightening"] = clause_tightening_rows
+        locator_artifact["clause_quote_tightening_issues"] = clause_tightening_issues
         locator_artifact["material_structure"] = material_structure_rows
         locator_artifact["material_structure_issues"] = material_structure_issues
         locator_artifact["required_fact_normalizations"] = required_fact_rows

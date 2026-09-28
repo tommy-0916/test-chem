@@ -46,6 +46,7 @@ _PROTOCOL_KEYS = frozenset({
 })
 _FACT_KEYS = frozenset({
     "fact_id", "field_path", "value", "unit", "excerpt", "required", "source",
+    "verification_excerpt",
 })
 
 
@@ -230,9 +231,9 @@ def _literal_fact_reason(
     }
     if not isinstance(locator, str) or locator not in possible_locators:
         return "fact_block_outside_group"
-    excerpt = fact.get("excerpt")
+    located_excerpt = fact.get("excerpt")
     binding, quote_issue = bind_pdf_quote(
-        blocks, excerpt,
+        blocks, located_excerpt,
         caption_block_locators={block.locator for block in group.blocks if block.caption},
     )
     if quote_issue:
@@ -240,6 +241,9 @@ def _literal_fact_reason(
     assert binding is not None
     if locator != binding.locator:
         return "fact_source_locator_mismatch"
+    # Semantic verification reads the full original quotation when a bounded
+    # trim shortened the located excerpt; location stays with the short one.
+    excerpt = fact.get("verification_excerpt") or located_excerpt
     if not _text(fact.get("fact_id")) or not _text(fact.get("field_path")):
         return "fact_identity_missing"
     if classify_route_field_basis(_text(fact.get("field_path"))) == "generated_id":

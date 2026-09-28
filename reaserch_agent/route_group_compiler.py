@@ -599,7 +599,9 @@ def _fact_issue(
         return "route_fact_invalid"
     fact_id = _text(raw.get("fact_id"))
     field_path = _text(raw.get("field_path"))
-    excerpt = _text(raw.get("excerpt"))
+    # Verification reads the full original quotation when a bounded trim
+    # shortened the located excerpt; location stays with the short excerpt.
+    excerpt = _text(raw.get("verification_excerpt")) or _text(raw.get("excerpt"))
     raw_unit = raw.get("unit", "")
     if not isinstance(raw_unit, str):
         return "route_fact_unit_invalid"

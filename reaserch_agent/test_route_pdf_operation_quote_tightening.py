@@ -109,6 +109,9 @@ class PdfOperationQuoteTighteningTest(unittest.TestCase):
         }
         facts = self._facts(prepared)
         self.assertTrue(all(facts[path]["excerpt"] == self.EVENT for path in paths))
+        self.assertTrue(all(
+            facts[path]["verification_excerpt"] == long_quote for path in paths
+        ))
         audit_by_path = {row["field_path"]: row for row in audit}
         self.assertTrue(paths <= audit_by_path.keys())
         for path in paths:
