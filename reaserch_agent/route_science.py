@@ -19,6 +19,11 @@ from .workflow import ResearchAgent
 
 _INDEXED_NAME = re.compile(r"^([a-z][a-z0-9_]*)(?:\[(0|[1-9][0-9]*)\])?$")
 _GRAPH_ROOT = re.compile(r"^material_graph\[(0|[1-9][0-9]*)\]$")
+_PORT_FIELD = re.compile(
+    r"^(material_graph\[(?:0|[1-9][0-9]*)\]\."
+    r"material_(?:inputs|intermediates|outputs)\[(?:0|[1-9][0-9]*)\])\."
+    r"(.+)$"
+)
 
 
 def _signature_field(candidate: RouteCandidateV1, field_path: str) -> Any | None:
@@ -82,6 +87,63 @@ def _same_value(actual: Any, claimed: Any) -> bool:
     if isinstance(actual, bool) or isinstance(claimed, bool):
         return isinstance(actual, bool) and isinstance(claimed, bool) and actual is claimed
     return actual == claimed
+
+
+def _paper_field_bound_to_port(
+    candidate: RouteCandidateV1,
+    steps: list[dict[str, Any]],
+    field: Any,
+    owner_provenance: dict[str, Any],
+    fields_by_path: dict[str, Any],
+) -> bool:
+    """Allow a separate paper fact for a port field anchored by its name fact.
+
+    A port has one V2 provenance object, whereas its name, state and quantity
+    can come from separate literal facts.  The port provenance anchors the
+    entity name.  Each other fact still needs its own bound excerpt, scope and
+    field-level verification before RouteDecision can admit it.
+    """
+    match = _PORT_FIELD.fullmatch(field.field_path)
+    if match is None or match.group(2) == "name":
+        return False
+    name_path = match.group(1) + ".name"
+    name_claim = fields_by_path.get(name_path)
+    name_resolved = _graph_field(steps, name_path)
+    if (
+        name_claim is None or name_claim.status != "supported"
+        or name_claim.provenance is None or name_resolved is None
+        or not _same_value(name_claim.value, name_resolved[0])
+        or name_claim.provenance.model_dump(mode="json", exclude_none=True)
+        != owner_provenance
+    ):
+        return False
+    provenance = field.provenance
+    scope = field.source_scope
+    route_scope = candidate.source_scope
+    if (
+        provenance is None or provenance.kind != "paper"
+        or owner_provenance.get("kind") != "paper"
+        or scope is None or route_scope is None
+        or (scope.paper_id, scope.experimental_group_id, scope.source_digest)
+        != (route_scope.paper_id, route_scope.experimental_group_id,
+            route_scope.source_digest)
+        or field.evidence_id != provenance.reference
+    ):
+        return False
+    evidence = next(
+        ((index, item) for index, item in enumerate(candidate.evidence_bundle)
+         if item.evidence_id == provenance.reference),
+        None,
+    )
+    if evidence is None:
+        return False
+    index, item = evidence
+    return (
+        provenance.source_path == f"evidence_bundle.items[{index}].excerpt"
+        and bool(provenance.excerpt.strip())
+        and provenance.excerpt in item.excerpt
+        and provenance.source_digest == canonical_digest(item.excerpt)
+    )
 
 
 def _numeric_graph_fields(steps: list[dict[str, Any]]) -> list[tuple[str, Any, str]]:
@@ -361,6 +423,7 @@ def audit_route_candidate_science(
         (record.get("step_index"), record.get("rule_id"))
         for record in expansion
     }
+    fields_by_path = {field.field_path: field for field in candidate.evidence_matrix}
     for field in candidate.evidence_matrix:
         if field.status == "runtime_pending" and field.required:
             # Existing Phase 3 searches for any earlier measurement.  The V2
@@ -389,7 +452,12 @@ def audit_route_candidate_science(
             continue
         value, owner_provenance, step_index = resolved
         claimed_provenance = field.provenance.model_dump(mode="json", exclude_none=True)
-        if not _same_value(value, field.value) or owner_provenance != claimed_provenance:
+        if not _same_value(value, field.value) or (
+            owner_provenance != claimed_provenance
+            and not _paper_field_bound_to_port(
+                candidate, steps, field, owner_provenance, fields_by_path,
+            )
+        ):
             issues.append(f"evidence_matrix_graph_mismatch:{field.field_path}")
             continue
         if not source_pending:

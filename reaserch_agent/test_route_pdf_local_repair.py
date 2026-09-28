@@ -367,7 +367,9 @@ class PdfGroupLocalRepairTest(unittest.TestCase):
             "source_group_ref": self._reference("Group A"),
             "role_hint": "synthesis",
             "material_graph": [{
-                "operation": "mix", "material_inputs": [{"name": "salt solution"}],
+                "operation": "mix", "material_inputs": [{
+                    "material_id": "salt", "name": "salt solution",
+                }],
             }],
             "route_facts": [self._fact(
                 "operation", "material_graph[0].operation", "mix", "", quote,

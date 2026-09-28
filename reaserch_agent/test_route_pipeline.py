@@ -53,7 +53,7 @@ class RoutePipelineTest(unittest.TestCase):
         self.excerpt = (
             "Mix 2 mmol metal salt with base to pH 10; precipitation "
             "solution_to_wet_solid metal_salt base dissolve precipitate "
-            "pH_feedback retained_wet_solid."
+            "pH_feedback retained_wet_solid product."
         )
         self.source.write_text("\n".join([
             "# Primary study", "## Methods", "### control", self.excerpt,
@@ -112,7 +112,12 @@ class RoutePipelineTest(unittest.TestCase):
                 "status": "supported", "evidence_id": "E1",
                 "source_scope": {**scope, "locator": "lines:4-4"},
                 "provenance": provenance,
-            } for path, value in signature_fields.items()],
+            } for path, value in signature_fields.items()] + [{
+                "field_path": "material_graph[0].material_outputs[0].name",
+                "value": "product", "status": "supported", "evidence_id": "E1",
+                "source_scope": {**scope, "locator": "lines:4-4"},
+                "provenance": provenance,
+            }],
             "material_graph": [{
                 "macro_step_id": "S1", "macro_action_id": "A1", "sequence": 1,
                 "operation": "precipitate", "sample_id": "sample-1",
@@ -364,7 +369,10 @@ class RoutePipelineTest(unittest.TestCase):
         science = {
             "scientific_completeness": ScientificCompletenessV2(),
             "scientific_gate_issues": [],
-            "audited_field_paths": [self.goal.required_fields[0]],
+            "audited_field_paths": [
+                self.goal.required_fields[0],
+                "material_graph[0].material_outputs[0].name",
+            ],
             "verified_graph_step_ids": ["S1"],
             "verified_runtime_resolution_fields": [],
             "verified_convention_field_paths": [],

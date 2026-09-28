@@ -24,6 +24,7 @@ from .route_pdf_group_proposals import (
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_locator_production import produce_pdf_proposal_locators
 from .route_pdf_local_repair import revise_pdf_group_proposals_locally
+from .route_group_compiler import canonicalize_proposal_material_ids
 
 
 _ROUTE_ROLES = frozenset({"synthesis", "material_processing"})
@@ -118,7 +119,11 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "material_inputs/material_intermediates/material_outputs arrays. A "
         "material port needs material_id, name, state, provenance, and an "
         "optional quantity object with value and unit. Use exactly these "
-        "field names, not inputs/outputs/conditions aliases. Each route_fact "
+        "field names, not inputs/outputs/conditions aliases. material_id and "
+        "material_instance_id are only local co-reference symbols; the program "
+        "assigns their canonical internal IDs. Never create a paper route_fact "
+        "for either ID or claim the paper states an internal ID. The port name "
+        "and any quantity still need their own source-bound facts. Each route_fact "
         "has fact_id, field_path, "
         "value, unit, excerpt, and required=true. The unit must always be a "
         "string: use an empty string for textual values and the exact quoted "
@@ -137,7 +142,7 @@ def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
         "material_graph[0].material_inputs[0].quantity.value, or "
         "route_signature.operations[0]; never use "
         "material_graph.macro_steps. Use a separate fact for every proposed route-defining "
-        "signature value, material identity/state, operation, and numeric graph "
+        "signature value, material name/state, operation, and numeric graph "
         "leaf. "
         "A route_fact field_path must resolve to route_signature or "
         "material_graph; do not emit a fact with field_path target. "
@@ -217,6 +222,18 @@ def _invoke_bounded_proposals(
         return _diagnostic("response_char_budget_exceeded")
     locator_artifact: dict[str, Any] = {}
     if locate_unreviewed:
+        generated_id_rows: list[dict[str, Any]] = []
+        canonicalized: list[Any] = []
+        for proposal_index, proposal in enumerate(proposals):
+            if isinstance(proposal, Mapping):
+                transformed, rows = canonicalize_proposal_material_ids(proposal)
+                canonicalized.append(transformed)
+                generated_id_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in rows)
+            else:
+                canonicalized.append(proposal)
+        proposals = canonicalized
         proposals, local_revision = revise_pdf_group_proposals_locally(
             source_groups, proposals, invoke_json, _build_prompt,
             max_repair_groups=max_repair_groups,
@@ -226,6 +243,7 @@ def _invoke_bounded_proposals(
         )
         located = produce_pdf_proposal_locators(source_groups, proposals)
         locator_artifact = located.audit_artifact()
+        locator_artifact["generated_material_ids"] = generated_id_rows
         locator_artifact["local_revision"] = local_revision
         if located.diagnostics:
             # Partial location records remain visible, but no partial batch

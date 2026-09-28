@@ -46,7 +46,7 @@ class UnreviewedProposalLiteralShapeTest(unittest.TestCase):
             "prepare nickel precursor solution", "",
             "Ni(NO3)2 was dissolved in water.",
         ))
-        self.assertEqual(result[0]["reason_code"], "fact_value_not_in_excerpt")
+        self.assertEqual(result[0]["reason_code"], "semantic_binding_pending")
 
     def test_null_unit_and_paraphrase_are_reported_together(self) -> None:
         result = self._audit(self._fact(
@@ -54,7 +54,7 @@ class UnreviewedProposalLiteralShapeTest(unittest.TestCase):
         ))
         self.assertEqual(
             [item["reason_code"] for item in result],
-            ["fact_unit_invalid", "fact_value_not_in_excerpt"],
+            ["fact_unit_invalid", "semantic_binding_pending"],
         )
 
     def test_exact_string_uses_receipt_whitespace_and_word_boundaries(self) -> None:
@@ -62,7 +62,7 @@ class UnreviewedProposalLiteralShapeTest(unittest.TestCase):
             "mixed with water", "", "The salts were mixed\nwith water.",
         )), [])
         result = self._audit(self._fact("mix", "", "The mixture was stirred."))
-        self.assertEqual(result[0]["reason_code"], "fact_value_not_in_excerpt")
+        self.assertEqual(result[0]["reason_code"], "semantic_binding_pending")
 
     def test_numeric_unit_and_literal_quantity_are_both_required(self) -> None:
         self.assertEqual(self._audit(self._fact(2, "mmol", "2 mmol Ni salt")), [])

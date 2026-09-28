@@ -176,11 +176,19 @@ def _fixture(
             operations=["stir"], endpoint_state="solution",
         ),
         evidence_bundle=[evidence],
-        evidence_matrix=[RouteFieldEvidenceV1(
-            field_path=FIELD_PATH, value=2, unit="mmol", required=True,
-            status="supported", provenance=provenance, evidence_id="E-G7",
-            source_scope=scope,
-        )],
+        evidence_matrix=[
+            RouteFieldEvidenceV1(
+                field_path=FIELD_PATH, value=2, unit="mmol", required=True,
+                status="supported", provenance=provenance, evidence_id="E-G7",
+                source_scope=scope,
+            ),
+            RouteFieldEvidenceV1(
+                field_path="material_graph[0].material_outputs[0].name",
+                value="nickel salt solution", required=True,
+                status="supported", provenance=provenance, evidence_id="E-G7",
+                source_scope=scope,
+            ),
+        ],
         material_graph=[step], required_capabilities=["ambient-mixing"],
         origin="paper_experimental_group",
     )
@@ -195,8 +203,12 @@ def _fixture(
         source_attestation_digest="sha256_" + "b" * 64,
         source_route_signature=candidate.route_signature,
         source_route_signature_review_digest="sha256_" + "c" * 64,
-        verified_evidence_ids=["E-G7"], verified_field_paths=[FIELD_PATH],
-        audited_field_paths=[FIELD_PATH], verified_graph_step_ids=["MS-G7"],
+        verified_evidence_ids=["E-G7"], verified_field_paths=[
+            FIELD_PATH, "material_graph[0].material_outputs[0].name",
+        ],
+        audited_field_paths=[
+            FIELD_PATH, "material_graph[0].material_outputs[0].name",
+        ], verified_graph_step_ids=["MS-G7"],
         scientific_completeness=ScientificCompletenessV2(),
         device_preflight=DevicePreflightV1(
             status="preflight_supported", snapshot_id="device-snapshot-G7",

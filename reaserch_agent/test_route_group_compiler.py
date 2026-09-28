@@ -9,12 +9,15 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from chem_agent_contracts.route_candidate import RouteGoalV1, RouteTargetV1
+from chem_agent_contracts.route_candidate import (
+    RouteCandidateV1, RouteGoalV1, RouteTargetV1,
+)
 from reaserch_agent.route_discovery import discover_route_candidates
 from reaserch_agent.route_group_compiler import (
     compile_experimental_group_protocols, material_identity_for_amount_path,
     quantity_has_local_attribution,
 )
+from reaserch_agent.route_science import audit_route_candidate_science
 from reaserch_agent.route_source import verify_route_source
 
 
@@ -64,11 +67,9 @@ class RouteGroupCompilerTest(unittest.TestCase):
             ("signature", "route_signature.operations[0]", "precipitate", ""),
             ("signature", "route_signature.endpoint_state", "retained_wet_solid", ""),
             ("step_op", "material_graph[0].operation", "precipitate", ""),
-            ("salt_amount", "material_graph[0].material_inputs[0].material_id", "salt", ""),
             ("salt_amount", "material_graph[0].material_inputs[0].name", "metal salt", ""),
             ("salt_amount", "material_graph[0].material_inputs[0].state", "solution", ""),
             ("salt_amount", "material_graph[0].material_inputs[0].quantity.value", 2, "mmol"),
-            ("out", "material_graph[0].material_outputs[0].material_id", "product", ""),
             ("out", "material_graph[0].material_outputs[0].name", "product", ""),
             ("out", "material_graph[0].material_outputs[0].state", "retained_wet_solid", ""),
         ]
@@ -150,6 +151,61 @@ class RouteGroupCompilerTest(unittest.TestCase):
         )
         self.assertTrue(verification.source_scope_verified, verification.reasons)
         self.assertTrue(set(goal.required_fields).issubset(verification.verified_field_paths))
+
+    def test_one_port_can_bind_distinct_name_state_and_quantity_facts(self) -> None:
+        protocol = self._protocol()
+        group = protocol["experimental_groups"][0]
+        port = group["material_graph"][0]["material_inputs"][0]
+        fact_ids = {
+            "name": "salt_name", "state": "salt_state",
+            "quantity.value": "salt_quantity",
+        }
+        for fact in group["route_facts"]:
+            for suffix, fact_id in fact_ids.items():
+                if fact["field_path"] == (
+                    "material_graph[0].material_inputs[0]." + suffix
+                ):
+                    fact["fact_id"] = fact_id
+        port["provenance"] = {"kind": "paper", "reference": "fact:salt_name"}
+        result = self._compile(protocol)
+        self.assertEqual(result.diagnostics, [])
+        compiled = result.protocols[0]["experimental_groups"][0]
+        fields = {item["field_path"]: item for item in compiled["evidence_matrix"]}
+        quantity = fields["material_graph[0].material_inputs[0].quantity.value"]
+        self.assertEqual(quantity["value"], 2)
+        self.assertEqual(quantity["unit"], "mmol")
+        self.assertNotEqual(
+            quantity["provenance"],
+            compiled["material_graph"][0]["material_inputs"][0]["provenance"],
+        )
+        goal = RouteGoalV1(
+            goal_id="goal", target=RouteTargetV1.model_validate(self.target),
+            constraint="open", required_fields=[
+                "material_graph[0].material_inputs[0].quantity.value",
+            ],
+        )
+        discovered = discover_route_candidates(
+            goal, result.protocols,
+            trusted_source_paths={"paper-A": [self.source]},
+        )
+        self.assertEqual(discovered.diagnostics, [])
+        candidate_data = discovered.candidates[0].model_dump(mode="json")
+        for item in candidate_data["evidence_bundle"]:
+            item["verification_status"] = "verified_doi"
+            item["full_text_status"] = "parsed"
+        # Synthetic source identity is controlled by this fixture. This test
+        # checks the compiler/science association, not source authenticity.
+        audited = audit_route_candidate_science(
+            RouteCandidateV1.model_validate(candidate_data)
+        )
+        self.assertIn(
+            "material_graph[0].material_inputs[0].name",
+            audited["audited_field_paths"],
+        )
+        self.assertIn(
+            "material_graph[0].material_inputs[0].quantity.value",
+            audited["audited_field_paths"],
+        )
 
     def test_nonstring_unit_cannot_be_erased_into_discoverable_evidence(self) -> None:
         protocol = self._protocol()
@@ -274,7 +330,7 @@ class RouteGroupCompilerTest(unittest.TestCase):
         result = self._compile(protocol)
         self.assertEqual(result.diagnostics[0].reason_code, "route_fact_signature_claim_missing")
 
-    def test_material_state_needs_its_own_literal_fact(self) -> None:
+    def test_material_state_without_any_fact_stays_blocked(self) -> None:
         protocol = self._protocol()
         facts = protocol["experimental_groups"][0]["route_facts"]
         facts[:] = [fact for fact in facts

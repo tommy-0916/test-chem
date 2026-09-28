@@ -12,7 +12,10 @@ from collections.abc import Mapping, Sequence
 import re
 from typing import Any
 
-from .route_group_compiler import literal_quantity_present
+from .route_group_compiler import (
+    classify_route_field_basis, controlled_state_requires_mapping,
+    literal_quantity_present,
+)
 from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
 
 
@@ -62,6 +65,10 @@ def assess_unreviewed_proposal_literal_shape(
             value = fact.get("value")
             unit = fact.get("unit", "")
             excerpt = fact.get("excerpt")
+            if controlled_state_requires_mapping(record["field_path"], value):
+                diagnostics.append({
+                    **record, "reason_code": "semantic_binding_pending",
+                })
             if not isinstance(unit, str):
                 diagnostics.append({**record, "reason_code": "fact_unit_invalid"})
             if isinstance(value, bool):
@@ -91,7 +98,13 @@ def assess_unreviewed_proposal_literal_shape(
                     rf"(?<!\w){re.escape(literal)}(?!\w)", quote,
                 ) is None:
                     diagnostics.append({
-                        **record, "reason_code": "fact_value_not_in_excerpt",
+                        **record,
+                        "reason_code": (
+                            "semantic_binding_pending"
+                            if classify_route_field_basis(record["field_path"])
+                            == "controlled_mapping"
+                            else "fact_value_not_in_excerpt"
+                        ),
                     })
             else:
                 diagnostics.append({

@@ -34,7 +34,7 @@ from chem_agent_contracts.v2 import (
 DOCUMENT_DIGEST = "sha256_" + "a" * 64
 DEVICE_SNAPSHOT = "capability_snapshot_" + "b" * 64
 FIELD_PATH = "precursor.amount"
-EXCERPT = "The precursor solution contained 2 mmol metal salt."
+EXCERPT = "The precursor solution contained 2 mmol metal salt and formed target-material."
 
 
 def candidate(
@@ -98,7 +98,7 @@ def candidate(
             )],
             material_outputs=[MaterialPortV2(
                 material_id="target-material", material_instance_id="out-" + route_id,
-                name="target material", state="retained_wet_solid",
+                name="target-material", state="retained_wet_solid",
                 provenance=paper_provenance,
             )],
             provenance=paper_provenance,
@@ -120,17 +120,25 @@ def candidate(
             evidence_id=evidence_id, title="Synthetic primary procedure",
             excerpt=EXCERPT,
         )],
-        evidence_matrix=[RouteFieldEvidenceV1(
-            field_path=FIELD_PATH,
-            value=value if status == "supported" else None,
-            unit="mmol" if status == "supported" else "",
-            required=True,
-            status=status,
-            provenance=field_provenance if status == "supported" else None,
-            evidence_id=evidence_id if status == "supported" else "",
-            source_scope=field_scope if status == "supported" else None,
-            resolution_path=resolution_path,
-        )],
+        evidence_matrix=[
+            RouteFieldEvidenceV1(
+                field_path=FIELD_PATH,
+                value=value if status == "supported" else None,
+                unit="mmol" if status == "supported" else "",
+                required=True,
+                status=status,
+                provenance=field_provenance if status == "supported" else None,
+                evidence_id=evidence_id if status == "supported" else "",
+                source_scope=field_scope if status == "supported" else None,
+                resolution_path=resolution_path,
+            ),
+            RouteFieldEvidenceV1(
+                field_path="material_graph[0].material_outputs[0].name",
+                value="target-material", required=True, status="supported",
+                provenance=paper_provenance, evidence_id=evidence_id,
+                source_scope=field_scope,
+            ),
+        ],
         material_graph=material_graph,
         required_capabilities=capabilities if capabilities is not None else ["ph_control"],
         origin="paper_experimental_group",
@@ -194,6 +202,221 @@ def receipt(
 
 
 class RouteDecisionOfflineTest(unittest.TestCase):
+    def test_generated_material_id_required_field_uses_name_and_graph_binding(self) -> None:
+        route = candidate()
+        generated_id = "material_" + "a" * 24
+        route.material_graph[0].material_outputs[0].material_id = generated_id
+        id_path = "material_graph[0].material_outputs[0].material_id"
+        result = decide_routes(
+            goal(required_fields=[FIELD_PATH, id_path]), [route], receipt,
+        )
+        self.assertEqual(result.status, "selected_for_planning")
+        self.assertFalse(any(
+            reason.startswith("required_field_not_covered:" + id_path)
+            or reason.startswith("required_field_not_audited:" + id_path)
+            for reason in result.candidates[0].reasons
+        ))
+
+        unbound = route.model_copy(deep=True)
+        unbound.evidence_matrix = [unbound.evidence_matrix[0]]
+        blocked = decide_routes(
+            goal(required_fields=[FIELD_PATH, id_path]), [unbound], receipt,
+        )
+        self.assertIsNone(blocked.selected_route_id)
+        self.assertIn(
+            "required_generated_id_name_unverified:" + id_path,
+            blocked.candidates[0].reasons,
+        )
+
+    def test_internal_id_cannot_substitute_for_endpoint_name(self) -> None:
+        route = candidate()
+        generated_id = "material_" + "b" * 24
+        route.material_graph[0].material_outputs[0].material_id = generated_id
+        route.target.material = generated_id
+        requested = goal()
+        requested.target.material = generated_id
+        result = decide_routes(requested, [route], receipt)
+        self.assertIn(
+            "material_graph_endpoint_mismatch", result.candidates[0].reasons,
+        )
+        self.assertIsNone(result.selected_route_id)
+
+    def test_endpoint_goal_case_does_not_change_source_name_proof(self) -> None:
+        requested = goal()
+        requested.target.material = "Target-Material"
+        selected = decide_routes(requested, [candidate()], receipt)
+        self.assertEqual(selected.status, "selected_for_planning")
+
+        unsupported = candidate()
+        unsupported.evidence_matrix[1].status = "unsupported"
+        blocked = decide_routes(goal(), [unsupported], receipt)
+        self.assertIsNone(blocked.selected_route_id)
+        self.assertIn(
+            "required_unsupported:material_graph[0].material_outputs[0].name",
+            blocked.candidates[0].reasons,
+        )
+
+        mapped = candidate()
+        mapped.target.material = "canonical product"
+        mapped.material_graph[0].material_outputs[0].name = "canonical product"
+        mapped.evidence_matrix[1].value = "canonical product"
+        mapped_goal = goal()
+        mapped_goal.target.material = "canonical product"
+        pending = decide_routes(mapped_goal, [mapped], receipt)
+        self.assertEqual(pending.status, "unresolved")
+        self.assertIn(
+            "material_graph_endpoint_name_unverified",
+            pending.candidates[0].reasons,
+        )
+
+    def test_generated_material_id_paper_fact_and_identity_collision_rejected(self) -> None:
+        route = candidate()
+        generated_id = "material_" + "c" * 24
+        route.material_graph[0].material_outputs[0].material_id = generated_id
+        id_path = "material_graph[0].material_outputs[0].material_id"
+        template = route.evidence_matrix[1]
+        route.evidence_matrix.append(RouteFieldEvidenceV1(
+            field_path=id_path, value=generated_id, required=True,
+            status="supported", provenance=template.provenance,
+            evidence_id=template.evidence_id, source_scope=template.source_scope,
+        ))
+        paper_id = decide_routes(
+            goal(required_fields=[FIELD_PATH, id_path]), [route], receipt,
+        )
+        self.assertIn(
+            "generated_id_paper_fact_forbidden:" + id_path,
+            paper_id.candidates[0].reasons,
+        )
+
+        collision = candidate()
+        collision.material_graph[0].material_outputs[0].material_id = (
+            collision.material_graph[0].material_inputs[0].material_id
+        )
+        result = decide_routes(
+            goal(required_fields=[FIELD_PATH, id_path]), [collision], receipt,
+        )
+        self.assertIn(
+            "required_generated_id_identity_conflict:" + id_path,
+            result.candidates[0].reasons,
+        )
+
+        # A repeated ID in a later step may have a new source-backed name.
+        # This unit checks only the identity diagnostic; the independent
+        # science receipt remains responsible for cross-step lineage.
+        later = candidate()
+        shared_id = "material_" + "d" * 24
+        later.material_graph[0].material_inputs[0].material_id = shared_id
+        next_step = later.material_graph[0].model_copy(deep=True)
+        next_step.macro_step_id = "S-next"
+        next_step.sequence = 2
+        next_step.material_inputs[0].material_id = "metal-salt-next"
+        next_step.material_outputs[0].material_id = shared_id
+        later.material_graph.append(next_step)
+        later.route_signature.operations = [
+            "controlled precipitation", "controlled precipitation",
+        ]
+        next_name = later.evidence_matrix[1].model_copy(deep=True)
+        next_name.field_path = "material_graph[1].material_outputs[0].name"
+        later.evidence_matrix.append(next_name)
+        later_id_path = "material_graph[1].material_outputs[0].material_id"
+        across_steps = decide_routes(
+            goal(required_fields=[FIELD_PATH, later_id_path]), [later], receipt,
+        )
+        self.assertNotIn(
+            "required_generated_id_identity_conflict:" + later_id_path,
+            across_steps.candidates[0].reasons,
+        )
+
+        dangling = candidate()
+        dangling.material_graph[0].material_outputs[0].material_id = generated_id
+        dangling.material_graph[0].quantity_requirements.append({
+            "kind": "whole_batch", "material_id": "ghost_material",
+            "material": "ghost", "source": "literature",
+            "provenance": dangling.material_graph[0].provenance.model_dump(mode="json"),
+        })
+        dangling_result = decide_routes(
+            goal(required_fields=[FIELD_PATH, id_path]), [dangling], receipt,
+        )
+        self.assertIn(
+            "required_generated_id_reference_invalid:" + id_path,
+            dangling_result.candidates[0].reasons,
+        )
+
+    def test_nested_generated_id_paths_cannot_be_paper_facts(self) -> None:
+        paths = (
+            "material_graph[0].quantity_requirements[0].material_id",
+            "material_graph[0].material_inputs[0].parent_output_refs[0].material_instance_id",
+            "material_graph[0].material_relations[0].input_material_instance_ids[0]",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                route = candidate()
+                template = route.evidence_matrix[1]
+                route.evidence_matrix.append(RouteFieldEvidenceV1(
+                    field_path=path, value="fake-internal-id", required=True,
+                    status="supported", provenance=template.provenance,
+                    evidence_id=template.evidence_id,
+                    source_scope=template.source_scope,
+                ))
+                result = decide_routes(goal(), [route], receipt)
+                self.assertIn(
+                    "generated_id_paper_fact_forbidden:" + path,
+                    result.candidates[0].reasons,
+                )
+
+    def test_required_quantity_material_id_uses_port_and_name_binding(self) -> None:
+        route = candidate()
+        path = "material_graph[0].quantity_requirements[0].material_id"
+        paper = route.material_graph[0].provenance
+        route.material_graph[0].quantity_requirements.append({
+            "kind": "whole_batch", "material_id": "metal-salt",
+            "material": "metal salt", "source": "literature",
+            "provenance": paper.model_dump(mode="json"),
+        })
+        template = route.evidence_matrix[1]
+        route.evidence_matrix.append(RouteFieldEvidenceV1(
+            field_path="material_graph[0].material_inputs[0].name",
+            value="metal salt", required=True, status="supported",
+            provenance=paper, evidence_id=template.evidence_id,
+            source_scope=template.source_scope,
+        ))
+        selected = decide_routes(
+            goal(required_fields=[FIELD_PATH, path]), [route], receipt,
+        )
+        self.assertEqual(selected.status, "selected_for_planning")
+        self.assertNotIn(
+            "required_field_not_covered:" + path,
+            selected.candidates[0].reasons,
+        )
+
+        dangling = route.model_copy(deep=True)
+        dangling.material_graph[0].quantity_requirements[0]["material_id"] = "ghost"
+        blocked = decide_routes(
+            goal(required_fields=[FIELD_PATH, path]), [dangling], receipt,
+        )
+        self.assertIn(
+            "required_generated_id_reference_invalid:" + path,
+            blocked.candidates[0].reasons,
+        )
+
+    def test_required_unsupported_nested_id_paths_block_explicitly(self) -> None:
+        for path in (
+            "material_graph[0].material_inputs[0].parent_output_refs[0].material_instance_id",
+            "material_graph[0].material_relations[0].input_material_instance_ids[0]",
+        ):
+            with self.subTest(path=path):
+                result = decide_routes(
+                    goal(required_fields=[FIELD_PATH, path]), [candidate()], receipt,
+                )
+                self.assertIn(
+                    "required_generated_id_structure_unsupported:" + path,
+                    result.candidates[0].reasons,
+                )
+                self.assertNotIn(
+                    "required_field_not_covered:" + path,
+                    result.candidates[0].reasons,
+                )
+
     def test_primary_group_route_selected_for_planning(self) -> None:
         route = candidate()
         result = decide_routes(goal(), [route], receipt)

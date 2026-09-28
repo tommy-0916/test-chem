@@ -117,6 +117,60 @@ class RouteScienceAuditTest(unittest.TestCase):
         # material contract still prevents a verified graph receipt.
         self.assertEqual(result["verified_graph_step_ids"], [])
 
+    def test_port_name_anchors_distinct_quantity_paper_fact(self) -> None:
+        step = _step(1)
+        step["material_inputs"] = [_port(
+            "feed", origin="external_inventory",
+            quantity={"mode": "exact", "value": 5.0, "unit": "mL"},
+        )]
+        step["material_outputs"] = [_port("product")]
+        prefix = "material_graph[0].material_inputs[0]"
+        quantity_path = prefix + ".quantity.value"
+        name_path = prefix + ".name"
+        second_excerpt = "The feed amount was 5 mL."
+        second_paper = {
+            **PAPER, "reference": "E2",
+            "source_path": "evidence_bundle.items[1].excerpt",
+            "excerpt": second_excerpt,
+            "source_digest": canonical_digest(second_excerpt),
+        }
+        scope = {
+            "paper_id": "paper_1", "experimental_group_id": "group_1",
+            "source_digest": "sha256_" + "a" * 64,
+        }
+        fields = [
+            {"field_path": name_path, "value": "feed", "status": "supported",
+             "provenance": PAPER, "evidence_id": "E1", "source_scope": scope},
+            {"field_path": quantity_path, "value": 5.0, "unit": "mL",
+             "status": "supported", "provenance": second_paper,
+             "evidence_id": "E2", "source_scope": scope},
+        ]
+        bundle = [
+            {"evidence_id": "E1", "verification_status": "verified_doi",
+             "full_text_status": "parsed", "excerpt": EXCERPT},
+            {"evidence_id": "E2", "verification_status": "verified_doi",
+             "full_text_status": "parsed", "excerpt": second_excerpt},
+        ]
+        result = self.audit(_candidate([step], fields, bundle=bundle))
+        self.assertIn(quantity_path, result["audited_field_paths"])
+        self.assertNotIn(
+            f"evidence_matrix_graph_mismatch:{quantity_path}",
+            result["scientific_gate_issues"],
+        )
+
+        missing_anchor = self.audit(_candidate([step], fields[1:], bundle=bundle))
+        self.assertIn(
+            f"evidence_matrix_graph_mismatch:{quantity_path}",
+            missing_anchor["scientific_gate_issues"],
+        )
+        wrong_source = copy.deepcopy(fields)
+        wrong_source[1]["provenance"]["source_digest"] = canonical_digest("other")
+        bad_binding = self.audit(_candidate([step], wrong_source, bundle=bundle))
+        self.assertIn(
+            f"evidence_matrix_graph_mismatch:{quantity_path}",
+            bad_binding["scientific_gate_issues"],
+        )
+
     def test_signature_fact_is_audited_only_when_equal_to_proposed_signature(self) -> None:
         step = _step(1)
         step["material_inputs"] = [_port("feed", origin="external_inventory")]

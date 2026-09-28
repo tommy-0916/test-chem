@@ -22,12 +22,22 @@ class RouteSearchTest(unittest.TestCase):
     @staticmethod
     def _evaluate(protocols):
         task = goal()
-        candidates = [
-            candidate(route_id=item["route_id"], status=(
-                "supported" if item.get("verified") else "unknown"
-            ))
-            for item in protocols if "route_id" in item
-        ]
+        candidates = []
+        for item in protocols:
+            if "route_id" not in item:
+                continue
+            route = candidate(
+                route_id=item["route_id"],
+                status="supported" if item.get("verified") else "unknown",
+            )
+            if not item.get("verified"):
+                # This acquisition has made no verified claim, including the
+                # output name that a selected route now requires.
+                for field in route.evidence_matrix:
+                    field.status = "unknown"
+                    field.provenance = None
+                    field.evidence_id = ""
+            candidates.append(route)
         decision = decide_routes(task, candidates, receipt)
         return RoutePipelineResultV1(
             goal=task,
@@ -52,7 +62,7 @@ class RouteSearchTest(unittest.TestCase):
         self.assertEqual(result.pipeline.decision.status, "selected_for_planning")
         self.assertEqual(result.stop_reason, "decision_reached")
         self.assertEqual(len(result.rounds), 1)
-        self.assertEqual(len(result.rounds[0].budget_round.new_verified_fact_ids), 1)
+        self.assertEqual(len(result.rounds[0].budget_round.new_verified_fact_ids), 2)
         self.assertEqual(requests[0][1], 1)
         self.assertEqual(list(requests[0][0]), goal().required_fields)
 
@@ -101,7 +111,7 @@ class RouteSearchTest(unittest.TestCase):
 
     def test_source_and_science_receipts_both_required_for_fact_count(self) -> None:
         evaluated = self._evaluate([{"paper_id": "paper-R1", "route_id": "R1", "verified": True}])
-        self.assertEqual(len(verified_route_fact_ids(evaluated)), 1)
+        self.assertEqual(len(verified_route_fact_ids(evaluated)), 2)
         self.assertEqual(missing_required_route_fields(goal(), evaluated), [])
         record = evaluated.decision.candidates[0]
         record.validation.audited_field_paths = []

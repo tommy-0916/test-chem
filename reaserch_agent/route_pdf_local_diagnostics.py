@@ -16,6 +16,7 @@ from typing import Any
 
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
+    classify_route_field_basis, material_id_graph_issue,
 )
 from .route_group_fact_receipt import _literal_fact_reason
 from .route_pdf_group_proposals import associate_pdf_group_proposals
@@ -34,6 +35,7 @@ class PdfProposalFieldAssessmentV1:
     issues: list[dict[str, Any]] = field(default_factory=list)
     passing_fact_slots: tuple[tuple[int, int], ...] = ()
     group_issue_indexes: tuple[int, ...] = ()
+    field_requirements: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _group_key(group: PdfExperimentalGroupV1) -> tuple[str, str, str]:
@@ -128,6 +130,19 @@ def assess_pdf_group_proposal_fields(
         add_issue(item["proposal_index"], item["fact_index"],
                   item["reason_code"])
 
+    for proposal_index, proposal in enumerate(source_proposals):
+        if not isinstance(proposal, Mapping):
+            continue
+        facts = proposal.get("route_facts")
+        if not isinstance(facts, list):
+            continue
+        for fact_index, fact in enumerate(facts):
+            if (isinstance(fact, Mapping)
+                    and classify_route_field_basis(str(fact.get("field_path") or ""))
+                    == "generated_id"):
+                add_issue(proposal_index, fact_index,
+                          "fact_generated_id_paper_fact_forbidden")
+
     if check_required_graph_facts:
         for proposal_index, proposal in enumerate(source_proposals):
             if not isinstance(proposal, Mapping):
@@ -152,6 +167,42 @@ def assess_pdf_group_proposal_fields(
             for path in sorted(required_paths - fact_paths):
                 add_issue(proposal_index, -1, "required_graph_fact_missing",
                           path)
+            for path in sorted(required_paths):
+                result.field_requirements.append({
+                    "proposal_index": proposal_index,
+                    "field_path": path,
+                    "verification_mode": classify_route_field_basis(path),
+                    "paper_fact_present": path in fact_paths,
+                })
+            def record_ids(node: Any, path: str) -> None:
+                if isinstance(node, Mapping):
+                    for key, child in node.items():
+                        child_path = f"{path}.{key}"
+                        if classify_route_field_basis(child_path) == "generated_id":
+                            result.field_requirements.append({
+                                "proposal_index": proposal_index,
+                                "field_path": child_path,
+                                "verification_mode": "generated_id",
+                                "paper_fact_present": child_path in fact_paths,
+                            })
+                        else:
+                            record_ids(child, child_path)
+                elif isinstance(node, list):
+                    for index, child in enumerate(node):
+                        child_path = f"{path}[{index}]"
+                        if classify_route_field_basis(child_path) == "generated_id":
+                            result.field_requirements.append({
+                                "proposal_index": proposal_index,
+                                "field_path": child_path,
+                                "verification_mode": "generated_id",
+                                "paper_fact_present": child_path in fact_paths,
+                            })
+                        else:
+                            record_ids(child, child_path)
+            record_ids(graph, "material_graph")
+            identity_issue = material_id_graph_issue(graph)
+            if identity_issue:
+                add_issue(proposal_index, -1, identity_issue)
             for fact_index, fact in enumerate(facts):
                 if not isinstance(fact, Mapping):
                     continue

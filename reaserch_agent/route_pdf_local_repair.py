@@ -16,6 +16,7 @@ from typing import Any
 
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
+    canonicalize_proposal_material_ids,
 )
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_local_diagnostics import assess_pdf_group_proposal_fields
@@ -73,6 +74,26 @@ def _graph_required_paths(proposal: Mapping[str, Any]) -> set[str]:
     signature = signature if isinstance(signature, Mapping) else {}
     sig_paths, graph_paths = _required_qualitative_paths(graph, signature)
     return sig_paths | graph_paths | _numeric_leaves(graph)
+
+
+def _existing_material_ids(value: Any) -> frozenset[str]:
+    found: set[str] = set()
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            for key, child in node.items():
+                if key in {"material_id", "material_instance_id"} and (
+                    isinstance(child, str) and child
+                ):
+                    found.add(child)
+                elif key.endswith("material_instance_ids") and isinstance(child, list):
+                    found.update(item for item in child if isinstance(item, str) and item)
+                else:
+                    visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+    visit(value)
+    return frozenset(found)
 
 
 def _changed_paths(before: Any, after: Any, path: str) -> set[str]:
@@ -258,6 +279,8 @@ def revise_pdf_group_proposals_locally(
         "production_version": assessment.located.production_version,
         "repair_version": PDF_LOCAL_REPAIR_VERSION,
         "check_required_graph_facts": check_required_graph_facts,
+        "field_requirements_before": deepcopy(assessment.field_requirements),
+        "field_requirements_after": deepcopy(assessment.field_requirements),
         "coverage_before": _coverage_rows(
             baseline, assessment.passing_fact_slots,
         ),
@@ -380,6 +403,14 @@ def revise_pdf_group_proposals_locally(
             entry["reason_code"] = "local_revision_envelope_invalid"
         else:
             revised = envelope["proposals"][0]
+            if isinstance(revised, Mapping):
+                revised, generated_ids = canonicalize_proposal_material_ids(
+                    revised,
+                    previous_ids=_existing_material_ids(
+                        original.get("material_graph")
+                    ),
+                )
+                entry["generated_material_ids"] = generated_ids
             entry["reason_code"] = _revised_group_issue(
                 original, revised, passing_indexes,
             )
@@ -409,6 +440,9 @@ def revise_pdf_group_proposals_locally(
         check_required_graph_facts=check_required_graph_facts,
     )
     report["final_issues"] = deepcopy(final_assessment.issues)
+    report["field_requirements_after"] = deepcopy(
+        final_assessment.field_requirements
+    )
     report["final_proposals_digest"] = _digest(final)
     report["coverage_after"] = _coverage_rows(
         final, final_assessment.passing_fact_slots,

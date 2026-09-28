@@ -1,0 +1,92 @@
+{
+  "schema_version": "a01_nife_precursor_fragment_v1",
+  "scope_note": "Frozen two-block excerpt and selected unreviewed proposal fields only; not a complete experimental group or reviewed route.",
+  "source_campaign": "A01-v5-quote-context-20260927",
+  "source_scope": {
+    "paper_id": "doi_10_1021_acsami_3c11651",
+    "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+    "section": "METHODS",
+    "locator": "pdf:p2:b54-p2:b76",
+    "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8"
+  },
+  "blocks": [
+    {
+      "locator": "pdf:p2:b58-p2:b58",
+      "text": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·",
+      "caption": false
+    },
+    {
+      "locator": "pdf:p2:b59-p2:b59",
+      "text": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution",
+      "caption": false
+    }
+  ],
+  "proposal": {
+    "source_group_ref": {
+      "paper_id": "doi_10_1021_acsami_3c11651",
+      "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+      "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8"
+    },
+    "role_hint": "synthesis procedure",
+    "material_graph": [
+      {
+        "macro_step_id": "ms1",
+        "material_inputs": [
+          {
+            "material_id": "ni_nitrate",
+            "name": "Ni(NO3)2·6H2O",
+            "quantity": {"value": 37.5, "unit": "mmol"}
+          },
+          {
+            "material_id": "fe_nitrate",
+            "name": "Fe(NO3)3·9H2O",
+            "quantity": {"value": 12.5, "unit": "mmol"}
+          },
+          {
+            "material_id": "water_a",
+            "name": "water",
+            "quantity": {"value": 50, "unit": "mL"}
+          }
+        ],
+        "material_outputs": [
+          {"material_id": "solution_a", "name": "solution A"}
+        ]
+      },
+      {
+        "macro_step_id": "ms4",
+        "material_inputs": [
+          {"material_id": "solution_a", "name": "solution A"}
+        ]
+      }
+    ],
+    "route_facts": [
+      {
+        "fact_id": "pc_sig1",
+        "field_path": "route_signature.operations[0]",
+        "value": "mixed and dissolved",
+        "unit": null,
+        "excerpt": "37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water",
+        "block_locator": "pdf:p2:b58-p2:b58",
+        "required": true
+      },
+      {
+        "fact_id": "pc_m1_name",
+        "field_path": "material_graph[0].material_inputs[0].name",
+        "value": "Ni(NO3)2·6H2O",
+        "unit": null,
+        "excerpt": "37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved",
+        "block_locator": "pdf:p2:b58-p2:b58",
+        "required": true
+      },
+      {
+        "fact_id": "pc_m1_qty",
+        "field_path": "material_graph[0].material_inputs[0].quantity.value",
+        "value": 37.5,
+        "unit": "mmol",
+        "excerpt": "37.5 mmol Ni(NO3)2·6H2O",
+        "block_locator": "pdf:p2:b58-p2:b58",
+        "required": true
+      }
+    ]
+  }
+}

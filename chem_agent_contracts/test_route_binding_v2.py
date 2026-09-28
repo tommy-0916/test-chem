@@ -28,6 +28,7 @@ class RouteBindingV2Test(unittest.TestCase):
         scope.section = "Methods"
         candidate.source_scope = scope
         candidate.evidence_matrix[0].source_scope = scope.model_copy(deep=True)
+        candidate.evidence_matrix[1].source_scope = scope.model_copy(deep=True)
         draft, decision, bundle = _reviewed_fixture(candidate)
         package = _build(draft, decision, bundle)
 

@@ -74,11 +74,9 @@ class PdfGroupProposalAssociationTest(unittest.TestCase):
             ("signature", "route_signature.operations[0]", "mix", ""),
             ("signature", "route_signature.endpoint_state", "retained_wet_solid", ""),
             ("step", "material_graph[0].operation", "mix", ""),
-            ("input", "material_graph[0].material_inputs[0].material_id", "salt", ""),
             ("input", "material_graph[0].material_inputs[0].name", "salt", ""),
             ("input", "material_graph[0].material_inputs[0].state", "solution", ""),
             ("input", "material_graph[0].material_inputs[0].quantity.value", amount, "mmol"),
-            ("output", "material_graph[0].material_outputs[0].material_id", "product", ""),
             ("output", "material_graph[0].material_outputs[0].name", "product", ""),
             ("output", "material_graph[0].material_outputs[0].state", "retained_wet_solid", ""),
         ]

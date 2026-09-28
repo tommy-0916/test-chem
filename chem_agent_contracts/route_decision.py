@@ -22,6 +22,7 @@ from .route_candidate import (
     RouteFieldEvidenceV1,
     RouteSignatureV1,
 )
+from .route_field_basis import classify_route_field_basis
 from .v2 import (
     ScientificCompletenessV2,
     StrictModel,
@@ -31,6 +32,16 @@ from .v2 import (
 
 
 SELECTION_POLICY_V1 = "route_decision_v1"
+_GENERATED_MATERIAL_FIELD = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\."
+    r"(material_inputs|material_intermediates|material_outputs)"
+    r"\[(0|[1-9][0-9]*)\]\."
+    r"(material_id|material_instance_id)\Z"
+)
+_QUANTITY_REQUIREMENT_MATERIAL_ID = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\."
+    r"quantity_requirements\[(0|[1-9][0-9]*)\]\.material_id\Z"
+)
 
 
 class DevicePreflightV1(StrictModel):
@@ -209,6 +220,9 @@ def _field_issue(
 ) -> Optional[str]:
     """Check the structural binding; source authenticity is receipt-owned."""
 
+    if classify_route_field_basis(field.field_path) == "generated_id":
+        return "generated_id_paper_fact_forbidden"
+
     if field.status == "unsupported":
         return "required_unsupported" if field.required else None
     if field.status == "unknown":
@@ -307,6 +321,61 @@ def _same_experimental_group(
     )
 
 
+def _graph_material_port(
+    candidate: RouteCandidateV1, field_path: str,
+):
+    """Resolve a structural ID path to its step and port, if it exists."""
+    match = _GENERATED_MATERIAL_FIELD.fullmatch(field_path)
+    if match is None:
+        return None
+    step_index, collection, port_index, field_name = match.groups()
+    if int(step_index) >= len(candidate.material_graph):
+        return None
+    step = candidate.material_graph[int(step_index)]
+    ports = getattr(step, collection)
+    if int(port_index) >= len(ports):
+        return None
+    return step, ports[int(port_index)], field_name
+
+
+def _port_name_evidence_issue(
+    candidate: RouteCandidateV1,
+    receipt: Optional[RouteValidationReceiptV1],
+    field_by_path: Dict[str, RouteFieldEvidenceV1],
+    name_path: str,
+    port,
+) -> str:
+    """Bind an internal port to its quoted material name and trusted receipt."""
+    field = field_by_path.get(name_path)
+    if field is None or not field.required:
+        return "name_fact_missing"
+    if field.status == "unsupported":
+        return "required_unsupported"
+    if field.status != "supported":
+        return "name_fact_missing"
+    if field.value != port.name or field.provenance != port.provenance:
+        return "name_fact_graph_mismatch"
+    provenance = field.provenance
+    if provenance is None or provenance.kind != "paper":
+        return "name_fact_paper_basis_missing"
+    literal = re.sub(r"\s+", " ", port.name.strip())
+    excerpt = re.sub(r"\s+", " ", provenance.excerpt)
+    if not literal or re.search(
+        rf"(?<!\w){re.escape(literal)}(?!\w)", excerpt,
+    ) is None:
+        return "semantic_binding_pending"
+    if receipt is None or receipt.route_id != candidate.route_id or (
+        receipt.candidate_digest != canonical_digest(candidate)
+    ):
+        return "name_fact_receipt_missing"
+    if not receipt.source_scope_verified or (
+        name_path not in receipt.verified_field_paths
+        or name_path not in receipt.audited_field_paths
+    ):
+        return "name_fact_unverified"
+    return _field_issue(field, candidate, receipt) or ""
+
+
 def _locked_scope_matches(
     candidate: Optional[ExperimentalGroupScopeV1],
     locked: Optional[ExperimentalGroupScopeV1],
@@ -357,6 +426,7 @@ def _candidate_assessment(
     device_hard: set[str] = set()
     device_pending: set[str] = set()
     device_status: Literal["preflight_supported", "blocked", "unknown"] = "unknown"
+    field_by_path = {field.field_path: field for field in candidate.evidence_matrix}
 
     if candidate.target.material.casefold() != goal.target.material.casefold():
         science_hard.add("target_mismatch")
@@ -383,12 +453,35 @@ def _candidate_assessment(
         or not candidate.material_graph[-1].material_outputs
     ):
         science_pending.add("material_graph_root_or_endpoint_missing")
-    elif not any(
-        output.material_id == goal.target.material
-        and output.state == goal.target.desired_state
-        for output in candidate.material_graph[-1].material_outputs
-    ):
-        science_hard.add("material_graph_endpoint_mismatch")
+    else:
+        final_index = len(candidate.material_graph) - 1
+        endpoint_ports = [
+            (port_index, output)
+            for port_index, output in enumerate(
+                candidate.material_graph[-1].material_outputs
+            )
+            if output.state == goal.target.desired_state
+            and output.name.strip().casefold() == goal.target.material.strip().casefold()
+        ]
+        if not endpoint_ports:
+            science_hard.add("material_graph_endpoint_mismatch")
+        else:
+            endpoint_issues = [
+                _port_name_evidence_issue(
+                    candidate, receipt, field_by_path,
+                    f"material_graph[{final_index}].material_outputs[{port_index}].name",
+                    output,
+                )
+                for port_index, output in endpoint_ports
+            ]
+            if all(endpoint_issues):
+                if any(issue in {
+                    "name_fact_graph_mismatch", "name_fact_paper_basis_missing",
+                    "name_fact_literal_missing", "required_unsupported",
+                } for issue in endpoint_issues):
+                    science_hard.add("material_graph_endpoint_name_basis_invalid")
+                else:
+                    science_pending.add("material_graph_endpoint_name_unverified")
     if not candidate.evidence_matrix:
         science_pending.add("evidence_matrix_missing")
     if not goal.required_fields:
@@ -398,8 +491,122 @@ def _candidate_assessment(
     if not candidate.required_capabilities:
         device_pending.add("capability_requirements_missing")
 
-    field_by_path = {field.field_path: field for field in candidate.evidence_matrix}
     for field_path in goal.required_fields:
+        if classify_route_field_basis(field_path) == "generated_id":
+            if not _GENERATED_MATERIAL_FIELD.fullmatch(field_path):
+                quantity_match = _QUANTITY_REQUIREMENT_MATERIAL_ID.fullmatch(
+                    field_path
+                )
+                if quantity_match is None:
+                    science_hard.add(
+                        "required_generated_id_structure_unsupported:" + field_path
+                    )
+                    continue
+                step_index, requirement_index = map(int, quantity_match.groups())
+                if step_index >= len(candidate.material_graph):
+                    science_hard.add("required_generated_id_reference_invalid:" + field_path)
+                    continue
+                graph_step = candidate.material_graph[step_index]
+                if requirement_index >= len(graph_step.quantity_requirements):
+                    science_hard.add("required_generated_id_reference_invalid:" + field_path)
+                    continue
+                requirement = graph_step.quantity_requirements[requirement_index]
+                if not isinstance(requirement, dict):
+                    science_hard.add("required_generated_id_reference_invalid:" + field_path)
+                    continue
+                referenced = requirement.get("material_id")
+                material_name = requirement.get("material")
+                if not isinstance(referenced, str) or not referenced.strip() or (
+                    not isinstance(material_name, str) or not material_name.strip()
+                ):
+                    science_hard.add("required_generated_id_reference_invalid:" + field_path)
+                    continue
+                matching_ports = [
+                    (collection_name, port_index, port)
+                    for collection_name in (
+                        "material_inputs", "material_intermediates",
+                        "material_outputs",
+                    )
+                    for port_index, port in enumerate(
+                        getattr(graph_step, collection_name)
+                    )
+                    if port.material_id == referenced
+                    and port.name.strip().casefold() == material_name.strip().casefold()
+                ]
+                if not matching_ports:
+                    science_hard.add("required_generated_id_reference_invalid:" + field_path)
+                    continue
+                name_issues = [
+                    _port_name_evidence_issue(
+                        candidate, receipt, field_by_path,
+                        f"material_graph[{step_index}].{collection_name}"
+                        f"[{port_index}].name", port,
+                    )
+                    for collection_name, port_index, port in matching_ports
+                ]
+                if all(name_issues):
+                    if any(issue in {
+                        "name_fact_graph_mismatch", "name_fact_paper_basis_missing",
+                        "name_fact_literal_missing", "required_unsupported",
+                    } for issue in name_issues):
+                        science_hard.add(
+                            "required_generated_id_name_basis_invalid:" + field_path
+                        )
+                    else:
+                        science_pending.add(
+                            "required_generated_id_name_unverified:" + field_path
+                        )
+                continue
+            binding = _graph_material_port(candidate, field_path)
+            if binding is None:
+                science_pending.add("required_generated_id_path_missing:" + field_path)
+                continue
+            step, port, field_name = binding
+            identity = getattr(port, field_name)
+            if not isinstance(identity, str) or not identity.strip():
+                science_hard.add("required_generated_id_invalid:" + field_path)
+                continue
+            if field_name == "material_id":
+                names = {
+                    other.name.strip().casefold()
+                    for collection in (
+                        step.material_inputs,
+                        step.material_intermediates,
+                        step.material_outputs,
+                    )
+                    for other in collection
+                    if other.material_id == identity
+                }
+                if len(names) != 1:
+                    science_hard.add("required_generated_id_identity_conflict:" + field_path)
+                for graph_step in candidate.material_graph:
+                    declared = {
+                        item.material_id for collection in (
+                            graph_step.material_inputs,
+                            graph_step.material_intermediates,
+                            graph_step.material_outputs,
+                        ) for item in collection
+                    }
+                    if any(
+                        isinstance(requirement, dict)
+                        and str(requirement.get("material_id") or "").strip()
+                        not in declared
+                        for requirement in graph_step.quantity_requirements
+                    ):
+                        science_hard.add("required_generated_id_reference_invalid:" + field_path)
+            name_path = field_path.rsplit(".", 1)[0] + ".name"
+            name_issue = _port_name_evidence_issue(
+                candidate, receipt, field_by_path, name_path, port,
+            )
+            if name_issue:
+                if name_issue in {
+                    "name_fact_graph_mismatch", "name_fact_paper_basis_missing",
+                    "name_fact_literal_missing", "required_unsupported",
+                }:
+                    science_hard.add("required_generated_id_name_basis_invalid:" + field_path)
+                else:
+                    science_pending.add("required_generated_id_name_unverified:" + field_path)
+            continue
         field = field_by_path.get(field_path)
         if field is None or not field.required:
             science_pending.add("required_field_not_covered:" + field_path)
@@ -429,6 +636,8 @@ def _candidate_assessment(
             if step.macro_step_id not in receipt.verified_graph_step_ids:
                 science_pending.add("material_graph_step_unverified:" + step.macro_step_id)
         for field_path in goal.required_fields:
+            if classify_route_field_basis(field_path) == "generated_id":
+                continue
             if field_path not in receipt.audited_field_paths:
                 science_pending.add("required_field_not_audited:" + field_path)
         for field in candidate.evidence_matrix:
@@ -438,6 +647,7 @@ def _candidate_assessment(
                     "required_unsupported", "experimental_group_mixing",
                     "convention_numeric_generation_forbidden", "device_sop_not_synthesis_evidence",
                     "agent_inferred_not_convention_backed", "unsupported_provenance_kind",
+                    "generated_id_paper_fact_forbidden",
                 }:
                     science_hard.add(issue + ":" + field.field_path)
                 else:
@@ -488,11 +698,15 @@ def _candidate_assessment(
     priority: List[int] = []
     if status == "admissible" and receipt is not None:
         required_supported = sum(
-            field_by_path[field_path].status == "supported"
+            (
+                True if classify_route_field_basis(field_path) == "generated_id"
+                else field_by_path[field_path].status == "supported"
+            )
             for field_path in goal.required_fields
         )
         primary_supported = sum(
-            field_by_path[field_path].status == "supported"
+            classify_route_field_basis(field_path) != "generated_id"
+            and field_by_path[field_path].status == "supported"
             and field_by_path[field_path].provenance is not None
             and field_by_path[field_path].provenance.kind == "paper"
             for field_path in goal.required_fields

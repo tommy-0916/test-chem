@@ -43,7 +43,7 @@ from chem_agent_contracts.v2 import (
 DOI = "10.1234/route-group"
 EXCERPTS = (
     "Mix 2 mmol nickel salt with base.",
-    "Heat the mixture to 80 °C for 1 h.",
+    "Heat the mixture to 80 °C for 1 h and isolate product.",
 )
 FIELD_PATH = "material_graph[0].parameters[0].value"
 
@@ -86,11 +86,18 @@ def _candidate() -> RouteCandidateV1:
             )
             for index, excerpt in enumerate(EXCERPTS)
         ],
-        evidence_matrix=[RouteFieldEvidenceV1(
-            field_path=FIELD_PATH, value=2, unit="mmol", required=True,
-            status="supported", provenance=first, evidence_id="E1",
-            source_scope=scope,
-        )],
+        evidence_matrix=[
+            RouteFieldEvidenceV1(
+                field_path=FIELD_PATH, value=2, unit="mmol", required=True,
+                status="supported", provenance=first, evidence_id="E1",
+                source_scope=scope,
+            ),
+            RouteFieldEvidenceV1(
+                field_path="material_graph[1].material_outputs[0].name",
+                value="product", required=True, status="supported",
+                provenance=second, evidence_id="E2", source_scope=scope,
+            ),
+        ],
         material_graph=[
             MacroStepV2(
                 macro_step_id="MS1", macro_action_id="MA1", sequence=1,
@@ -144,8 +151,12 @@ def _selected(candidate: RouteCandidateV1):
             source_attestation_digest="sha256_" + "b" * 64,
             source_route_signature=route.route_signature,
             verified_evidence_ids=["E1", "E2"],
-            verified_field_paths=[FIELD_PATH],
-            audited_field_paths=[FIELD_PATH],
+            verified_field_paths=[
+                FIELD_PATH, "material_graph[1].material_outputs[0].name",
+            ],
+            audited_field_paths=[
+                FIELD_PATH, "material_graph[1].material_outputs[0].name",
+            ],
             verified_graph_step_ids=["MS1", "MS2"],
             scientific_completeness=ScientificCompletenessV2(),
             device_preflight=DevicePreflightV1(
@@ -395,6 +406,9 @@ class RouteActionIntentTest(unittest.TestCase):
 
     def test_graph_paper_reference_must_match_exact_evidence_item(self) -> None:
         candidate = _candidate()
+        candidate.material_graph[0].parameters[1].provenance = (
+            candidate.material_graph[0].parameters[1].provenance.model_copy(deep=True)
+        )
         candidate.material_graph[0].parameters[1].provenance.source_path = (
             "evidence_bundle.items[0].excerpt"
         )
@@ -406,6 +420,9 @@ class RouteActionIntentTest(unittest.TestCase):
 
     def test_graph_parameter_provenance_digest_must_match_excerpt(self) -> None:
         candidate = _candidate()
+        candidate.material_graph[0].parameters[1].provenance = (
+            candidate.material_graph[0].parameters[1].provenance.model_copy(deep=True)
+        )
         candidate.material_graph[0].parameters[1].provenance.source_digest = (
             "sha256_" + "0" * 64
         )

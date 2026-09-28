@@ -15,7 +15,9 @@ import re
 from typing import Any
 
 from .route_group_compiler import (
-    literal_quantity_present, material_identity_for_amount_path,
+    classify_route_field_basis, controlled_state_requires_mapping,
+    literal_quantity_present,
+    material_identity_for_amount_path,
     quantity_has_local_attribution,
 )
 from .route_pdf_group_proposals import PdfGroupProposalAssociationResultV1
@@ -232,10 +234,14 @@ def _literal_fact_reason(
         return "fact_source_locator_mismatch"
     if not _text(fact.get("fact_id")) or not _text(fact.get("field_path")):
         return "fact_identity_missing"
+    if classify_route_field_basis(_text(fact.get("field_path"))) == "generated_id":
+        return "fact_generated_id_paper_fact_forbidden"
     value = fact.get("value")
     unit = fact.get("unit", "")
     if not isinstance(unit, str):
         return "fact_unit_invalid"
+    if controlled_state_requires_mapping(_text(fact.get("field_path")), value):
+        return "semantic_binding_pending"
     if isinstance(value, bool):
         return "fact_value_type_unverifiable"
     if isinstance(value, (int, float)):
@@ -259,7 +265,12 @@ def _literal_fact_reason(
         if not literal or re.search(
             rf"(?<!\w){re.escape(literal)}(?!\w)", normalized_excerpt,
         ) is None:
-            return "fact_value_not_in_excerpt"
+            return (
+                "semantic_binding_pending"
+                if classify_route_field_basis(_text(fact.get("field_path")))
+                == "controlled_mapping"
+                else "fact_value_not_in_excerpt"
+            )
     else:
         return "fact_value_type_unverifiable"
     return ""

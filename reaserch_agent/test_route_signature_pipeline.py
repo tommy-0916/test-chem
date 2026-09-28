@@ -226,6 +226,13 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
             "source_path": "evidence_bundle.items[0].excerpt",
             "excerpt": excerpt, "source_digest": canonical_digest(excerpt),
         }
+        output_excerpt = "Recover product wet solid."
+        output_provenance = {
+            **provenance, "reference": "E2",
+            "source_path": "evidence_bundle.items[1].excerpt",
+            "excerpt": output_excerpt,
+            "source_digest": canonical_digest(output_excerpt),
+        }
         return {
             "paper_id": self.paper_id,
             "experimental_group_id": "control",
@@ -238,6 +245,9 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
             "route_signature": self.signature.model_dump(mode="json"),
             "evidence_bundle": [{
                 "evidence_id": "E1", "excerpt": excerpt, "doi": self.source_doi,
+            }, {
+                "evidence_id": "E2", "excerpt": output_excerpt,
+                "doi": self.source_doi,
             }],
             "evidence_matrix": [{
                 "field_path": self.required_field,
@@ -251,6 +261,18 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
                     "source_digest": self.source_digest,
                 },
                 "provenance": provenance,
+            }, {
+                "field_path": "material_graph[0].material_outputs[0].name",
+                "value": "product", "status": "supported",
+                "evidence_id": "E2",
+                "source_scope": {
+                    "paper_id": self.paper_id,
+                    "experimental_group_id": "control",
+                    "section": scope.section,
+                    "locator": "pdf:p1:b4-p1:b4",
+                    "source_digest": self.source_digest,
+                },
+                "provenance": output_provenance,
             }],
             "material_graph": [{
                 "macro_step_id": "S1", "macro_action_id": "A1", "sequence": 1,
@@ -266,7 +288,7 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
                 "material_outputs": [{
                     "material_id": "product", "material_instance_id": "product-1",
                     "name": "product", "state": "retained_wet_solid",
-                    "provenance": provenance,
+                    "provenance": output_provenance,
                 }],
             }],
             "required_capabilities": ["capability-1"],
@@ -292,7 +314,10 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
         science = {
             "scientific_completeness": ScientificCompletenessV2(),
             "scientific_gate_issues": [],
-            "audited_field_paths": [self.required_field],
+            "audited_field_paths": [
+                self.required_field,
+                "material_graph[0].material_outputs[0].name",
+            ],
             "verified_graph_step_ids": ["S1"],
             "verified_runtime_resolution_fields": [],
             "verified_convention_field_paths": [],
@@ -529,7 +554,10 @@ class SignedRouteSignaturePipelineTest(unittest.TestCase):
         science = {
             "scientific_completeness": ScientificCompletenessV2(),
             "scientific_gate_issues": [],
-            "audited_field_paths": [self.required_field],
+            "audited_field_paths": [
+                self.required_field,
+                "material_graph[0].material_outputs[0].name",
+            ],
             "verified_graph_step_ids": ["S1"],
             "verified_runtime_resolution_fields": [],
             "verified_convention_field_paths": [],

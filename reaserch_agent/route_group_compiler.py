@@ -16,7 +16,12 @@ import math
 import re
 from typing import Any, Mapping, Sequence
 
-from chem_agent_contracts.v2 import canonical_digest, evidence_contains_exact_quantity
+from chem_agent_contracts.route_field_basis import (
+    classify_route_field_basis, controlled_state_requires_mapping,
+)
+from chem_agent_contracts.v2 import (
+    canonical_digest, evidence_contains_exact_quantity,
+)
 
 
 _PATH_PART = re.compile(r"([a-z][a-z0-9_]*)(?:\[(0|[1-9][0-9]*)\])?\Z")
@@ -63,6 +68,77 @@ def _text(value: Any) -> str:
 
 def _node_value(node: Any, name: str) -> Any:
     return node.get(name) if isinstance(node, Mapping) else getattr(node, name, None)
+
+
+def canonicalize_proposal_material_ids(
+    proposal: Mapping[str, Any],
+    *,
+    previous_ids: frozenset[str] = frozenset(),
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Replace model co-reference symbols with deterministic internal IDs.
+
+    The model may propose that two ports refer to the same material using one
+    local symbol. Its spelling is not an assertion from the paper. The program
+    assigns an opaque ID scoped to the source document and experimental group,
+    and records the transformation for the unsigned proposal audit. Evidence
+    for each port's name, amount, and relationship is checked separately.
+    """
+    detached = deepcopy(dict(proposal))
+    ref = detached.get("source_group_ref")
+    graph = detached.get("material_graph")
+    if not isinstance(ref, Mapping) or not isinstance(graph, list):
+        return detached, []
+    scope = tuple(_text(ref.get(key)) for key in (
+        "paper_id", "experimental_group_id", "source_digest",
+    ))
+    if not all(scope):
+        return detached, []
+    assigned: dict[tuple[str, str], str] = {}
+    audit: list[dict[str, str]] = []
+
+    def generated_id(kind: str, symbol: str, path: str) -> str:
+        key = (kind, symbol)
+        generated = assigned.get(key)
+        if generated is None:
+            if symbol in previous_ids:
+                generated = symbol
+            else:
+                seed = "\0".join((*scope, kind, symbol))
+                prefix = "material_" if kind == "material_id" else "instance_"
+                generated = prefix + sha256(seed.encode("utf-8")).hexdigest()[:24]
+            assigned[key] = generated
+        audit.append({
+            "field_path": path,
+            "id_kind": kind,
+            "model_symbol": symbol,
+            "generated_id": generated,
+        })
+        return generated
+
+    def visit(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                child_path = f"{path}.{key}"
+                if key in {"material_id", "material_instance_id"} and (
+                    isinstance(value, str) and value.strip()
+                ):
+                    node[key] = generated_id(key, value.strip(), child_path)
+                elif (key.endswith("material_instance_ids")
+                      and isinstance(value, list)):
+                    node[key] = [
+                        generated_id("material_instance_id", item.strip(),
+                                     f"{child_path}[{index}]")
+                        if isinstance(item, str) and item.strip() else item
+                        for index, item in enumerate(value)
+                    ]
+                else:
+                    visit(value, child_path)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                visit(value, f"{path}[{index}]")
+
+    visit(graph, "material_graph")
+    return detached, audit
 
 
 def literal_quantity_present(excerpt: Any, value: Any, unit: Any) -> bool:
@@ -235,9 +311,9 @@ def _required_qualitative_paths(
     """Paper-derived chemistry must have literal same-group quotations.
 
     Structural IDs, graph relations and device capability selectors are
-    checked by later gates.  This deliberately demands a literal quote for
-    the route's defining signature and for each paper-claimed operation and
-    material identity/state.  A synonym is not promoted into evidence here.
+    checked structurally, not against prose. This demands a literal quote for
+    the route's defining signature and each paper-claimed operation, material
+    name, and state. A synonym is not promoted into evidence here.
     """
     signature_paths: set[str] = set()
     for key in ("route_family", "target_transformation", "endpoint_state"):
@@ -275,10 +351,137 @@ def _required_qualitative_paths(
             for port_index, port in enumerate(ports):
                 if not isinstance(port, Mapping):
                     continue
-                for key in ("name", "material_id", "state"):
+                for key in ("name", "state"):
                     if _text(port.get(key)):
                         graph_paths.add(f"{prefix}.{port_kind}[{port_index}].{key}")
     return signature_paths, graph_paths
+
+
+def material_id_graph_issue(graph: Sequence[Any]) -> str:
+    """Check internal ID references without pretending the IDs are prose.
+
+    A paper-backed port name establishes the material entity separately. An
+    opaque ID must be nonempty, must not denote two differently named ports
+    in one step, and quantity and relation references must resolve to declared
+    ports. Upstream input references must identify an earlier output with the
+    same material identity. A concrete instance ID cannot define batches in
+    two sample arms. V2 checks state transitions and full cross-step lineage,
+    where a material may gain a new source-backed name.
+    """
+    instance_samples: dict[str, set[str]] = {}
+    outputs_by_ref: dict[tuple[str, str], list[tuple[Any, str]]] = {}
+    for step in graph:
+        if not isinstance(step, Mapping):
+            continue
+        step_id = _text(step.get("macro_step_id"))
+        sequence = step.get("sequence")
+        outputs = step.get("material_outputs", []) or []
+        if not isinstance(outputs, list):
+            return "route_group_material_graph_invalid"
+        for port in outputs:
+            if not isinstance(port, Mapping):
+                continue
+            instance_id = _text(port.get("material_instance_id"))
+            if step_id and instance_id:
+                outputs_by_ref.setdefault((step_id, instance_id), []).append(
+                    (sequence, _text(port.get("material_id")))
+                )
+    parent_consumers: set[tuple[str, str]] = set()
+    for step in graph:
+        if not isinstance(step, Mapping):
+            continue
+        sample_id = _text(step.get("sample_id"))
+        step_ids: set[str] = set()
+        names_by_id: dict[str, set[str]] = {}
+        instance_ids: dict[str, set[str]] = {}
+        for port_kind in (
+            "material_inputs", "material_intermediates", "material_outputs",
+        ):
+            ports = step.get(port_kind, [])
+            if not isinstance(ports, list):
+                continue
+            instance_ids[port_kind] = set()
+            for port in ports:
+                if not isinstance(port, Mapping):
+                    continue
+                material_id = _text(port.get("material_id"))
+                material_name = _text(port.get("name"))
+                if not material_id or not material_name:
+                    return "route_group_material_identity_missing"
+                instance_id = _text(port.get("material_instance_id"))
+                if instance_id:
+                    if not sample_id:
+                        return "route_group_material_instance_scope_missing"
+                    instance_samples.setdefault(instance_id, set()).add(sample_id)
+                    instance_ids[port_kind].add(instance_id)
+                step_ids.add(material_id)
+                names_by_id.setdefault(material_id, set()).add(
+                    re.sub(r"\s+", " ", material_name).casefold()
+                )
+                if port_kind == "material_inputs":
+                    origin = _text(port.get("material_origin"))
+                    parent_refs = port.get("parent_output_refs", []) or []
+                    if not isinstance(parent_refs, list):
+                        return "route_group_parent_output_reference_invalid"
+                    if (origin == "upstream_output") != bool(parent_refs):
+                        return "route_group_parent_output_reference_invalid"
+                    for parent_ref in parent_refs:
+                        if not isinstance(parent_ref, Mapping):
+                            return "route_group_parent_output_reference_invalid"
+                        parent_key = (
+                            _text(parent_ref.get("macro_step_id")),
+                            _text(parent_ref.get("material_instance_id")),
+                        )
+                        if not all(parent_key):
+                            return "route_group_parent_output_reference_invalid"
+                        matches = outputs_by_ref.get(parent_key, [])
+                        if len(matches) != 1:
+                            return "route_group_parent_output_reference_missing"
+                        parent_sequence, parent_material_id = matches[0]
+                        sequence = step.get("sequence")
+                        if (type(parent_sequence) is not int
+                                or type(sequence) is not int
+                                or parent_sequence >= sequence):
+                            return "route_group_parent_output_reference_not_earlier"
+                        if parent_material_id != material_id:
+                            return "route_group_parent_output_material_id_mismatch"
+                        if parent_key in parent_consumers:
+                            return "route_group_parent_output_reference_reused"
+                        parent_consumers.add(parent_key)
+        if any(len(names) != 1 for names in names_by_id.values()):
+            return "route_group_material_id_identity_conflict"
+        relations = step.get("material_relations", []) or []
+        if not isinstance(relations, list):
+            return "route_group_material_relations_invalid"
+        allowed_inputs = (instance_ids.get("material_inputs", set())
+                          | instance_ids.get("material_intermediates", set()))
+        allowed_outputs = (instance_ids.get("material_intermediates", set())
+                           | instance_ids.get("material_outputs", set()))
+        for relation in relations:
+            if not isinstance(relation, Mapping):
+                return "route_group_material_relations_invalid"
+            for key, declared in (
+                ("input_material_instance_ids", allowed_inputs),
+                ("output_material_instance_ids", allowed_outputs),
+            ):
+                references = relation.get(key, [])
+                if (not isinstance(references, list)
+                        or any(not _text(item) for item in references)):
+                    return "route_group_material_relation_reference_invalid"
+                if any(item not in declared for item in references):
+                    return "route_group_material_relation_reference_missing"
+        requirements = step.get("quantity_requirements", []) or []
+        if not isinstance(requirements, list):
+            return "route_group_quantity_requirements_invalid"
+        for requirement in requirements:
+            if not isinstance(requirement, Mapping):
+                continue
+            referenced = _text(requirement.get("material_id"))
+            if referenced and referenced not in step_ids:
+                return "route_group_material_id_reference_missing"
+    if any(len(samples) != 1 for samples in instance_samples.values()):
+        return "route_group_material_instance_scope_conflict"
+    return ""
 
 
 def _numeric_leaves(graph: list[Any]) -> set[str]:
@@ -353,6 +556,8 @@ def _fact_issue(
     source = raw.get("source")
     if not fact_id or not field_path:
         return "route_fact_identity_missing"
+    if classify_route_field_basis(field_path) == "generated_id":
+        return "route_fact_generated_id_paper_fact_forbidden"
     if not excerpt:
         return "route_fact_excerpt_missing"
     if raw.get("required", True) is not True:
@@ -377,6 +582,8 @@ def _fact_issue(
         return "route_fact_value_invalid"
     if isinstance(actual, bool) or actual != claimed or unit != graph_unit:
         return "route_fact_graph_value_mismatch"
+    if controlled_state_requires_mapping(field_path, claimed):
+        return "semantic_binding_pending"
     if isinstance(claimed, (int, float)):
         if not unit:
             return "route_fact_numeric_unit_missing"
@@ -393,11 +600,11 @@ def _fact_issue(
     elif not claimed.strip() or re.search(
         rf"(?<!\w){re.escape(claimed.strip())}(?!\w)", excerpt
     ) is None:
-        return "route_fact_value_absent_from_excerpt"
-    if owner is not None:
-        provenance = owner.get("provenance")
-        if provenance != {"kind": "paper", "reference": f"fact:{fact_id}"}:
-            return "route_fact_graph_provenance_mismatch"
+        return (
+            "semantic_binding_pending"
+            if classify_route_field_basis(field_path) == "controlled_mapping"
+            else "route_fact_value_absent_from_excerpt"
+        )
     return ""
 
 
@@ -433,6 +640,9 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             for port in ports:
                 if not isinstance(port, Mapping) or _text(port.get("state")) in {"", "unknown"}:
                     return "route_group_material_state_missing"
+    identity_issue = material_id_graph_issue(graph)
+    if identity_issue:
+        return identity_issue
     for name in ("target", "route_signature", "required_capabilities"):
         if not group.get(name):
             return f"route_group_{name}_missing"
@@ -442,6 +652,8 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
 
     seen_paths: set[str] = set()
     excerpts_by_id: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    owner_fact_ids: dict[int, set[str]] = {}
+    owner_nodes: dict[int, Mapping[str, Any]] = {}
     for raw in raw_facts:
         issue = _fact_issue(
             raw, paper_id=paper_id, group_id=group_id,
@@ -452,6 +664,11 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             return issue
         fact_id = raw["fact_id"].strip()
         field_path = raw["field_path"].strip()
+        scoped = _scoped_claim(graph, signature, field_path)
+        if scoped is not None and scoped[1] is not None:
+            owner = scoped[1]
+            owner_fact_ids.setdefault(id(owner), set()).add(fact_id)
+            owner_nodes[id(owner)] = owner
         if field_path in seen_paths:
             return "route_fact_field_path_duplicate"
         seen_paths.add(field_path)
@@ -461,12 +678,27 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             return "route_fact_id_conflict"
         excerpts_by_id[fact_id] = identity
 
+    for owner_key, owner in owner_nodes.items():
+        provenance = owner.get("provenance")
+        reference = _text(provenance.get("reference")) if isinstance(
+            provenance, Mapping
+        ) else ""
+        if (
+            not isinstance(provenance, Mapping)
+            or provenance.get("kind") != "paper"
+            or not reference.startswith("fact:")
+            or reference[len("fact:"):] not in owner_fact_ids[owner_key]
+        ):
+            return "route_fact_graph_provenance_mismatch"
+
     if not _numeric_leaves(graph).issubset(seen_paths):
         return "route_fact_numeric_graph_claim_missing"
     signature_paths, graph_paths = _required_qualitative_paths(graph, signature)
-    if not signature_paths.issubset(seen_paths):
+    missing_signature = signature_paths - seen_paths
+    missing_graph = graph_paths - seen_paths
+    if missing_signature:
         return "route_fact_signature_claim_missing"
-    if not graph_paths.issubset(seen_paths):
+    if missing_graph:
         return "route_fact_qualitative_graph_claim_missing"
     for placeholder in _paper_placeholders(graph):
         reference = _text(placeholder.get("reference"))
