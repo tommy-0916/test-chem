@@ -119,6 +119,29 @@ class PdfGroupFactReceiptTest(unittest.TestCase):
         self.assertIn("fact[0]:fact_numeric_unit_missing",
                       result.group_results[0].reason_codes)
 
+    def test_dimensionless_parameter_remains_pending_with_its_source_scope(self) -> None:
+        group = self._group("Arm A", "Adjust to pH 10.", "pdf:p1:b2-p1:b2")
+        protocol = self._protocol(group, 10, "pH")
+        protocol["material_graph"] = [{
+            "parameters": [{"name": "pH", "value": 10, "unit": ""}],
+        }]
+        protocol["route_facts"] = [protocol["route_facts"][0]]
+        protocol["route_facts"][0].update(
+            field_path="material_graph[0].parameters[0].value", unit="",
+        )
+        result = self._receipt([protocol, self.protocols[1]],
+                               [group, self.groups[1]])
+        self.assertIn("fact[0]:dimensionless_semantic_pending",
+                      result.group_results[0].reason_codes)
+        self.assertEqual(result.group_results[1].status,
+                         "literal_facts_verified_pending_review")
+
+        protocol["material_graph"][0]["parameters"][0]["name"] = "temperature"
+        result = self._receipt([protocol, self.protocols[1]],
+                               [group, self.groups[1]])
+        self.assertIn("fact[0]:fact_numeric_unit_missing",
+                      result.group_results[0].reason_codes)
+
     def test_quantity_cannot_be_borrowed_from_another_material_in_same_quote(self) -> None:
         group = self._group("Arm A", "A 1 mmol and B 2 mmol", "pdf:p1:b2-p1:b2")
         protocols = [self._protocol(group, 2, "A"), self.protocols[1]]

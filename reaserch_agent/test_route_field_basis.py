@@ -12,8 +12,16 @@ from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1, RouteCandidateV1, RouteFieldEvidenceV1,
     RouteGoalV1, RouteSignatureV1, RouteTargetV1,
 )
-from chem_agent_contracts.route_decision import decide_routes
-from chem_agent_contracts.v2 import EvidenceItemV2, MacroStepV2, ProvenanceV2
+from chem_agent_contracts.route_field_basis import (
+    canonicalize_unreviewed_state_facts, controlled_state_mapping,
+    verify_controlled_state_mapping,
+)
+from chem_agent_contracts.route_decision import (
+    RouteValidationReceiptV1, _field_issue, decide_routes,
+)
+from chem_agent_contracts.v2 import (
+    EvidenceItemV2, MacroStepV2, ProvenanceV2, canonical_digest,
+)
 from reaserch_agent.route_group_compiler import (
     canonicalize_proposal_material_ids, classify_route_field_basis,
     compile_experimental_group_protocols,
@@ -23,6 +31,7 @@ from reaserch_agent.route_group_fact_receipt import produce_pdf_group_fact_recei
 from reaserch_agent.route_pdf_group_extraction import propose_pdf_group_unreviewed
 from reaserch_agent.route_pdf_groups import PdfExperimentalGroupV1, PdfSourceBlockV1
 from reaserch_agent.route_pdf_local_diagnostics import assess_pdf_group_proposal_fields
+from reaserch_agent.route_science import audit_route_candidate_science
 
 
 class RouteFieldBasisTest(unittest.TestCase):
@@ -586,6 +595,237 @@ class RouteFieldBasisTest(unittest.TestCase):
             (state_path, "semantic_binding_pending"),
             {(issue["field_path"], issue["reason_code"]) for issue in assessment.issues},
         )
+
+    def test_program_binds_quoted_state_alias_and_preserves_literal_value(self) -> None:
+        proposal = self._proposal()
+        quote = self.quote.replace(
+            "Ni salt solution was", "Ni salt 溶液 and B powder were",
+        )
+        self.group = PdfExperimentalGroupV1(
+            source_scope=self.group.source_scope,
+            source_document=self.group.source_document,
+            blocks=(PdfSourceBlockV1(self.locator, quote),),
+        )
+        for fact in proposal["route_facts"]:
+            fact["excerpt"] = quote
+        path = "material_graph[0].material_inputs[0].state"
+        next(fact for fact in proposal["route_facts"]
+             if fact["field_path"] == path)["fact_id"] = "input_state"
+        unreviewed = self._unreviewed_proposal()
+        for fact in unreviewed["route_facts"]:
+            fact["excerpt"] = quote
+            if fact["field_path"] == path:
+                fact["fact_id"] = "input_state"
+                fact["value"] = "溶液"
+        original = deepcopy(unreviewed)
+        generated, rows = canonicalize_unreviewed_state_facts(unreviewed)
+        self.assertEqual(unreviewed, original)
+        self.assertEqual(rows, [])
+        state_fact = next(fact for fact in generated["route_facts"]
+                          if fact["field_path"] == path)
+        self.assertEqual(state_fact["value"], "溶液")
+        self.assertEqual(generated["material_graph"][0]["material_inputs"][0]["state"],
+                         "solution")
+        assessment = assess_pdf_group_proposal_fields(
+            [self.group], [generated], check_required_graph_facts=True,
+        )
+        self.assertNotIn(path, {item["field_path"] for item in assessment.issues})
+        associated = propose_pdf_group_unreviewed(
+            [self.group], lambda _prompt: {"proposals": [generated]},
+            check_required_graph_facts=True, max_repair_groups=0,
+        )
+        self.assertFalse(associated.diagnostics)
+        receipt = produce_pdf_group_fact_receipt(
+            [self.group], associated, signed_inventory_verified=True,
+        )
+        self.assertEqual(receipt.status, "literal_facts_verified_pending_review")
+        reviewed_fixture = deepcopy(associated.protocols)
+        reviewed_fixture[0]["required_capabilities"] = ["precipitate"]
+        compiled = compile_experimental_group_protocols([{
+            "paper_id": "paper-1", "source_title": "Original study",
+            "experimental_groups": reviewed_fixture,
+        }])
+        self.assertFalse(compiled.diagnostics)
+        group = compiled.protocols[0]["experimental_groups"][0]
+        mapped_field = next(item for item in group["evidence_matrix"]
+                            if item["field_path"] == path)
+        self.assertEqual(mapped_field["value"], "溶液")
+        self.assertEqual(mapped_field["controlled_mapping"]["target_value"],
+                         "solution")
+        self.assertEqual(mapped_field["provenance"]["evidence_class"],
+                         "paper_explicit")
+        typed = RouteFieldEvidenceV1.model_validate(mapped_field)
+        restored = RouteFieldEvidenceV1.model_validate_json(typed.model_dump_json())
+        self.assertEqual(restored, typed)
+        self.assertEqual(restored.value, "溶液")
+        self.assertEqual(restored.controlled_mapping.target_value, "solution")
+        candidate = RouteCandidateV1.model_validate({
+            "route_id": "route-state-1", "target": group["target"],
+            "source_scope": {
+                "paper_id": "paper-1", "experimental_group_id": "Arm A",
+                "section": "Methods", "locator": self.locator,
+                "source_digest": self.digest,
+            },
+            "route_signature": group["route_signature"],
+            "evidence_bundle": [{
+                **item, "verification_status": "local_file",
+                "full_text_status": "local_parsed",
+            } for item in group["evidence_bundle"]],
+            "evidence_matrix": group["evidence_matrix"],
+            "material_graph": group["material_graph"],
+            "required_capabilities": group["required_capabilities"],
+            "origin": "paper_experimental_group",
+        })
+        candidate_reloaded = RouteCandidateV1.model_validate_json(
+            candidate.model_dump_json()
+        )
+        self.assertEqual(candidate_reloaded, candidate)
+        self.assertIn(path, audit_route_candidate_science(
+            candidate_reloaded,
+        )["audited_field_paths"])
+        validation = RouteValidationReceiptV1(
+            route_id=candidate.route_id,
+            candidate_digest=canonical_digest(candidate),
+            verified_evidence_ids=[item.evidence_id for item in candidate.evidence_bundle],
+            verified_field_paths=[path],
+        )
+        state_field = next(item for item in candidate.evidence_matrix
+                           if item.field_path == path)
+        self.assertIsNone(_field_issue(state_field, candidate, validation))
+        tampered = candidate.model_copy(deep=True)
+        bad_field = next(item for item in tampered.evidence_matrix
+                         if item.field_path == path)
+        bad_field.controlled_mapping.resource_digest = "sha256_" + "0" * 64
+        self.assertEqual(
+            _field_issue(bad_field, tampered, validation),
+            "semantic_binding_pending",
+        )
+        self.assertNotIn(path, audit_route_candidate_science(
+            tampered,
+        )["audited_field_paths"])
+
+        wrong_material = candidate.model_copy(deep=True)
+        wrong_state = next(item for item in wrong_material.evidence_matrix
+                           if item.field_path == path)
+        wrong_excerpt = quote.replace(
+            "Ni salt 溶液 and B powder", "Ni salt powder and B 溶液",
+        )
+        wrong_state.provenance.excerpt = wrong_excerpt
+        wrong_state.provenance.source_digest = canonical_digest(wrong_excerpt)
+        next(item for item in wrong_material.evidence_bundle
+             if item.evidence_id == wrong_state.evidence_id).excerpt = wrong_excerpt
+        wrong_receipt = RouteValidationReceiptV1(
+            route_id=wrong_material.route_id,
+            candidate_digest=canonical_digest(wrong_material),
+            verified_evidence_ids=[item.evidence_id
+                                   for item in wrong_material.evidence_bundle],
+            verified_field_paths=[path],
+        )
+        self.assertEqual(
+            _field_issue(wrong_state, wrong_material, wrong_receipt),
+            "semantic_binding_pending",
+        )
+        self.assertNotIn(path, audit_route_candidate_science(
+            wrong_material,
+        )["audited_field_paths"])
+
+    def test_state_fact_cannot_borrow_other_materials_word(self) -> None:
+        path = "material_graph[0].material_inputs[0].state"
+        for source_word in ("solution", "溶液"):
+            with self.subTest(source_word=source_word):
+                quote = self.quote.replace(
+                    "Ni salt solution was",
+                    f"Ni salt powder and B {source_word} was",
+                )
+                group = PdfExperimentalGroupV1(
+                    source_scope=self.group.source_scope,
+                    source_document=self.group.source_document,
+                    blocks=(PdfSourceBlockV1(self.locator, quote),),
+                )
+                proposal = self._proposal()
+                for fact in proposal["route_facts"]:
+                    fact["excerpt"] = quote
+                    if fact["field_path"] == path:
+                        fact["value"] = source_word
+                receipt = produce_pdf_group_fact_receipt(
+                    [group], [proposal], signed_inventory_verified=True,
+                )
+                self.assertEqual(receipt.status, "blocked")
+                self.assertIn(
+                    "fact[7]:semantic_binding_pending",
+                    receipt.group_results[0].reason_codes,
+                )
+                compiled = self._compile(proposal)
+                self.assertEqual(
+                    [item.reason_code for item in compiled.diagnostics],
+                    ["semantic_binding_pending"],
+                )
+
+    def test_state_alias_rule_is_exact_and_digest_bound(self) -> None:
+        path = "material_graph[0].material_outputs[0].state"
+        mapping, issue = controlled_state_mapping(path, "dry solid", "dry_solid")
+        self.assertEqual(issue, "")
+        self.assertIsNotNone(mapping)
+        self.assertEqual(verify_controlled_state_mapping(
+            path, "dry solid", "dry_solid", mapping,
+        ), "")
+        stale = {**mapping, "resource_digest": "sha256_" + "0" * 64}
+        self.assertEqual(verify_controlled_state_mapping(
+            path, "dry solid", "dry_solid", stale,
+        ), "semantic_binding_pending")
+        for source, target in (
+            ("沉淀", "retained_wet_solid"),
+            ("dry solid", "solution"),
+            ("wet precipitate", "retained_wet_solid"),
+        ):
+            self.assertEqual(controlled_state_mapping(path, source, target)[1],
+                             "semantic_binding_pending")
+
+    def test_state_producer_captures_source_case_and_abstains_on_repetition(self) -> None:
+        proposal = self._unreviewed_proposal()
+        quote = self.quote.replace("Ni salt solution was", "Ni salt Solution was")
+        for fact in proposal["route_facts"]:
+            fact["excerpt"] = quote
+        produced, rows = canonicalize_unreviewed_state_facts(proposal)
+        path = "material_graph[0].material_inputs[0].state"
+        source_fact = next(fact for fact in produced["route_facts"]
+                           if fact["field_path"] == path)
+        self.assertEqual(source_fact["value"], "Solution")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["mapping"]["target_value"], "solution")
+        repeated = deepcopy(proposal)
+        for fact in repeated["route_facts"]:
+            fact["excerpt"] = quote + " Another Solution was prepared."
+        blocked, rows = canonicalize_unreviewed_state_facts(repeated)
+        self.assertEqual(rows, [])
+        source_fact = next(fact for fact in blocked["route_facts"]
+                           if fact["field_path"] == path)
+        self.assertEqual(source_fact["value"], "solution")
+
+    def test_state_producer_does_not_borrow_other_material_state(self) -> None:
+        path = "material_graph[0].material_inputs[0].state"
+        proposal = {
+            "material_graph": [{
+                "material_inputs": [{"name": "A", "state": "powder"},
+                                    {"name": "B", "state": "solution"}],
+            }],
+            "route_facts": [{
+                "field_path": path, "value": "powder", "unit": "",
+                "excerpt": "A solution and B powder were mixed.",
+            }],
+        }
+        original = deepcopy(proposal)
+        produced, rows = canonicalize_unreviewed_state_facts(proposal)
+        self.assertEqual(produced, original)
+        self.assertEqual(rows, [])
+        # A missing or invalid claim is not repaired from a convenient word
+        # in the quote, even if that word maps to A's proposed graph state.
+        proposal["material_graph"][0]["material_inputs"][0]["state"] = "solution"
+        proposal["route_facts"][0]["value"] = "unknown"
+        original = deepcopy(proposal)
+        produced, rows = canonicalize_unreviewed_state_facts(proposal)
+        self.assertEqual(produced, original)
+        self.assertEqual(rows, [])
 
     def test_device_sop_is_still_a_provenance_evidence_class(self) -> None:
         sop = ProvenanceV2(

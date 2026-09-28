@@ -8,6 +8,7 @@ import unittest
 from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
 from reaserch_agent.route_pdf_group_extraction import (
     PdfGroupExtractionBudgetV1,
+    _normalize_required_route_fact_flags,
     propose_pdf_group_protocols,
     propose_pdf_group_unreviewed,
 )
@@ -19,6 +20,36 @@ from reaserch_agent.route_pdf_groups import (
 
 
 class PdfGroupExtractionTest(unittest.TestCase):
+    def test_unsigned_missing_required_flag_only_on_existing_required_paths(self) -> None:
+        proposal = {
+            "source_group_ref": {
+                "paper_id": "paper-1", "experimental_group_id": "Group A",
+                "source_digest": "sha256_" + "a" * 64,
+            },
+            "route_signature": {"operations": ["mix"]},
+            "material_graph": [{
+                "operation": "mix",
+                "material_inputs": [{
+                    "name": "salt", "state": "solution",
+                    "quantity": {"value": 2, "unit": "mmol"},
+                }],
+            }],
+            "route_facts": [
+                {"fact_id": "op", "field_path": "material_graph[0].operation"},
+                {"fact_id": "amount", "field_path":
+                 "material_graph[0].material_inputs[0].quantity.value"},
+                {"fact_id": "explicit_false", "field_path":
+                 "material_graph[0].material_inputs[0].name", "required": False},
+                {"fact_id": "outside", "field_path": "target"},
+            ],
+        }
+        rows = _normalize_required_route_fact_flags(proposal)
+        self.assertEqual([row["fact_id"] for row in rows], ["op", "amount"])
+        self.assertTrue(proposal["route_facts"][0]["required"])
+        self.assertTrue(proposal["route_facts"][1]["required"])
+        self.assertIs(proposal["route_facts"][2]["required"], False)
+        self.assertNotIn("required", proposal["route_facts"][3])
+
     def setUp(self) -> None:
         digest = "sha256_" + "a" * 64
         self.groups = [

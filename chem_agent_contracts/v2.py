@@ -1397,6 +1397,41 @@ def route_material_graph_digest_v1(steps: List[MacroStepV2]) -> str:
     ])
 
 
+class RouteControlledStateMappingV1(StrictModel):
+    """One source-literal state mapping from a selected, reviewed candidate."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal["controlled-state-mapping/v1"]
+    field_path: str = Field(min_length=1)
+    evidence_id: str = Field(min_length=1)
+    source_value: str = Field(min_length=1)
+    target_value: str = Field(min_length=1)
+    rule_id: str = Field(min_length=1)
+    rule_version: Literal["material-states/v1"]
+    resource_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def require_state_path(self) -> "RouteControlledStateMappingV1":
+        if re.fullmatch(
+            r"material_graph\[(0|[1-9][0-9]*)\]\."
+            r"(material_inputs|material_intermediates|material_outputs)"
+            r"\[(0|[1-9][0-9]*)\]\.state", self.field_path,
+        ) is None:
+            raise ValueError("controlled state mapping requires a material port state path")
+        if any(
+            not value.strip() or value != value.strip()
+            for value in (
+                self.evidence_id, self.source_value, self.target_value,
+                self.rule_id,
+            )
+        ):
+            raise ValueError("controlled state mapping values must be nonempty and trimmed")
+        if not self.rule_id.startswith("material-states/v1:alias:"):
+            raise ValueError("controlled state mapping rule_id must identify a v1 alias")
+        return self
+
+
 class RouteBindingV1(StrictModel):
     """Hash-bound identity of one explicitly selected route and action intent.
 
@@ -1431,6 +1466,9 @@ class RouteBindingV1(StrictModel):
     intent_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
     material_graph_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
     device_contract_snapshot_hash: str = Field(min_length=1)
+    # This is a projection of the selected candidate's verified field records,
+    # not a substitute for the source review or its candidate digest.
+    controlled_state_mappings: Optional[List[RouteControlledStateMappingV1]] = None
 
     @model_validator(mode="after")
     def require_paper_scope(self) -> "RouteBindingV1":
@@ -1450,6 +1488,10 @@ class RouteBindingV1(StrictModel):
             set(self.required_capabilities)
         ) != len(self.required_capabilities):
             raise ValueError("route binding required capabilities must be unique nonempty IDs")
+        if self.controlled_state_mappings is not None:
+            paths = [item.field_path for item in self.controlled_state_mappings]
+            if not paths or len(paths) != len(set(paths)):
+                raise ValueError("route binding controlled state mappings must be nonempty and unique")
         return self
 
 
@@ -1503,6 +1545,45 @@ class ResearchActionPackageV2(StrictModel):
                 raise ValueError("route binding intent digest differs from package")
             if binding.material_graph_digest != route_material_graph_digest_v1(self.macro_steps):
                 raise ValueError("route binding material graph digest differs from package")
+            if binding.controlled_state_mappings:
+                evidence_by_id = {
+                    item.evidence_id: item for item in self.evidence_bundle.items
+                }
+                for mapping in binding.controlled_state_mappings:
+                    match = re.fullmatch(
+                        r"material_graph\[([0-9]+)\]\."
+                        r"(material_inputs|material_intermediates|material_outputs)"
+                        r"\[([0-9]+)\]\.state", mapping.field_path,
+                    )
+                    assert match is not None
+                    step_index, collection, port_index = (
+                        int(match.group(1)), match.group(2), int(match.group(3))
+                    )
+                    if step_index >= len(self.macro_steps):
+                        raise ValueError("route binding controlled mapping graph path missing")
+                    ports = getattr(self.macro_steps[step_index], collection)
+                    if (port_index >= len(ports)
+                            or ports[port_index].state != mapping.target_value):
+                        raise ValueError("route binding controlled mapping graph state differs")
+                    evidence = evidence_by_id.get(mapping.evidence_id)
+                    if (evidence is None
+                            or re.sub(r"\s+", " ", mapping.source_value)
+                            not in re.sub(r"\s+", " ", evidence.excerpt)):
+                        raise ValueError("route binding controlled mapping evidence differs")
+                    # Reconstructing a V2 package must verify the claimed rule
+                    # against the versioned resource, not only its shape and
+                    # source text. Import locally because route_field_basis
+                    # itself uses V2's state normalizer.
+                    from .route_field_basis import verify_controlled_state_mapping
+
+                    mapping_record = mapping.model_dump(
+                        mode="json", exclude={"field_path", "evidence_id"},
+                    )
+                    if verify_controlled_state_mapping(
+                        mapping.field_path, mapping.source_value,
+                        ports[port_index].state, mapping_record,
+                    ):
+                        raise ValueError("route binding controlled mapping rule differs")
         if (self.raw_observations_digest_scope is None) != (
             not self.raw_observations_sha256
         ):
@@ -1897,6 +1978,9 @@ class ResearchActionPackageV2(StrictModel):
             if "route_binding" in self.model_fields_set:
                 null_binding_digest = canonical_digest(payload, prefix="research_v2")
             payload.pop("route_binding", None)
+        elif self.route_binding.controlled_state_mappings is None:
+            # Historical bound V2 packages predate this optional snapshot.
+            payload["route_binding"].pop("controlled_state_mappings", None)
         digest = canonical_digest(payload, prefix="research_v2")
         if self.research_contract_hash and self.research_contract_hash not in {
             digest, null_binding_digest,

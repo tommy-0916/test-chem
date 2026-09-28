@@ -22,7 +22,10 @@ from .route_candidate import (
     RouteFieldEvidenceV1,
     RouteSignatureV1,
 )
-from .route_field_basis import classify_route_field_basis
+from .route_field_basis import (
+    classify_route_field_basis, is_material_port_state_path,
+    state_source_locally_attributed, verify_controlled_state_mapping,
+)
 from .v2 import (
     ScientificCompletenessV2,
     StrictModel,
@@ -238,6 +241,32 @@ def _field_issue(
         return "supported_field_provenance_missing"
     if field.value is None:
         return "supported_field_value_missing"
+    if is_material_port_state_path(field.field_path):
+        match = re.fullmatch(
+            r"material_graph\[([0-9]+)\]\."
+            r"(material_inputs|material_intermediates|material_outputs)"
+            r"\[([0-9]+)\]\.state", field.field_path,
+        )
+        if match is None or int(match.group(1)) >= len(candidate.material_graph):
+            return "semantic_binding_pending"
+        ports = getattr(candidate.material_graph[int(match.group(1))], match.group(2))
+        if int(match.group(3)) >= len(ports):
+            return "semantic_binding_pending"
+        record = field.controlled_mapping
+        mapping_issue = verify_controlled_state_mapping(
+            field.field_path, field.value, ports[int(match.group(3))].state,
+            record.model_dump(mode="json") if record is not None else None,
+        )
+        if mapping_issue:
+            return mapping_issue
+        if (provenance.kind == "paper"
+                and not state_source_locally_attributed(
+                    field.value, provenance.excerpt,
+                    ports[int(match.group(3))].name,
+                )):
+            return "semantic_binding_pending"
+    elif field.controlled_mapping is not None:
+        return "semantic_binding_pending"
     if field.unit and (isinstance(field.value, bool) or not isinstance(field.value, (int, float))):
         return "quantity_value_not_numeric"
     if provenance.kind == "paper":

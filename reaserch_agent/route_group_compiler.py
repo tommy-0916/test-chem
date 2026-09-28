@@ -17,7 +17,8 @@ import re
 from typing import Any, Mapping, Sequence
 
 from chem_agent_contracts.route_field_basis import (
-    classify_route_field_basis, controlled_state_requires_mapping,
+    classify_route_field_basis, controlled_state_mapping,
+    is_material_port_state_path, state_source_locally_attributed,
 )
 from chem_agent_contracts.v2 import (
     canonical_digest, evidence_contains_exact_quantity,
@@ -36,6 +37,18 @@ _MATERIAL_AMOUNT_PATH = re.compile(
     r"(?:\.material_(?:inputs|intermediates|outputs)\[(?:0|[1-9][0-9]*)\])?)"
     r"\.(?:quantity\.value|concentration_value)\Z"
 )
+_DIMENSIONLESS_PARAMETER_PATH = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\.parameters"
+    r"\[(0|[1-9][0-9]*)\]\.value\Z"
+)
+_DIMENSIONLESS_CONTAINER_COUNT_PATH = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\.logical_containers"
+    r"\[(0|[1-9][0-9]*)\]\.count\Z"
+)
+_DIMENSIONLESS_PARAMETER_NAMES = frozenset({
+    "ph", "ph_target", "wash_count", "cycle_count", "repeat_count",
+    "molar_ratio", "volume_ratio", "ratio",
+})
 _LOCAL_CLAUSE = re.compile(
     r"[,;，；。]|\.(?=\s|$)|\b(?:and|plus|with)\b|[、与和及]",
     re.IGNORECASE,
@@ -146,6 +159,38 @@ def literal_quantity_present(excerpt: Any, value: Any, unit: Any) -> bool:
     try:
         return evidence_contains_exact_quantity(excerpt, value, unit)
     except (OverflowError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def dimensionless_numeric_field_pending(field_path: str, graph: Any) -> bool:
+    """Recognize explicit dimensionless graph fields without approving a value.
+
+    No literal verifier for pH, repetition counts, or ratios exists yet. A
+    recognized unitless field therefore gets a distinct pending reason, while
+    material quantities and unrecognized numeric parameters still require a
+    physical unit. The field path and parameter name, never the number alone,
+    select this branch.
+    """
+    parameter = _DIMENSIONLESS_PARAMETER_PATH.fullmatch(field_path)
+    container_count = _DIMENSIONLESS_CONTAINER_COUNT_PATH.fullmatch(field_path)
+    if parameter is None and container_count is None:
+        return False
+    match = parameter or container_count
+    assert match is not None
+    try:
+        step = graph[int(match.group(1))]
+        if parameter is not None:
+            node = step["parameters"][int(match.group(2))]
+            return (
+                isinstance(node, Mapping)
+                and _text(node.get("name")).casefold()
+                in _DIMENSIONLESS_PARAMETER_NAMES
+                and isinstance(node.get("unit", ""), str)
+                and not node.get("unit", "").strip()
+            )
+        node = step["logical_containers"][int(match.group(2))]
+        return isinstance(node, Mapping) and type(node.get("count")) is int
+    except (IndexError, KeyError, TypeError, ValueError):
         return False
 
 
@@ -580,13 +625,28 @@ def _fact_issue(
         return "route_fact_value_invalid"
     if isinstance(claimed, float) and not math.isfinite(claimed):
         return "route_fact_value_invalid"
-    if isinstance(actual, bool) or actual != claimed or unit != graph_unit:
+    if is_material_port_state_path(field_path):
+        _mapping, mapping_issue = controlled_state_mapping(
+            field_path, claimed, actual,
+        )
+        if mapping_issue:
+            return mapping_issue
+        if (not isinstance(owner, Mapping)
+                or not state_source_locally_attributed(
+                    claimed, excerpt, owner.get("name"),
+                )):
+            return "semantic_binding_pending"
+    elif isinstance(actual, bool) or actual != claimed:
         return "route_fact_graph_value_mismatch"
-    if controlled_state_requires_mapping(field_path, claimed):
-        return "semantic_binding_pending"
+    if unit != graph_unit:
+        return "route_fact_graph_value_mismatch"
     if isinstance(claimed, (int, float)):
         if not unit:
-            return "route_fact_numeric_unit_missing"
+            return (
+                "dimensionless_semantic_pending"
+                if dimensionless_numeric_field_pending(field_path, graph)
+                else "route_fact_numeric_unit_missing"
+            )
         if not literal_quantity_present(excerpt, claimed, unit):
             return "route_fact_quantity_absent_from_excerpt"
         identity, identity_required = material_identity_for_amount_path(
@@ -651,6 +711,7 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         return "route_group_route_signature_invalid"
 
     seen_paths: set[str] = set()
+    state_mapping_by_path: dict[str, dict[str, str]] = {}
     excerpts_by_id: dict[str, tuple[str, Mapping[str, Any]]] = {}
     owner_fact_ids: dict[int, set[str]] = {}
     owner_nodes: dict[int, Mapping[str, Any]] = {}
@@ -665,6 +726,12 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         fact_id = raw["fact_id"].strip()
         field_path = raw["field_path"].strip()
         scoped = _scoped_claim(graph, signature, field_path)
+        if scoped is not None and is_material_port_state_path(field_path):
+            state_mapping, _ = controlled_state_mapping(
+                field_path, raw["value"], scoped[0],
+            )
+            if state_mapping is not None:
+                state_mapping_by_path[field_path] = state_mapping
         if scoped is not None and scoped[1] is not None:
             owner = scoped[1]
             owner_fact_ids.setdefault(id(owner), set()).add(fact_id)
@@ -690,6 +757,20 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             or reference[len("fact:"):] not in owner_fact_ids[owner_key]
         ):
             return "route_fact_graph_provenance_mismatch"
+
+    # Canonicalize only states whose exact source phrase passed the fact
+    # check above. V2 itself normalizes states on load; doing it here keeps
+    # the graph and field-level mapping record synchronized before hashing.
+    for path, record in state_mapping_by_path.items():
+        match = re.fullmatch(
+            r"material_graph\[([0-9]+)\]\."
+            r"(material_inputs|material_intermediates|material_outputs)"
+            r"\[([0-9]+)\]\.state", path,
+        )
+        assert match is not None
+        graph[int(match.group(1))][match.group(2)][int(match.group(3))]["state"] = (
+            record["target_value"]
+        )
 
     if not _numeric_leaves(graph).issubset(seen_paths):
         return "route_fact_numeric_graph_claim_missing"
@@ -749,6 +830,8 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
                 "locator": _text(source.get("locator")),
                 "source_digest": document_digest,
             },
+            **({"controlled_mapping": deepcopy(state_mapping_by_path[raw["field_path"].strip()])}
+               if raw["field_path"].strip() in state_mapping_by_path else {}),
         })
     _replace_paper_placeholders(graph, provenance_by_fact_id)
     group["evidence_bundle"] = evidence_bundle

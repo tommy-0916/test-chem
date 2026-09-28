@@ -226,7 +226,7 @@ def build_selected_route_saved_state_v2(
             selected.scientific_completeness.model_dump(mode="json", exclude_none=False)
             if selected.scientific_completeness is not None else None
         ),
-        "route_binding": selected.route_binding.model_dump(mode="json", exclude_none=False),
+        "route_binding": selected.route_binding.model_dump(mode="json", exclude_none=True),
     }
     rebuilt = research_state_to_v2(state)
     _assert_projection_equal(selected, rebuilt, raw_steps, raw_observations)
@@ -259,7 +259,7 @@ def validate_selected_route_saved_state_v2(state: dict[str, Any]) -> ResearchAct
     if canonical.route_binding is None:
         raise RouteSavedStateMismatch("canonical V2 package lacks route_binding")
     if restored.get("route_binding") != canonical.route_binding.model_dump(
-        mode="json", exclude_none=False
+        mode="json", exclude_none=True
     ):
         raise RouteSavedStateMismatch("top-level route_binding differs from canonical V2")
     raw_steps = restored.get("macro_plan")

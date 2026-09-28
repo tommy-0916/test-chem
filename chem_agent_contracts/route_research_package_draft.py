@@ -25,6 +25,7 @@ from .v2 import (
     MacroActionV2,
     ResearchActionPackageV2,
     RouteBindingV1,
+    RouteControlledStateMappingV1,
     StageV2,
     canonical_digest,
     route_material_graph_digest_v1,
@@ -110,6 +111,24 @@ def build_route_research_package_draft_v2(
 
     candidate = selected.candidate
     scope = candidate.source_scope
+    controlled_state_mappings: list[RouteControlledStateMappingV1] = []
+    for field in candidate.evidence_matrix:
+        mapping = field.controlled_mapping
+        if mapping is None:
+            continue
+        if (
+            field.status != "supported"
+            or field.value != mapping.source_value
+            or not field.evidence_id
+            or field.provenance is None
+            or field.provenance.reference != field.evidence_id
+        ):
+            raise ValueError("selected controlled mapping lacks its source field evidence")
+        controlled_state_mappings.append(RouteControlledStateMappingV1(
+            field_path=field.field_path,
+            evidence_id=field.evidence_id,
+            **mapping.model_dump(mode="json"),
+        ))
     intent = RouteActionIntentV1(
         route_id=bound.route_id,
         candidate_digest=bound.candidate_digest,
@@ -143,6 +162,9 @@ def build_route_research_package_draft_v2(
         intent_digest=canonical_digest(intent),
         material_graph_digest=route_material_graph_digest_v1(bound.macro_steps),
         device_contract_snapshot_hash=selected_decision.device_contract_snapshot_hash,
+        controlled_state_mappings=(
+            controlled_state_mappings or None
+        ),
     )
 
     package = ResearchActionPackageV2.model_validate({

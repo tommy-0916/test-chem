@@ -12,9 +12,13 @@ from collections.abc import Mapping, Sequence
 import re
 from typing import Any
 
+from chem_agent_contracts.route_field_basis import (
+    controlled_state_mapping, is_material_port_state_path,
+)
+
 from .route_group_compiler import (
-    classify_route_field_basis, controlled_state_requires_mapping,
-    literal_quantity_present,
+    _scoped_claim, classify_route_field_basis,
+    dimensionless_numeric_field_pending, literal_quantity_present,
 )
 from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
 
@@ -65,10 +69,18 @@ def assess_unreviewed_proposal_literal_shape(
             value = fact.get("value")
             unit = fact.get("unit", "")
             excerpt = fact.get("excerpt")
-            if controlled_state_requires_mapping(record["field_path"], value):
-                diagnostics.append({
-                    **record, "reason_code": "semantic_binding_pending",
-                })
+            if is_material_port_state_path(record["field_path"]):
+                graph = proposal.get("material_graph")
+                scoped = _scoped_claim(
+                    graph if isinstance(graph, list) else [], {},
+                    record["field_path"],
+                )
+                _mapping, issue = controlled_state_mapping(
+                    record["field_path"], value,
+                    scoped[0] if scoped is not None else None,
+                )
+                if issue:
+                    diagnostics.append({**record, "reason_code": issue})
             if not isinstance(unit, str):
                 diagnostics.append({**record, "reason_code": "fact_unit_invalid"})
             if isinstance(value, bool):
@@ -78,7 +90,11 @@ def assess_unreviewed_proposal_literal_shape(
             elif isinstance(value, (int, float)):
                 if isinstance(unit, str):
                     reason = (
-                        "fact_numeric_unit_missing" if not unit.strip() else
+                        ("dimensionless_semantic_pending" if
+                         dimensionless_numeric_field_pending(
+                             record["field_path"], proposal.get("material_graph")
+                         ) else "fact_numeric_unit_missing")
+                        if not unit.strip() else
                         "fact_quantity_not_in_excerpt" if not
                         literal_quantity_present(excerpt, value, unit) else ""
                     )

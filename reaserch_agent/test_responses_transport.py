@@ -650,6 +650,37 @@ class DirectResponsesTransportTest(unittest.TestCase):
         direct.assert_not_called()
         key_copy_cli.assert_not_called()
 
+    def test_cli_transports_encode_unicode_prompt_as_utf8(self) -> None:
+        prompt = "请核对 NiFe 沉淀的用量。"
+        response_text = '{"material":"NiFe 沉淀"}'
+
+        def fake_run(cmd, **kwargs):
+            self.assertTrue(kwargs["text"])
+            self.assertEqual(kwargs["encoding"], "utf-8")
+            self.assertIn(prompt, kwargs["input"])
+            self.assertIn(prompt.encode("utf-8"), kwargs["input"].encode(kwargs["encoding"]))
+            output_path = Path(cmd[cmd.index("--output-last-message") + 1])
+            output_path.write_text(response_text, encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        for transport in ("cli", "cli_account"):
+            with self.subTest(transport=transport), patch.dict(
+                os.environ, {"REFINER_RESPONSES_TRANSPORT": transport}
+            ), patch(
+                "reaserch_agent.utils.llm_factory.subprocess.run",
+                side_effect=fake_run,
+            ) as run:
+                model = CodexResponsesModel(
+                    model="gpt-5.6-sol",
+                    api_key="" if transport == "cli_account" else "test-key",
+                    base_url="" if transport == "cli_account" else "https://provider.invalid",
+                    client=None if transport == "cli_account" else Mock(),
+                    cli_account_only=transport == "cli_account",
+                )
+                response = model.invoke([{"role": "user", "content": prompt}])
+                self.assertEqual(response.content, response_text)
+                run.assert_called_once()
+
     def test_cli_account_failure_is_redacted_and_does_not_fall_back(self) -> None:
         model = CodexResponsesModel(
             model="gpt-6-sol",

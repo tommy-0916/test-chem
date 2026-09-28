@@ -72,6 +72,39 @@ class UnreviewedProposalLiteralShapeTest(unittest.TestCase):
         self.assertEqual(false_quote[0]["reason_code"],
                          "fact_quantity_not_in_excerpt")
 
+    def test_dimensionless_parameter_is_pending_without_relaxing_material_amount(self) -> None:
+        path = "material_graph[0].parameters[0].value"
+        fact = self._fact(10, "", "Adjust to pH 10.")
+        fact["field_path"] = path
+        graph = [{"parameters": [{"name": "pH", "value": 10, "unit": ""}]}]
+        result = assess_unreviewed_proposal_literal_shape([{
+            "route_facts": [fact], "material_graph": graph,
+        }])
+        self.assertEqual([item["reason_code"] for item in result],
+                         ["dimensionless_semantic_pending"])
+
+        graph[0]["parameters"][0]["name"] = "temperature"
+        result = assess_unreviewed_proposal_literal_shape([{
+            "route_facts": [fact], "material_graph": graph,
+        }])
+        self.assertEqual([item["reason_code"] for item in result],
+                         ["fact_numeric_unit_missing"])
+
+        fact["field_path"] = "material_graph[0].material_inputs[0].quantity.value"
+        result = assess_unreviewed_proposal_literal_shape([{
+            "route_facts": [fact], "material_graph": graph,
+        }])
+        self.assertEqual([item["reason_code"] for item in result],
+                         ["fact_numeric_unit_missing"])
+
+        fact["field_path"] = path
+        fact["unit"] = {"guessed": ""}
+        result = assess_unreviewed_proposal_literal_shape([{
+            "route_facts": [fact], "material_graph": graph,
+        }])
+        self.assertEqual([item["reason_code"] for item in result],
+                         ["fact_unit_invalid"])
+
     def test_non_numeric_value_and_string_with_unit_are_reported(self) -> None:
         self.assertEqual(
             self._audit(self._fact(True, "", "true"))[0]["reason_code"],

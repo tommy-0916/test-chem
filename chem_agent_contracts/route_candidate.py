@@ -67,6 +67,17 @@ class RouteSignatureV1(_RouteStrictModel):
         return normalize_material_state(value)
 
 
+class ControlledStateMappingV1(_RouteStrictModel):
+    """Program-verified lexical bridge from a paper literal to a V2 state."""
+
+    schema_version: Literal["controlled-state-mapping/v1"]
+    source_value: str = Field(min_length=1)
+    target_value: str = Field(min_length=1)
+    rule_id: str = Field(min_length=1)
+    rule_version: Literal["material-states/v1"]
+    resource_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
+
+
 class RouteFieldEvidenceV1(_RouteStrictModel):
     field_path: str = Field(min_length=1)
     value: Any = None
@@ -78,6 +89,7 @@ class RouteFieldEvidenceV1(_RouteStrictModel):
     source_scope: ExperimentalGroupScopeV1 | None = None
     resolution_path: str = ""
     derived_or_scaled: bool = False
+    controlled_mapping: ControlledStateMappingV1 | None = None
 
 
 class RouteCandidateV1(_RouteStrictModel):

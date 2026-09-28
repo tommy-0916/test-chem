@@ -14,6 +14,10 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from chem_agent_contracts.route_field_basis import (
+    controlled_state_mapping, is_material_port_state_path,
+)
+
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
     classify_route_field_basis, material_id_graph_issue,
@@ -216,7 +220,13 @@ def assess_pdf_group_proposal_fields(
                 else:
                     actual, _owner, graph_unit = claim
                     fact_unit = fact.get("unit", "")
-                    if (actual != fact.get("value")
+                    state_match = False
+                    if is_material_port_state_path(path):
+                        _mapping, state_issue = controlled_state_mapping(
+                            path, fact.get("value"), actual,
+                        )
+                        state_match = not state_issue
+                    if ((not state_match and actual != fact.get("value"))
                             or (isinstance(fact_unit, str)
                                 and graph_unit != fact_unit.strip())):
                         add_issue(proposal_index, fact_index,

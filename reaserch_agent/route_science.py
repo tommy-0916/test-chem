@@ -11,6 +11,10 @@ import re
 from typing import Any
 
 from chem_agent_contracts.route_candidate import RouteCandidateV1
+from chem_agent_contracts.route_field_basis import (
+    is_material_port_state_path, state_source_locally_attributed,
+    verify_controlled_state_mapping,
+)
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
 
 from .state import ResearchAgentState, ResearchEvent
@@ -451,8 +455,32 @@ def audit_route_candidate_science(
         if resolved is None or field.provenance is None:
             continue
         value, owner_provenance, step_index = resolved
+        field_value = field.value
+        if is_material_port_state_path(field.field_path):
+            mapping = field.controlled_mapping
+            issue = verify_controlled_state_mapping(
+                field.field_path, field.value, value,
+                mapping.model_dump(mode="json") if mapping is not None else None,
+            )
+            if issue:
+                issues.append(
+                    f"evidence_matrix_controlled_mapping_invalid:{field.field_path}"
+                )
+                continue
+            if field.provenance.kind == "paper":
+                name = _graph_field(
+                    steps, field.field_path.rsplit(".", 1)[0] + ".name",
+                )
+                if (name is None or not state_source_locally_attributed(
+                    field.value, field.provenance.excerpt, name[0],
+                )):
+                    # Ambiguous attribution is pending, not an audited fact.
+                    # RouteDecision reports semantic_binding_pending.
+                    continue
+            if mapping is not None:
+                field_value = mapping.target_value
         claimed_provenance = field.provenance.model_dump(mode="json", exclude_none=True)
-        if not _same_value(value, field.value) or (
+        if not _same_value(value, field_value) or (
             owner_provenance != claimed_provenance
             and not _paper_field_bound_to_port(
                 candidate, steps, field, owner_provenance, fields_by_path,

@@ -16,6 +16,10 @@ from dataclasses import dataclass
 import json
 from typing import Any
 
+from chem_agent_contracts.route_field_basis import (
+    canonicalize_unreviewed_state_facts,
+)
+
 from .route_pdf_group_proposals import (
     PdfGroupProposalAssociationResultV1,
     PdfGroupProposalDiagnosticV1,
@@ -24,7 +28,10 @@ from .route_pdf_group_proposals import (
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_locator_production import produce_pdf_proposal_locators
 from .route_pdf_local_repair import revise_pdf_group_proposals_locally
-from .route_group_compiler import canonicalize_proposal_material_ids
+from .route_group_compiler import (
+    _numeric_leaves, _required_qualitative_paths,
+    canonicalize_proposal_material_ids,
+)
 
 
 _ROUTE_ROLES = frozenset({"synthesis", "material_processing"})
@@ -83,6 +90,109 @@ def _valid_capabilities(value: object) -> bool:
         )
         and len(value) == len(set(value))
     )
+
+
+def _normalize_qualitative_fact_units(
+    proposal: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Represent a unitless text claim without changing its source claim.
+
+    This only edits a detached, unsigned model proposal. Quantitative paths,
+    malformed unit values, and paths outside the required route graph remain
+    untouched for the existing literal and structural checks to reject.
+    """
+    graph = proposal.get("material_graph")
+    signature = proposal.get("route_signature")
+    signature_paths, graph_paths = _required_qualitative_paths(
+        graph if isinstance(graph, list) else [],
+        signature if isinstance(signature, Mapping) else {},
+    )
+    allowed_paths = signature_paths | graph_paths
+    facts = proposal.get("route_facts")
+    if not isinstance(facts, list):
+        return []
+    source_ref = proposal.get("source_group_ref")
+    source_ref = source_ref if isinstance(source_ref, Mapping) else {}
+    audit: list[dict[str, Any]] = []
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+        field_path = fact.get("field_path")
+        if not isinstance(field_path, str) or field_path not in allowed_paths:
+            continue
+        value = fact.get("value")
+        if not isinstance(value, str) or not value.strip():
+            continue
+        unit_missing = "unit" not in fact
+        if not unit_missing and fact["unit"] is not None:
+            continue
+        fact["unit"] = ""
+        audit.append({
+            "version": "qualitative_unit_empty/v1",
+            "paper_id": source_ref.get("paper_id", ""),
+            "experimental_group_id": source_ref.get("experimental_group_id", ""),
+            "source_digest": source_ref.get("source_digest", ""),
+            "fact_id": fact.get("fact_id", ""),
+            "field_path": field_path,
+            "from": "missing" if unit_missing else "null",
+            "to": "",
+        })
+    return audit
+
+
+def _normalize_required_route_fact_flags(
+    proposal: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Mark omitted required flags only for exact graph and signature paths.
+
+    Every proposed route fact must be required. An explicit ``False`` or a
+    claim outside the proposed graph still reaches the existing validator.
+    This is an unsigned representation transform, not evidence approval.
+    """
+    graph = proposal.get("material_graph")
+    signature = proposal.get("route_signature")
+    graph = graph if isinstance(graph, list) else []
+    signature = signature if isinstance(signature, Mapping) else {}
+    signature_paths, graph_paths = _required_qualitative_paths(graph, signature)
+    allowed_paths = signature_paths | graph_paths | _numeric_leaves(graph)
+    facts = proposal.get("route_facts")
+    if not isinstance(facts, list):
+        return []
+    source_ref = proposal.get("source_group_ref")
+    source_ref = source_ref if isinstance(source_ref, Mapping) else {}
+    audit: list[dict[str, Any]] = []
+    for fact in facts:
+        if not isinstance(fact, dict) or "required" in fact:
+            continue
+        path = fact.get("field_path")
+        if not isinstance(path, str) or path not in allowed_paths:
+            continue
+        fact["required"] = True
+        audit.append({
+            "version": "route_fact_required_flag/v1",
+            "paper_id": source_ref.get("paper_id", ""),
+            "experimental_group_id": source_ref.get("experimental_group_id", ""),
+            "source_digest": source_ref.get("source_digest", ""),
+            "fact_id": fact.get("fact_id", ""),
+            "field_path": path,
+            "from": "missing",
+            "to": True,
+        })
+    return audit
+
+
+def _prepare_unsigned_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
+    """Apply bounded representation transforms before literal diagnostics."""
+    required_rows = _normalize_required_route_fact_flags(proposal)
+    unit_rows = _normalize_qualitative_fact_units(proposal)
+    mapped, state_rows = canonicalize_unreviewed_state_facts(proposal)
+    proposal.clear()
+    proposal.update(mapped)
+    return {
+        "required_fact_normalizations": required_rows,
+        "qualitative_unit_normalizations": unit_rows,
+        "controlled_state_normalizations": state_rows,
+    }
 
 
 def _build_prompt(groups: Sequence[PdfExperimentalGroupV1]) -> str:
@@ -223,14 +333,27 @@ def _invoke_bounded_proposals(
     locator_artifact: dict[str, Any] = {}
     if locate_unreviewed:
         generated_id_rows: list[dict[str, Any]] = []
+        required_fact_rows: list[dict[str, Any]] = []
+        qualitative_unit_rows: list[dict[str, Any]] = []
+        controlled_state_rows: list[dict[str, Any]] = []
         canonicalized: list[Any] = []
         for proposal_index, proposal in enumerate(proposals):
             if isinstance(proposal, Mapping):
                 transformed, rows = canonicalize_proposal_material_ids(proposal)
+                normalizations = _prepare_unsigned_proposal(transformed)
                 canonicalized.append(transformed)
                 generated_id_rows.extend({
                     "proposal_index": proposal_index, **row,
                 } for row in rows)
+                required_fact_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in normalizations["required_fact_normalizations"])
+                qualitative_unit_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in normalizations["qualitative_unit_normalizations"])
+                controlled_state_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in normalizations["controlled_state_normalizations"])
             else:
                 canonicalized.append(proposal)
         proposals = canonicalized
@@ -240,10 +363,14 @@ def _invoke_bounded_proposals(
             max_prompt_chars=budget.max_prompt_chars,
             max_response_chars=budget.max_response_chars,
             check_required_graph_facts=check_required_graph_facts,
+            normalize_revised_proposal=_prepare_unsigned_proposal,
         )
         located = produce_pdf_proposal_locators(source_groups, proposals)
         locator_artifact = located.audit_artifact()
         locator_artifact["generated_material_ids"] = generated_id_rows
+        locator_artifact["required_fact_normalizations"] = required_fact_rows
+        locator_artifact["qualitative_unit_normalizations"] = qualitative_unit_rows
+        locator_artifact["controlled_state_normalizations"] = controlled_state_rows
         locator_artifact["local_revision"] = local_revision
         if located.diagnostics:
             # Partial location records remain visible, but no partial batch

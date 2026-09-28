@@ -118,9 +118,7 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
         self.assertEqual(source_port["quantity"], {"value": 37.5, "unit": "mmol"})
         source_facts = {item["field_path"]: item for item in self.original["route_facts"]}
         facts = [deepcopy(source_facts[path]) for path in (NAME_PATH, QUANTITY_PATH)]
-        # The saved raw proposal used JSON null for qualitative units. This
-        # syntax correction changes neither the proposed name nor its quote.
-        facts[0]["unit"] = ""
+        self.assertIsNone(facts[0]["unit"], "preserve the saved model's raw unit")
         facts[1]["value"] = quantity
         if quantity_excerpt is not None:
             facts[1]["excerpt"] = quantity_excerpt
@@ -155,11 +153,17 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
             [self.group], [fragment], check_required_graph_facts=True,
         )
         self.assertEqual(assessment.located.diagnostics, [])
-        self.assertEqual(assessment.issues, [])
-        self.assertEqual(assessment.passing_fact_slots, ((0, 0), (0, 1)))
+        self.assertIn("fact_unit_invalid", {
+            issue["reason_code"] for issue in assessment.issues
+        })
         produced = self._strict_entry(fragment)
         self.assertEqual(produced.diagnostics, [])
         self.assertEqual(len(produced.protocols), 1)
+        normalized = produced.locator_production["qualitative_unit_normalizations"]
+        self.assertEqual(len(normalized), 1)
+        self.assertEqual(normalized[0]["field_path"], NAME_PATH)
+        self.assertEqual(normalized[0]["from"], "null")
+        self.assertEqual(fragment["route_facts"][0]["unit"], None)
         self.assertEqual(produced.protocols[0]["group_role"], "unclassified")
         self.assertNotIn("required_capabilities", produced.protocols[0])
         generated_id = produced.protocols[0]["material_graph"][0][
@@ -175,6 +179,52 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
                 "material_id"
             ], generated_id,
         )
+
+    def test_unit_normalization_does_not_invent_physical_units(self) -> None:
+        for bad_unit in (None, {"name": "mmol"}, ["mmol"]):
+            with self.subTest(bad_unit=bad_unit):
+                fragment = self._fragment()
+                fragment["route_facts"][1]["unit"] = bad_unit
+                produced = propose_pdf_group_unreviewed(
+                    [self.group], lambda _prompt: {"proposals": [fragment]},
+                    max_repair_groups=0, check_required_graph_facts=True,
+                )
+                self.assertEqual(produced.protocols, [])
+                self.assertIn("fact_unit_invalid", {
+                    diagnostic.reason_code for diagnostic in produced.diagnostics
+                })
+                self.assertFalse(any(
+                    row["field_path"] == QUANTITY_PATH
+                    for row in produced.locator_production[
+                        "qualitative_unit_normalizations"
+                    ]
+                ))
+
+    def test_text_unit_object_and_numeric_string_are_not_normalized(self) -> None:
+        for unit in ({"unit": ""}, [""]):
+            with self.subTest(unit=unit):
+                fragment = self._fragment()
+                fragment["route_facts"][0]["unit"] = unit
+                produced = propose_pdf_group_unreviewed(
+                    [self.group], lambda _prompt: {"proposals": [fragment]},
+                    max_repair_groups=0, check_required_graph_facts=True,
+                )
+                self.assertEqual(produced.protocols, [])
+                self.assertIn("fact_unit_invalid", {
+                    diagnostic.reason_code for diagnostic in produced.diagnostics
+                })
+        fragment = self._fragment()
+        fragment["route_facts"][1]["value"] = "37.5"
+        fragment["route_facts"][1]["unit"] = None
+        produced = propose_pdf_group_unreviewed(
+            [self.group], lambda _prompt: {"proposals": [fragment]},
+            max_repair_groups=0, check_required_graph_facts=True,
+        )
+        self.assertEqual(produced.protocols, [])
+        self.assertFalse(any(
+            row["field_path"] == QUANTITY_PATH
+            for row in produced.locator_production["qualitative_unit_normalizations"]
+        ))
 
     def test_generated_ids_close_real_solution_a_reference(self) -> None:
         original = deepcopy(self.original)
@@ -275,6 +325,35 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
             [item.reason_code for item in produced.diagnostics],
         )
 
+    def test_local_revision_normalizes_qualitative_unit_without_changing_raw(self) -> None:
+        whole_sentence = next(
+            fact["excerpt"] for fact in self.original["route_facts"]
+            if fact["fact_id"] == "pc_sig1"
+        )
+        initial = self._fragment(quantity=12.5, quantity_excerpt=whole_sentence)
+        revised = self._fragment()
+        calls = []
+
+        def invoke(_prompt: str) -> dict:
+            calls.append(_prompt)
+            return {"proposals": [deepcopy(initial if len(calls) == 1 else revised)]}
+
+        produced = propose_pdf_group_unreviewed(
+            [self.group], invoke, max_repair_groups=1,
+            check_required_graph_facts=True,
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(initial["route_facts"][0]["unit"], None)
+        self.assertEqual(revised["route_facts"][0]["unit"], None)
+        self.assertEqual(produced.diagnostics, [])
+        self.assertEqual(len(produced.protocols), 1)
+        revision = produced.locator_production["local_revision"]["revisions"][0]
+        self.assertEqual(revision["status"], "merged_unreviewed")
+        self.assertEqual(
+            revision["producer_normalizations"]["qualitative_unit_normalizations"]
+            [0]["field_path"], NAME_PATH,
+        )
+
     def test_ni_material_port_v2_json_round_trip_preserves_binding(self) -> None:
         fragment = self._fragment()
         produced = self._strict_entry(fragment)
@@ -292,7 +371,7 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
         self.assertEqual(
             compiled_facts[QUANTITY_PATH]["source"]["locator"], "pdf:p2:b58-p2:b58",
         )
-        name_fact, quantity_fact = fragment["route_facts"]
+        name_fact, quantity_fact = produced.protocols[0]["route_facts"]
         scope_data = self.group.source_scope.model_dump(mode="json")
         source_objects = []
         for index, fact in enumerate((name_fact, quantity_fact)):
@@ -316,7 +395,7 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
                 unit=fact["unit"], status="supported", required=True,
                 evidence_id=evidence_id, provenance=provenance,
                 source_scope=ExperimentalGroupScopeV1(
-                    **{**scope_data, "locator": fact["block_locator"]}
+                    **{**scope_data, "locator": fact["source"]["locator"]}
                 ),
             )
             source_objects.append((evidence, field))

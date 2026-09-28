@@ -14,7 +14,8 @@ from chem_agent_contracts.route_candidate import (
 )
 from reaserch_agent.route_discovery import discover_route_candidates
 from reaserch_agent.route_group_compiler import (
-    compile_experimental_group_protocols, material_identity_for_amount_path,
+    _fact_issue, compile_experimental_group_protocols,
+    dimensionless_numeric_field_pending, material_identity_for_amount_path,
     quantity_has_local_attribution,
 )
 from reaserch_agent.route_science import audit_route_candidate_science
@@ -28,9 +29,9 @@ class RouteGroupCompilerTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.source = self.root / "methods.md"
         self.excerpt = (
-            "In this precipitation, metal_salt solution is used for the "
+            "In this precipitation, metal_salt is used for the "
             "solution_to_wet_solid transformation: precipitate product as "
-            "retained_wet_solid from 2 mmol metal salt (salt)."
+            "retained_wet_solid from 2 mmol metal salt solution (salt)."
         )
         signature = {
             "route_family": "precipitation",
@@ -247,8 +248,8 @@ class RouteGroupCompilerTest(unittest.TestCase):
         protocol = self._protocol()
         group = protocol["experimental_groups"][0]
         wrong_quote = self.excerpt.replace(
-            "2 mmol metal salt (salt)",
-            "1 mmol metal salt (salt) and 2 mmol other salt",
+            "2 mmol metal salt solution (salt)",
+            "1 mmol metal salt solution (salt) and 2 mmol other salt",
         )
         for fact in group["route_facts"]:
             fact["excerpt"] = wrong_quote
@@ -277,6 +278,48 @@ class RouteGroupCompilerTest(unittest.TestCase):
             "A 1 M and B 2 M.", 2, "M", identity=identity,
             identity_required=required,
         ))
+
+    def test_dimensionless_numeric_path_is_pending_not_unit_exempt(self) -> None:
+        graph = [{
+            "parameters": [
+                {"name": "pH", "value": 10, "unit": ""},
+                {"name": "molar_ratio", "value": 2, "unit": ""},
+                {"name": "temperature", "value": 10, "unit": ""},
+            ],
+            "logical_containers": [{"count": 2}],
+            "material_inputs": [{"quantity": {"value": 2, "unit": ""}}],
+        }]
+        def reason(path: str, value: int) -> str:
+            fact = {
+                "fact_id": "numeric", "field_path": path,
+                "value": value, "unit": "", "excerpt": "pH 10 and 2 mmol salt",
+                "source": {
+                    "paper_id": "paper-A", "experimental_group_id": "Group A",
+                    "section": "Methods", "locator": "lines:4-4",
+                    "source_digest": self.digest,
+                },
+            }
+            return _fact_issue(
+                fact, paper_id="paper-A", group_id="Group A",
+                section="Methods", document_digest=self.digest,
+                graph=graph, signature={},
+            )
+
+        self.assertTrue(dimensionless_numeric_field_pending(
+            "material_graph[0].parameters[0].value", graph,
+        ))
+        self.assertEqual(reason("material_graph[0].parameters[0].value", 10),
+                         "dimensionless_semantic_pending")
+        self.assertEqual(reason("material_graph[0].parameters[1].value", 2),
+                         "dimensionless_semantic_pending")
+        self.assertEqual(reason("material_graph[0].logical_containers[0].count", 2),
+                         "dimensionless_semantic_pending")
+        self.assertEqual(reason("material_graph[0].parameters[2].value", 10),
+                         "route_fact_numeric_unit_missing")
+        self.assertEqual(
+            reason("material_graph[0].material_inputs[0].quantity.value", 2),
+            "route_fact_numeric_unit_missing",
+        )
 
     def test_intervening_entity_is_not_an_attribution_link(self) -> None:
         self.assertFalse(quantity_has_local_attribution(

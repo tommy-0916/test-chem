@@ -14,9 +14,14 @@ import json
 import re
 from typing import Any
 
+from chem_agent_contracts.route_field_basis import (
+    controlled_state_mapping, is_material_port_state_path,
+    state_source_locally_attributed,
+)
+
 from .route_group_compiler import (
-    classify_route_field_basis, controlled_state_requires_mapping,
-    literal_quantity_present,
+    _scoped_claim, classify_route_field_basis,
+    dimensionless_numeric_field_pending, literal_quantity_present,
     material_identity_for_amount_path,
     quantity_has_local_attribution,
 )
@@ -240,13 +245,33 @@ def _literal_fact_reason(
     unit = fact.get("unit", "")
     if not isinstance(unit, str):
         return "fact_unit_invalid"
-    if controlled_state_requires_mapping(_text(fact.get("field_path")), value):
-        return "semantic_binding_pending"
+    field_path = _text(fact.get("field_path"))
+    if is_material_port_state_path(field_path):
+        scoped = _scoped_claim(
+            graph if isinstance(graph, list) else [], {}, field_path,
+        )
+        if scoped is None:
+            return "fact_graph_path_missing"
+        _mapping, mapping_issue = controlled_state_mapping(
+            field_path, value, scoped[0],
+        )
+        if mapping_issue:
+            return mapping_issue
+        owner = scoped[1]
+        if (not isinstance(owner, Mapping)
+                or not state_source_locally_attributed(
+                    value, excerpt, owner.get("name"),
+                )):
+            return "semantic_binding_pending"
     if isinstance(value, bool):
         return "fact_value_type_unverifiable"
     if isinstance(value, (int, float)):
         if not unit.strip():
-            return "fact_numeric_unit_missing"
+            return (
+                "dimensionless_semantic_pending"
+                if dimensionless_numeric_field_pending(field_path, graph)
+                else "fact_numeric_unit_missing"
+            )
         if not literal_quantity_present(excerpt, value, unit):
             return "fact_quantity_not_in_excerpt"
         identity, identity_required = material_identity_for_amount_path(

@@ -264,6 +264,7 @@ def revise_pdf_group_proposals_locally(
     max_prompt_chars: int,
     max_response_chars: int,
     check_required_graph_facts: bool = False,
+    normalize_revised_proposal: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
     """Try at most one revision per failing group, then reassess the full batch."""
     baseline = deepcopy(list(original_proposals))
@@ -411,6 +412,10 @@ def revise_pdf_group_proposals_locally(
                     ),
                 )
                 entry["generated_material_ids"] = generated_ids
+                if normalize_revised_proposal is not None:
+                    entry["producer_normalizations"] = normalize_revised_proposal(
+                        revised
+                    )
             entry["reason_code"] = _revised_group_issue(
                 original, revised, passing_indexes,
             )
