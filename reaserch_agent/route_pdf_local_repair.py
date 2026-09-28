@@ -264,6 +264,14 @@ def revise_pdf_group_proposals_locally(
     max_prompt_chars: int,
     max_response_chars: int,
     check_required_graph_facts: bool = False,
+    tighten_revised_proposal: Callable[
+        [Mapping[str, Any], PdfExperimentalGroupV1],
+        tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]],
+    ] | None = None,
+    structure_revised_proposal: Callable[
+        [Mapping[str, Any], PdfExperimentalGroupV1],
+        tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]],
+    ] | None = None,
     normalize_revised_proposal: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
     """Try at most one revision per failing group, then reassess the full batch."""
@@ -409,6 +417,18 @@ def revise_pdf_group_proposals_locally(
         else:
             revised = envelope["proposals"][0]
             if isinstance(revised, Mapping):
+                if tighten_revised_proposal is not None:
+                    revised, quote_rows, quote_issues = (
+                        tighten_revised_proposal(revised, group)
+                    )
+                    entry["operation_quote_tightening"] = quote_rows
+                    entry["operation_quote_tightening_issues"] = quote_issues
+                if structure_revised_proposal is not None:
+                    revised, structure_rows, structure_issues = (
+                        structure_revised_proposal(revised, group)
+                    )
+                    entry["material_structure"] = structure_rows
+                    entry["material_structure_issues"] = structure_issues
                 revised, generated_ids = canonicalize_proposal_material_ids(
                     revised,
                     previous_ids=_existing_material_ids(
@@ -423,6 +443,8 @@ def revise_pdf_group_proposals_locally(
             entry["reason_code"] = _revised_group_issue(
                 original, revised, passing_indexes,
             )
+            if entry.get("material_structure_issues"):
+                entry["reason_code"] = "local_revision_material_structure_blocked"
             if not entry["reason_code"]:
                 final[proposal_index] = deepcopy(revised)
                 entry["status"] = "merged_unreviewed"
