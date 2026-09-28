@@ -32,6 +32,7 @@ from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_quote_binding import (
     bind_pdf_quote, normalize_pdf_quote_whitespace,
 )
+from .route_pdf_verification_context import verification_context_reason
 
 
 _DIGEST = re.compile(r"sha256_[0-9a-f]{64}\Z")
@@ -241,6 +242,14 @@ def _literal_fact_reason(
     assert binding is not None
     if locator != binding.locator:
         return "fact_source_locator_mismatch"
+    # The full verification context must bind to this same group and contain
+    # the located excerpt before it may back any semantic check.
+    context_issue = verification_context_reason(
+        fact, blocks,
+        {block.locator for block in group.blocks if block.caption},
+    )
+    if context_issue:
+        return context_issue
     # Semantic verification reads the full original quotation when a bounded
     # trim shortened the located excerpt; location stays with the short one.
     excerpt = fact.get("verification_excerpt") or located_excerpt

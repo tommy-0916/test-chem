@@ -84,6 +84,7 @@ def bind_pdf_quote(
     blocks: Sequence[tuple[str, str]], excerpt: str,
     *, asserted_block_locator: str | None = None,
     caption_block_locators: Collection[str] = (),
+    max_quote_blocks: int = _MAX_QUOTE_BLOCKS,
 ) -> tuple[PdfQuoteBindingV1 | None, str]:
     """Return one exact short quote span within the supplied group blocks.
 
@@ -91,7 +92,16 @@ def bind_pdf_quote(
     from the proposal. At most one such block may be skipped, only when it
     lies strictly between the quoted prose blocks. A locator still covers the
     original continuous source span, including the skipped caption.
+
+    ``max_quote_blocks`` is the prose-block budget for one quote. Location
+    and display use the default of three; callers verifying a full
+    verification context pass their own explicit budget so the two checks
+    stay separate.
     """
+
+    if not isinstance(max_quote_blocks, int) or isinstance(max_quote_blocks, bool) \
+            or max_quote_blocks < 1:
+        raise ValueError("max_quote_blocks must be a positive integer")
 
     if not isinstance(excerpt, str) or not excerpt.strip():
         return None, "fact_excerpt_not_in_block"
@@ -179,7 +189,7 @@ def bind_pdf_quote(
     (first, _start_offset, last, _end_offset), paths = next(iter(matches.items()))
     valid_paths = {
         skipped for skipped in paths
-        if last - first + 1 - int(skipped is not None) <= _MAX_QUOTE_BLOCKS
+        if last - first + 1 - int(skipped is not None) <= max_quote_blocks
     }
     if not valid_paths:
         return None, "fact_excerpt_span_too_long"

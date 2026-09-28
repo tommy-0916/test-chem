@@ -172,8 +172,13 @@ class RoutePdfSourceVerificationTest(unittest.TestCase):
         correct = self._verify(candidate)
         self.assertTrue(correct.source_scope_verified, correct.reasons)
 
-    def test_cross_block_literal_quote_verifies_only_with_exact_span_locator(self) -> None:
+    def test_cross_block_literal_quote_verifies_only_with_anchor_inside_span(self) -> None:
+        self.lines.insert(4, ("The control yield was recorded.", 10, "helv"))
+        self._write_pdf()
         candidate = self._candidate()
+        candidate.source_scope.locator = "pdf:p1:b2-p1:b5"
+        candidate.source_scope.source_digest = self.digest
+        candidate.evidence_matrix[0].source_scope.source_digest = self.digest
         excerpt = self.control_excerpt + "\n" + self.lines[3][0]
         candidate.evidence_bundle[0].excerpt = excerpt
         field = candidate.evidence_matrix[0]
@@ -184,7 +189,16 @@ class RoutePdfSourceVerificationTest(unittest.TestCase):
         self.assertTrue(verified.source_scope_verified, verified.reasons)
         self.assertEqual(verified.verified_field_paths, ("precursor.amount",))
 
+        # The stored field locator is the located anchor: it must lie inside
+        # the verified evidence span. A trimmed fact anchors the short
+        # excerpt inside the full context exactly this way.
         field.source_scope.locator = "pdf:p1:b3-p1:b3"
+        anchored = self._verify(candidate)
+        self.assertTrue(anchored.source_scope_verified, anchored.reasons)
+
+        # An anchor on other group prose outside the evidence span cannot
+        # claim the excerpt.
+        field.source_scope.locator = "pdf:p1:b5-p1:b5"
         wrong_range = self._verify(candidate)
         self.assertIn("field_excerpt_not_in_source_group:precursor.amount",
                       wrong_range.reasons)

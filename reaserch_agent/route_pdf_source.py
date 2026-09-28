@@ -43,6 +43,7 @@ from .route_group_compiler import (
 from .route_pdf_quote_binding import (
     bind_pdf_quote, normalize_pdf_quote_whitespace,
 )
+from .route_pdf_verification_context import MAX_VERIFICATION_CONTEXT_BLOCKS
 
 
 _LOCATOR = re.compile(r"pdf:p([1-9][0-9]*):b([1-9][0-9]*)-p([1-9][0-9]*):b([1-9][0-9]*)\Z")
@@ -440,10 +441,21 @@ def _field_issue(
     binding, quote_issue = bind_pdf_quote(
         quote_blocks, excerpt,
         caption_block_locators=_quote_caption_locators(blocks, group_range),
+        # Post-compile evidence carries the full verification context when a
+        # bounded trim shortened the located excerpt; its re-binding uses the
+        # context budget, and the stored located locator must sit inside the
+        # context span -- never silently re-tested against the short text.
+        max_quote_blocks=MAX_VERIFICATION_CONTEXT_BLOCKS,
+    )
+    context_range = (
+        _locator_range(binding.locator, blocks)
+        if binding is not None and not quote_issue else None
     )
     if (
         quote_issue or binding is None
-        or binding.locator != field_scope.locator
+        or context_range is None
+        or not (group_range[0] < context_range[0] <= context_range[1] <= group_range[1])
+        or not (context_range[0] <= field_range[0] <= field_range[1] <= context_range[1])
         or not excerpt.strip()
         or normalize_pdf_quote_whitespace(excerpt)
         not in normalize_pdf_quote_whitespace(item.excerpt)
@@ -620,6 +632,7 @@ def verify_route_pdf_source(
                 _binding, quote_issue = bind_pdf_quote(
                     quote_blocks, graph_excerpt,
                     caption_block_locators=caption_locators,
+                    max_quote_blocks=MAX_VERIFICATION_CONTEXT_BLOCKS,
                 )
                 if quote_issue:
                     issue = "graph_paper_excerpt_outside_group"
@@ -632,6 +645,7 @@ def verify_route_pdf_source(
         binding = evidence_by_id.get(evidence_id)
         if binding is None or bind_pdf_quote(
             quote_blocks, binding[1], caption_block_locators=caption_locators,
+            max_quote_blocks=MAX_VERIFICATION_CONTEXT_BLOCKS,
         )[1]:
             invalid = True
             reasons.append(f"evidence_item_excerpt_not_in_group:{evidence_id}")

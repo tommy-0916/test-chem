@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_quote_binding import bind_pdf_quote
+from .route_pdf_verification_context import verification_context_reason
 
 
 _ALLOWED_PROPOSAL_KEYS = frozenset({
@@ -181,6 +182,15 @@ def associate_pdf_group_proposals(
                 caption_block_locators=caption_locators,
             )
             if fact_issue:
+                break
+            # The full verification context must bind to this same group and
+            # contain the located excerpt before any downstream check may
+            # trust it; a forged or foreign context blocks the proposal here.
+            context_issue = verification_context_reason(
+                raw_fact, blocks, caption_locators,
+            )
+            if context_issue:
+                fact_issue = f"proposal_{context_issue}"
                 break
             assert binding is not None
             prepared_fact = deepcopy(dict(raw_fact))

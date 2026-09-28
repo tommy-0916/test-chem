@@ -29,6 +29,8 @@ from chem_agent_contracts.v2 import (
     canonical_digest, evidence_contains_exact_quantity,
 )
 
+from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
+
 
 _PATH_PART = re.compile(r"([a-z][a-z0-9_]*)(?:\[(0|[1-9][0-9]*)\])?\Z")
 _GRAPH_ROOT = re.compile(r"material_graph\[(0|[1-9][0-9]*)\]\Z")
@@ -602,6 +604,17 @@ def _fact_issue(
     # Verification reads the full original quotation when a bounded trim
     # shortened the located excerpt; location stays with the short excerpt.
     excerpt = _text(raw.get("verification_excerpt")) or _text(raw.get("excerpt"))
+    # This layer is pure and holds no PDF blocks, so it re-checks the part of
+    # the source binding that does not need them: the located excerpt must be
+    # literally contained in the context. Block-level binding of the context
+    # happens at the association/receipt boundaries and again in the PDF
+    # source verifier; each of those refuses a foreign or modified context.
+    if raw.get("verification_excerpt") is not None:
+        located = _text(raw.get("excerpt"))
+        if (not located
+                or normalize_pdf_quote_whitespace(located)
+                not in normalize_pdf_quote_whitespace(excerpt)):
+            return "verification_context_missing_located_excerpt"
     raw_unit = raw.get("unit", "")
     if not isinstance(raw_unit, str):
         return "route_fact_unit_invalid"
@@ -766,7 +779,14 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             return "route_fact_field_path_duplicate"
         seen_paths.add(field_path)
         earlier = excerpts_by_id.get(fact_id)
-        identity = (raw["excerpt"].strip(), raw["source"])
+        # Formal evidence carries the same text verification used: the full
+        # original quotation when a bounded trim shortened the located
+        # excerpt (already containment-checked above and block-bound at the
+        # association/receipt boundaries), otherwise the excerpt itself.
+        evidence_excerpt = raw.get("verification_excerpt")
+        if not isinstance(evidence_excerpt, str) or not evidence_excerpt.strip():
+            evidence_excerpt = raw["excerpt"]
+        identity = (evidence_excerpt.strip(), raw["source"])
         if earlier is not None and earlier != identity:
             return "route_fact_id_conflict"
         excerpts_by_id[fact_id] = identity
