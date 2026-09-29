@@ -24,12 +24,21 @@ import json
 from pathlib import Path
 import re
 from statistics import median
-from typing import Mapping
+from typing import Any, Mapping
 
 from chem_agent_contracts.route_candidate import RouteCandidateV1
 from chem_agent_contracts.route_convention_basis import verify_bound_output_state
-from chem_agent_contracts.route_field_basis import output_state_parent_role_issue
-from chem_agent_contracts.v2 import canonical_digest
+from chem_agent_contracts.route_field_basis import (
+    is_material_port_state_path, output_state_parent_role_issue,
+    state_source_locally_attributed,
+)
+from chem_agent_contracts.route_inventory_basis import load_inventory_resource
+from chem_agent_contracts.route_source_labels import (
+    RULE_SCOPED_LABEL_IDENTITY, SOURCE_LABEL_RULE_VERSION,
+    build_source_label_context, definition_site_concentration_binding,
+    quantity_identity_surfaces, state_attribution_outcome, surface_anchor,
+)
+from chem_agent_contracts.v2 import canonical_digest, normalize_material_state
 
 from .route_source import (
     RouteSourceVerificationV1,
@@ -37,8 +46,8 @@ from .route_source import (
     _paper_graph_claims,
 )
 from .route_group_compiler import (
-    literal_quantity_present, material_identity_for_amount_path,
-    quantity_has_local_attribution,
+    _port_material_for_path, literal_quantity_present,
+    material_identity_for_amount_path, quantity_has_local_attribution,
 )
 from .route_pdf_quote_binding import (
     bind_pdf_quote, normalize_pdf_quote_whitespace,
@@ -395,12 +404,46 @@ def _group_range(
     return group_index, group_end - 1
 
 
+def _port_name_for_path(graph: Any, field_path: str) -> str:
+    match = re.fullmatch(
+        r"material_graph\[([0-9]+)\]\."
+        r"(material_inputs|material_intermediates|material_outputs)"
+        r"\[([0-9]+)\]\.state", field_path,
+    )
+    if match is None:
+        return ""
+    try:
+        step = graph[int(match.group(1))]
+        ports = getattr(step, match.group(2))
+        port = ports[int(match.group(3))]
+    except (IndexError, TypeError, AttributeError):
+        return ""
+    name = getattr(port, "name", "")
+    return name.strip() if isinstance(name, str) else ""
+
+
+def _stored_binding_issue(
+    field: Any, binding: dict[str, str] | None,
+) -> str | None:
+    stored = getattr(field, "source_label_binding", None)
+    if stored is None:
+        return None
+    expected = binding or {}
+    comparable = {
+        key: value for key, value in expected.items() if value or key != "entity_material_id"
+    }
+    if stored.model_dump(mode="json", exclude_none=True) != comparable:
+        return "field_source_label_binding_mismatch"
+    return None
+
+
 def _field_issue(
     candidate: RouteCandidateV1,
     field_index: int,
     blocks: list[_PdfBlock],
     group_range: tuple[int, int],
     digest: str,
+    label_context: Any = None,
 ) -> str | None:
     field = candidate.evidence_matrix[field_index]
     scope = candidate.source_scope
@@ -467,19 +510,81 @@ def _field_issue(
         field.field_path, candidate.material_graph, field.value, excerpt,
     ):
         return "parent_state_not_child_evidence"
+    if is_material_port_state_path(field.field_path):
+        context = label_context
+        if context is None:
+            context = build_source_label_context(
+                candidate.material_graph, candidate.evidence_matrix,
+            )
+        outcome, binding = state_attribution_outcome(
+            field.value, excerpt, field.field_path,
+            candidate.material_graph, context,
+        )
+        if outcome == "pending":
+            return "field_state_attribution_unresolved"
+        if outcome == "legacy":
+            name = _port_name_for_path(candidate.material_graph, field.field_path)
+            if (not name or not state_source_locally_attributed(
+                    field.value, excerpt, name)):
+                return "field_state_attribution_unresolved"
+            binding = None
+        stored_issue = _stored_binding_issue(field, binding)
+        if stored_issue:
+            return stored_issue
     if field.unit:
         if isinstance(field.value, bool) or not isinstance(field.value, (int, float)):
             return "field_quantity_not_numeric"
         if not literal_quantity_present(excerpt, field.value, field.unit):
             return "field_quantity_not_in_excerpt"
+        context = label_context
+        if context is None:
+            context = build_source_label_context(
+                candidate.material_graph, candidate.evidence_matrix,
+            )
         identity, identity_required = material_identity_for_amount_path(
-            field.field_path, candidate.material_graph,
+            field.field_path, candidate.material_graph, candidate.evidence_matrix,
         )
-        if not quantity_has_local_attribution(
+        surfaces = quantity_identity_surfaces(
+            field.field_path, candidate.material_graph, context,
+        )
+        binding: dict[str, str] | None = None
+        match_sink: dict[str, Any] = {}
+        if quantity_has_local_attribution(
             excerpt, field.value, field.unit, identity=identity,
-            identity_required=identity_required,
+            identity_required=identity_required, identity_surfaces=surfaces,
+            match_sink=match_sink,
         ):
-            return "field_quantity_attribution_unresolved"
+            surface = match_sink.get("identity_surface", "")
+            if surface and surface != identity.strip():
+                binding = {
+                    "schema_version": "source-label-binding/v1",
+                    "rule_version": SOURCE_LABEL_RULE_VERSION,
+                    "rule_id": RULE_SCOPED_LABEL_IDENTITY,
+                    "label": surface.casefold(),
+                    "source_surface": surface,
+                    "entity_material_id": _port_material_for_path(
+                        candidate.material_graph, field.field_path)[0],
+                    "mention_anchor": surface_anchor(
+                        field.field_path, candidate.material_graph, context,
+                        surface, excerpt),
+                }
+        else:
+            binding = definition_site_concentration_binding(
+                excerpt, field.value, field.unit, surfaces,
+            )
+            if binding is None:
+                return "field_quantity_attribution_unresolved"
+            binding["entity_material_id"] = _port_material_for_path(
+                candidate.material_graph, field.field_path)[0]
+            anchor = surface_anchor(
+                field.field_path, candidate.material_graph, context,
+                binding["source_surface"], excerpt,
+            )
+            if anchor:
+                binding["mention_anchor"] = anchor
+        stored_issue = _stored_binding_issue(field, binding)
+        if stored_issue:
+            return stored_issue
     elif isinstance(field.value, str):
         literal = normalize_pdf_quote_whitespace(field.value)
         normalized_excerpt = normalize_pdf_quote_whitespace(excerpt)
@@ -511,6 +616,10 @@ def _quote_caption_locators(
         for block in blocks[group_range[0] + 1:group_range[1] + 1]
         if _caption(block)
     }
+
+
+def _inventory_text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def verify_route_pdf_source(
@@ -558,6 +667,9 @@ def verify_route_pdf_source(
         return _failure("experimental_group_locator_mismatch")
     quote_blocks = _quote_blocks(blocks, group)
     caption_locators = _quote_caption_locators(blocks, group)
+    label_context = build_source_label_context(
+        candidate.material_graph, candidate.evidence_matrix,
+    )
     reasons: list[str] = []
     verified_fields: list[str] = []
     verified_ids: set[str] = set()
@@ -568,7 +680,9 @@ def verify_route_pdf_source(
             continue
         if field.evidence_id:
             referenced_ids.add(field.evidence_id)
-        issue = _field_issue(candidate, index, blocks, group, digest)
+        issue = _field_issue(
+            candidate, index, blocks, group, digest, label_context,
+        )
         if issue:
             reasons.append(f"{issue}:{field.field_path}")
             invalid = True
@@ -610,6 +724,32 @@ def verify_route_pdf_source(
                 )):
             reasons.append(f"convention_state_support_unverified:{field.field_path}")
             invalid = True
+    inventory_items, inventory_digest = load_inventory_resource()
+    inventory_by_id = {
+        _inventory_text(item.get("item_id")): item for item in inventory_items
+    }
+    for field in candidate.evidence_matrix:
+        provenance = field.provenance
+        if provenance is None or provenance.kind != "inventory":
+            continue
+        if field.resolution_path == "candidate_supply_spec/v1":
+            # Candidate supply-spec rows are byte-verified at the candidate
+            # package boundary (save/reload audit), not against approved
+            # inventory bytes; the two registers never cross-verify.
+            continue
+        item = inventory_by_id.get(provenance.reference)
+        if (field.status != "supported"
+                or provenance.evidence_class != "inventory_record"
+                or item is None
+                or not inventory_digest
+                or provenance.source_digest != inventory_digest
+                or normalize_material_state(
+                    _inventory_text(item.get("supply_form"))) != field.value
+                or _inventory_text(item.get("record")) != provenance.excerpt.strip()):
+            reasons.append(f"inventory_resolution_unverified:{field.field_path}")
+            invalid = True
+        else:
+            verified_fields.append(field.field_path)
     evidence_by_id = {
         item.evidence_id: (index, item.excerpt)
         for index, item in enumerate(candidate.evidence_bundle)

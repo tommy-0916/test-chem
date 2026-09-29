@@ -186,6 +186,23 @@ def _port_name_paper_anchor(
     )
 
 
+def _inventory_resolved_state_field(field: Any) -> bool:
+    """An external-input state bound from an approved inventory record.
+
+    Structural verification only; the resource bytes are re-verified at the
+    source-audit layer.  The graph-state equality and controlled-vocabulary
+    checks around this exemption still apply.
+    """
+    provenance = field.provenance
+    if provenance is None or provenance.kind != "inventory":
+        return False
+    if provenance.evidence_class != "inventory_record":
+        return False
+    if not provenance.reference.strip() or not provenance.excerpt.strip():
+        return False
+    return re.fullmatch(r"sha256_[0-9a-f]{64}", provenance.source_digest) is not None
+
+
 def _verified_convention_state_field(
     candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
     fields_by_path: dict[str, Any],
@@ -609,6 +626,7 @@ def audit_route_candidate_science(
             and not _paper_field_bound_to_port(
                 candidate, steps, field, owner_provenance, fields_by_path,
             )
+            and not _inventory_resolved_state_field(field)
         ):
             issues.append(f"evidence_matrix_graph_mismatch:{field.field_path}")
             continue

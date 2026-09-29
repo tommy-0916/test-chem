@@ -56,18 +56,22 @@ def _items(value: Any) -> list[Mapping[str, Any]]:
     return [_mapping(item) for item in value] if isinstance(value, (list, tuple)) else []
 
 
+def is_concentration_unit(unit: Any) -> bool:
+    """Whether a unit string denotes a concentration in the controlled set."""
+    return isinstance(unit, str) and unit.strip() in _CONCENTRATION_UNITS
+
+
 def output_quantity_role_issue(field_path: str, graph: Sequence[Any], unit: str) -> bool:
     """A split count or concentration cannot be one output material's amount."""
     match = _OUTPUT_QUANTITY.fullmatch(field_path)
     if match is None:
         return False
-    normalized = unit.strip()
-    if normalized in _CONCENTRATION_UNITS:
+    if is_concentration_unit(unit):
         return True
     # A count of portions describes cardinality of an operation. It does not
     # specify how much material each output contains, even if the proposal
     # omitted its relation graph entirely.
-    return normalized.casefold() in _SPLIT_COUNT_UNITS
+    return unit.strip().casefold() in _SPLIT_COUNT_UNITS
 
 
 def _rule_resource() -> tuple[dict[str, Mapping[str, Any]], str]:

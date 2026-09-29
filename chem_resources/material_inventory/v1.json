@@ -1,0 +1,5 @@
+{
+  "schema": "material-inventory/v1",
+  "description": "Approved inventory / material-spec records for external inputs. Empty until the lab provides verifiable records; an entry binds a concrete material identity to its verified supply form and optional spec. Never invent entries to silence unresolved states.",
+  "items": []
+}

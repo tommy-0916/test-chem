@@ -27,6 +27,9 @@ from .route_field_basis import (
     output_state_parent_role_issue,
     state_source_locally_attributed, verify_controlled_state_mapping,
 )
+from .route_source_labels import (
+    build_source_label_context, state_attribution_outcome,
+)
 from .v2 import (
     ScientificCompletenessV2,
     StrictModel,
@@ -266,12 +269,20 @@ def _field_issue(
                     field.value, provenance.excerpt,
                 )):
             return "parent_state_not_child_evidence"
-        if (provenance.kind == "paper"
-                and not state_source_locally_attributed(
+        if provenance.kind == "paper":
+            label_context = build_source_label_context(
+                candidate.material_graph, candidate.evidence_matrix,
+            )
+            outcome, _binding = state_attribution_outcome(
+                field.value, provenance.excerpt, field.field_path,
+                candidate.material_graph, label_context,
+            )
+            if outcome == "pending":
+                return "semantic_binding_pending"
+            if outcome == "legacy" and not state_source_locally_attributed(
                     field.value, provenance.excerpt,
-                    ports[int(match.group(3))].name,
-                )):
-            return "semantic_binding_pending"
+                    ports[int(match.group(3))].name):
+                return "semantic_binding_pending"
     elif field.controlled_mapping is not None:
         return "semantic_binding_pending"
     if field.unit and (isinstance(field.value, bool) or not isinstance(field.value, (int, float))):
@@ -313,6 +324,19 @@ def _field_issue(
         if isinstance(field.value, (int, float)) and not isinstance(field.value, bool):
             if not evidence_contains_exact_quantity(provenance.excerpt, field.value, field.unit):
                 return "paper_quantity_excerpt_mismatch"
+        return None
+    if provenance.kind == "inventory":
+        # An external-input state bound from an approved inventory record.
+        # Structural verification only (this gate is pure); the resource
+        # bytes are re-verified at the source-audit layer.
+        if not is_material_port_state_path(field.field_path):
+            return "inventory_state_field_only"
+        if provenance.evidence_class != "inventory_record":
+            return "inventory_evidence_class_mismatch"
+        if not provenance.reference.strip() or not provenance.excerpt.strip():
+            return "inventory_reference_missing"
+        if re.fullmatch(r"sha256_[0-9a-f]{64}", provenance.source_digest) is None:
+            return "inventory_digest_missing"
         return None
     if provenance.kind == "agent_inferred":
         if provenance.evidence_class != "chemistry_convention" or not provenance.inference_rule:

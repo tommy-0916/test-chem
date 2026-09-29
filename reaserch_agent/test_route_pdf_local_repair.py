@@ -369,6 +369,7 @@ class PdfGroupLocalRepairTest(unittest.TestCase):
             "material_graph": [{
                 "operation": "mix", "material_inputs": [{
                     "material_id": "salt", "name": "salt solution",
+                    "state": "solution",
                 }],
             }],
             "route_facts": [self._fact(
@@ -379,6 +380,12 @@ class PdfGroupLocalRepairTest(unittest.TestCase):
         revised["route_facts"].append(self._fact(
             "name", "material_graph[0].material_inputs[0].name",
             "salt solution", "", quote,
+        ))
+        # G1 requires a state fact for every port; the local feedback adds
+        # the missing name claim AND the missing state claim.
+        revised["route_facts"].append(self._fact(
+            "state", "material_graph[0].material_inputs[0].state",
+            "solution", "", quote,
         ))
         result, prompts = self._run(
             revised, initial_a=original, check_required_graph_facts=True,

@@ -18,6 +18,9 @@ from chem_agent_contracts.route_field_basis import (
     controlled_state_mapping, is_material_port_state_path,
 )
 from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
+from chem_agent_contracts.route_inventory_basis import (
+    load_inventory_resource, verified_resolutions,
+)
 
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
@@ -85,13 +88,21 @@ def assess_pdf_group_proposal_fields(
     proposals: Sequence[Mapping[str, Any]],
     *,
     check_required_graph_facts: bool = False,
+    inventory_registers: Mapping[str, tuple[Any, ...]] | None = None,
 ) -> PdfProposalFieldAssessmentV1:
     """Inspect every fact independently, retaining all original proposal data.
 
     Successful location is checked against the same private literal predicate
     used by the formal receipt. Unlike a partial receipt, this retains all
-    sibling facts when evaluating material quantity attribution. The returned
+    sibling facts when evaluating material quantity attribution.  The returned
     status never substitutes for full-batch association and receipt checks.
+
+    A state requirement discharged by a verified inventory resolution is not
+    re-demanded as a paper fact: registers bundle byte-verified source
+    records — ``{register: (items, digest, resolutions)}`` — and only a
+    resolution that re-verifies against those same bytes discharges the
+    requirement.  A candidate supply-spec register therefore counts only
+    when its bytes were supplied here.
     """
 
     located = produce_pdf_proposal_locators(groups, proposals)
@@ -149,6 +160,13 @@ def assess_pdf_group_proposal_fields(
                           "fact_generated_id_paper_fact_forbidden")
 
     if check_required_graph_facts:
+        registers: dict[str, tuple[Any, ...]] = {}
+        if inventory_registers is not None:
+            registers = dict(inventory_registers)
+        else:
+            items, digest = load_inventory_resource()
+            if digest:
+                registers = {"material-inventory/v1": (items, digest, ())}
         for proposal_index, proposal in enumerate(source_proposals):
             if not isinstance(proposal, Mapping):
                 continue
@@ -169,7 +187,25 @@ def assess_pdf_group_proposal_fields(
                 and isinstance(fact.get("field_path"), str)
                 and fact.get("required") is True
             }
-            for path in sorted(required_paths - fact_paths):
+            covered_paths: set[str] = set()
+            for register, bundle in registers.items():
+                if not isinstance(bundle, tuple) or len(bundle) < 2:
+                    continue
+                items, digest = bundle[0], bundle[1]
+                bundled = bundle[2] if len(bundle) > 2 else ()
+                resolutions = [
+                    r for r in (*bundled,)
+                    if isinstance(r, Mapping)
+                ]
+                raw = proposal.get("inventory_resolutions")
+                if isinstance(raw, list):
+                    resolutions.extend(
+                        r for r in raw if isinstance(r, Mapping))
+                if resolutions:
+                    covered_paths.update(verified_resolutions(
+                        resolutions, items, digest, register=register,
+                    ))
+            for path in sorted(required_paths - fact_paths - covered_paths):
                 add_issue(proposal_index, -1, "required_graph_fact_missing",
                           path)
             for path in sorted(required_paths):

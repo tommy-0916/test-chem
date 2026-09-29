@@ -78,6 +78,23 @@ class ControlledStateMappingV1(_RouteStrictModel):
     resource_digest: str = Field(pattern=r"^sha256_[0-9a-f]{64}$")
 
 
+class SourceLabelBindingV1(_RouteStrictModel):
+    """Program-verified association from one source mention to one entity.
+
+    Records which source surface form and which of the entity's labels made a
+    state, identity, or concentration attribution pass, so every verification
+    layer audits the same association instead of re-deriving it ad hoc.
+    """
+
+    schema_version: Literal["source-label-binding/v1"]
+    rule_id: str = Field(min_length=1)
+    rule_version: Literal["source-labels/v1"]
+    label: str = Field(min_length=1)
+    source_surface: str = Field(min_length=1)
+    entity_material_id: str = ""
+    mention_anchor: str = ""
+
+
 class RouteFieldEvidenceV1(_RouteStrictModel):
     field_path: str = Field(min_length=1)
     value: Any = None
@@ -90,6 +107,7 @@ class RouteFieldEvidenceV1(_RouteStrictModel):
     resolution_path: str = ""
     derived_or_scaled: bool = False
     controlled_mapping: ControlledStateMappingV1 | None = None
+    source_label_binding: SourceLabelBindingV1 | None = None
 
 
 class RouteCandidateV1(_RouteStrictModel):

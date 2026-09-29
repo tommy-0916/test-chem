@@ -25,8 +25,13 @@ from chem_agent_contracts.route_convention_basis import (
     canonical_state_derivation, derive_unreviewed_output_state,
     output_quantity_role_issue,
 )
+from chem_agent_contracts.route_source_labels import (
+    SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
+    build_source_label_context, definition_site_concentration_binding,
+    quantity_identity_surfaces, state_attribution_outcome, surface_anchor,
+)
 from chem_agent_contracts.v2 import (
-    canonical_digest, evidence_contains_exact_quantity,
+    canonical_digest, evidence_contains_exact_quantity, normalize_material_state,
 )
 
 from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
@@ -88,6 +93,27 @@ def _text(value: Any) -> str:
 
 def _node_value(node: Any, name: str) -> Any:
     return node.get(name) if isinstance(node, Mapping) else getattr(node, name, None)
+
+
+_AMOUNT_PORT_PATH = re.compile(
+    r"material_graph\[([0-9]+)\]\."
+    r"(material_inputs|material_intermediates|material_outputs)\[([0-9]+)\]"
+)
+
+
+def _port_material_for_path(graph: Any, field_path: str) -> tuple[str, str]:
+    """Resolve a graph port path to (material_id, sample_id) without binding."""
+    match = _AMOUNT_PORT_PATH.match(field_path)
+    if match is None or not isinstance(graph, (list, tuple)):
+        return "", ""
+    try:
+        step = graph[int(match.group(1))]
+        ports = _node_value(step, match.group(2))
+        port = ports[int(match.group(3))]
+    except (IndexError, KeyError, TypeError, ValueError):
+        return "", ""
+    return _text(_node_value(port, "material_id")), _text(
+        _node_value(step, "sample_id"))
 
 
 def canonicalize_proposal_material_ids(
@@ -249,7 +275,8 @@ def material_identity_for_amount_path(
 
 def quantity_has_local_attribution(
     excerpt: str, value: int | float, unit: str, *, identity: str = "",
-    identity_required: bool = False,
+    identity_required: bool = False, identity_surfaces: Sequence[str] = (),
+    match_sink: dict[str, Any] | None = None,
 ) -> bool:
     """Check a literal amount belongs to one local clause and named entity.
 
@@ -257,6 +284,9 @@ def quantity_has_local_attribution(
     ``A 1 mmol and B 2 mmol`` to support the false claim ``A = 2 mmol``.
     This is intentionally conservative: ambiguous coordinated amounts are
     deferred to independent review, without deriving chemistry or synonyms.
+    ``identity_surfaces`` carries the entity's verified label spellings
+    (including case variants from its definition-site mentions); the scoped
+    label rule never merges labels that differ beyond case and whitespace.
     """
     if not literal_quantity_present(excerpt, value, unit):
         return False
@@ -282,9 +312,16 @@ def quantity_has_local_attribution(
     except (ValueError, OverflowError):
         return False
     if identity:
-        literal_identity = re.sub(r"\s+", " ", identity.strip().replace("µ", "u"))
+        spellings = [identity.strip(), *identity_surfaces]
+        seen: set[str] = set()
+        alternatives = []
+        for spelling in spellings:
+            candidate = re.sub(r"\s+", " ", spelling.replace("µ", "u")).strip()
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                alternatives.append(re.escape(candidate))
         identity_pattern = re.compile(
-            rf"(?<!\w){re.escape(literal_identity)}(?!\w)"
+            rf"(?<!\w)(?:{'|'.join(alternatives)})(?!\w)"
         )
         labeled = [
             (part, numbers, matches, list(identity_pattern.finditer(part)))
@@ -306,6 +343,8 @@ def quantity_has_local_attribution(
             r"[^\W\d_]\w*", between,
         )):
             return False
+        if match_sink is not None:
+            match_sink["identity_surface"] = material.group()
         return math.isclose(
             numbers[0], float(value), rel_tol=1e-12, abs_tol=1e-12,
         )
@@ -403,22 +442,65 @@ def _required_qualitative_paths(
             for port_index, port in enumerate(ports):
                 if not isinstance(port, Mapping):
                     continue
-                for key in ("name", "state"):
-                    if _text(port.get(key)):
-                        graph_paths.add(f"{prefix}.{port_kind}[{port_index}].{key}")
+                # Name and state are required for every material port.  The
+                # requirement must not depend on whether the model happened
+                # to fill a non-empty value: an unresolved state surfaces
+                # here as an explicit required-fact dependency instead of
+                # vanishing from the coverage check.
+                graph_paths.add(f"{prefix}.{port_kind}[{port_index}].name")
+                graph_paths.add(f"{prefix}.{port_kind}[{port_index}].state")
     return signature_paths, graph_paths
+
+
+def _label_distinguishing_core(name: str) -> str:
+    """The label residue that identifies a material, with role words removed.
+
+    Controlled state tokens (``solution``) and stage/batch words (``the
+    reaction``) describe a role or a stage, not an identity. A name whose
+    residue is empty is a bare referential stage label; any non-empty residue
+    is identity-bearing and must agree across every alias of one entity.
+    Raw words are matched case-insensitively, but single-letter articles are
+    stripped only in lowercase: the ``A`` of ``solution A`` is a designation,
+    not an article, and remains part of the core.
+    """
+    residue = []
+    for raw in re.findall(r"[^\W\d_]\w*", name):
+        word = raw.casefold()
+        if word in _GENERIC_LABEL_WORDS and (
+                word not in {"a", "an", "the"} or raw.islower()):
+            continue
+        if normalize_material_state(word) != "unknown":
+            continue
+        residue.append(word)
+    return " ".join(residue)
+
+
+_GENERIC_LABEL_WORDS = frozenset({
+    "a", "an", "the", "of", "batch", "mixture", "precursor", "product",
+    "reaction", "stage",
+})
 
 
 def material_id_graph_issue(graph: Sequence[Any]) -> str:
     """Check internal ID references without pretending the IDs are prose.
 
     A paper-backed port name establishes the material entity separately. An
-    opaque ID must be nonempty, must not denote two differently named ports
-    in one step, and quantity and relation references must resolve to declared
-    ports. Upstream input references must identify an earlier output with the
-    same material identity. A concrete instance ID cannot define batches in
-    two sample arms. V2 checks state transitions and full cross-step lineage,
-    where a material may gain a new source-backed name.
+    opaque ID must be nonempty and quantity and relation references must
+    resolve to declared ports. One ID may carry several port names in a step
+    only when every name is a bare referential stage label (its distinguishing
+    core is empty) AND continuity evidence says they are one batch: every
+    diverse name must appear in the same ID's ports of a neighbouring step,
+    unless every diverse port declares one shared instance ID. Empty cores
+    alone never prove identity; the paper refers to one batch as ``the
+    reaction``, ``the solution``, then ``the suspension`` while its state
+    evolves, and forcing a single spelling would rewrite the source. Any name
+    with a distinguishing core (``Solution A`` vs ``Solution B``) must keep
+    the same core across every alias of the ID in the step, or the conflict
+    stands. Upstream input references must identify an earlier output with
+    the same material identity. A concrete instance ID cannot define batches
+    in two sample arms. V2 checks state transitions and full cross-step
+    lineage; the per-mention attribution gates bind every label's mentions to
+    one entity.
     """
     instance_samples: dict[str, set[str]] = {}
     outputs_by_ref: dict[tuple[str, str], list[tuple[Any, str]]] = {}
@@ -439,12 +521,37 @@ def material_id_graph_issue(graph: Sequence[Any]) -> str:
                     (sequence, _text(port.get("material_id")))
                 )
     parent_consumers: set[tuple[str, str]] = set()
-    for step in graph:
+    input_names_by_step: dict[int, dict[str, set[str]]] = {}
+    output_names_by_step: dict[int, dict[str, set[str]]] = {}
+    for step_index, step in enumerate(graph):
+        if not isinstance(step, Mapping):
+            continue
+        for port_kind, store in (
+            ("material_inputs", input_names_by_step),
+            ("material_intermediates", input_names_by_step),
+            ("material_intermediates", output_names_by_step),
+            ("material_outputs", output_names_by_step),
+        ):
+            ports = step.get(port_kind, []) or []
+            if not isinstance(ports, list):
+                continue
+            by_id = store.setdefault(step_index, {})
+            for port in ports:
+                if not isinstance(port, Mapping):
+                    continue
+                material_id = _text(port.get("material_id"))
+                material_name = re.sub(
+                    r"\s+", " ", _text(port.get("name"))).casefold()
+                if material_id and material_name:
+                    by_id.setdefault(material_id, set()).add(material_name)
+    for step_index, step in enumerate(graph):
         if not isinstance(step, Mapping):
             continue
         sample_id = _text(step.get("sample_id"))
         step_ids: set[str] = set()
         names_by_id: dict[str, set[str]] = {}
+        raw_names_by_id: dict[str, set[str]] = {}
+        instances_of_id: dict[str, set[str]] = {}
         instance_ids: dict[str, set[str]] = {}
         for port_kind in (
             "material_inputs", "material_intermediates", "material_outputs",
@@ -466,9 +573,19 @@ def material_id_graph_issue(graph: Sequence[Any]) -> str:
                         return "route_group_material_instance_scope_missing"
                     instance_samples.setdefault(instance_id, set()).add(sample_id)
                     instance_ids[port_kind].add(instance_id)
+                    instances_of_id.setdefault(material_id, set()).add(instance_id)
+                else:
+                    # A port without an instance ID cannot join a
+                    # physical-continuity argument for its material.
+                    instances_of_id.setdefault(material_id, set()).add("")
                 step_ids.add(material_id)
                 names_by_id.setdefault(material_id, set()).add(
                     re.sub(r"\s+", " ", material_name).casefold()
+                )
+                # Keep the original spelling: single-letter designations
+                # (the ``A`` of ``solution A``) are recognized by case.
+                raw_names_by_id.setdefault(material_id, set()).add(
+                    re.sub(r"\s+", " ", material_name)
                 )
                 if port_kind == "material_inputs":
                     origin = _text(port.get("material_origin"))
@@ -501,7 +618,46 @@ def material_id_graph_issue(graph: Sequence[Any]) -> str:
                             return "route_group_parent_output_reference_reused"
                         parent_consumers.add(parent_key)
         if any(len(names) != 1 for names in names_by_id.values()):
-            return "route_group_material_id_identity_conflict"
+            # Bare stage labels may share one ID only when continuity
+            # evidence says they are one batch: every diverse name must be
+            # anchored in the same ID's ports of a neighbouring step (its
+            # earlier outputs or later inputs), unless every diverse port
+            # declares one shared instance ID. Empty cores alone never
+            # prove identity, and any distinguishing core present must be
+            # the same one for every alias of the ID in this step.
+            cores = {
+                _label_distinguishing_core(name)
+                for material_id, names in raw_names_by_id.items()
+                if len(names) != 1
+                for name in names
+                if _label_distinguishing_core(name)
+            }
+            if len(cores) > 1:
+                return "route_group_material_id_identity_conflict"
+            for material_id, names in names_by_id.items():
+                if len(names) == 1:
+                    continue
+                declared = instances_of_id.get(material_id, set())
+                continuous = len(declared) == 1 and "" not in declared
+                if continuous:
+                    continue
+                anchored = True
+                for name in names:
+                    earlier = any(
+                        name in output_names_by_step.get(earlier_index, {}).get(
+                            material_id, set())
+                        for earlier_index in range(step_index)
+                    )
+                    later = any(
+                        name in input_names_by_step.get(later_index, {}).get(
+                            material_id, set())
+                        for later_index in range(step_index + 1, len(graph))
+                    )
+                    if not (earlier or later):
+                        anchored = False
+                        break
+                if not anchored:
+                    return "route_group_material_id_identity_conflict"
         relations = step.get("material_relations", []) or []
         if not isinstance(relations, list):
             return "route_group_material_relations_invalid"
@@ -596,6 +752,8 @@ def _fact_issue(
     raw: Any, *, paper_id: str, group_id: str, section: str,
     document_digest: str, graph: list[Any], signature: Mapping[str, Any],
     facts: Sequence[Mapping[str, Any]] = (),
+    label_context: SourceLabelContext | None = None,
+    binding_sink: dict[str, Any] | None = None,
 ) -> str:
     if not isinstance(raw, Mapping):
         return "route_fact_invalid"
@@ -659,10 +817,24 @@ def _fact_issue(
             )
             if mapping_issue:
                 return mapping_issue
-            if (not isinstance(owner, Mapping)
+            context = label_context
+            if context is None:
+                context = build_source_label_context(graph, facts)
+            outcome, binding = state_attribution_outcome(
+                claimed, excerpt, field_path, graph, context,
+            )
+            if outcome == "pending":
+                return "semantic_binding_pending"
+            if outcome == "binding":
+                if binding_sink is not None:
+                    binding_sink["binding"] = binding
+            elif (not isinstance(owner, Mapping)
                     or not state_source_locally_attributed(
                         claimed, excerpt, owner.get("name"),
                     )):
+                # Only an entity the label context has never seen may still
+                # pass through the legacy strictly-local matcher; a known
+                # entity whose association check failed stays pending.
                 return "semantic_binding_pending"
     elif isinstance(actual, bool) or actual != claimed:
         return "route_fact_graph_value_mismatch"
@@ -680,13 +852,45 @@ def _fact_issue(
         if not literal_quantity_present(excerpt, claimed, unit):
             return "route_fact_quantity_absent_from_excerpt"
         identity, identity_required = material_identity_for_amount_path(
-            field_path, graph,
+            field_path, graph, facts,
         )
-        if not quantity_has_local_attribution(
+        context = label_context
+        if context is None:
+            context = build_source_label_context(graph, facts)
+        surfaces = quantity_identity_surfaces(field_path, graph, context)
+        match_sink: dict[str, Any] = {}
+        if quantity_has_local_attribution(
             excerpt, claimed, unit, identity=identity,
-            identity_required=identity_required,
+            identity_required=identity_required, identity_surfaces=surfaces,
+            match_sink=match_sink,
         ):
-            return "route_fact_quantity_attribution_unresolved"
+            surface = match_sink.get("identity_surface", "")
+            if (surface and surface != identity.strip() and binding_sink is not None):
+                binding_sink["binding"] = {
+                    "schema_version": "source-label-binding/v1",
+                    "rule_version": SOURCE_LABEL_RULE_VERSION,
+                    "rule_id": RULE_SCOPED_LABEL_IDENTITY,
+                    "label": surface.casefold(),
+                    "source_surface": surface,
+                    "entity_material_id": _port_material_for_path(
+                        graph, field_path)[0],
+                    "mention_anchor": surface_anchor(
+                        field_path, graph, context, surface, excerpt),
+                }
+        else:
+            binding = definition_site_concentration_binding(
+                excerpt, claimed, unit, surfaces,
+            )
+            if binding is None:
+                return "route_fact_quantity_attribution_unresolved"
+            binding["entity_material_id"] = _port_material_for_path(
+                graph, field_path)[0]
+            anchor = surface_anchor(
+                field_path, graph, context, binding["source_surface"], excerpt)
+            if anchor:
+                binding["mention_anchor"] = anchor
+            if binding_sink is not None:
+                binding_sink["binding"] = binding
     elif derived_proof is None and (not claimed.strip() or re.search(
         rf"(?<!\w){re.escape(claimed.strip())}(?!\w)", excerpt
     ) is None):
@@ -720,6 +924,41 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
     graph = group.get("material_graph")
     if not isinstance(graph, list) or not graph:
         return "route_group_material_graph_missing"
+    # Inventory resolutions are produced upstream (before G2) by binding
+    # approved inventory / material-spec records to external inputs.  This
+    # compiler stays file-pure: it validates each record structurally and
+    # trusts the resource digest the producer recorded; the file-based
+    # re-verification happens at the source-audit layer.
+    inventory_records = group.pop("inventory_resolutions", [])
+    if not isinstance(inventory_records, list):
+        return "route_group_inventory_resolution_invalid"
+    inventory_by_path: dict[str, dict[str, str]] = {}
+    for record in inventory_records:
+        if not isinstance(record, Mapping):
+            return "route_group_inventory_resolution_invalid"
+        if record.get("status") != "resolved":
+            continue
+        path = _text(record.get("field_path"))
+        token = _text(record.get("state"))
+        item_id = _text(record.get("item_id"))
+        digest = _text(
+            record.get("register_digest") or record.get("resource_digest"))
+        register = _text(record.get("register")) or "material-inventory/v1"
+        if (not path or not token or not item_id
+                or _DOCUMENT_DIGEST.fullmatch(digest) is None
+                or register not in {
+                    "material-inventory/v1", "candidate_supply_spec/v1"}
+                or not is_material_port_state_path(path)):
+            return "route_group_inventory_resolution_invalid"
+        inventory_by_path[path] = {
+            "item_id": item_id,
+            "supply_form": _text(record.get("supply_form")),
+            "record": _text(record.get("record")),
+            "state": token,
+            "register": register,
+            "register_digest": digest,
+            "candidate": bool(record.get("candidate")),
+        }
     for step in graph:
         if not isinstance(step, Mapping):
             return "route_group_material_graph_invalid"
@@ -746,16 +985,22 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
     excerpts_by_id: dict[str, tuple[str, Mapping[str, Any]]] = {}
     owner_fact_ids: dict[int, set[str]] = {}
     owner_nodes: dict[int, Mapping[str, Any]] = {}
+    label_context = build_source_label_context(graph, raw_facts)
+    label_binding_by_path: dict[str, dict[str, str]] = {}
     for raw in raw_facts:
+        binding_sink: dict[str, Any] = {}
         issue = _fact_issue(
             raw, paper_id=paper_id, group_id=group_id,
             section=section, document_digest=document_digest, graph=graph,
-            signature=signature, facts=raw_facts,
+            signature=signature, facts=raw_facts, label_context=label_context,
+            binding_sink=binding_sink,
         )
         if issue:
             return issue
-        fact_id = raw["fact_id"].strip()
         field_path = raw["field_path"].strip()
+        if "binding" in binding_sink:
+            label_binding_by_path[field_path] = binding_sink["binding"]
+        fact_id = raw["fact_id"].strip()
         scoped = _scoped_claim(graph, signature, field_path)
         if scoped is not None and is_material_port_state_path(field_path):
             derived, _ = derive_unreviewed_output_state(
@@ -822,7 +1067,18 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         return "route_fact_numeric_graph_claim_missing"
     signature_paths, graph_paths = _required_qualitative_paths(graph, signature)
     missing_signature = signature_paths - seen_paths
-    missing_graph = graph_paths - seen_paths
+    # A verified inventory resolution discharges the paper-fact obligation
+    # for an external-input state path.  The resolution must agree with the
+    # graph state actually compiled.
+    inventory_covered: dict[str, dict[str, str]] = {}
+    for path, record in inventory_by_path.items():
+        if path in seen_paths:
+            continue
+        scoped = _scoped_claim(graph, signature, path)
+        if scoped is None or scoped[0] != record["state"]:
+            return "route_group_inventory_resolution_invalid"
+        inventory_covered[path] = record
+    missing_graph = graph_paths - seen_paths - set(inventory_covered)
     if missing_signature:
         return "route_fact_signature_claim_missing"
     if missing_graph:
@@ -899,6 +1155,39 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             },
             **({"controlled_mapping": deepcopy(state_mapping_by_path[raw["field_path"].strip()])}
                if raw["field_path"].strip() in state_mapping_by_path else {}),
+            **({"source_label_binding": deepcopy(label_binding_by_path[raw["field_path"].strip()])}
+               if raw["field_path"].strip() in label_binding_by_path else {}),
+        })
+    group_scope = {
+        "paper_id": paper_id,
+        "experimental_group_id": group_id,
+        "section": section,
+        "locator": _text(source.get("locator")),
+        "source_digest": document_digest,
+    }
+    for path, record in inventory_covered.items():
+        matrix.append({
+            "field_path": path,
+            "value": record["state"],
+            "unit": "",
+            "required": True,
+            "status": "supported",
+            "provenance": {
+                "kind": "inventory",
+                "reference": record["item_id"],
+                "rationale": (
+                    "external-input state bound from an approved inventory "
+                    "record" if record["register"] == "material-inventory/v1"
+                    else "external-input state bound from a candidate supply "
+                         "spec (form support only; stock NOT verified)"
+                ),
+                "evidence_class": "inventory_record",
+                "excerpt": record["record"],
+                "source_digest": record["register_digest"],
+            },
+            "evidence_id": "",
+            "resolution_path": record["register"],
+            "source_scope": deepcopy(group_scope),
         })
     _replace_paper_placeholders(graph, provenance_by_fact_id)
     group["evidence_bundle"] = evidence_bundle

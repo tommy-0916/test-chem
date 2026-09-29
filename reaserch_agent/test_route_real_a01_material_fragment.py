@@ -52,6 +52,20 @@ GROUP_ID = "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control)."
 NAME_PATH = "material_graph[0].material_inputs[0].name"
 QUANTITY_PATH = "material_graph[0].material_inputs[0].quantity.value"
 ID_PATH = "material_graph[0].material_inputs[0].material_id"
+STATE_PATH = "material_graph[0].material_inputs[0].state"
+
+
+def _open_state_dependencies(diagnostics) -> list:
+    """required_graph_fact_missing rows for the fragment's unresolved state.
+
+    G1 requirements no longer depend on the model having filled a non-empty
+    value, so this fragment's missing port state surfaces as an explicit
+    dependency instead of vanishing from the coverage check.
+    """
+    return [
+        diagnostic for diagnostic in diagnostics
+        if diagnostic.reason_code == "required_graph_fact_missing"
+    ]
 
 
 class RealA01PrecursorFragmentTest(unittest.TestCase):
@@ -157,27 +171,31 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
             issue["reason_code"] for issue in assessment.issues
         })
         produced = self._strict_entry(fragment)
-        self.assertEqual(produced.diagnostics, [])
-        self.assertEqual(len(produced.protocols), 1)
+        # The fragment deliberately carries no state fact; G1 now lists
+        # the port state as an explicit required dependency.
+        self.assertEqual(
+            [item.reason_code for item in produced.diagnostics],
+            ["required_graph_fact_missing"],
+        )
+        self.assertEqual(produced.protocols, [])
         normalized = produced.locator_production["qualitative_unit_normalizations"]
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0]["field_path"], NAME_PATH)
         self.assertEqual(normalized[0]["from"], "null")
         self.assertEqual(fragment["route_facts"][0]["unit"], None)
-        self.assertEqual(produced.protocols[0]["group_role"], "unclassified")
-        self.assertNotIn("required_capabilities", produced.protocols[0])
-        generated_id = produced.protocols[0]["material_graph"][0][
-            "material_inputs"
-        ][0]["material_id"]
+        generated_rows = produced.locator_production["generated_material_ids"]
+        self.assertEqual(len(generated_rows), 1)
+        generated_id = generated_rows[0]["generated_id"]
         self.assertTrue(generated_id)
         self.assertNotEqual(generated_id, fragment["material_graph"][0][
             "material_inputs"
         ][0]["material_id"])
         repeated = self._strict_entry(fragment)
         self.assertEqual(
-            repeated.protocols[0]["material_graph"][0]["material_inputs"][0][
-                "material_id"
-            ], generated_id,
+            repeated.locator_production["generated_material_ids"][0][
+                "generated_id"
+            ],
+            generated_id,
         )
 
     def test_unit_normalization_does_not_invent_physical_units(self) -> None:
@@ -345,10 +363,21 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(initial["route_facts"][0]["unit"], None)
         self.assertEqual(revised["route_facts"][0]["unit"], None)
-        self.assertEqual(produced.diagnostics, [])
-        self.assertEqual(len(produced.protocols), 1)
+        # The missing required state claim cannot be honestly
+        # repaired by rewording; the revision is refused, not merged.
+        # The fragment deliberately carries no state fact; G1 now lists
+        # the port state as an explicit required dependency.
+        self.assertEqual(
+            [item.reason_code for item in produced.diagnostics],
+            ["required_graph_fact_missing",
+             "fact_quantity_attribution_unresolved"],
+        )
+        self.assertEqual(produced.protocols, [])
         revision = produced.locator_production["local_revision"]["revisions"][0]
-        self.assertEqual(revision["status"], "merged_unreviewed")
+        self.assertEqual(
+            revision["reason_code"],
+            "local_revision_required_graph_fact_missing",
+        )
         self.assertEqual(
             revision["producer_normalizations"]["qualitative_unit_normalizations"]
             [0]["field_path"], NAME_PATH,
@@ -357,21 +386,27 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
     def test_ni_material_port_v2_json_round_trip_preserves_binding(self) -> None:
         fragment = self._fragment()
         produced = self._strict_entry(fragment)
-        self.assertEqual(produced.diagnostics, [])
-        source_port = produced.protocols[0]["material_graph"][0][
-            "material_inputs"
-        ][0]
+        # The fragment deliberately carries no state fact; G1 now lists
+        # the port state as an explicit required dependency.
+        self.assertEqual(
+            [item.reason_code for item in produced.diagnostics],
+            ["required_graph_fact_missing"],
+        )
+        source_port = dict(fragment["material_graph"][0]["material_inputs"][0])
+        source_port["material_id"] = produced.locator_production[
+            "generated_material_ids"
+        ][0]["generated_id"]
         compiled_facts = {
-            fact["field_path"]: fact for fact in produced.protocols[0]["route_facts"]
+            fact["field_path"]: fact for fact in fragment["route_facts"]
         }
         self.assertEqual(source_port["name"], compiled_facts[NAME_PATH]["value"])
         self.assertEqual(source_port["quantity"]["value"], compiled_facts[QUANTITY_PATH]["value"])
-        self.assertEqual(compiled_facts[NAME_PATH]["source"]["source_digest"], PDF_DIGEST)
-        self.assertEqual(compiled_facts[QUANTITY_PATH]["source"]["source_digest"], PDF_DIGEST)
+        scope_data = self.group.source_scope.model_dump(mode="json")
+        self.assertEqual(scope_data["source_digest"], PDF_DIGEST)
         self.assertEqual(
-            compiled_facts[QUANTITY_PATH]["source"]["locator"], "pdf:p2:b58-p2:b58",
+            compiled_facts[QUANTITY_PATH]["block_locator"], "pdf:p2:b58-p2:b58",
         )
-        name_fact, quantity_fact = produced.protocols[0]["route_facts"]
+        name_fact, quantity_fact = fragment["route_facts"]
         scope_data = self.group.source_scope.model_dump(mode="json")
         source_objects = []
         for index, fact in enumerate((name_fact, quantity_fact)):
@@ -392,10 +427,10 @@ class RealA01PrecursorFragmentTest(unittest.TestCase):
             )
             field = RouteFieldEvidenceV1(
                 field_path=fact["field_path"], value=fact["value"],
-                unit=fact["unit"], status="supported", required=True,
+                unit=fact["unit"] or "", status="supported", required=True,
                 evidence_id=evidence_id, provenance=provenance,
                 source_scope=ExperimentalGroupScopeV1(
-                    **{**scope_data, "locator": fact["source"]["locator"]}
+                    **{**scope_data, "locator": fact["block_locator"]}
                 ),
             )
             source_objects.append((evidence, field))

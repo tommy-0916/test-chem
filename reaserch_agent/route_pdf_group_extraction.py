@@ -392,6 +392,7 @@ def _invoke_bounded_proposals(
     locate_unreviewed: bool = False,
     max_repair_groups: int = 0,
     check_required_graph_facts: bool = False,
+    inventory_registers: Mapping[str, tuple[Sequence[Any], str]] | None = None,
 ) -> PdfGroupProposalAssociationResultV1:
     source_operation_inventory, source_inventory_issues = (
         inventory_pdf_group_operations(source_groups)
@@ -565,6 +566,7 @@ def _invoke_bounded_proposals(
             max_prompt_chars=budget.max_prompt_chars,
             max_response_chars=budget.max_response_chars,
             check_required_graph_facts=check_required_graph_facts,
+            inventory_registers=inventory_registers,
             tighten_revised_proposal=_tighten_revised,
             structure_revised_proposal=construct_unreviewed_split_transfer_structure,
             normalize_revised_proposal=_prepare_unsigned_proposal,
@@ -674,6 +676,7 @@ def propose_pdf_group_unreviewed(
     budget: PdfGroupExtractionBudgetV1 = PdfGroupExtractionBudgetV1(),
     max_repair_groups: int = 8,
     check_required_graph_facts: bool = False,
+    inventory_registers: Mapping[str, tuple[Sequence[Any], str]] | None = None,
 ) -> PdfGroupProposalAssociationResultV1:
     """Extract quote-bound proposals before independent role/capability review.
 
@@ -682,6 +685,10 @@ def propose_pdf_group_unreviewed(
     they are review input, not admissible route candidates or chemical review.
     Complete coverage and literal block quotations are enforced before any
     proposal is returned. Source identity is not authenticated here.
+
+    ``inventory_registers`` byte-verifies state resolutions attached to the
+    proposals (controlled inventory by default; a candidate supply-spec
+    register only when its bytes are supplied here).
     """
     if not isinstance(budget, PdfGroupExtractionBudgetV1):
         raise TypeError("budget must be PdfGroupExtractionBudgetV1")
@@ -694,6 +701,7 @@ def propose_pdf_group_unreviewed(
         source_groups, invoke_json, budget, locate_unreviewed=True,
         max_repair_groups=min(max_repair_groups, budget.max_groups),
         check_required_graph_facts=check_required_graph_facts,
+        inventory_registers=inventory_registers,
     )
 
 

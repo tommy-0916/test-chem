@@ -19,9 +19,14 @@ from chem_agent_contracts.route_field_basis import (
     output_state_parent_role_issue, state_source_locally_attributed,
 )
 from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
+from chem_agent_contracts.route_source_labels import (
+    SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
+    build_source_label_context, definition_site_concentration_binding,
+    quantity_identity_surfaces, state_attribution_outcome, surface_anchor,
+)
 
 from .route_group_compiler import (
-    _scoped_claim, classify_route_field_basis,
+    _port_material_for_path, _scoped_claim, classify_route_field_basis,
     dimensionless_numeric_field_pending, literal_quantity_present,
     material_identity_for_amount_path,
     output_quantity_role_issue,
@@ -208,6 +213,8 @@ def _literal_fact_reason(
     fact: Mapping[str, Any], group: PdfExperimentalGroupV1,
     blocks: Sequence[tuple[str, str]],
     *, graph: Any, facts: Sequence[Mapping[str, Any]],
+    label_context: SourceLabelContext | None = None,
+    binding_sink: dict[str, Any] | None = None,
 ) -> str:
     if set(fact) - _FACT_KEYS:
         return "fact_authority_field_forbidden"
@@ -283,7 +290,21 @@ def _literal_fact_reason(
             if mapping_issue:
                 return mapping_issue
             owner = scoped[1]
-            if (not isinstance(owner, Mapping)
+            context = label_context
+            if context is None:
+                context = build_source_label_context(
+                    graph if isinstance(graph, list) else [], facts,
+                )
+            outcome, binding = state_attribution_outcome(
+                value, excerpt, field_path,
+                graph if isinstance(graph, list) else [], context,
+            )
+            if outcome == "pending":
+                return "semantic_binding_pending"
+            if outcome == "binding":
+                if binding_sink is not None:
+                    binding_sink["binding"] = binding
+            elif (not isinstance(owner, Mapping)
                     or not state_source_locally_attributed(
                         value, excerpt, owner.get("name"),
                     )):
@@ -304,11 +325,58 @@ def _literal_fact_reason(
         identity, identity_required = material_identity_for_amount_path(
             _text(fact.get("field_path")), graph, facts,
         )
-        if not quantity_has_local_attribution(
+        context = label_context
+        if context is None:
+            context = build_source_label_context(
+                graph if isinstance(graph, list) else [], facts,
+            )
+        surfaces = quantity_identity_surfaces(
+            _text(fact.get("field_path")),
+            graph if isinstance(graph, list) else [], context,
+        )
+        match_sink: dict[str, Any] = {}
+        if quantity_has_local_attribution(
             excerpt, value, unit, identity=identity,
-            identity_required=identity_required,
+            identity_required=identity_required, identity_surfaces=surfaces,
+            match_sink=match_sink,
         ):
-            return "fact_quantity_attribution_unresolved"
+            surface = match_sink.get("identity_surface", "")
+            if (surface and surface != identity.strip()
+                    and binding_sink is not None):
+                binding_sink["binding"] = {
+                    "schema_version": "source-label-binding/v1",
+                    "rule_version": SOURCE_LABEL_RULE_VERSION,
+                    "rule_id": RULE_SCOPED_LABEL_IDENTITY,
+                    "label": surface.casefold(),
+                    "source_surface": surface,
+                    "entity_material_id": _port_material_for_path(
+                        graph if isinstance(graph, list) else [],
+                        _text(fact.get("field_path")),
+                    )[0],
+                    "mention_anchor": surface_anchor(
+                        _text(fact.get("field_path")),
+                        graph if isinstance(graph, list) else [],
+                        context, surface, excerpt),
+                }
+        else:
+            binding = definition_site_concentration_binding(
+                excerpt, value, unit, surfaces,
+            )
+            if binding is None:
+                return "fact_quantity_attribution_unresolved"
+            binding["entity_material_id"] = _port_material_for_path(
+                graph if isinstance(graph, list) else [],
+                _text(fact.get("field_path")),
+            )[0]
+            anchor = surface_anchor(
+                _text(fact.get("field_path")),
+                graph if isinstance(graph, list) else [],
+                context, binding["source_surface"], excerpt,
+            )
+            if anchor:
+                binding["mention_anchor"] = anchor
+            if binding_sink is not None:
+                binding_sink["binding"] = binding
     elif isinstance(value, str):
         if unit.strip():
             return "fact_unit_non_numeric"
@@ -418,6 +486,11 @@ def produce_pdf_group_fact_receipt(
             role_hint = ""
         blocks = [(block.locator, block.text) for block in group.blocks]
         facts = protocol.get("route_facts", [])
+        label_context = build_source_label_context(
+            protocol.get("material_graph")
+            if isinstance(protocol.get("material_graph"), list) else [],
+            facts if isinstance(facts, list) else [],
+        )
         # One quoted evidence item may support several distinct field paths.
         # Reusing its ID is valid only when both its literal quote and source
         # scope are unchanged, matching the route compiler's binding rule.
@@ -442,7 +515,7 @@ def produce_pdf_group_fact_receipt(
             field_paths.add(field_path)
             reason = _literal_fact_reason(
                 fact, group, blocks, graph=protocol.get("material_graph"),
-                facts=facts,
+                facts=facts, label_context=label_context,
             )
             if reason:
                 reasons.append(f"fact[{index}]:{reason}")

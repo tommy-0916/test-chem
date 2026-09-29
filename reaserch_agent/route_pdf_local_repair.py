@@ -264,6 +264,7 @@ def revise_pdf_group_proposals_locally(
     max_prompt_chars: int,
     max_response_chars: int,
     check_required_graph_facts: bool = False,
+    inventory_registers: Mapping[str, tuple[Sequence[Any], str]] | None = None,
     tighten_revised_proposal: Callable[
         [Mapping[str, Any], PdfExperimentalGroupV1],
         tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]],
@@ -279,6 +280,7 @@ def revise_pdf_group_proposals_locally(
     assessment = assess_pdf_group_proposal_fields(
         groups, baseline,
         check_required_graph_facts=check_required_graph_facts,
+        inventory_registers=inventory_registers,
     )
     report: dict[str, Any] = {
         "status": "unchanged", "original_proposals_digest": _digest(baseline),
@@ -469,6 +471,7 @@ def revise_pdf_group_proposals_locally(
     final_assessment = assess_pdf_group_proposal_fields(
         groups, final,
         check_required_graph_facts=check_required_graph_facts,
+        inventory_registers=inventory_registers,
     )
     report["final_issues"] = deepcopy(final_assessment.issues)
     report["field_requirements_after"] = deepcopy(

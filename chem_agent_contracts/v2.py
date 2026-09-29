@@ -95,6 +95,7 @@ EvidenceClassV2 = Literal[
     "chemistry_convention",
     "device_sop",
     "runtime_measurement",
+    "inventory_record",
 ]
 
 # kind -> evidence_class canonical mapping (boundary A: the two dimensions are
@@ -104,6 +105,7 @@ _PROVENANCE_EVIDENCE_CLASS_BY_KIND: Dict[str, str] = {
     "paper": "paper_explicit",
     "device_skill": "device_sop",
     "runtime": "runtime_measurement",
+    "inventory": "inventory_record",
 }
 
 
@@ -189,6 +191,7 @@ class ProvenanceV2(StrictModel):
         "manual_revision",
         "runtime",
         "device_skill",
+        "inventory",
     ]
     reference: str = ""
     rationale: str = ""
