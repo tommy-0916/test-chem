@@ -72,7 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--route-trust-config",
         help=(
             "Independent deployment JSON containing signed PDF acquisition events, "
-            "issuer-scoped public keys, signed route reviews, and group policy. "
+            "issuer-scoped public keys, signed route reviews, group policy, and "
+            "optional trusted candidate supply-spec file paths. "
             "Never read route trust from event constraints or a saved state."
         ),
     )
@@ -322,8 +323,36 @@ def load_route_trust_config(
         "signed_route_signature_reviews", "trusted_route_signature_public_keys",
         "trusted_route_capabilities_by_group", "trusted_route_group_roles_by_group",
     }
-    if not isinstance(raw, dict) or set(raw) != fields or raw["schema_version"] != "route-trust-config/v1":
-        raise SystemExit("route-trust-config must contain exactly the v1 trust fields")
+    optional_fields = {"trusted_inventory_register_paths"}
+    if (not isinstance(raw, dict) or not fields.issubset(raw)
+            or not set(raw).issubset(fields | optional_fields)
+            or raw["schema_version"] != "route-trust-config/v1"):
+        raise SystemExit("route-trust-config must contain the required v1 trust fields "
+                         "and only recognized optional fields")
+
+    inventory_paths: Dict[str, str] = {}
+    if "trusted_inventory_register_paths" in raw:
+        registers = raw["trusted_inventory_register_paths"]
+        if (not isinstance(registers, dict)
+                or not set(registers).issubset({"candidate_supply_spec/v1"})):
+            raise SystemExit("trusted_inventory_register_paths must be an object "
+                             "containing only candidate_supply_spec/v1")
+        for register, name in registers.items():
+            if (not isinstance(name, str) or not name.strip()
+                    or name != name.strip() or name.startswith(("\\\\", "//"))
+                    or re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", name)):
+                raise SystemExit("trusted_inventory_register_paths requires non-empty local file paths")
+            try:
+                registered = Path(name).expanduser()
+                if not registered.is_absolute():
+                    registered = path.parent / registered
+                registered = registered.resolve(strict=True)
+                if not registered.is_file() or not registered.is_relative_to(kb_root):
+                    raise ValueError("registered file is outside the knowledge base or not a file")
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise SystemExit("trusted_inventory_register_paths requires an existing "
+                                 "file inside the knowledge base") from exc
+            inventory_paths[register] = str(registered)
 
     def parse_keys(value: Any, label: str) -> Dict[str, TrustedIssuerPublicKeyV1]:
         if not isinstance(value, dict):
@@ -441,7 +470,7 @@ def load_route_trust_config(
         }:
             raise SystemExit(f"trusted_route_group_roles_by_group has invalid role for {group}")
 
-    return {
+    result = {
         "signed_route_source_events": sources,
         "trusted_route_public_keys": source_keys,
         "signed_route_signature_reviews": reviews,
@@ -449,6 +478,9 @@ def load_route_trust_config(
         "trusted_route_capabilities_by_group": capabilities,
         "trusted_route_group_roles_by_group": roles,
     }
+    if "trusted_inventory_register_paths" in raw:
+        result["trusted_inventory_register_paths"] = inventory_paths
+    return result
 
 
 def attach_device_context(args: argparse.Namespace, constraints: Dict[str, Any]) -> Dict[str, Any]:

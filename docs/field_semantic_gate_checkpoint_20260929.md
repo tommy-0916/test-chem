@@ -8,6 +8,15 @@ stays closed; this slice owns only the 11 triaged field-semantic items (state
 evidence roles, material-ID identity policy, quantity/concentration identity
 matching). No route architecture was added.
 
+Round 2 (same file, below): the split downstream reference is withdrawn
+into an unresolved dependency instead of re-pointed to the parent; the
+step-8 identity conflict is resolved through the source-local label; the
+revision-damaged verified fields are restored under guards; and the
+group-level structural reviser gains acceptance conditions.  The strict
+association still admits nothing and G2 stays unentered until the external
+reviews land — that is recorded as the current honest state, not a
+regression.
+
 ## Design rule, corrected
 
 **Retracted:** "reaction/solution/suspension should move to `state` as
@@ -393,6 +402,162 @@ Replay result (`real-source-resolution-replay.json`):
 | G2 group compilation | entered, stopped at `route_group_required_capabilities_missing`; NOT complete, nothing past it validated |
 | Independent review | work order ISSUED, human decision pending — the current named external dependency |
 | Fresh generation, Research publication, Device validation | no pass result this round |
+
+## Live-model runs after credential recovery (2026-09-29)
+
+Auth fixed: the `.env` key is a Kimi Code key; endpoint
+`https://api.kimi.com/coding/v1`, model `k3` (the factory strips the fixed
+temperature only for the recognised pairing), wire=chat. Minimal probe via
+the same `LLMFactory` path returns a normal response.
+
+- Bounded model revision on the saved proposal: 0 revision calls — the
+  machinery correctly classifies the arm/instance defect as a structural
+  blocker and refuses field-level repair attempts
+  (`bounded-model-revision.json`).
+- Fresh generation from raw inputs (one live call, bounded repair budget):
+  the full producer-gate chain ran and did NOT admit the proposal
+  (`fresh-clause-tightening-proposal.json`, 94 facts). Honest profile:
+  4-arm organization recurs (no instance conflict this time); 13 required
+  state facts missing (null states on external inputs recur); 1 identity
+  conflict (step 5 `suspension` vs `LDH seeds` under one ID; step 8
+  `Ni3Fe LDH` vs `samples`); 8 `semantic_binding_pending`; 2 quantity
+  attribution; 2 unit issues. Candidate-spec resolution would discharge
+  the external-input states where the name matches (`deionized water` at
+  step 5 has no matching record — naming finding); upstream-produced
+  states and the identity conflict are proposal defects, blocked from
+  field repair as structural. Verification of the generation stage stops
+  here, at the unchanged review boundary.
+
+- Budgeted group-level structural revision on the fresh proposal (exactly
+  one live call, `group-structural-revision.py`): the diagnosed arm fix
+  LANDED (one `sample_nife_control` arm), identity renames pass under the
+  continuity policy ('suspension'->'LDH seeds'->'samples' chain across
+  adjacent steps), no quantity value/unit changed (one source-backed
+  quantity fact added), operation quotes identical, G1 field diagnostics
+  clean with 8 candidate-spec state resolutions and the `deionized water`
+  precise gap kept.  The revision is NOT admitted: the strict association
+  blocks with `structure_split_count_or_children_unresolved` — the
+  revision materialized the 8-part split as ONE output carrying quantity
+  '8 parts', which the typed split constructor cannot expand into 8
+  children (the fresh proposal had this split 'represented' by leaving
+  outputs empty).  Budget spent; no resampling.  Remaining issue for the
+  next budgeted round: represent the split with no outputs (program-built
+  children) or explicit child ports covering all 8 parts.
+
+- Deterministic split-event repair (`reaserch_agent/route_pdf_split_repair.py`,
+  regression in `test_route_pdf_split_repair.py`): revokes a collapsed
+  count-as-quantity split port into an audit record, preserves the source
+  operation / unique parent / verified count, and lets the existing
+  constructor rebuild the children in the current scope.  Applied to the
+  arm-fixed proposal: the 8 children and the typed relation were rebuilt
+  with fresh instance IDs, and — in its first version — the downstream
+  reference was re-pointed to the split parent as a recorded
+  batch-continuation mapping (5 audit rows, 0 model calls, 0 unresolved).
+  **Superseded 2026-09-29 (round 2, below):** that re-pointing made the
+  parent an executable downstream input while the children stayed recorded
+  as available outputs; review rejected that semantics and the repair now
+  withdraws the reference into an unresolved dependency instead.  The
+  strict association still refused after the first repair, with the split
+  structure sound: the first actual blocker was the step-8 identity
+  conflict ('Ni3Fe LDH' vs 'samples', a named rename without continuity),
+  and field-level defects the revision introduced (truncated quotes on the
+  Solution B facts; the non-vocabulary state 'precipitate' on the LDH-seeds
+  chain).  Nothing was admitted; nothing was compiled; empty results were
+  reported as empty.
+
+## Round 2 (same day): split downstream reference, step-8 identity, damaged fields
+
+Scope, fixed: only the split downstream reference, the step-8 identity
+relation, and the fields the structural candidate damaged.  The confirmed
+arm organization, the split cardinality, source quantities and all
+unaffected facts were locked.  Zero model calls; every change is
+deterministic and audited (`result/operation-structure-20260928/local-revision-r2.py`,
+artifacts `local-revision-r2-proposal.json` / `-audit.json` / `-replay.json`).
+
+1. **Downstream reference: withdrawn, not re-pointed.** Review rejected
+   "batch continuation to the split parent as an executable input while the
+   8 children stay recorded as available outputs" (double-booked parent,
+   children idle).  `repair_split_event_representation` now removes the
+   revoked port's instance binding from downstream ports (name/state facts
+   stay — they are source claims about WHAT is processed) and records an
+   unresolved dependency naming the deterministic candidate set (the
+   constructor's child IDs, verified byte-equal in
+   `test_withdrawn_reference_names_constructor_children`).  No child is
+   silently selected, no merge is assumed; the only defensible merge is one
+   the source itself states.  Gate-constructed state, re-verified: 8
+   children, relation `split_same_material` in=[inst_ldh_susp] out=8,
+   **zero** downstream references to the parent (it survives only as the
+   split relation input, i.e. lineage), `material_id_graph_issue` clean.
+
+2. **Step-8 identity: source-local label, no rename dodge, no ID mint.**
+   The collection passage (b75) names the gathered material "all the
+   samples"; the paper-level designation "pristine Ni3Fe LDH" stays bound at
+   `route_signature.target` (b56) and the shared material entity
+   `mat_ni3fe_ldh` (b67 identifies the precipitate as Ni3Fe LDH at reaction
+   start; b69 identifies the samples as that suspension).  The step-8
+   output therefore carries the label the source uses at that position
+   ('samples', instance `inst_nife_control` preserved).  A step-8-local
+   rename to 'Ni3Fe LDH' had neither continuity nor a local mention — it is
+   not forced.  `route_group_material_id_identity_conflict` is gone.
+
+3. **Damaged fields restored from the verified basis, under guards.**
+   Restoration applies only when document, group, entity, value and unit
+   are unchanged (mechanical guard) and the verified quote binds to the
+   current source under the verification budget
+   (`MAX_VERIFICATION_CONTEXT_BLOCKS`, not the display budget — the
+   verified split quote spans four content blocks).  28 excerpts restored;
+   4 correctly refused (three operation labels and the merged step-3
+   output naming, whose values differ from the verified basis — the
+   correspondence changed, so nothing was copied).  The part count returned
+   to the dedicated `count` field (verified representation) instead of a
+   unit-less numeric parameter, clearing `fact_numeric_unit_missing` and
+   letting the constructor validate the count fact against the operation.
+   `deionized water` keeps its exact name and its separate gap
+   (`source_missing` resolution + `required_graph_fact_missing`); it is not
+   simplified to catch the water spec and not counted as resolved.
+
+4. **Group-revision acceptance conditions (prospective guard).**
+   `group-structural-revision.py` now runs the gates on the candidate
+   BEFORE any baseline write and accepts it only if (a) no structural
+   blocker code remains — from both `association.diagnostics` and the
+   local-revision final issues; producer-stage collapses surface in the
+   former and would previously have slipped through — and (b)
+   `fact_regressions` finds no rewritten/removed verified fact (name-fact
+   value changes are admitted only as gate-proven rename candidates).
+   Otherwise the candidate lands in `structural-revised-candidate-rejected.json`
+   and the working baseline stands.  Retrospective verdict on last round's
+   candidate: **REJECT** (`structure_split_count_or_children_unresolved`) —
+   the guard would have kept the collapsed split out of the baseline.
+
+Gate result after the round (same strict entry, zero repair budget):
+**admitted = 0 → G2 not entered; nothing compiled; nothing reported as
+passed.**  Remaining G1 items are honest and smaller: 7
+`semantic_binding_pending` NAME facts (5× 'LDH seeds', 2× 'samples' — the
+labeling/collection bare labels stay unresolved as names), 1
+dimensionless-numeric pending (pH 10), 1 `fact_quantity_attribution_unresolved`
+(the 1 M concentration — the verified arm-repaired basis shows the identical
+single pending under the current gates, so this is an inherited genuine
+gap, not round-2 damage), and the deionized-water state requirement.
+`precipitate` received **no** alias: its state facts now bind through the
+unchanged anchored-association rules; the token stays outside the
+controlled vocabulary (`material-states/v1`), and any future mapping (e.g.
+to `retained_wet_solid`) is a reviewed vocabulary decision, not this
+round's.  Net: the two blockers this round targeted (identity conflict,
+count representation) are resolved; the split downstream consumption is
+explicitly unresolved rather than wrong; all preserved facts match the
+verified basis or are declared model-chain gaps.
+
+Test suite (full research discovery, same environment): **949 tests**
+ran on the changed tree (835 at the f957b64 baseline + 114 added since);
+**8 failures + 21 errors, and the 29 failing test IDs are byte-identical to
+the f957b64 baseline set** (compared both directions, zero differences) —
+all added tests, including the split-repair regressions, pass.  Per the
+standing caveat this fingerprint match does not by itself prove every
+semantic change in this round correct; it bounds this round's blast radius
+to zero new failing IDs.  The known flaky category difference on
+`test_concurrent_same_identity_records_do_not_overwrite` (FAIL in the full
+suite, reproducible verbatim when isolated) is part of that inherited set
+and remains tracked as a test-stability issue.
 
 ## Independent review track (current external dependency)
 

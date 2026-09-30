@@ -12,6 +12,7 @@ from chem_agent_contracts.route_source_labels import (
     SOURCE_LABEL_RULE_VERSION,
     attributed_state_mention,
     build_source_label_context,
+    competing_quantity_identity_surfaces,
     definition_site_concentration_binding,
     quantity_identity_surfaces,
 )
@@ -284,6 +285,111 @@ class ConcentrationAttributionTests(unittest.TestCase):
         self.assertIsNotNone(binding)
         self.assertEqual(binding["rule_id"], RULE_DEFINITION_SITE_CONCENTRATION)
         self.assertEqual(binding["source_surface"], "Solution B")
+
+    def test_definition_site_binds_renamed_quantified_preparations(self):
+        examples = (
+            ("Buffer Omega", "Buffer Omega was made by dissolving 0.2 g salt "
+             "in 50 mL solvent (4 mM).", 4, "mM"),
+            ("Mixture Q", "The Mixture Q is formed by dissolving 2 mmol salt "
+             "and 1 mmol additive in 20 mL solvent (0.1 M).", 0.1, "M"),
+            ("Feed Z", "An unrelated batch was cooled.\tFeed Z was prepared "
+             "by dissolving 10 mg reagent in 5 mL carrier (2 mM).", 2, "mM"),
+        )
+        for label, excerpt, value, unit in examples:
+            with self.subTest(label=label):
+                binding = definition_site_concentration_binding(
+                    excerpt, value, unit, (label,),
+                )
+                self.assertIsNotNone(binding)
+                self.assertEqual(binding["source_surface"], label)
+
+    def test_definition_site_quantities_do_not_disambiguate_foreign_entities(self):
+        binding = definition_site_concentration_binding(
+            DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
+            competing_surfaces=("NaOH", "water", "solution"),
+        )
+        self.assertIsNone(binding)
+
+    def test_competing_surfaces_exclude_same_entity_aliases(self):
+        graph, facts = _nife_facts()
+        context = build_source_label_context(graph, facts)
+        other = competing_quantity_identity_surfaces(
+            "material_graph[0].material_inputs[1].concentration_value",
+            graph, context,
+        )
+        self.assertIn("solution A", other)
+        self.assertIn("solution", other)
+        self.assertNotIn("solution B", other)
+        self.assertNotIn("Solution B", other)
+        binding = definition_site_concentration_binding(
+            DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
+            competing_surfaces=other,
+        )
+        self.assertIsNotNone(binding)
+
+    def test_definition_site_rejects_cross_subject_and_multi_event_prose(self):
+        templates = (
+            "{a} was washed, then {b} was prepared by dissolving 2 mmol salt "
+            "in 20 mL water (1 M).",
+            "{a} and {b} were prepared by dissolving 2 mmol salt in 20 mL water (1 M).",
+            "{a} was prepared by dissolving 2 mmol salt in 20 mL water; "
+            "{b} was prepared (1 M).",
+            "{a} was prepared by dissolving 2 mmol salt in 20 mL water "
+            "and was cooled (1 M).",
+            "{a} was prepared by dissolving 2 mmol salt in 20 mL water "
+            "and stirred for an hour (1 M).",
+            "{a} was prepared by dissolving 2 mmol salt in 20 mL water "
+            "before {b} was added (1 M).",
+        )
+        for a, b in (("Solution A", "Solution B"), ("Batch Violet", "Batch Teal")):
+            for template in templates:
+                excerpt = template.format(a=a, b=b)
+                with self.subTest(excerpt=excerpt):
+                    self.assertIsNone(definition_site_concentration_binding(
+                        excerpt, 1, "M", (a,), competing_surfaces=(b,),
+                    ))
+
+    def test_definition_site_rejects_negation_condition_and_quotation(self):
+        predicate = "dissolving 2 mmol reagent in 20 mL solvent (1 M)."
+        examples = (
+            "Feed Q was not prepared by " + predicate,
+            "Feed Q was never prepared by " + predicate,
+            "Feed Q might be prepared by " + predicate,
+            "If Feed Q was prepared by " + predicate,
+            "Feed Q was prepared by dissolving no reagent in 20 mL solvent (1 M).",
+            "Feed Q was prepared by dissolving 2 mmol reagent "
+            "in 20 mL solvent without heating (1 M).",
+            'The report proposed "Feed Q was prepared by ' + predicate + '"',
+        )
+        for excerpt in examples:
+            with self.subTest(excerpt=excerpt):
+                self.assertIsNone(definition_site_concentration_binding(
+                    excerpt, 1, "M", ("Feed Q",),
+                ))
+
+    def test_definition_site_does_not_borrow_stock_object_concentration(self):
+        examples = (
+            "Feed A was prepared by mixing Feed B (1 M).",
+            "Feed A was prepared by mixing 5 mL Feed B with water (1 M).",
+            "Feed A was prepared by diluting 5 mL Feed B in 20 mL water (1 M).",
+            "Feed A was prepared by dissolving 2 mmol stock solution "
+            "in 20 mL water (1 M).",
+            "Feed A was prepared by dissolving 2 mmol reagent "
+            "in 20 mL water and Feed B (1 M).",
+            "Feed A was prepared by dissolving 2 mmol reagent "
+            "in 20 mL Feed B (1 M).",
+        )
+        for excerpt in examples:
+            with self.subTest(excerpt=excerpt):
+                self.assertIsNone(definition_site_concentration_binding(
+                    excerpt, 1, "M", ("Feed A",), competing_surfaces=("Feed B",),
+                ))
+
+    def test_definition_site_rejects_shared_subject_label(self):
+        self.assertIsNone(definition_site_concentration_binding(
+            DEF_B_SENTENCE, 1, "M", ("Solution B",),
+            competing_surfaces=("Solution B",),
+        ))
 
     def test_definition_site_rejects_non_concentration_unit(self):
         self.assertIsNone(definition_site_concentration_binding(

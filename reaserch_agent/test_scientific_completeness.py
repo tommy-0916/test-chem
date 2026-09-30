@@ -57,6 +57,45 @@ def base_step(number: int, operation: str = "搅拌") -> dict:
     }
 
 
+def runtime_plan() -> list[dict]:
+    """One batch is produced, weighed whole, then used with a mass dependency."""
+    material = {
+        "material_id": "product", "material_instance_id": "dry_01",
+        "name": "干燥产物", "state": "dry_solid",
+        "provenance": {"kind": "paper", "reference": "evidence_x"},
+    }
+    produce = base_step(1, "干燥")
+    produce["material_outputs"] = [{**material, "quantity": {
+        "mode": "runtime_measured", "semantic": "runtime_measurement_required",
+        "unit": "mg",
+    }}]
+    measure = base_step(2, "定量称量干燥产物")
+    measure["material_inputs"] = [{**material, "quantity": {
+        "mode": "all_available", "semantic": "whole_batch_unspecified",
+    }}]
+    measure["intermediate_returns"] = [{
+        "name": "样品质量", "material_instance_id": "dry_01", "unit": "mg",
+        "required_for_next_step": True, "availability": "declared",
+        "delivery_mode": "automatic", "feedback_kind": "returned_data",
+        "source": {"station_code": "BALANCE", "operation": "称量"},
+    }]
+    consume = base_step(3, "下游配料")
+    consume["material_inputs"] = [material.copy()]
+    return [produce, measure, consume]
+
+
+def runtime_state() -> ResearchAgentState:
+    return ResearchAgentState(event=ResearchEvent("bootstrap", "test", {
+        "device_context": {"workstations": [{
+            "station_code": "BALANCE", "availability": "online",
+            "operations": [{"name": "称量", "feedback_contract": {
+                "returned_data": {"status": "supported", "fields": ["样品质量"],
+                                  "field_units": {"样品质量": "mg"}},
+            }}],
+        }]},
+    }))
+
+
 class CompletenessAuditTest(unittest.TestCase):
     def setUp(self):
         self.addCleanup(patch.stopall)
@@ -120,49 +159,9 @@ class CompletenessAuditTest(unittest.TestCase):
         self.assertTrue(audit["unsupported"][0]["required"])
 
     def test_runtime_pending_with_and_without_resolution_path(self):
-        def plan_with(measurement_step: bool) -> list:
-            steps = []
-            if measurement_step:
-                measure = base_step(1, "定量称量干燥产物")
-                steps.append(measure)
-            produce = base_step(len(steps) + 1, "干燥")
-            produce["material_outputs"] = [
-                {
-                    "material_id": "product",
-                    "material_instance_id": "dry_01",
-                    "name": "干燥产物",
-                    "state": "dry_solid",
-                    "quantity": {
-                        "mode": "runtime_measured",
-                        "semantic": "runtime_measurement_required",
-                        "unit": "mg",
-                    },
-                    "provenance": {"kind": "agent_inferred", "rationale": "r"},
-                }
-            ]
-            steps.append(produce)
-            consume = base_step(len(steps) + 1, "下游配料")
-            consume["material_inputs"] = [
-                {
-                    "material_id": "product",
-                    "material_instance_id": "dry_01",
-                    "name": "干燥产物",
-                    "state": "dry_solid",
-                    "material_origin": "upstream_output",
-                    "parent_output_refs": [
-                        {
-                            "macro_step_id": produce["macro_step_id"],
-                            "material_instance_id": "dry_01",
-                        }
-                    ],
-                    "provenance": {"kind": "agent_inferred", "rationale": "r"},
-                }
-            ]
-            steps.append(consume)
-            return steps
-
+        plan = runtime_plan()
         unresolved = self.agent._scientific_completeness_audit(
-            plan_with(measurement_step=False), []
+            [plan[0], plan[2]], [], state=runtime_state(),
         )
         self.assertEqual(unresolved["counts"]["unresolved_runtime_dependency"], 1)
         self.assertEqual(
@@ -170,9 +169,175 @@ class CompletenessAuditTest(unittest.TestCase):
             "no_measurement_scheduled",
         )
         resolved = self.agent._scientific_completeness_audit(
-            plan_with(measurement_step=True), []
+            plan, [], state=runtime_state(),
         )
         self.assertEqual(resolved["counts"]["unresolved_runtime_dependency"], 0)
+
+    def test_runtime_resolution_rejects_unbound_or_wrong_quantity_returns(self):
+        variants = {
+            "other_batch": {"material_instance_id": "dry_02"},
+            "temperature": {"unit": "C"},
+            "no_unit": {"unit": ""},
+            "optional_return": {"required_for_next_step": False},
+            "not_a_declared_return": {"availability": "undeclared"},
+            "setpoint_instead_of_reading": {"name": "设定质量"},
+            "unknown_operation": {"source": {"station_code": "BALANCE", "operation": "guess"}},
+        }
+        for label, update in variants.items():
+            with self.subTest(label=label):
+                plan = runtime_plan()
+                plan[1]["intermediate_returns"][0].update(update)
+                result = self.agent._scientific_completeness_audit(
+                    plan, [], state=runtime_state(),
+                )
+                self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_runtime_resolution_requires_available_source_contract(self):
+        for state in (None, ResearchAgentState(event=ResearchEvent("bootstrap", "test", {}))):
+            result = self.agent._scientific_completeness_audit(runtime_plan(), [], state=state)
+            self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+        state = runtime_state()
+        state.event.constraints["device_context"]["workstations"][0]["availability"] = "offline"
+        result = self.agent._scientific_completeness_audit(runtime_plan(), [], state=state)
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+        state.event.constraints["device_context"]["workstations"][0].pop("availability")
+        result = self.agent._scientific_completeness_audit(runtime_plan(), [], state=state)
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+        for availability in ("unknown", "not_declared", "made-up-status"):
+            with self.subTest(availability=availability):
+                state.event.constraints["device_context"]["workstations"][0]["availability"] = availability
+                result = self.agent._scientific_completeness_audit(runtime_plan(), [], state=state)
+                self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_external_pending_quantity_is_checked_at_its_first_input(self):
+        plan = runtime_plan()
+        plan[0]["material_inputs"] = plan[0].pop("material_outputs")
+        result = self.agent._scientific_completeness_audit([plan[0]], [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_distinct_quantity_dependencies_of_same_instance_are_not_deduplicated(self):
+        plan = runtime_plan()
+        plan[2]["quantity_requirements"] = [{
+            "kind": "runtime_measured_inventory", "material_id": "product", "unit": "mL",
+        }]
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_each_quantity_uses_its_own_first_numeric_consumer(self):
+        plan = runtime_plan()
+        plan[2]["material_inputs"][0]["quantity"] = {"value": 2, "unit": "mg"}
+        volume_measure = copy.deepcopy(plan[1])
+        volume_measure["intermediate_returns"][0].update(name="样品体积", unit="mL")
+        volume_consume = copy.deepcopy(plan[2])
+        volume_consume["material_inputs"][0]["quantity"] = {
+            "mode": "runtime_measured", "semantic": "runtime_measurement_required", "unit": "mL",
+        }
+        volume_consume["quantity_requirements"] = [{
+            "kind": "runtime_measured_inventory", "material_id": "product", "unit": "mL",
+        }]
+        state = runtime_state()
+        declaration = state.event.constraints["device_context"]["workstations"][0]["operations"][0]["feedback_contract"]["returned_data"]
+        declaration["fields"].append("样品体积")
+        declaration["field_units"]["样品体积"] = "mL"
+        result = self.agent._scientific_completeness_audit(
+            [*plan, volume_measure, volume_consume], [], state=state,
+        )
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 0)
+        result = self.agent._scientific_completeness_audit(
+            [*plan, volume_consume, volume_measure], [], state=state,
+        )
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_measurement_of_one_instance_does_not_resolve_another(self):
+        plan = runtime_plan()
+        second = copy.deepcopy(plan[0]["material_outputs"][0])
+        second.update(material_id="other_product", material_instance_id="dry_02")
+        plan[0]["material_outputs"].append(second)
+        plan[2]["material_inputs"].append(copy.deepcopy(second))
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_copied_scalar_feedback_cannot_measure_two_instances(self):
+        plan = runtime_plan()
+        second = copy.deepcopy(plan[0]["material_outputs"][0])
+        second.update(material_id="other_product", material_instance_id="dry_02")
+        plan[0]["material_outputs"].append(second)
+        second_input = copy.deepcopy(second)
+        second_input["quantity"] = {"mode": "all_available", "semantic": "whole_batch_unspecified"}
+        plan[1]["material_inputs"].append(second_input)
+        second_return = copy.deepcopy(plan[1]["intermediate_returns"][0])
+        second_return["material_instance_id"] = "dry_02"
+        plan[1]["intermediate_returns"].append(second_return)
+        plan[2]["material_inputs"].append(copy.deepcopy(second))
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 2)
+
+        # Independent operations may return the same declared scalar field.
+        first_measure = copy.deepcopy(plan[1])
+        first_measure["material_inputs"] = first_measure["material_inputs"][:1]
+        first_measure["intermediate_returns"] = first_measure["intermediate_returns"][:1]
+        second_measure = copy.deepcopy(plan[1])
+        second_measure["material_inputs"] = second_measure["material_inputs"][1:]
+        second_measure["intermediate_returns"] = second_measure["intermediate_returns"][1:]
+        result = self.agent._scientific_completeness_audit(
+            [plan[0], first_measure, second_measure, plan[2]], [], state=runtime_state(),
+        )
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 0)
+
+        # Distinct declared fields in one operation also represent independent readings.
+        plan[1]["intermediate_returns"][1]["name"] = "第二样品质量"
+        state = runtime_state()
+        declaration = state.event.constraints["device_context"]["workstations"][0]["operations"][0]["feedback_contract"]["returned_data"]
+        declaration["fields"].append("第二样品质量")
+        declaration["field_units"]["第二样品质量"] = "mg"
+        result = self.agent._scientific_completeness_audit(plan, [], state=state)
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 0)
+
+    def test_runtime_resolution_unit_must_be_declared_by_source_not_proposal(self):
+        for field_units in ({}, {"样品质量": "C"}):
+            state = runtime_state()
+            declaration = state.event.constraints["device_context"]["workstations"][0]["operations"][0]["feedback_contract"]["returned_data"]
+            declaration["field_units"] = field_units
+            result = self.agent._scientific_completeness_audit(runtime_plan(), [], state=state)
+            self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_runtime_resolution_must_follow_production_and_precede_use(self):
+        for ordering in ((1, 0, 2), (0, 2, 1)):
+            plan = runtime_plan()
+            result = self.agent._scientific_completeness_audit(
+                [plan[i] for i in ordering], [], state=runtime_state(),
+            )
+            self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_unrelated_measurement_text_and_pending_requirement_never_resolve(self):
+        plan = runtime_plan()
+        plan[1] = base_step(2, "measure unrelated reagent B temperature")
+        plan[1]["operation_segments"] = [{"role": "weigh"}]
+        plan[1]["quantity_requirements"] = [{"kind": "runtime_measured_inventory", "material_id": "B"}]
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_manual_runtime_resolution_requires_bound_wait(self):
+        plan = runtime_plan()
+        feedback = plan[1]["intermediate_returns"][0]
+        feedback.update(availability="undeclared", delivery_mode="manual_handoff", wait_for="mass observation for dry_01")
+        result = self.agent._scientific_completeness_audit(plan, [])
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 0)
+        feedback.pop("wait_for")
+        result = self.agent._scientific_completeness_audit(plan, [])
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
+
+    def test_runtime_inventory_requirement_is_a_dependency_not_a_resolution(self):
+        plan = runtime_plan()
+        plan[0]["material_outputs"][0].pop("quantity")
+        plan[2]["quantity_requirements"] = [{
+            "kind": "runtime_measured_inventory", "material_id": "product", "unit": "mg",
+        }]
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 0)
+        plan[1]["intermediate_returns"] = []
+        result = self.agent._scientific_completeness_audit(plan, [], state=runtime_state())
+        self.assertEqual(result["counts"]["unresolved_runtime_dependency"], 1)
 
     def test_fidelity_risk_requires_equivalence_evidence(self):
         risky = base_step(1, "共沉淀")

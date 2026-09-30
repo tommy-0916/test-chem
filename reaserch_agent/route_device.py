@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from agent_skills.capabilities import (
@@ -26,6 +26,14 @@ _RESTRICTION_KEYS = (
     "allowed_capabilities",
     "allowed_operations",
 )
+
+
+def station_availability_confirmed(contract: Mapping[str, Any]) -> bool:
+    """Unknown status cannot prove that an automatic operation can run."""
+    return (
+        contract.get("currently_usable") is True
+        and str(contract.get("availability") or "").strip().lower() in _CONFIRMED_AVAILABLE
+    )
 
 
 def _canonical_json(value: Any) -> Any:
@@ -165,8 +173,7 @@ def preflight_route_capabilities(
         if any(
             item.get("support_status") == "supported"
             and item.get("operation_mapping_status") == "mapped"
-            and item.get("currently_usable") is True
-            and str(item.get("availability") or "").strip().lower() in _CONFIRMED_AVAILABLE
+            and station_availability_confirmed(item)
             for item in matches
         ):
             # The experiment projection deliberately omits operation details.

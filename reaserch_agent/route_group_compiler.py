@@ -27,7 +27,8 @@ from chem_agent_contracts.route_convention_basis import (
 )
 from chem_agent_contracts.route_source_labels import (
     SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
-    build_source_label_context, definition_site_concentration_binding,
+    build_source_label_context, competing_quantity_identity_surfaces,
+    definition_site_concentration_binding,
     quantity_identity_surfaces, state_attribution_outcome, surface_anchor,
 )
 from chem_agent_contracts.v2 import (
@@ -880,6 +881,9 @@ def _fact_issue(
         else:
             binding = definition_site_concentration_binding(
                 excerpt, claimed, unit, surfaces,
+                competing_surfaces=competing_quantity_identity_surfaces(
+                    field_path, graph, context,
+                ),
             )
             if binding is None:
                 return "route_fact_quantity_attribution_unresolved"

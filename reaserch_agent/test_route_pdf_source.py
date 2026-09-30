@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from hashlib import sha256
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1,
@@ -20,6 +22,9 @@ from chem_agent_contracts.v2 import (
     QuantityV2, canonical_digest,
 )
 from reaserch_agent.route_pdf_source import verify_route_pdf_source
+from chem_agent_contracts.route_decision import (
+    RouteValidationReceiptV1, _field_issue as decision_field_issue,
+)
 
 
 @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
@@ -112,12 +117,126 @@ class RoutePdfSourceVerificationTest(unittest.TestCase):
             origin="paper_experimental_group",
         )
 
-    def _verify(self, candidate: RouteCandidateV1, path: Path | None = None):
+    def _verify(self, candidate: RouteCandidateV1, path: Path | None = None,
+                *, inventory_register_paths=None):
         return verify_route_pdf_source(
             candidate,
             source_paths={"paper-1": path or self.path},
             source_root=self.root,
+            inventory_register_paths=inventory_register_paths,
         )
+
+    def _inventory_candidate(self, register="candidate_supply_spec/v1"):
+        item = {
+            "item_id": "supply-1", "material_name": "reagent Z",
+            "supply_form": "solution", "record": "Referenced reagent Z solution form",
+        }
+        if register == "candidate_supply_spec/v1":
+            item.update(candidate_supply_spec=True, stock_verified=False)
+        self.spec_path = self.root / "supply-specs.json"
+        self.spec_path.write_text(json.dumps({"schema": register, "items": [item]}), encoding="utf-8")
+        digest = "sha256_" + sha256(self.spec_path.read_bytes()).hexdigest()
+        route = self._candidate()
+        proposed = ProvenanceV2(kind="agent_inferred", rationale="unreviewed structure")
+        route.material_graph = [MacroStepV2(
+            macro_step_id="S1", macro_action_id="A1", sequence=1,
+            operation="mix", sample_id="sample-A", provenance=proposed,
+            material_inputs=[MaterialPortV2(
+                material_id="z", material_instance_id="z_batch", name="reagent Z",
+                state="solution", material_origin="external_inventory", provenance=proposed,
+            )],
+        )]
+        route.evidence_matrix.append(RouteFieldEvidenceV1(
+            field_path="material_graph[0].material_inputs[0].state",
+            value="solution", status="supported", resolution_path=register,
+            provenance=ProvenanceV2(
+                kind="inventory", reference=item["item_id"], excerpt=item["record"],
+                evidence_class="inventory_record",
+                source_digest=digest,
+            ),
+        ))
+        return route, [item], digest
+
+    def test_candidate_supply_spec_requires_registered_source_bytes(self):
+        route, _, _ = self._inventory_candidate()
+        field = route.evidence_matrix[-1]
+        result = self._verify(route)
+        self.assertFalse(result.source_scope_verified)
+        self.assertIn("inventory_resolution_unverified:" + field.field_path, result.reasons)
+        self.assertEqual(decision_field_issue(field, route, None), "inventory_field_source_unverified")
+        receipt = RouteValidationReceiptV1(
+            route_id=route.route_id, candidate_digest=canonical_digest(route),
+            source_scope_verified=True, verified_field_paths=["precursor.amount"],
+        )
+        self.assertEqual(decision_field_issue(field, route, receipt), "inventory_field_source_unverified")
+
+    def test_candidate_supply_save_reload_reopens_and_verifies_registered_bytes(self):
+        route, _, _ = self._inventory_candidate()
+        reloaded = RouteCandidateV1.model_validate(json.loads(route.model_dump_json()))
+        register = {"candidate_supply_spec/v1": self.spec_path}
+        result = self._verify(reloaded, inventory_register_paths=register)
+        self.assertTrue(result.source_scope_verified, result.reasons)
+        field = reloaded.evidence_matrix[-1]
+        self.assertIn(field.field_path, result.verified_field_paths)
+        receipt = RouteValidationReceiptV1(
+            route_id=reloaded.route_id, candidate_digest=canonical_digest(reloaded),
+            source_scope_verified=result.source_scope_verified,
+            verified_field_paths=list(result.verified_field_paths),
+        )
+        self.assertIsNone(decision_field_issue(field, reloaded, receipt))
+        self.spec_path.write_text(self.spec_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        stale = self._verify(reloaded, inventory_register_paths=register)
+        self.assertFalse(stale.source_scope_verified)
+        self.assertNotIn(field.field_path, stale.verified_field_paths)
+
+    def test_candidate_supply_cannot_forge_item_record_or_graph_binding(self):
+        route, _, _ = self._inventory_candidate()
+        mutations = {
+            "unknown_item": lambda c: setattr(c.evidence_matrix[-1].provenance, "reference", "does-not-exist"),
+            "fabricated_record": lambda c: setattr(c.evidence_matrix[-1].provenance, "excerpt", "fabricated reference"),
+            "wrong_state": lambda c: setattr(c.evidence_matrix[-1], "value", "powder"),
+            "wrong_material": lambda c: setattr(c.material_graph[0].material_inputs[0], "name", "reagent Y"),
+            "graph_state_mismatch": lambda c: setattr(c.material_graph[0].material_inputs[0], "state", "powder"),
+            "internal_material": lambda c: setattr(c.material_graph[0].material_inputs[0], "material_origin", "upstream_output"),
+            "unknown_register": lambda c: setattr(c.evidence_matrix[-1], "resolution_path", "other/v1"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                candidate = route.model_copy(deep=True)
+                mutate(candidate)
+                result = self._verify(candidate, inventory_register_paths={"candidate_supply_spec/v1": self.spec_path})
+                self.assertFalse(result.source_scope_verified, result)
+
+    def test_candidate_supply_requires_candidate_schema_and_status(self):
+        route, items, _ = self._inventory_candidate()
+        for change in ({"schema": "material-inventory/v1"}, {"stock_verified": True}, {"candidate_supply_spec": False}):
+            with self.subTest(change=change):
+                payload = {"schema": "candidate_supply_spec/v1", "items": [items[0].copy()]}
+                if "schema" in change:
+                    payload.update(change)
+                else:
+                    payload["items"][0].update(change)
+                self.spec_path.write_text(json.dumps(payload), encoding="utf-8")
+                route.evidence_matrix[-1].provenance.source_digest = "sha256_" + sha256(self.spec_path.read_bytes()).hexdigest()
+                result = self._verify(route, inventory_register_paths={"candidate_supply_spec/v1": self.spec_path})
+                self.assertFalse(result.source_scope_verified)
+
+    def test_candidate_supply_register_cannot_escape_trusted_root(self):
+        route, _, _ = self._inventory_candidate()
+        with tempfile.TemporaryDirectory() as directory:
+            outside = Path(directory) / "specs.json"
+            outside.write_bytes(self.spec_path.read_bytes())
+            result = self._verify(route, inventory_register_paths={"candidate_supply_spec/v1": outside})
+            self.assertFalse(result.source_scope_verified)
+
+    def test_approved_inventory_is_reverified_and_cannot_cross_registers(self):
+        route, items, digest = self._inventory_candidate("material-inventory/v1")
+        with patch("reaserch_agent.route_pdf_source.load_inventory_resource", return_value=(items, digest)):
+            result = self._verify(route)
+            self.assertTrue(result.source_scope_verified, result.reasons)
+            route.evidence_matrix[-1].resolution_path = "candidate_supply_spec/v1"
+            result = self._verify(route)
+            self.assertFalse(result.source_scope_verified)
 
     def test_exact_page_block_group_and_quantity_are_verified_without_signature(self) -> None:
         result = self._verify(self._candidate())
@@ -171,6 +290,51 @@ class RoutePdfSourceVerificationTest(unittest.TestCase):
         candidate.material_graph[0].material_inputs[0].quantity.value = 1
         correct = self._verify(candidate)
         self.assertTrue(correct.source_scope_verified, correct.reasons)
+
+    def test_definition_concentration_subject_is_rechecked_from_pdf_bytes(self) -> None:
+        variants = (
+            ("Solution A was washed, then Solution B was prepared by adding water (1 M).", "Solution B", False),
+            ("Solution A was prepared by mixing 5 mL Solution B (1 M).", "Solution B", False),
+            ("Solution A was prepared by dissolving 2 mmol salt in 2 mL Carrier Z (1 M).", "Carrier Z", False),
+            ("Solution A was prepared by dissolving 2 mmol salt in 2 mL water (1 M).", None, True),
+        )
+        for excerpt, competing_name, expected in variants:
+            with self.subTest(excerpt=excerpt):
+                self.lines[2] = (excerpt, 8, "helv")
+                self._write_pdf()
+                candidate = self._candidate()
+                candidate.evidence_bundle[0].excerpt = excerpt
+                field = candidate.evidence_matrix[0]
+                field.field_path = "material_graph[0].material_inputs[0].concentration_value"
+                field.value, field.unit = 1, "M"
+                field.provenance.excerpt = excerpt
+                field.provenance.source_digest = canonical_digest(excerpt)
+                inferred = ProvenanceV2(kind="agent_inferred", rationale="unreviewed candidate")
+                ports = [MaterialPortV2(
+                    material_id="solution_a", material_instance_id="batch_a", name="Solution A",
+                    state="solution", concentration_value=1, concentration_unit="M", provenance=inferred,
+                )]
+                if competing_name:
+                    ports.append(MaterialPortV2(
+                        material_id="other_input", material_instance_id="other_batch",
+                        name=competing_name, state="solution", provenance=inferred,
+                    ))
+                candidate.material_graph = [MacroStepV2(
+                    macro_step_id="S1", macro_action_id="A1", sequence=1,
+                    operation="prepare", sample_id="sample-A", provenance=inferred,
+                    material_inputs=ports,
+                )]
+                for index, port in enumerate(ports):
+                    candidate.evidence_matrix.append(field.model_copy(deep=True, update={
+                        "field_path": f"material_graph[0].material_inputs[{index}].name",
+                        "value": port.name, "unit": "",
+                    }))
+                result = self._verify(candidate)
+                self.assertEqual(result.source_scope_verified, expected, result.reasons)
+                if expected:
+                    self.assertIn(field.field_path, result.verified_field_paths)
+                else:
+                    self.assertIn("field_quantity_attribution_unresolved:" + field.field_path, result.reasons)
 
     def test_cross_block_literal_quote_verifies_only_with_anchor_inside_span(self) -> None:
         self.lines.insert(4, ("The control yield was recorded.", 10, "helv"))

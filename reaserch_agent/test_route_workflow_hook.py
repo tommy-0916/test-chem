@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -201,6 +202,56 @@ class RouteWorkflowHookTest(unittest.TestCase):
         evaluate.assert_not_called()
         ignored.assert_called_once()
         self.assertEqual(result.research_action_package_v2, {"old": "package"})
+
+    def test_constructor_inventory_register_reaches_pipeline_without_constraint_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            spec = Path(directory) / "registered-specs.json"
+            spec.write_text(json.dumps({"schema": "candidate_supply_spec/v1", "items": []}),
+                            encoding="utf-8")
+            trusted = {"candidate_supply_spec/v1": str(spec)}
+            agent = ResearchAgent(
+                model=object(), use_llm=False, enable_memory=False,
+                enable_online_literature=False, enable_web_search=False,
+                contract_version="v2", knowledge_base_dir=directory, memory_dir=directory,
+                trusted_inventory_register_paths=trusted,
+            )
+            injected = {"candidate_supply_spec/v1": str(Path(directory) / "model-specs.json")}
+            state = ResearchAgentState(
+                event=ResearchEvent(event_type="bootstrap", query="prepare product", constraints={
+                    "trusted_inventory_register_paths": injected,
+                    "route_trust_config": {"trusted_inventory_register_paths": injected},
+                }),
+                contract_version="v2",
+            )
+            with patch("reaserch_agent.route_pipeline.evaluate_route_decision_v1",
+                       wraps=real_route_evaluate) as evaluate:
+                result = agent.evaluate_route_decision_v1(state, GOAL, route_protocols=[])
+            self.assertEqual(result.decision.status, "unresolved")
+            kwargs = evaluate.call_args.kwargs
+            self.assertEqual(kwargs["trusted_inventory_register_paths"], trusted)
+            self.assertNotEqual(kwargs["trusted_inventory_register_paths"], injected)
+            self.assertEqual(Path(kwargs["source_root"]).resolve(), Path(directory).resolve())
+            self.assertEqual(state.research_action_package_v2, {})
+
+    def test_constraints_cannot_create_inventory_trust_when_constructor_has_none(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agent = ResearchAgent(
+                model=object(), use_llm=False, enable_memory=False,
+                enable_online_literature=False, enable_web_search=False,
+                contract_version="v2", knowledge_base_dir=directory, memory_dir=directory,
+            )
+            state = ResearchAgentState(
+                event=ResearchEvent(event_type="bootstrap", query="prepare product", constraints={
+                    "trusted_inventory_register_paths": {"candidate_supply_spec/v1": "forged.json"},
+                }),
+                contract_version="v2",
+            )
+            with patch("reaserch_agent.route_pipeline.evaluate_route_decision_v1",
+                       wraps=real_route_evaluate) as evaluate:
+                result = agent.evaluate_route_decision_v1(state, GOAL, route_protocols=[])
+            self.assertFalse(evaluate.call_args.kwargs["trusted_inventory_register_paths"])
+            self.assertEqual(result.decision.status, "unresolved")
+            self.assertEqual(state.research_action_package_v2, {})
 
     def test_route_evaluation_uses_pdf_group_proposals_not_legacy_summaries(self) -> None:
         digest = "sha256_" + "a" * 64

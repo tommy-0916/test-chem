@@ -32,10 +32,13 @@ from chem_agent_contracts.route_field_basis import (
     is_material_port_state_path, output_state_parent_role_issue,
     state_source_locally_attributed,
 )
-from chem_agent_contracts.route_inventory_basis import load_inventory_resource
+from chem_agent_contracts.route_inventory_basis import (
+    RESOLVED, load_inventory_resource, resolve_external_input_states,
+)
 from chem_agent_contracts.route_source_labels import (
     RULE_SCOPED_LABEL_IDENTITY, SOURCE_LABEL_RULE_VERSION,
-    build_source_label_context, definition_site_concentration_binding,
+    build_source_label_context, competing_quantity_identity_surfaces,
+    definition_site_concentration_binding,
     quantity_identity_surfaces, state_attribution_outcome, surface_anchor,
 )
 from chem_agent_contracts.v2 import canonical_digest, normalize_material_state
@@ -571,6 +574,9 @@ def _field_issue(
         else:
             binding = definition_site_concentration_binding(
                 excerpt, field.value, field.unit, surfaces,
+                competing_surfaces=competing_quantity_identity_surfaces(
+                    field.field_path, candidate.material_graph, context,
+                ),
             )
             if binding is None:
                 return "field_quantity_attribution_unresolved"
@@ -622,13 +628,48 @@ def _inventory_text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _trusted_candidate_supply_register(
+    paths: Mapping[str, str | Path], root: Path,
+) -> tuple[list[Mapping[str, Any]], str]:
+    """Read caller-registered spec bytes; candidate metadata is not authority."""
+    name = paths.get("candidate_supply_spec/v1")
+    if name is None:
+        return [], ""
+    try:
+        path = Path(name).resolve(strict=True)
+        if (not path.is_file() or not path.is_relative_to(root)
+                or path.stat().st_size > _MAX_SOURCE_BYTES):
+            return [], ""
+        raw = path.read_bytes()
+        if len(raw) > _MAX_SOURCE_BYTES:
+            return [], ""
+        payload = json.loads(raw)
+    except (OSError, ValueError, TypeError):
+        return [], ""
+    if (not isinstance(payload, dict)
+            or payload.get("schema") != "candidate_supply_spec/v1"
+            or not isinstance(payload.get("items"), list)):
+        return [], ""
+    items = payload["items"]
+    if any(not isinstance(item, dict)
+           or item.get("candidate_supply_spec") is not True
+           or item.get("stock_verified") is not False for item in items):
+        return [], ""
+    return items, "sha256_" + sha256(raw).hexdigest()
+
+
 def verify_route_pdf_source(
     candidate: RouteCandidateV1,
     *,
     source_paths: Mapping[str, str | Path],
     source_root: str | Path,
+    inventory_register_paths: Mapping[str, str | Path] | None = None,
 ) -> RouteSourceVerificationV1:
-    """Check one candidate against a registered local PDF, never its own path."""
+    """Reopen registered PDF/spec bytes, never paths supplied by the candidate.
+
+    Candidate supply specifications require an explicit trusted register path
+    inside ``source_root``. They prove planning form only, never stock.
+    """
 
     scope = candidate.source_scope
     if candidate.origin != "paper_experimental_group" or scope is None:
@@ -725,24 +766,55 @@ def verify_route_pdf_source(
             reasons.append(f"convention_state_support_unverified:{field.field_path}")
             invalid = True
     inventory_items, inventory_digest = load_inventory_resource()
-    inventory_by_id = {
-        _inventory_text(item.get("item_id")): item for item in inventory_items
-    }
+    registers = {"material-inventory/v1": (inventory_items, inventory_digest)}
+    if any(field.resolution_path == "candidate_supply_spec/v1"
+           for field in candidate.evidence_matrix):
+        registers["candidate_supply_spec/v1"] = _trusted_candidate_supply_register(
+            inventory_register_paths or {}, root,
+        )
+    graph = [step.model_dump(mode="json") for step in candidate.material_graph]
+    source_facts = [
+        {"field_path": field.field_path, "excerpt": field.provenance.excerpt}
+        for field in candidate.evidence_matrix
+        if field.field_path in verified_fields and field.provenance is not None
+    ]
     for field in candidate.evidence_matrix:
         provenance = field.provenance
         if provenance is None or provenance.kind != "inventory":
             continue
-        if field.resolution_path == "candidate_supply_spec/v1":
-            # Candidate supply-spec rows are byte-verified at the candidate
-            # package boundary (save/reload audit), not against approved
-            # inventory bytes; the two registers never cross-verify.
-            continue
-        item = inventory_by_id.get(provenance.reference)
+        register = field.resolution_path or "material-inventory/v1"
+        items, register_digest = registers.get(register, ([], ""))
+        matching_items = [item for item in items
+                          if _inventory_text(item.get("item_id")) == provenance.reference]
+        item = matching_items[0] if len(matching_items) == 1 else None
+        resolutions = {
+            record["field_path"]: record
+            for record in resolve_external_input_states(graph, items, source_facts)
+        }
+        resolution = resolutions.get(field.field_path, {})
+        port_match = re.fullmatch(
+            r"material_graph\[([0-9]+)\]\.material_inputs\[([0-9]+)\]\.state",
+            field.field_path,
+        )
+        graph_state = None
+        if port_match is not None:
+            try:
+                graph_state = candidate.material_graph[int(port_match[1])].material_inputs[int(port_match[2])].state
+            except IndexError:
+                pass
         if (field.status != "supported"
+                or not is_material_port_state_path(field.field_path)
                 or provenance.evidence_class != "inventory_record"
                 or item is None
-                or not inventory_digest
-                or provenance.source_digest != inventory_digest
+                or not register_digest
+                or provenance.source_digest != register_digest
+                or resolution.get("status") != RESOLVED
+                or resolution.get("item_id") != provenance.reference
+                or resolution.get("state") != field.value
+                or graph_state != field.value
+                or (register == "material-inventory/v1"
+                    and (item.get("candidate_supply_spec") is True
+                         or item.get("stock_verified") is False))
                 or normalize_material_state(
                     _inventory_text(item.get("supply_form"))) != field.value
                 or _inventory_text(item.get("record")) != provenance.excerpt.strip()):

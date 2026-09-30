@@ -5,7 +5,14 @@ from __future__ import annotations
 import copy
 import unittest
 
-from chem_agent_contracts.route_candidate import RouteCandidateV1
+from chem_agent_contracts.route_candidate import RouteCandidateV1, RouteGoalV1
+from chem_agent_contracts.route_decision import (
+    DevicePreflightV1, RouteValidationReceiptV1, decide_routes,
+)
+from chem_agent_contracts.route_field_basis import state_source_locally_attributed
+from chem_agent_contracts.route_source_labels import (
+    build_source_label_context, state_attribution_outcome,
+)
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
 from reaserch_agent.route_science import _numeric_graph_fields, audit_route_candidate_science
 from reaserch_agent.workflow import ResearchAgent
@@ -240,9 +247,9 @@ class RouteScienceAuditTest(unittest.TestCase):
             "resolution_path": "weigh wet_product before consumption",
         }])
         result = self.audit(candidate)
-        # Existing completeness looks for a preceding measurement phrase;
-        # this adapter refuses to equate that phrase with field-level proof.
-        self.assertEqual(result["scientific_completeness"].counts["unresolved_runtime_dependency"], 0)
+        # An unrelated measurement phrase satisfies neither the material
+        # return contract nor the evidence-matrix field's resolution proof.
+        self.assertEqual(result["scientific_completeness"].counts["unresolved_runtime_dependency"], 1)
         self.assertEqual(result["verified_runtime_resolution_fields"], [])
         self.assertNotIn(path, result["audited_field_paths"])
 
@@ -457,6 +464,226 @@ class RouteScienceAuditTest(unittest.TestCase):
             and "parameters[0]" in issue
             for issue in result["scientific_gate_issues"]
         ))
+
+
+PH_SENTENCE = (
+    "The pH of the solution was monitored using a pH meter (Mettler Toledo) "
+    "and controlled to be 10 by dropwise adding solution B manually."
+)
+STATE_PATH = "material_graph[0].material_inputs[0].state"
+
+
+def _source_state_candidate(
+    *, names: tuple[str, ...] = ("solution B",), excerpt: str = PH_SENTENCE,
+    name_excerpts: tuple[str, ...] | None = None,
+) -> RouteCandidateV1:
+    """One paper state claim with separately bound entity-name facts.
+
+    This small fixture deliberately lacks an executable material contract;
+    it exercises field association without implying whole-route approval.
+    """
+    scope = {
+        "paper_id": "paper_1", "experimental_group_id": "group_1",
+        "section": "Methods", "locator": "lines:1-3",
+        "source_digest": "sha256_" + "a" * 64,
+    }
+    bundle: list[dict] = []
+    provenances: dict[str, dict] = {}
+
+    def paper(quote: str) -> dict:
+        if quote not in provenances:
+            index = len(bundle)
+            evidence_id = f"E{index + 1}"
+            bundle.append({
+                "evidence_id": evidence_id, "verification_status": "verified_doi",
+                "full_text_status": "parsed", "excerpt": quote,
+            })
+            provenances[quote] = {
+                "kind": "paper", "reference": evidence_id,
+                "evidence_class": "paper_explicit",
+                "source_path": f"evidence_bundle.items[{index}].excerpt",
+                "excerpt": quote, "source_digest": canonical_digest(quote),
+            }
+        return provenances[quote]
+
+    state_paper = paper(excerpt)
+    step = _step(1)
+    step["provenance"] = state_paper
+    fields = []
+    for index, name in enumerate(names):
+        name_paper = paper((name_excerpts or (excerpt,) * len(names))[index])
+        port = _port(f"material_{index}", origin="external_inventory",
+                     provenance=name_paper)
+        port["name"] = name
+        step["material_inputs"].append(port)
+        fields.append({
+            "field_path": f"material_graph[0].material_inputs[{index}].name",
+            "value": name, "status": "supported", "provenance": name_paper,
+            "evidence_id": name_paper["reference"], "source_scope": scope,
+        })
+    step["material_outputs"] = [_port("product", provenance=state_paper)]
+    fields.append({
+        "field_path": STATE_PATH, "value": "solution", "status": "supported",
+        "provenance": state_paper, "evidence_id": state_paper["reference"],
+        "source_scope": scope,
+    })
+    candidate = _candidate([step], fields, bundle=bundle)
+    candidate.source_scope = candidate.evidence_matrix[0].source_scope.model_copy()
+    candidate.required_capabilities = ["ambient-mixing"]
+    return candidate
+
+
+class SourceLabelScienceAuditTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.agent = ResearchAgent(
+            model=object(), use_llm=False, enable_memory=False,
+            enable_online_literature=False, enable_web_search=False,
+            contract_version="v2",
+        )
+
+    def audit(self, candidate: RouteCandidateV1) -> dict:
+        return audit_route_candidate_science(candidate, agent=self.agent)
+
+    def attribution(self, candidate: RouteCandidateV1):
+        field = candidate.evidence_matrix[-1]
+        return state_attribution_outcome(
+            field.value, field.provenance.excerpt, field.field_path,
+            candidate.material_graph, build_source_label_context(
+                candidate.material_graph, candidate.evidence_matrix,
+            ),
+        )
+
+    def test_original_ph_passage_audits_named_solution_amid_other_mentions(self):
+        candidate = _source_state_candidate()
+        self.assertFalse(state_source_locally_attributed(
+            "solution", PH_SENTENCE, "solution B",
+        ))
+        outcome, binding = self.attribution(candidate)
+        self.assertEqual(outcome, "binding")
+        self.assertEqual(binding["entity_material_id"], "material_0")
+        self.assertEqual(binding["mention_anchor"],
+                         "material_graph[0].material_inputs[0].name")
+        for annotate in (False, True):
+            with self.subTest(stored_binding=annotate):
+                payload = candidate.model_dump(mode="json")
+                if annotate:
+                    payload["evidence_matrix"][-1]["source_label_binding"] = binding
+                result = self.audit(RouteCandidateV1.model_validate(payload))
+                self.assertIn(STATE_PATH, result["audited_field_paths"])
+
+    def test_shared_label_of_two_entities_never_audits_either_state(self):
+        candidate = _source_state_candidate(names=("solution B", "solution B"))
+        self.assertEqual(self.attribution(candidate), ("pending", None))
+        self.assertNotIn(STATE_PATH, self.audit(candidate)["audited_field_paths"])
+
+    def test_original_ph_passage_binds_bare_solution_to_its_same_passage_name(self):
+        candidate = _source_state_candidate(names=("solution", "solution B"))
+        outcome, binding = self.attribution(candidate)
+        self.assertEqual(outcome, "binding")
+        self.assertEqual(binding["source_surface"], "solution")
+        self.assertEqual(binding["entity_material_id"], "material_0")
+        self.assertIn(STATE_PATH, self.audit(candidate)["audited_field_paths"])
+
+    def test_foreign_named_solution_does_not_prove_this_material_state(self):
+        candidate = _source_state_candidate(
+            names=("solution A", "solution B"),
+            name_excerpts=("Solution A was prepared separately.", PH_SENTENCE),
+        )
+        self.assertEqual(self.attribution(candidate), ("pending", None))
+        self.assertNotIn(STATE_PATH, self.audit(candidate)["audited_field_paths"])
+
+    def test_engaged_failure_never_falls_back_to_legacy_matcher(self):
+        excerpt = "The suspension in the solution was mixed gently."
+        candidate = _source_state_candidate(
+            names=("solution",), excerpt=excerpt,
+            name_excerpts=("The solution was cooled overnight before use.",),
+        )
+        self.assertTrue(state_source_locally_attributed("solution", excerpt, "solution"))
+        self.assertEqual(self.attribution(candidate), ("pending", None))
+        self.assertNotIn(STATE_PATH, self.audit(candidate)["audited_field_paths"])
+
+    def test_legacy_local_attribution_remains_available_without_label_structure(self):
+        candidate = _source_state_candidate(
+            names=("feed",), excerpt="The feed solution was mixed.",
+        )
+        self.assertEqual(self.attribution(candidate), ("legacy", None))
+        self.assertIn(STATE_PATH, self.audit(candidate)["audited_field_paths"])
+
+    def test_stored_binding_is_recomputed_including_entity_and_mention_anchor(self):
+        candidate = _source_state_candidate()
+        _outcome, binding = self.attribution(candidate)
+        for key, value in (
+            ("entity_material_id", "material_1"),
+            ("mention_anchor", "material_graph[0].material_inputs[1].name"),
+            ("label", "solution a"),
+            ("source_surface", "solution A"),
+            ("rule_id", "source-labels/v1:bare_state_mention"),
+        ):
+            with self.subTest(tampered=key):
+                payload = candidate.model_dump(mode="json")
+                payload["evidence_matrix"][-1]["source_label_binding"] = {
+                    **binding, key: value,
+                }
+                result = self.audit(RouteCandidateV1.model_validate(payload))
+                self.assertNotIn(STATE_PATH, result["audited_field_paths"])
+                self.assertIn(
+                    "evidence_matrix_source_label_binding_mismatch:" + STATE_PATH,
+                    result["scientific_gate_issues"],
+                )
+
+    def test_forged_binding_cannot_authorize_legacy_claim(self):
+        source = _source_state_candidate()
+        _outcome, binding = self.attribution(source)
+        legacy = _source_state_candidate(
+            names=("feed",), excerpt="The feed solution was mixed.",
+        ).model_dump(mode="json")
+        legacy["evidence_matrix"][-1]["source_label_binding"] = binding
+        result = self.audit(RouteCandidateV1.model_validate(legacy))
+        self.assertNotIn(STATE_PATH, result["audited_field_paths"])
+        self.assertIn(
+            "evidence_matrix_source_label_binding_mismatch:" + STATE_PATH,
+            result["scientific_gate_issues"],
+        )
+
+    def test_binding_never_upgrades_unverified_source_evidence(self):
+        candidate = _source_state_candidate()
+        candidate.evidence_bundle[0].verification_status = "unknown"
+        result = self.audit(candidate)
+        self.assertNotIn(STATE_PATH, result["audited_field_paths"])
+        self.assertIsNone(result["scientific_completeness"])
+
+    def test_decider_receives_actual_state_audit_and_retains_other_graph_blockers(self):
+        candidate = _source_state_candidate()
+        science = self.audit(candidate)
+        receipt = RouteValidationReceiptV1(
+            route_id=candidate.route_id, candidate_digest=canonical_digest(candidate),
+            source_scope_verified=True, source_route_signature=candidate.route_signature,
+            verified_evidence_ids=[item.evidence_id for item in candidate.evidence_bundle],
+            verified_field_paths=[field.field_path for field in candidate.evidence_matrix],
+            audited_field_paths=science["audited_field_paths"],
+            verified_graph_step_ids=science["verified_graph_step_ids"],
+            scientific_completeness=science["scientific_completeness"],
+            scientific_gate_issues=science["scientific_gate_issues"],
+            device_preflight=DevicePreflightV1(
+                status="preflight_supported", snapshot_id="synthetic-device-snapshot",
+                checked_capabilities=candidate.required_capabilities,
+            ),
+        )
+        goal = RouteGoalV1(
+            goal_id="state-audit-goal", target=candidate.target,
+            constraint="open", required_fields=[STATE_PATH],
+        )
+        decision = decide_routes(goal, [candidate], lambda _candidate: receipt)
+        missing_audit = "required_field_not_audited:" + STATE_PATH
+        self.assertNotIn(missing_audit, decision.candidates[0].reasons)
+        self.assertNotEqual(decision.status, "selected_for_planning")
+        self.assertIn(
+            "material_graph_step_unverified:MS_001", decision.candidates[0].reasons,
+        )
+        receipt.audited_field_paths.remove(STATE_PATH)
+        control = decide_routes(goal, [candidate], lambda _candidate: receipt)
+        self.assertIn(missing_audit, control.candidates[0].reasons)
 
 
 if __name__ == "__main__":

@@ -347,6 +347,8 @@ quantity_requirements。材料合同只能依据已授权的实验语义填写�
   __LOGICAL_LID_STATE_PROMPT__
   count 必须为正整数或 null，capacity_ml 必须为有限正数或 null；禁止字符串数值和布尔值。
 - intermediate_returns：数组；每项 name、availability（declared/undeclared）、required_for_next_step、source。
+  若返回用于解析待测物料数量，还必须绑定 material_instance_id 与 unit，并在该实例产生之后、对应数量首个数值消费步之前排程；整批送测可声明 all_available，不能把待测质量当已知值。同一步同一来源的同名标量反馈不能复制绑定到多个实例，应分别测量或使用能力合同声明的独立反馈字段。
+  automatic 数量返回只能引用能力合同已声明的同名字段及 field_units 单位；合同未声明时保留未知，并指定 observation/manual_handoff 和明确的 wait_for。操作文本出现“称量/measure”或另一个 runtime_measured_inventory 需求不构成解析证据。
   declared 必须引用当前 step 投影的真实字段：name 与 fields 中字段完全一致，source 为包含
   station_code、operation 的对象，feedback_kind 为 returned_data（操作完成后返回）或
   intermediate_feedback（中间/实时反馈）；对应 feedback_contract 声明必须为 supported。

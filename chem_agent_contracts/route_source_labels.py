@@ -56,11 +56,26 @@ _GENERIC_LABEL_WORDS = frozenset({
     "a", "an", "the", "of", "batch", "mixture", "precursor", "product",
     "reaction", "stage",
 })
-_PREPARATION_VERB = re.compile(
-    r"\b(?:is|was|are|were)\s+"
-    r"(?:prepared|obtained|made|synthesized|produced|formed|created)\b"
-    r"|\b(?:prepared|obtained|made|synthesized|produced|formed|created)\b",
+_PREPARATION_PREDICATE = re.compile(
+    r"\s+(?:is|was|are|were)\s+"
+    r"(?:prepared|obtained|made|synthesized|produced|formed|created)"
+    r"\s+by\s+dissolving\s+",
     re.IGNORECASE,
+)
+_RECIPE_DISCOURSE = re.compile(
+    r"[,;:!?\"“”]|\b(?:no|not|never|neither|without|if|unless|might|may|could|"
+    r"would|should|then|before|after|while|when|whereas|but|or|instead|"
+    r"rather|is|was|are|were|has|have|had)\b",
+    re.IGNORECASE,
+)
+_RECIPE_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_SOLUTE_AMOUNT = re.compile(
+    rf"(?P<value>{_RECIPE_NUMBER})\s*"
+    r"(?:kg|mg|ug|ng|g|mmol|umol|nmol|mol)\b\s+(?:of\s+)?(?P<name>.+)\Z",
+)
+_SOLVENT_AMOUNT = re.compile(
+    rf"(?P<value>{_RECIPE_NUMBER})\s*"
+    r"(?:mL|uL|nL|L)\b\s+(?:of\s+)?(?P<name>.+)\Z",
 )
 # An explicit source statement that two mentions are NOT one material.
 # Only predicative forms count: "X and Y were two different materials",
@@ -470,20 +485,93 @@ def quantity_identity_surfaces(
     return tuple(found)
 
 
+def competing_quantity_identity_surfaces(
+    field_path: str,
+    graph: Sequence[Any],
+    context: SourceLabelContext,
+) -> tuple[str, ...]:
+    """Source surfaces of other entities, never aliases of this port's entity."""
+    material_id, _sample_id = _port_material(graph, field_path)
+    return tuple(sorted({
+        surface
+        for owner_id, entity in context.by_material.items()
+        if owner_id != material_id
+        for surfaces in entity.surfaces.values()
+        for surface in surfaces
+    }))
+
+
+def _quantified_dissolution_operands(recipe: str) -> tuple[str, ...] | None:
+    """Recognize one quantified dissolution, rather than arbitrary prose.
+
+    This bounded source grammar accepts mass/amount-of-substance solutes in
+    a quantified solvent volume.  It cannot certify mixing, dilution,
+    multiple events or unquantified stock inputs; those remain pending.
+    Parentheses inside literal chemical names are retained, but may not
+    enclose another concentration or a subordinate operation.
+    """
+    if _RECIPE_DISCOURSE.search(recipe):
+        return None
+    parts = re.split(r"\s+in\s+", recipe, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        return None
+    solutes = re.split(r"\s+and\s+", parts[0], flags=re.IGNORECASE)
+    operands: list[str] = []
+    for text, pattern in [
+        *((item, _SOLUTE_AMOUNT) for item in solutes),
+        (parts[1], _SOLVENT_AMOUNT),
+    ]:
+        match = pattern.fullmatch(text.strip())
+        if match is None:
+            return None
+        value = float(match.group("value"))
+        if not math.isfinite(value) or value <= 0:
+            return None
+        name = match.group("name").strip()
+        # A secondary event or a stock concentration can never be certified
+        # by the dissolution definition.  Ingredient lists are permitted;
+        # scientific prose following an ingredient is not parsed here.
+        if re.search(
+                r"\b(?:and|or|by|followed|subsequently)\b|"
+                r"\d\s*(?:M|mM|mol/L|mmol/L)\b", name):
+            return None
+        if any(normalize_material_state(word) in {"solution", "suspension"}
+               or word.casefold() in {"stock", "buffer"}
+               for word in re.findall(r"\w+", name)):
+            return None
+        depth = 0
+        for char in name:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth < 0:
+                    return None
+        if depth:
+            return None
+        operands.append(name)
+    return tuple(operands)
+
+
 def definition_site_concentration_binding(
     excerpt: Any,
     value: Any,
     unit: Any,
     surfaces: Sequence[str],
+    *,
+    competing_surfaces: Sequence[str] = (),
 ) -> dict[str, str] | None:
     """Bind a trailing parenthesized concentration to its definition sentence.
 
-    Pattern: one sentence whose subject is one of the entity's label surfaces,
-    followed by a preparation verb and a single parenthesized concentration at
-    the end, e.g. ``Solution B is prepared by dissolving ... (1 M).``  Every
-    guard is literal: the claimed value and unit occur exactly once, inside
-    the final parenthesis, with the unit in the concentration set, and the
-    label surface is the only one in that sentence, before the verb.
+    The entity's literal label must be the sole subject immediately followed
+    by an affirmative preparation predicate and one quantified dissolution
+    recipe.  A final parenthesized concentration may then describe that
+    preparation.  When another source-bound entity occurs in the same
+    recipe, its amount does not prove whose concentration the parenthesis
+    describes: such multi-entity passages stay unresolved, even with
+    quantified ingredients.  Stock inputs, coordination, negation and
+    multiple events also stay unresolved.  This fallback is intentionally
+    a bounded source grammar, not a natural-language concentration resolver.
     """
     if (isinstance(value, bool) or not isinstance(value, (int, float))
             or not isinstance(excerpt, str) or not excerpt.strip()
@@ -513,12 +601,9 @@ def definition_site_concentration_binding(
         return None  # the concentration must close a trailing parenthesis
     if not normalized[:amount.start()].rstrip().endswith("("):
         return None
-    sentence_start = max(
-        normalized.rfind(". ", 0, amount.start()),
-        normalized.rfind(".\n", 0, amount.start()),
-    )
-    sentence_start = 0 if sentence_start < 0 else sentence_start + 2
-    sentence = normalized[sentence_start:]
+    boundaries = list(re.finditer(r"[.!?](?=\s|$)", normalized[:amount.start()]))
+    sentence_start = boundaries[-1].end() if boundaries else 0
+    sentence = normalized[sentence_start:].strip()
     surface_pattern = re.compile(
         "|".join(
             rf"(?<!\w){re.escape(surface)}(?!\w)"
@@ -528,11 +613,32 @@ def definition_site_concentration_binding(
     mentions = list(surface_pattern.finditer(sentence))
     if len(mentions) != 1:
         return None
-    verb = _PREPARATION_VERB.search(sentence)
-    if (verb is None or not mentions[0].start() < verb.start()
-            or not verb.start() < amount.start() - sentence_start):
+    subject = mentions[0]
+    if sentence[:subject.start()].strip().casefold() not in {"", "the"}:
         return None
-    surface = mentions[0].group()
+    predicate = _PREPARATION_PREDICATE.match(sentence, subject.end())
+    if predicate is None:
+        return None
+    concentration_start = sentence.rfind("(")
+    if concentration_start < predicate.end():
+        return None
+    recipe = sentence[predicate.end():concentration_start].strip()
+    operands = _quantified_dissolution_operands(recipe)
+    if operands is None:
+        return None
+    for surface in competing_surfaces:
+        if not isinstance(surface, str) or not surface.strip():
+            continue
+        pattern = _word_pattern(surface, ignorecase=False)
+        # A quantity on a foreign input is not proof that the final
+        # concentration describes the product rather than that input.
+        for mention in pattern.finditer(sentence):
+            if (subject.start() <= mention.start()
+                    and mention.end() <= subject.end()
+                    and mention.end() - mention.start() < subject.end() - subject.start()):
+                continue  # a shorter foreign stage word inside this subject label
+            return None
+    surface = subject.group()
     return {
         "schema_version": "source-label-binding/v1",
         "rule_version": SOURCE_LABEL_RULE_VERSION,
@@ -569,6 +675,7 @@ __all__ = [
     "SourceLabelContext",
     "attributed_state_mention",
     "build_source_label_context",
+    "competing_quantity_identity_surfaces",
     "definition_site_concentration_binding",
     "labels_explicitly_distinct",
     "quantity_identity_surfaces",

@@ -649,6 +649,8 @@ def _compact_feedback(feedback: Any) -> dict[str, Any]:
             "status": declaration.get("status", "unknown"),
             "fields": copy.deepcopy(declaration.get("fields", [])),
         }
+        if isinstance(declaration.get("field_units"), dict):
+            result[kind]["field_units"] = copy.deepcopy(declaration["field_units"])
         if declaration.get("evidence"):
             result[kind]["evidence"] = [_compact_evidence(item) for item in declaration["evidence"]]
     return result

@@ -135,6 +135,7 @@ def _evaluate_route_decision_v1_impl(
     *,
     source_root: str | Path,
     trusted_source_paths: RouteSourceIndex | None = None,
+    trusted_inventory_register_paths: Mapping[str, str | Path] | None = None,
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     signed_source_events: Sequence[Mapping[str, Any]] | None = None,
     trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
@@ -350,10 +351,15 @@ def _evaluate_route_decision_v1_impl(
                 reasons=("source_attestation_digest_mismatch",)
             )
         else:
+            inventory_kwargs = (
+                {"inventory_register_paths": trusted_inventory_register_paths}
+                if source_verifier is verify_route_pdf_source else {}
+            )
             source = source_verifier(
                 candidate,
                 source_paths={scope.paper_id: path} if path and scope else {},
                 source_root=root,
+                **inventory_kwargs,
             )
         if source.source_scope_verified and require_attested_sources:
             attested_doi = source_identity[0] if source_identity else ""
@@ -566,6 +572,7 @@ def evaluate_route_decision_v1(
     protocols: Sequence[Mapping[str, Any]],
     *,
     source_root: str | Path,
+    trusted_inventory_register_paths: Mapping[str, str | Path] | None = None,
     trusted_source_events: Sequence[TrustedAcquisitionEventV1] | None = None,
     signed_source_events: Sequence[Mapping[str, Any]] | None = None,
     trusted_public_keys: Mapping[str, TrustedIssuerPublicKeyV1] | None = None,
@@ -592,6 +599,7 @@ def evaluate_route_decision_v1(
         goal,
         protocols,
         source_root=source_root,
+        trusted_inventory_register_paths=trusted_inventory_register_paths,
         trusted_source_events=trusted_source_events,
         signed_source_events=signed_source_events,
         trusted_public_keys=trusted_public_keys,

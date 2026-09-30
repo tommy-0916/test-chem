@@ -23,6 +23,7 @@ upstream state requirements.
 from __future__ import annotations
 
 import json
+import math
 import re
 from copy import deepcopy
 from hashlib import sha256
@@ -48,6 +49,11 @@ AMBIGUOUS = "ambiguous"
 # solution contradicts it.  A bare amount unit (e.g. mmol) never proves a
 # form by itself.
 _DISSOLVING_VERB = re.compile(r"dissol\w*", re.IGNORECASE)
+_SOLVENT_INTRODUCTION = re.compile(r"\b(?:in|into|using|with)\b", re.IGNORECASE)
+_PASSIVE_AUXILIARY = re.compile(r"\b(?:was|were|is|are)\b", re.IGNORECASE)
+_OTHER_CLAUSE = re.compile(
+    r"[,;\n!?]|(?<!\d)\.(?!\d)|\b(?:then|after|before)\b", re.IGNORECASE,
+)
 
 
 def _requires_non_solution_form(
@@ -71,9 +77,24 @@ def _requires_non_solution_form(
             blobs.append(excerpt)
     for blob in blobs:
         for match in name_pattern.finditer(blob):
-            window = blob[max(0, match.start() - 45):match.end() + 45]
-            if _DISSOLVING_VERB.search(window):
-                return True
+            before = blob[max(0, match.start() - 160):match.start()]
+            preceding = list(_DISSOLVING_VERB.finditer(before))
+            if preceding:
+                between = before[preceding[-1].end():]
+                # In "dissolve NaOH in water", water is the solvent, not a
+                # solute required to arrive in non-solution form.
+                if _SOLVENT_INTRODUCTION.search(between):
+                    continue
+                if not _OTHER_CLAUSE.search(between):
+                    return True
+            after = blob[match.end():match.end() + 160]
+            following = _DISSOLVING_VERB.search(after)
+            if following:
+                between = after[:following.start()]
+                if (_PASSIVE_AUXILIARY.search(between)
+                        and not _SOLVENT_INTRODUCTION.search(between)
+                        and not _OTHER_CLAUSE.search(between)):
+                    return True
     return False
 
 
@@ -134,20 +155,26 @@ def _upstream_evidence(graph: Sequence[Any], step_index: int, port: Mapping) -> 
     return False
 
 
-def _spec_signal(port: Mapping) -> tuple[float | None, str]:
-    value = port.get("concentration_value")
-    unit = _text(port.get("concentration_unit"))
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and unit:
-        return float(value), unit
-    return None, ""
+def _concentration_spec(record: Mapping) -> tuple[float, str] | None:
+    """A complete, finite concentration; absent or invalid specs prove nothing."""
+    value = record.get("concentration_value")
+    unit = _text(record.get("concentration_unit"))
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not unit:
+        return None
+    try:
+        numeric = float(value)
+    except (OverflowError, ValueError):
+        return None
+    if math.isfinite(numeric) and numeric > 0:
+        return numeric, unit
+    return None
 
 
-def _item_spec(item: Mapping) -> tuple[float | None, str]:
-    value = item.get("concentration_value")
-    unit = _text(item.get("concentration_unit"))
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and unit:
-        return float(value), unit
-    return None, ""
+def _has_concentration_requirement(port: Mapping) -> bool:
+    # Null defaults do not assert a concentration. A value or a unit alone
+    # still expresses an incomplete requirement, which must not disappear.
+    return (port.get("concentration_value") is not None
+            or bool(_text(port.get("concentration_unit"))))
 
 
 def resolve_external_input_states(
@@ -219,35 +246,41 @@ def resolve_external_input_states(
                                    "external input"),
                     })
                     continue
-                requires_solid = _requires_non_solution_form(
+                requires_non_solution = _requires_non_solution_form(
                     facts, base["name"], step_index,
                     _text(step.get("operation")),
                 )
-                port_value, port_unit = _spec_signal(port)
+                requires_concentration = _has_concentration_requirement(port)
+                port_spec = _concentration_spec(port)
                 compatible = [
                     item for item in candidates
-                    if not (requires_solid and _item_spec(item)[0] is not None)
+                    if normalize_material_state(_text(item.get("supply_form")))
+                    != "unknown"
+                    and not (
+                        requires_non_solution
+                        and normalize_material_state(_text(item.get("supply_form")))
+                        == "solution"
+                    )
+                    and (
+                        not requires_concentration
+                        or (port_spec is not None
+                            and _concentration_spec(item) == port_spec)
+                    )
                 ]
                 chosen: Mapping[str, Any] | None = None
                 if len(compatible) == 1:
                     chosen = compatible[0]
-                elif len(compatible) > 1 and port_value is not None:
-                    # Only an explicit port spec signal may disambiguate
-                    # several records; absence of a signal is not a match.
-                    exact = [
-                        item for item in compatible
-                        if _item_spec(item) == (port_value, port_unit)
-                    ]
-                    if len(exact) == 1:
-                        chosen = exact[0]
                 if chosen is None:
-                    if len(compatible) < len(candidates):
+                    if not compatible:
                         records.append({
                             **base,
                             "status": SPEC_MISMATCH,
-                            "reason": ("the only matching record contradicts "
-                                       "the operation constraint (dissolving "
-                                       "requires a non-solution supply form)"),
+                            "reason": ("no matching record proves a controlled "
+                                       "supply form compatible with the explicit "
+                                       "operation and concentration requirements; "
+                                       "dissolving requires a non-solution form, "
+                                       "and declared concentrations require an "
+                                       "equal finite value and unit"),
                             "candidates": [_text(item.get("item_id"))
                                            for item in candidates],
                         })
@@ -332,24 +365,46 @@ def verified_resolutions(
     supply-spec never verifies against approved inventory bytes and vice
     versa.
     """
-    by_id = {
-        _text(item.get("item_id")): item for item in inventory_items
-        if _text(item.get("item_id"))
-    }
+    by_id: dict[str, Mapping[str, Any]] = {}
+    duplicate_ids: set[str] = set()
+    for item in inventory_items:
+        item_id = _text(item.get("item_id"))
+        if not item_id:
+            continue
+        if item_id in by_id:
+            duplicate_ids.add(item_id)
+        by_id[item_id] = item
     verified: dict[str, dict[str, Any]] = {}
     for record in resolutions:
         if record.get("status") != RESOLVED:
             continue
         if (_text(record.get("register")) or "material-inventory/v1") != register:
             continue
-        item = by_id.get(_text(record.get("item_id")))
+        item_id = _text(record.get("item_id"))
+        if item_id in duplicate_ids:
+            continue
+        item = by_id.get(item_id)
         if item is None or not inventory_digest:
             continue
         cited = _text(
             record.get("register_digest") or record.get("resource_digest"))
         if cited != inventory_digest:
             continue
-        if normalize_material_state(_text(item.get("supply_form"))) != record.get("state"):
+        token = normalize_material_state(_text(item.get("supply_form")))
+        if token == "unknown" or token != record.get("state"):
+            continue
+        # Older compact records omit the name. When a resolver record carries
+        # source details, none may contradict the item identified by its digest.
+        if ("name" in record and
+                _norm(_text(record.get("name")))
+                != _norm(_text(item.get("material_name")))):
+            continue
+        if ("supply_form" in record and
+                _norm(_text(record.get("supply_form")))
+                != _norm(_text(item.get("supply_form")))):
+            continue
+        if ("record" in record and
+                _text(record.get("record")) != _text(item.get("record"))):
             continue
         verified[_text(record.get("field_path"))] = {
             "item_id": _text(item.get("item_id")),

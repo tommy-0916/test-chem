@@ -412,6 +412,7 @@ class ResearchAgent(BaseAgent):
         trusted_route_group_roles_by_group: Mapping[
             tuple[str, str, str], str
         ] | None = None,
+        trusted_inventory_register_paths: Mapping[str, str | Path] | None = None,
     ) -> None:
         if model is None:
             model = LLMFactory.create_or_none()
@@ -444,6 +445,9 @@ class ResearchAgent(BaseAgent):
         }
         self._trusted_route_group_roles_by_group = dict(
             trusted_route_group_roles_by_group or {}
+        )
+        self._trusted_inventory_register_paths = dict(
+            trusted_inventory_register_paths or {}
         )
         self._use_llm = bool(model) if use_llm is None else bool(use_llm)
         self._max_survey_rounds = max_survey_rounds
@@ -1065,6 +1069,7 @@ class ResearchAgent(BaseAgent):
             ),
             verified_capabilities_by_group=self._trusted_route_capabilities_by_group,
             verified_group_roles_by_group=self._trusted_route_group_roles_by_group,
+            trusted_inventory_register_paths=self._trusted_inventory_register_paths,
             device_context=device_context if isinstance(device_context, dict) else None,
             science_agent=self,
         )
@@ -4120,48 +4125,97 @@ class ResearchAgent(BaseAgent):
         self,
         macro_plan: Sequence[Dict[str, Any]],
         consumer_index: int,
+        *,
+        material_instance_id: str,
+        unit: str,
+        producer_index: int,
+        state: ResearchAgentState | None = None,
     ) -> bool:
-        """Boundary C: a runtime-pending quantity may enter Device only when a
-        measurement/resolution path is scheduled before the first consumer."""
-        measurement_patterns = (
-            "称量",
-            "测量",
-            "weigh",
-            "measure",
-            "滴定",
-            "quantify",
-        )
-        for step in macro_plan[: max(consumer_index - 1, 0)]:
-            if not isinstance(step, dict):
+        """Require a bound quantity return after production and before use.
+
+        An operation name or another pending requirement is not a measurement
+        contract. Automatic returns must pass the existing capability check;
+        undeclared readings require an explicit observation/manual wait.
+        """
+        from .route_device import station_availability_confirmed
+
+        if not material_instance_id or not unit.strip():
+            return False
+        contracts = {}
+        if state is not None:
+            projection = project_device_context(
+                (state.event.constraints or {}).get("device_context") or {}, "step",
+            )
+            contracts = {
+                (item.get("station_code"), item.get("name")): item
+                for item in projection.get("operation_contracts", [])
+            }
+        for index, step in enumerate(macro_plan[: max(consumer_index - 1, 0)], 1):
+            if not isinstance(step, dict) or index <= producer_index:
                 continue
-            blob = " ".join(
-                str(step.get(key) or "")
-                for key in ("操作", "试剂/对象", "参数", "operation", "parameters")
-            ).lower()
-            if any(pattern in blob for pattern in measurement_patterns):
-                return True
-            for segment in step.get("operation_segments") or []:
-                if not isinstance(segment, dict):
+            if not any(
+                isinstance(port, dict)
+                and port.get("material_instance_id") == material_instance_id
+                for key in ("material_inputs", "material_intermediates")
+                for port in step.get(key) or []
+            ):
+                continue
+            # A scalar feedback field is one reading. Repeating its declaration
+            # cannot turn it into independent measurements of several batches.
+            feedback_instances: dict[tuple[str, str, str, str], set[str]] = {}
+            for feedback in step.get("intermediate_returns") or []:
+                if not isinstance(feedback, dict):
                     continue
-                role_text = " ".join(
-                    str(segment.get(key) or "")
-                    for key in ("role", "role_id", "material_effect", "source_operation_ref")
-                ).lower()
-                if "measur" in role_text or "weigh" in role_text:
+                source = feedback.get("source")
+                source = source if isinstance(source, dict) else {}
+                reading_key = (
+                    str(source.get("station_code") or ""),
+                    str(source.get("operation") or ""),
+                    str(feedback.get("feedback_kind") or ""),
+                    str(feedback.get("name") or ""),
+                )
+                instance = str(feedback.get("material_instance_id") or "").strip()
+                if instance:
+                    feedback_instances.setdefault(reading_key, set()).add(instance)
+            for feedback in step.get("intermediate_returns") or []:
+                if (not isinstance(feedback, dict)
+                        or feedback.get("material_instance_id") != material_instance_id
+                        or str(feedback.get("unit") or "").strip() != unit.strip()
+                        or feedback.get("required_for_next_step") is not True):
+                    continue
+                source = feedback.get("source")
+                source = source if isinstance(source, dict) else {}
+                reading_key = (
+                    str(source.get("station_code") or ""),
+                    str(source.get("operation") or ""),
+                    str(feedback.get("feedback_kind") or ""),
+                    str(feedback.get("name") or ""),
+                )
+                if len(feedback_instances.get(reading_key, ())) != 1:
+                    continue
+                mode = feedback.get("delivery_mode", "automatic")
+                if (mode in {"observation", "manual_handoff"}
+                        and feedback.get("availability") in {"declared", "undeclared"}
+                        and isinstance(feedback.get("wait_for"), str)
+                        and feedback["wait_for"].strip()):
                     return True
-            for requirement in step.get("quantity_requirements") or []:
-                if (
-                    isinstance(requirement, dict)
-                    and str(requirement.get("kind") or "")
-                    == "runtime_measured_inventory"
-                ):
-                    return True
+                if (mode == "automatic" and state is not None
+                        and feedback.get("availability") == "declared"
+                        and not self._macro_return_contract_issues(state, [step])):
+                    contract = contracts.get((source.get("station_code"), source.get("operation")), {})
+                    declaration = contract.get("feedback_contract", {}).get(feedback.get("feedback_kind"), {})
+                    field_units = declaration.get("field_units") or {}
+                    if (station_availability_confirmed(contract)
+                            and field_units.get(feedback.get("name")) == unit.strip()):
+                        return True
         return False
 
     def _scientific_completeness_audit(
         self,
         macro_plan: Sequence[Dict[str, Any]],
         graph_issues: Sequence[str],
+        *,
+        state: ResearchAgentState | None = None,
     ) -> Dict[str, Any]:
         """Phase 3 Scientific Completeness Audit (publish gate).
 
@@ -4180,6 +4234,8 @@ class ResearchAgent(BaseAgent):
         fidelity_risks: List[Dict[str, Any]] = []
 
         consumed_by: Dict[str, int] = {}
+        numeric_consumed_by: Dict[tuple[str, str], int] = {}
+        produced_by: Dict[str, int] = {}
         for index, step in enumerate(macro_plan, start=1):
             if not isinstance(step, dict):
                 continue
@@ -4190,9 +4246,37 @@ class ResearchAgent(BaseAgent):
                     instance_id = str(material.get("material_instance_id") or "").strip()
                     if instance_id:
                         consumed_by.setdefault(instance_id, index)
+                        quantity = material.get("quantity")
+                        quantity = quantity if isinstance(quantity, dict) else {}
+                        whole_batch = quantity.get("mode") == "all_available"
+                        numeric_requirements = [
+                            requirement
+                            for requirement in step.get("quantity_requirements") or []
+                            if isinstance(requirement, dict)
+                            and requirement.get("material_id") == material.get("material_id")
+                            and requirement.get("kind") != "whole_batch"
+                        ]
+                        if not whole_batch:
+                            numeric_consumed_by.setdefault(
+                                (instance_id, str(quantity.get("unit") or "").strip()), index,
+                            )
+                        for requirement in numeric_requirements:
+                            numeric_consumed_by.setdefault(
+                                (instance_id, str(requirement.get("unit") or quantity.get("unit") or "").strip()), index,
+                            )
+            for material in step.get("material_outputs") or []:
+                if isinstance(material, dict) and material.get("material_instance_id"):
+                    produced_by.setdefault(material["material_instance_id"], index)
 
         total_steps = len(macro_plan)
-        checked_runtime_instances: set[str] = set()
+
+        def first_numeric_consumer(instance_id: str, unit: str) -> int | None:
+            indices = [numeric_consumed_by[key] for key in {
+                (instance_id, unit.strip()), (instance_id, ""),
+            } if key in numeric_consumed_by]
+            return min(indices) if indices else None
+
+        checked_runtime_quantities: set[tuple[str, str]] = set()
         for index, step in enumerate(macro_plan, start=1):
             if not isinstance(step, dict):
                 continue
@@ -4237,18 +4321,24 @@ class ResearchAgent(BaseAgent):
                                 "required": required,
                             }
                         )
-                    if instance_id and instance_id not in checked_runtime_instances:
-                        quantity = material.get("quantity")
+                    quantity = material.get("quantity")
+                    quantity_unit = str(quantity.get("unit") or "") if isinstance(quantity, dict) else ""
+                    quantity_key = (instance_id, quantity_unit)
+                    if instance_id and quantity_key not in checked_runtime_quantities:
                         if isinstance(quantity, dict) and (
                             quantity.get("mode") == "runtime_measured"
                             or quantity.get("semantic")
                             == "runtime_measurement_required"
                         ):
-                            checked_runtime_instances.add(instance_id)
-                            first_consumer = consumed_by.get(instance_id)
-                            if first_consumer and first_consumer > index:
+                            checked_runtime_quantities.add(quantity_key)
+                            first_consumer = first_numeric_consumer(instance_id, quantity_unit)
+                            if first_consumer and first_consumer >= index:
                                 if not self._runtime_resolution_scheduled_before(
-                                    macro_plan, first_consumer
+                                    macro_plan, first_consumer,
+                                    material_instance_id=instance_id,
+                                    unit=quantity_unit,
+                                    producer_index=produced_by.get(instance_id, 0),
+                                    state=state,
                                 ):
                                     unit = str(quantity.get("unit") or "")
                                     runtime_dependencies.append(
@@ -4269,16 +4359,30 @@ class ResearchAgent(BaseAgent):
                 if path in class_counts:
                     class_counts[path] += 1
                 material_id = str(requirement.get("material_id") or "")
-                if (
-                    material_id
-                    and material_id not in checked_runtime_instances
-                    and str(requirement.get("kind") or "") == "runtime_measured_inventory"
-                ):
-                    checked_runtime_instances.add(material_id)
-                    first_consumer = consumed_by.get(material_id)
-                    if first_consumer and first_consumer > index:
+                if (material_id and str(requirement.get("kind") or "")
+                        == "runtime_measured_inventory"):
+                    ports = [
+                        material for key in ("material_inputs", "material_intermediates")
+                        for material in step.get(key) or []
+                        if isinstance(material, dict)
+                        and material.get("material_id") == material_id
+                    ]
+                    for material in ports:
+                        instance_id = str(material.get("material_instance_id") or "")
+                        quantity = material.get("quantity")
+                        quantity = quantity if isinstance(quantity, dict) else {}
+                        quantity_unit = str(requirement.get("unit") or quantity.get("unit") or "")
+                        quantity_key = (instance_id, quantity_unit)
+                        if quantity_key in checked_runtime_quantities:
+                            continue
+                        checked_runtime_quantities.add(quantity_key)
+                        first_consumer = first_numeric_consumer(instance_id, quantity_unit) or index
                         if not self._runtime_resolution_scheduled_before(
-                            macro_plan, first_consumer
+                            macro_plan, first_consumer,
+                            material_instance_id=instance_id,
+                            unit=quantity_unit,
+                            producer_index=produced_by.get(instance_id, 0),
+                            state=state,
                         ):
                             runtime_dependencies.append(
                                 {
@@ -4390,7 +4494,7 @@ class ResearchAgent(BaseAgent):
         # Phase 3: Scientific Completeness Audit.  The audit block is persisted
         # with the V2 package and included in the contract hash.
         completeness = self._scientific_completeness_audit(
-            state.macro_plan, graph_issues
+            state.macro_plan, graph_issues, state=state,
         )
         block_counts = completeness["counts"]
         if (

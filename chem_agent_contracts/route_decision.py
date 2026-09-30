@@ -337,6 +337,11 @@ def _field_issue(
             return "inventory_reference_missing"
         if re.fullmatch(r"sha256_[0-9a-f]{64}", provenance.source_digest) is None:
             return "inventory_digest_missing"
+        if (receipt is None or not receipt.source_scope_verified
+                or receipt.route_id != candidate.route_id
+                or receipt.candidate_digest != canonical_digest(candidate)
+                or field.field_path not in receipt.verified_field_paths):
+            return "inventory_field_source_unverified"
         return None
     if provenance.kind == "agent_inferred":
         if provenance.evidence_class != "chemistry_convention" or not provenance.inference_rule:

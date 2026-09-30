@@ -11,7 +11,7 @@ import re
 import json
 from typing import Any
 
-from chem_agent_contracts.route_candidate import RouteCandidateV1
+from chem_agent_contracts.route_candidate import RouteCandidateV1, SourceLabelBindingV1
 from chem_agent_contracts.route_field_basis import (
     is_material_port_state_path, state_source_locally_attributed,
     output_state_parent_role_issue,
@@ -19,6 +19,9 @@ from chem_agent_contracts.route_field_basis import (
 )
 from chem_agent_contracts.route_convention_basis import (
     output_quantity_role_issue, verify_bound_output_state,
+)
+from chem_agent_contracts.route_source_labels import (
+    build_source_label_context, state_attribution_outcome,
 )
 from chem_agent_contracts.v2 import ScientificCompletenessV2, canonical_digest
 
@@ -545,11 +548,14 @@ def audit_route_candidate_science(
         for record in expansion
     }
     fields_by_path = {field.field_path: field for field in candidate.evidence_matrix}
+    label_context = build_source_label_context(
+        candidate.material_graph, candidate.evidence_matrix,
+    )
     for field in candidate.evidence_matrix:
         if field.status == "runtime_pending" and field.required:
-            # Existing Phase 3 searches for any earlier measurement.  The V2
-            # route graph does not yet link that measurement to this exact
-            # evidence-matrix field, so no runtime field can be certified here.
+            # Completeness audits scheduled material returns. The V2 route
+            # graph still has no verified binding from a return to this exact
+            # evidence-matrix field, so this adapter cannot certify it.
             continue
         if field.status != "supported":
             # RouteDecision maps unsupported to rejection and unknown to
@@ -605,15 +611,37 @@ def audit_route_candidate_science(
                     )
                     continue
                 if field.provenance.kind == "paper":
-                    name = _graph_field(
-                        steps, field.field_path.rsplit(".", 1)[0] + ".name",
+                    outcome, binding = state_attribution_outcome(
+                        field.value, field.provenance.excerpt, field.field_path,
+                        candidate.material_graph, label_context,
                     )
-                    if (name is None or not state_source_locally_attributed(
-                        field.value, field.provenance.excerpt, name[0],
-                    )):
+                    if outcome == "pending":
                         # Ambiguous attribution is pending, not an audited fact.
-                        # RouteDecision reports semantic_binding_pending.
+                        # An engaged association failure never reopens through
+                        # the legacy matcher at this independent audit boundary.
                         continue
+                    if field.source_label_binding is not None:
+                        expected_binding = (
+                            SourceLabelBindingV1.model_validate(binding).model_dump(
+                                mode="json", exclude_none=True,
+                            ) if binding is not None else None
+                        )
+                        if field.source_label_binding.model_dump(
+                            mode="json", exclude_none=True,
+                        ) != expected_binding:
+                            issues.append(
+                                "evidence_matrix_source_label_binding_mismatch:"
+                                + field.field_path
+                            )
+                            continue
+                    if outcome == "legacy":
+                        name = _graph_field(
+                            steps, field.field_path.rsplit(".", 1)[0] + ".name",
+                        )
+                        if (name is None or not state_source_locally_attributed(
+                            field.value, field.provenance.excerpt, name[0],
+                        )):
+                            continue
                 if mapping is not None:
                     field_value = mapping.target_value
         claimed_provenance = field.provenance.model_dump(mode="json", exclude_none=True)
