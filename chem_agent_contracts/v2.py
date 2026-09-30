@@ -272,6 +272,12 @@ class QuantityV2(StrictModel):
     ]] = None
     value: Optional[float] = None
     unit: str = ""
+    # Scope of an exact quantity when the source sentence addresses a split
+    # population: "per_part" (each part receives this amount) or "total"
+    # (the amount covers the whole set).  None records that the source does
+    # not disambiguate; the field never invents a scope the source left
+    # open, and consumers must not treat an unspecified scope as either.
+    scope: Optional[Literal["per_part", "total", "unspecified"]] = None
 
     @model_validator(mode="after")
     def validate_quantity(self) -> "QuantityV2":

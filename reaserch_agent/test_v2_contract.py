@@ -978,5 +978,26 @@ class ResearchV2ContractTest(unittest.TestCase):
         self.assertNotIn("selection_miss", projected)
 
 
+
+class QuantityV2ScopeTest(unittest.TestCase):
+    def test_scope_records_source_supported_assignment(self):
+        from chem_agent_contracts.v2 import QuantityV2
+
+        per_part = QuantityV2(value=30, unit="mL", scope="per_part")
+        self.assertEqual(per_part.scope, "per_part")
+        total = QuantityV2(value=30, unit="mL", scope="total")
+        self.assertEqual(total.scope, "total")
+        unspecified = QuantityV2(value=30, unit="mL", scope="unspecified")
+        self.assertEqual(unspecified.scope, "unspecified")
+        inherited = QuantityV2(value=30, unit="mL")
+        self.assertIsNone(inherited.scope)
+
+    def test_scope_rejects_unknown_values(self):
+        from chem_agent_contracts.v2 import QuantityV2
+        from pydantic import ValidationError
+
+        with self.assertRaises(ValidationError):
+            QuantityV2(value=30, unit="mL", scope="each_vial")
+
 if __name__ == "__main__":
     unittest.main()
