@@ -303,12 +303,49 @@ class ConcentrationAttributionTests(unittest.TestCase):
                 self.assertIsNotNone(binding)
                 self.assertEqual(binding["source_surface"], label)
 
-    def test_definition_site_quantities_do_not_disambiguate_foreign_entities(self):
+    def test_definition_site_reproduced_parenthetical_binds_despite_competing_entities(self):
+        # 100 mmol in 100 mL reproduces the trailing (1 M): the readings
+        # "the product is 1 M" and "NaOH in this product is 1 M" coincide.
         binding = definition_site_concentration_binding(
             DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
             competing_surfaces=("NaOH", "water", "solution"),
         )
+        self.assertIsNotNone(binding)
+        self.assertEqual(binding["source_surface"], "Solution B")
+
+    def test_definition_site_competing_entities_stay_unresolved_without_reproduction(self):
+        binding = definition_site_concentration_binding(
+            DEF_B_SENTENCE, 2, "M", ("Solution B", "solution B"),
+            competing_surfaces=("NaOH", "water", "solution"),
+        )
         self.assertIsNone(binding)
+
+    def test_definition_site_reproduction_requires_a_unique_quotient(self):
+        sentence = ("Solution Q was prepared by dissolving 2 mmol salt and "
+                    "2 mmol additive in 20 mL water (0.1 M).")
+        binding = definition_site_concentration_binding(
+            sentence, 0.1, "M", ("Solution Q",),
+            competing_surfaces=("salt", "additive"),
+        )
+        self.assertIsNotNone(binding)
+        self.assertEqual(binding["source_surface"], "Solution Q")
+        unresolved = ("Solution Q was prepared by dissolving 2 mmol salt and "
+                      "1 mmol additive in 20 mL water (0.1 M).")
+        self.assertIsNone(definition_site_concentration_binding(
+            unresolved, 0.1, "M", ("Solution Q",),
+            competing_surfaces=("salt", "additive"),
+        ))
+
+    def test_definition_site_reproduction_stays_unresolved_for_nonwater_solvent(self):
+        # 2 mmol in 2 mL happens to equal 1 M, yet the parenthetical could
+        # just as well describe the carrier solution itself, so the competing
+        # readings do not collapse.
+        excerpt = ("Solution A was prepared by dissolving 2 mmol salt "
+                   "in 2 mL Carrier Z (1 M).")
+        self.assertIsNone(definition_site_concentration_binding(
+            excerpt, 1, "M", ("Solution A",),
+            competing_surfaces=("Carrier Z",),
+        ))
 
     def test_competing_surfaces_exclude_same_entity_aliases(self):
         graph, facts = _nife_facts()
