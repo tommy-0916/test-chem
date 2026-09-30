@@ -1,5 +1,12 @@
 # Field Semantic Gate — Round-4 Checkpoint (2026-09-30)
 
+> **Corrected in round 5** (`docs/field_semantic_gate_r5_checkpoint_20260930.md`):
+> the arithmetic release premise introduced here — solvent volume standing
+> in for solution volume, and equal n/V quotients dissolving component
+> ambiguity — is revoked. The 1 M binding is re-established on source
+> relation only. Keep this document for the register and triage records,
+> which round 5 carries over unchanged.
+
 Round 4 replays the unchanged round-3 proposal (`local-revision-r3-proposal.json`)
 through the same strict gates after two bounded changes and one triage
 deliverable. No structural rewrite; arms, split cardinality, quantities and

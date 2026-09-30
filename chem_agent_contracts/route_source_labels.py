@@ -553,62 +553,27 @@ def _quantified_dissolution_operands(recipe: str) -> tuple[str, ...] | None:
     return tuple(operands)
 
 
-_MOLE_UNIT_FACTORS = {"mol": 1.0, "mmol": 1e-3, "umol": 1e-6}
-_VOLUME_UNIT_FACTORS = {"l": 1.0, "ml": 1e-3, "ul": 1e-6}
-_CONCENTRATION_UNIT_FACTORS = {"m": 1.0, "mm": 1e-3, "um": 1e-6}
-_QUANTIFIED_AMOUNT = re.compile(
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
-    r"\s*(mmol|umol|mol|ml|ul|l)\b",
-    re.IGNORECASE,
-)
+def _single_solute_aqueous_dissolution(recipe: Any) -> bool:
+    """Check whether the recipe is one quantified reagent dissolved in water.
 
-
-def _recipe_reproduces_concentration(recipe: Any, value: Any, unit: Any) -> bool:
-    """Check whether the recipe's own operands reproduce the parenthetical.
-
-    This collapse is only conclusive for an aqueous dissolution: only a water
-    solvent lets the recipe's solvent volume stand for the solution volume.
-    For any other solvent, carrier, or stock solution the same quotient is
-    consistent with the parenthetical describing that other entity (e.g.
-    dissolving salt into 2 mL of a 1 M carrier leaves the carrier at 1 M),
-    so the competing readings stay ambiguous and keep blocking the binding.
-    When every amount-of-substance operand over the water volume yields
-    exactly the parenthetical value, "whose concentration is it" collapses:
-    the product concentration and each quantified solute concentration are
-    then the same claim.  Mass units, missing volume/amount pairs, and
-    multiple distinct quotients stay unresolved.
+    In a preparation sentence, the trailing parenthetical describes the
+    prepared solution (the grammatical subject).  A mention of the single
+    quantified reagent or of the water inside such a recipe is an ingredient
+    role, not a competing concentration bearer: a reagent's amount is already
+    stated in its own quantity, and pure water carries no solute
+    concentration.  This is a grammatical-role judgment over the parsed
+    operands only — never an arithmetic n/V(solvent) inference, which would
+    be unsound because concentration is defined against the solution volume.
+    Multi-solute recipes and non-water solvents stay competing, since the
+    parenthetical may then describe one component or the solvent itself.
     """
-    if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not isinstance(unit, str)):
+    if not isinstance(recipe, str):
         return False
-    target = _CONCENTRATION_UNIT_FACTORS.get(
-        unit.strip().casefold().replace("µ", "u"))
-    if target is None:
-        return False
-    operands = _quantified_dissolution_operands(str(recipe))
-    if operands is None:
+    operands = _quantified_dissolution_operands(recipe)
+    if operands is None or len(operands) != 2:
         return False
     solvent = operands[-1].strip().casefold()
-    if solvent.removeprefix("of ").strip() != "water":
-        return False
-    moles: list[float] = []
-    volumes: list[float] = []
-    for match in _QUANTIFIED_AMOUNT.finditer(str(recipe)):
-        number = float(match.group(1))
-        if not math.isfinite(number) or number <= 0:
-            return False
-        unit_key = match.group(2).casefold()
-        if unit_key in _MOLE_UNIT_FACTORS:
-            moles.append(number * _MOLE_UNIT_FACTORS[unit_key])
-        elif unit_key in _VOLUME_UNIT_FACTORS:
-            volumes.append(number * _VOLUME_UNIT_FACTORS[unit_key])
-    if not moles or not volumes:
-        return False
-    quotients = {mole / volume for mole in moles for volume in volumes}
-    if len(quotients) != 1:
-        return False
-    return math.isclose(
-        quotients.pop(), float(value) * target, rel_tol=1e-9, abs_tol=1e-12)
+    return solvent.removeprefix("of ").strip() == "water"
 
 
 def definition_site_concentration_binding(
@@ -624,15 +589,17 @@ def definition_site_concentration_binding(
     The entity's literal label must be the sole subject immediately followed
     by an affirmative preparation predicate and one quantified dissolution
     recipe.  A final parenthesized concentration may then describe that
-    preparation.  When another source-bound entity occurs in the same
-    recipe, its presence alone does not prove whose concentration the
-    parenthesis describes; the binding stays unresolved unless this is an
-    aqueous dissolution whose quantified operands reproduce the
-    parenthetical value, in which case the competing readings coincide and
-    the subject keeps the binding.
-    Stock inputs, coordination, negation and multiple events also stay
-    unresolved.  This fallback is intentionally a bounded source grammar,
-    not a natural-language concentration resolver.
+    preparation.  A competing source-bound entity mentioned inside the recipe
+    of a single-reagent aqueous dissolution does not block the binding:
+    there the mention is an ingredient role (reagent or water), and the
+    parenthetical stays with the prepared solution.  Any other co-occurring
+    source-bound entity — another solution, a non-water solvent, carrier or
+    stock, or an ingredient of a multi-solute recipe — can itself bear the
+    reported concentration, so those passages stay unresolved.  Stock
+    inputs, coordination, negation and multiple events also stay unresolved.
+    This fallback is intentionally a bounded source grammar, not a
+    natural-language concentration resolver and never an arithmetic
+    concentration proof.
     """
     if (isinstance(value, bool) or not isinstance(value, (int, float))
             or not isinstance(excerpt, str) or not excerpt.strip()
@@ -687,31 +654,28 @@ def definition_site_concentration_binding(
     operands = _quantified_dissolution_operands(recipe)
     if operands is None:
         return None
-    competing_seen = False
+    ingredients_exempt = _single_solute_aqueous_dissolution(recipe)
+    recipe_start = predicate.end()
+    recipe_end = concentration_start
     for surface in competing_surfaces:
         if not isinstance(surface, str) or not surface.strip():
             continue
         pattern = _word_pattern(surface, ignorecase=False)
-        # A quantity on a foreign input is not by itself proof that the final
-        # concentration describes the product rather than that input; only a
-        # reproduction of the parenthetical by the recipe's own operands
-        # collapses that ambiguity.
         for mention in pattern.finditer(sentence):
             if (subject.start() <= mention.start()
                     and mention.end() <= subject.end()):
                 if mention.end() - mention.start() < subject.end() - subject.start():
                     continue  # a shorter foreign stage word inside this subject label
                 # A competing surface spanning the whole subject means the
-                # entities cannot be told apart at all; no recipe arithmetic
-                # resolves a shared identity.
+                # entities cannot be told apart at all.
                 return None
-            competing_seen = True
-            break
-        if competing_seen:
-            break
-    if competing_seen and not _recipe_reproduces_concentration(
-            recipe, value, unit):
-        return None
+            if (ingredients_exempt and recipe_start <= mention.start()
+                    and mention.end() <= recipe_end):
+                # Ingredient role (the quantified reagent or the water) in a
+                # single-solute aqueous dissolution: not a competing
+                # concentration bearer.
+                continue
+            return None
     surface = subject.group()
     return {
         "schema_version": "source-label-binding/v1",

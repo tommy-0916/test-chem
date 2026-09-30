@@ -303,9 +303,10 @@ class ConcentrationAttributionTests(unittest.TestCase):
                 self.assertIsNotNone(binding)
                 self.assertEqual(binding["source_surface"], label)
 
-    def test_definition_site_reproduced_parenthetical_binds_despite_competing_entities(self):
-        # 100 mmol in 100 mL reproduces the trailing (1 M): the readings
-        # "the product is 1 M" and "NaOH in this product is 1 M" coincide.
+    def test_definition_site_ingredient_mentions_do_not_compete(self):
+        # NaOH and water appear only as quantified ingredient roles of the
+        # single-solute aqueous dissolution; the trailing parenthetical
+        # stays with the prepared solution (the subject).
         binding = definition_site_concentration_binding(
             DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
             competing_surfaces=("NaOH", "water", "solution"),
@@ -313,22 +314,15 @@ class ConcentrationAttributionTests(unittest.TestCase):
         self.assertIsNotNone(binding)
         self.assertEqual(binding["source_surface"], "Solution B")
 
-    def test_definition_site_competing_entities_stay_unresolved_without_reproduction(self):
-        binding = definition_site_concentration_binding(
-            DEF_B_SENTENCE, 2, "M", ("Solution B", "solution B"),
-            competing_surfaces=("NaOH", "water", "solution"),
-        )
-        self.assertIsNone(binding)
-
-    def test_definition_site_reproduction_requires_a_unique_quotient(self):
+    def test_definition_site_multi_solute_recipe_stays_unresolved(self):
+        # With two solutes the parenthetical may describe either component;
+        # equal or unequal quotients are irrelevant and cannot resolve it.
         sentence = ("Solution Q was prepared by dissolving 2 mmol salt and "
                     "2 mmol additive in 20 mL water (0.1 M).")
-        binding = definition_site_concentration_binding(
+        self.assertIsNone(definition_site_concentration_binding(
             sentence, 0.1, "M", ("Solution Q",),
             competing_surfaces=("salt", "additive"),
-        )
-        self.assertIsNotNone(binding)
-        self.assertEqual(binding["source_surface"], "Solution Q")
+        ))
         unresolved = ("Solution Q was prepared by dissolving 2 mmol salt and "
                       "1 mmol additive in 20 mL water (0.1 M).")
         self.assertIsNone(definition_site_concentration_binding(
@@ -336,10 +330,20 @@ class ConcentrationAttributionTests(unittest.TestCase):
             competing_surfaces=("salt", "additive"),
         ))
 
-    def test_definition_site_reproduction_stays_unresolved_for_nonwater_solvent(self):
-        # 2 mmol in 2 mL happens to equal 1 M, yet the parenthetical could
-        # just as well describe the carrier solution itself, so the competing
-        # readings do not collapse.
+    def test_definition_site_mentions_outside_recipe_still_compete(self):
+        # An entity mentioned outside the recipe span is never an ingredient
+        # role, even in a single-solute aqueous dissolution.
+        excerpt = ("Solution A was prepared by dissolving 2 mmol salt "
+                   "in 20 mL water. Solution B was prepared (1 M).")
+        self.assertIsNone(definition_site_concentration_binding(
+            excerpt, 1, "M", ("Solution B",),
+            competing_surfaces=("Solution A",),
+        ))
+
+    def test_definition_site_nonwater_solvent_still_competes(self):
+        # 2 mmol in 2 mL happens to equal 1 M arithmetically, but the
+        # quotient is never consulted: the block comes from the role — a
+        # carrier solution can itself bear the reported concentration.
         excerpt = ("Solution A was prepared by dissolving 2 mmol salt "
                    "in 2 mL Carrier Z (1 M).")
         self.assertIsNone(definition_site_concentration_binding(
