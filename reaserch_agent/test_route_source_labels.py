@@ -289,11 +289,9 @@ class ConcentrationAttributionTests(unittest.TestCase):
     def test_definition_site_binds_renamed_quantified_preparations(self):
         examples = (
             ("Buffer Omega", "Buffer Omega was made by dissolving 0.2 g salt "
-             "in 50 mL solvent (4 mM).", 4, "mM"),
-            ("Mixture Q", "The Mixture Q is formed by dissolving 2 mmol salt "
-             "and 1 mmol additive in 20 mL solvent (0.1 M).", 0.1, "M"),
+             "in 50 mL water (4 mM).", 4, "mM"),
             ("Feed Z", "An unrelated batch was cooled.\tFeed Z was prepared "
-             "by dissolving 10 mg reagent in 5 mL carrier (2 mM).", 2, "mM"),
+             "by dissolving 10 mg reagent in 5 mL water (2 mM).", 2, "mM"),
         )
         for label, excerpt, value, unit in examples:
             with self.subTest(label=label):
@@ -306,10 +304,17 @@ class ConcentrationAttributionTests(unittest.TestCase):
     def test_definition_site_ingredient_mentions_do_not_compete(self):
         # NaOH and water appear only as quantified ingredient roles of the
         # single-solute aqueous dissolution; the trailing parenthetical
-        # stays with the prepared solution (the subject).
+        # stays with the prepared solution (the subject).  The result must
+        # not depend on whether the caller listed the ingredients.
         binding = definition_site_concentration_binding(
             DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
             competing_surfaces=("NaOH", "water", "solution"),
+        )
+        self.assertIsNotNone(binding)
+        self.assertEqual(binding["source_surface"], "Solution B")
+        binding = definition_site_concentration_binding(
+            DEF_B_SENTENCE, 1, "M", ("Solution B", "solution B"),
+            competing_surfaces=(),
         )
         self.assertIsNotNone(binding)
         self.assertEqual(binding["source_surface"], "Solution B")
@@ -317,12 +322,16 @@ class ConcentrationAttributionTests(unittest.TestCase):
     def test_definition_site_multi_solute_recipe_stays_unresolved(self):
         # With two solutes the parenthetical may describe either component;
         # equal or unequal quotients are irrelevant and cannot resolve it.
+        # The applicability gate reads the parsed recipe itself, so the
+        # rejection must hold with a full competing list and with none.
         sentence = ("Solution Q was prepared by dissolving 2 mmol salt and "
                     "2 mmol additive in 20 mL water (0.1 M).")
-        self.assertIsNone(definition_site_concentration_binding(
-            sentence, 0.1, "M", ("Solution Q",),
-            competing_surfaces=("salt", "additive"),
-        ))
+        for competing in (("salt", "additive"), ()):
+            with self.subTest(competing=competing):
+                self.assertIsNone(definition_site_concentration_binding(
+                    sentence, 0.1, "M", ("Solution Q",),
+                    competing_surfaces=competing,
+                ))
         unresolved = ("Solution Q was prepared by dissolving 2 mmol salt and "
                       "1 mmol additive in 20 mL water (0.1 M).")
         self.assertIsNone(definition_site_concentration_binding(
@@ -342,14 +351,17 @@ class ConcentrationAttributionTests(unittest.TestCase):
 
     def test_definition_site_nonwater_solvent_still_competes(self):
         # 2 mmol in 2 mL happens to equal 1 M arithmetically, but the
-        # quotient is never consulted: the block comes from the role — a
-        # carrier solution can itself bear the reported concentration.
+        # quotient is never consulted: the block comes from applicability —
+        # a carrier solution can itself bear the reported concentration.
+        # Rejection must hold with a full competing list and with none.
         excerpt = ("Solution A was prepared by dissolving 2 mmol salt "
                    "in 2 mL Carrier Z (1 M).")
-        self.assertIsNone(definition_site_concentration_binding(
-            excerpt, 1, "M", ("Solution A",),
-            competing_surfaces=("Carrier Z",),
-        ))
+        for competing in (("Carrier Z",), ()):
+            with self.subTest(competing=competing):
+                self.assertIsNone(definition_site_concentration_binding(
+                    excerpt, 1, "M", ("Solution A",),
+                    competing_surfaces=competing,
+                ))
 
     def test_competing_surfaces_exclude_same_entity_aliases(self):
         graph, facts = _nife_facts()

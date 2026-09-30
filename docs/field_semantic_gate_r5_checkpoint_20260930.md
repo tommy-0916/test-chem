@@ -1,5 +1,17 @@
 # Field Semantic Gate — Round-5 Checkpoint (2026-09-30)
 
+> **Addendum (same day): applicability gate made competing-independent.**
+> The definition-site fallback now checks its applicability — single-reagent
+> aqueous dissolution, judged from the parsed recipe itself — *before* the
+> competing-entity loop, and returns unresolved outside that scope
+> unconditionally. Previously the multi-solute / non-aqueous rejection only
+> fired when a caller happened to list the competing entities; an omitted
+> list could have changed the local result. The acceptance matrix is now:
+> multi-solute and non-water-solvent passages reject with a full competing
+> list **and** with an empty one; the single-solute aqueous positive binds
+> with either. The Solution B 1 M binding, the register resolution (9/0) and
+> the seven-fact triage below are unchanged under the stricter gate.
+
 Round 5 corrects one round-4 error and otherwise carries the round-4
 results forward. The round-3 proposal bytes are still not rewritten; arms,
 split cardinality, quantities and the pH labeled quote remain untouched.

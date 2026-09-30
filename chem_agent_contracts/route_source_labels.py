@@ -588,14 +588,18 @@ def definition_site_concentration_binding(
 
     The entity's literal label must be the sole subject immediately followed
     by an affirmative preparation predicate and one quantified dissolution
-    recipe.  A final parenthesized concentration may then describe that
-    preparation.  A competing source-bound entity mentioned inside the recipe
-    of a single-reagent aqueous dissolution does not block the binding:
-    there the mention is an ingredient role (reagent or water), and the
-    parenthetical stays with the prepared solution.  Any other co-occurring
-    source-bound entity — another solution, a non-water solvent, carrier or
-    stock, or an ingredient of a multi-solute recipe — can itself bear the
-    reported concentration, so those passages stay unresolved.  Stock
+    recipe that parses as a single-reagent aqueous dissolution — this
+    applicability is judged from the parsed recipe itself, never from which
+    competing entities a caller listed.  Outside that scope (multi-solute
+    recipes, non-aqueous solvents) the parenthetical may describe a
+    component or the solvent itself, so those passages are always
+    unresolved.  Inside the scope, a final parenthesized concentration
+    describes the prepared solution (the subject): a competing source-bound
+    entity mentioned inside the recipe is an ingredient role (reagent or
+    water), not a competing concentration bearer, and does not block the
+    binding.  Any other co-occurring source-bound entity — another solution,
+    a carrier or stock, or an entity mentioned outside the recipe — can
+    itself bear the reported concentration and stays unresolved.  Stock
     inputs, coordination, negation and multiple events also stay unresolved.
     This fallback is intentionally a bounded source grammar, not a
     natural-language concentration resolver and never an arithmetic
@@ -654,7 +658,13 @@ def definition_site_concentration_binding(
     operands = _quantified_dissolution_operands(recipe)
     if operands is None:
         return None
-    ingredients_exempt = _single_solute_aqueous_dissolution(recipe)
+    if not _single_solute_aqueous_dissolution(recipe):
+        # Applicability gate, checked against the parsed recipe itself —
+        # never against which competing entities a caller happened to list.
+        # Multi-solute recipes and non-aqueous solvents can put the
+        # parenthetical on a component or on the solvent itself, so the
+        # definition-site rule does not certify them at all.
+        return None
     recipe_start = predicate.end()
     recipe_end = concentration_start
     for surface in competing_surfaces:
@@ -669,11 +679,10 @@ def definition_site_concentration_binding(
                 # A competing surface spanning the whole subject means the
                 # entities cannot be told apart at all.
                 return None
-            if (ingredients_exempt and recipe_start <= mention.start()
-                    and mention.end() <= recipe_end):
-                # Ingredient role (the quantified reagent or the water) in a
-                # single-solute aqueous dissolution: not a competing
-                # concentration bearer.
+            if recipe_start <= mention.start() and mention.end() <= recipe_end:
+                # Ingredient role (the quantified reagent or the water) in
+                # the applicable single-solute aqueous dissolution: not a
+                # competing concentration bearer.
                 continue
             return None
     surface = subject.group()
