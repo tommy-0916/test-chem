@@ -92,6 +92,7 @@ _COMPILER_MANAGED_STEP_FIELDS = frozenset(
 ALLOWED_EVENT_KINDS = frozenset(
     {
         "none",
+        "collect_same_material",
         "state_change",
         "process_same_material",
         "split_same_material",
@@ -1675,6 +1676,10 @@ def seal_relationship_binding_authority(
             raise ValueError(
                 f"event_kind=none relationship {relationship_id} may not have a Device binding record"
             )
+        if str(relation.get("event_kind") or "").strip() == "collect_same_material":
+            raise ValueError(
+                f"collect_same_material registration {relationship_id} is a non-executing assertion and may not have a Device binding record"
+            )
         if not isinstance(raw_binding, dict):
             raise ValueError(
                 f"binding {relationship_id} must be a structured object"
@@ -2617,6 +2622,8 @@ def compile_material_relationships(
     output_ports_global: Dict[Tuple[str, str], Dict[str, Any]] = {}
     relationship_ids: set[str] = set()
     non_bindable_none_relationship_ids: set[str] = set()
+    non_bindable_collection_relationship_ids: set[str] = set()
+    collection_registrations: List[Dict[str, Any]] = []
 
     for macro_index, raw_macro in enumerate(raw_macro_steps):
         path = f"research_action_package_v2.macro_steps[{macro_index}]"
@@ -2894,6 +2901,60 @@ def compile_material_relationships(
                             "event_kind=none cannot carry material or container endpoints",
                             relationship_id=relationship_id,
                         )
+                    )
+                continue
+            if event_kind == "collect_same_material":
+                # A collection registration is a Device-visible NO-OP: it is
+                # preserved as package metadata, never bound to a workstation
+                # action, never measured, and never transitions material.
+                non_bindable_collection_relationship_ids.add(relationship_id)
+                registration_issues: List[RelationshipCompileIssue] = []
+                if not input_ids or set(input_ids) != set(output_ids):
+                    registration_issues.append(
+                        RelationshipCompileIssue(
+                            "collect_registration_endpoint_mismatch",
+                            "collect_same_material registration requires a nonempty member set with identical input and output instance IDs",
+                            relationship_id=relationship_id,
+                            input_material_instance_ids=list(input_ids),
+                            output_material_instance_ids=list(output_ids),
+                        )
+                    )
+                if not logical_ids:
+                    registration_issues.append(
+                        RelationshipCompileIssue(
+                            "collect_registration_missing_logical_container",
+                            "collect_same_material registration requires the collected_set logical container endpoint",
+                            relationship_id=relationship_id,
+                        )
+                    )
+                if raw_relation.get("input_allocations") or raw_relation.get(
+                    "output_allocations"
+                ):
+                    registration_issues.append(
+                        RelationshipCompileIssue(
+                            "collect_registration_with_allocations",
+                            "collect_same_material registration is a non-executing assertion and may not carry quantity allocations",
+                            relationship_id=relationship_id,
+                        )
+                    )
+                if registration_issues:
+                    issues.extend(registration_issues)
+                else:
+                    collection_registrations.append(
+                        {
+                            "relationship_id": relationship_id,
+                            "member_material_instance_ids": list(input_ids),
+                            "logical_container_ids": list(logical_ids),
+                            "quantity_basis": str(
+                                raw_relation.get("quantity_basis") or ""
+                            ).strip(),
+                            "source_operation_ref": str(
+                                raw_relation.get("source_operation_ref") or ""
+                            ).strip(),
+                            "provenance": copy.deepcopy(
+                                raw_relation.get("provenance") or {}
+                            ),
+                        }
                     )
                 continue
             input_nodes = {**input_by_id, **intermediate_by_id}
@@ -3200,6 +3261,18 @@ def compile_material_relationships(
                 relationship_ids=unexpected_none_bindings,
             )
         )
+    unexpected_collection_bindings = sorted(
+        set(bindings) & non_bindable_collection_relationship_ids
+    )
+    if unexpected_collection_bindings:
+        issues.append(
+            RelationshipCompileIssue(
+                "unexpected_binding_for_collect_registration",
+                "collect_same_material is a non-executing registration and may not have a Device binding record",
+                blocker_class="plan_binding_invalid",
+                relationship_ids=unexpected_collection_bindings,
+            )
+        )
 
     previous_manifest = candidate.get("material_relationship_compiler")
     previous_relation_transitions = (
@@ -3287,6 +3360,18 @@ def compile_material_relationships(
                 "Device steps may not claim event_kind=none Research relationships",
                 blocker_class="plan_binding_invalid",
                 relationship_ids=claimed_none_relationships,
+            )
+        )
+    claimed_collection_registrations = sorted(
+        set(candidate_claim_steps) & non_bindable_collection_relationship_ids
+    )
+    if claimed_collection_registrations:
+        issues.append(
+            RelationshipCompileIssue(
+                "candidate_binding_for_collect_registration",
+                "Device steps may not claim collect_same_material Research registrations",
+                blocker_class="plan_binding_invalid",
+                relationship_ids=claimed_collection_registrations,
             )
         )
     if issues:
@@ -4940,49 +5025,6 @@ def compile_material_relationships(
     }
     updated["material_relation_graph"] = relation_graph
 
-# Research -> device bridge (scientific semantics Phase 2): material-state
-# vocabulary synonyms only.  The quantity mapping above is unchanged.
-_FALLBACK_RESEARCH_STATE_SYNONYMS: Dict[str, str] = {
-    "powder": "粉末",
-    "suspension": "悬浊液",
-    "solution": "纯液态",
-    "retained_wet_solid": "固体",
-    "washed_wet_solid": "固体",
-    "dry_solid": "固体",
-    "supernatant": "纯液态",
-    "filtrate": "纯液态",
-    "gas": "不限",
-    "unknown": "unknown",
-}
-_RESEARCH_STATE_SYNONYMS_CACHE: Optional[Dict[str, str]] = None
-
-
-def research_state_device_synonyms() -> Dict[str, str]:
-    """Map Research material-state tokens to device sample-state vocabulary.
-
-    Reads chem_resources/material_states/v1.json when present; falls back to
-    the embedded table so the compiler never hard-fails on a missing resource.
-    """
-    global _RESEARCH_STATE_SYNONYMS_CACHE
-    if _RESEARCH_STATE_SYNONYMS_CACHE is not None:
-        return _RESEARCH_STATE_SYNONYMS_CACHE
-    synonyms = dict(_FALLBACK_RESEARCH_STATE_SYNONYMS)
-    try:
-        resource_path = Path(__file__).resolve().parents[1] / "chem_resources" / "material_states" / "v1.json"
-        payload = json.loads(resource_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        payload = None
-    if (
-        isinstance(payload, dict)
-        and str(payload.get("schema") or "").strip() == "material-states/v1"
-        and isinstance(payload.get("device_sample_state_map"), dict)
-    ):
-        for key, value in payload["device_sample_state_map"].items():
-            if isinstance(key, str) and isinstance(value, str) and key.strip():
-                synonyms[key.strip()] = value.strip()
-    _RESEARCH_STATE_SYNONYMS_CACHE = synonyms
-    return synonyms
-
     updated_plan_by_key = {
         macro_id_key(step.get("plan_step")): step
         for step in updated.get("device_plan") or []
@@ -5090,6 +5132,7 @@ def research_state_device_synonyms() -> Dict[str, str]:
         ),
         "managed_consumption_event_ids": sorted(generated_consumption_events),
         "relationship_ids": sorted(relationship_ids),
+        "collection_registrations": copy.deepcopy(collection_registrations),
         "relationship_transition_ids": {
             relationship_id: transition_by_relationship[relationship_id]
             for relationship_id in sorted(transition_by_relationship)
@@ -5112,6 +5155,51 @@ def research_state_device_synonyms() -> Dict[str, str]:
         ),
     ]
     return updated, [], applied
+
+
+# Research -> device bridge (scientific semantics Phase 2): material-state
+# vocabulary synonyms only.  The quantity mapping above is unchanged.
+_FALLBACK_RESEARCH_STATE_SYNONYMS: Dict[str, str] = {
+    "powder": "粉末",
+    "suspension": "悬浊液",
+    "solution": "纯液态",
+    "retained_wet_solid": "固体",
+    "washed_wet_solid": "固体",
+    "dry_solid": "固体",
+    "supernatant": "纯液态",
+    "filtrate": "纯液态",
+    "gas": "不限",
+    "unknown": "unknown",
+}
+_RESEARCH_STATE_SYNONYMS_CACHE: Optional[Dict[str, str]] = None
+
+
+def research_state_device_synonyms() -> Dict[str, str]:
+    """Map Research material-state tokens to device sample-state vocabulary.
+
+    Reads chem_resources/material_states/v1.json when present; falls back to
+    the embedded table so the compiler never hard-fails on a missing resource.
+    """
+
+    global _RESEARCH_STATE_SYNONYMS_CACHE
+    if _RESEARCH_STATE_SYNONYMS_CACHE is not None:
+        return _RESEARCH_STATE_SYNONYMS_CACHE
+    synonyms = dict(_FALLBACK_RESEARCH_STATE_SYNONYMS)
+    try:
+        resource_path = Path(__file__).resolve().parents[1] / "chem_resources" / "material_states" / "v1.json"
+        payload = json.loads(resource_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if (
+        isinstance(payload, dict)
+        and str(payload.get("schema") or "").strip() == "material-states/v1"
+        and isinstance(payload.get("device_sample_state_map"), dict)
+    ):
+        for key, value in payload["device_sample_state_map"].items():
+            if isinstance(key, str) and isinstance(value, str) and key.strip():
+                synonyms[key.strip()] = value.strip()
+    _RESEARCH_STATE_SYNONYMS_CACHE = synonyms
+    return synonyms
 
 
 __all__ = [
