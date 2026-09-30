@@ -57,7 +57,8 @@ source states it → automatic; SI/protocol supplies it → targeted
 supplementation; a scope is chosen for the experiment → labeled new
 protocol decision with applicability verification.
 
-**Q3 终点集合 (collection vs physical merge)** — **CAPABILITY, main fix.**
+**Q3 终点集合 (collection vs physical merge)** — **CAPABILITY (representation
+delivered this round).**
 "All the samples are collected" is a set record; it is not a merge
 operation. The schema today cannot say that: no set/collection construct —
 `LogicalContainerV2` is physical (v2.py:651-658), merge exists only as
@@ -82,18 +83,41 @@ instead of converting every failure into "human review".
 
 ## C. Engineering backlog (capability items, bounded, in order)
 
-1. ~~Quantity scope representation~~ — **done this round**:
-   `QuantityV2.scope` + tests (test_v2_contract.QuantityV2ScopeTest).
-2. Collection-set semantics for Q3: lineage `collected_set_of`, effect
-   `collect_material`, event kind, source-verified producer; relax
-   derivation's single-parent requirement for a declared collection parent
+1. Quantity scope — **representation and consumer guard done this round**:
+   `QuantityV2.scope` (per_part/total/unspecified) + tests, and
+   `quantity_scope_allocation_issue` wired into the Phase-2 publish gate
+   (`_v2_material_graph_issues`): an exact quantity whose scope is
+   unresolved blocks ONLY the allocation that depends on it when the
+   addressed population (≥2 instances) is determinable from existing refs
+   (`parent_output_refs` or a `collect_same_material` member set); single
+   objects and populations not yet determinable stay untouched. `per_part`
+   permits per-part processing once the set is explicit; `total` records an
+   identified-set total without inferring equal splits.
+2. ~~Collection-set semantics for Q3~~ — **done this round (revised design)**:
+   a collected set is member references, not another physical merge.
+   `LogicalContainerV2` gains `member_material_instance_ids` (allowed only
+   for `container_type="collected_set"`); the set adds no material, mass, or
+   state and never forces a uniform member state. A collection is typed via
+   `event_kind="collect_same_material"` + `material_effect="register_collection"`;
+   the relation registers the same instances it references (input set ==
+   output set), forbids quantity allocations, and is rejected in any
+   transformation shape — bookkeeping never generates a device transfer or
+   merge. The single-parent split/transfer/state-change checks are NOT
+   globally relaxed; each relation kind keeps its own shape. Remaining: the
+   source-verified producer that wires a collection sentence into this
+   structure, and derivation's acceptance of a declared collection parent
    set (route_convention_basis.py:328-330).
 3. State-change derivation wiring for Q4-capability: extend `_RULE_EVENTS`,
-   add REDISPERSION_V1 to conventions.json, support `state_change_of`
-   lineage in `derive_unreviewed_output_state`.
-4. Vocabulary: add the Q4-chosen precipitate alias at both gates
-   (material_states/v1.json + `_SAFE_STATE_ALIASES`) — only after the
-   per-step review decision.
+   add REDISPERSION_V1 to conventions.json with verified object/operation/
+   applicability premises (never any solid-plus-water ⇒ suspension), and
+   support `state_change_of` lineage in `derive_unreviewed_output_state`.
+   Do this together with single-instance input inheritance (next slice).
+4. ~~Vocabulary: global precipitate alias~~ — **removed per review**: the
+   vocabulary layer only does morphological/terminological normalization
+   (e.g. singular/plural); operation-dependent states ("separated and
+   retained wet solid") must come from scoped derivation records with
+   operation, input state, retained object, and time — never a global
+   two-table alias added because one A01 field needs it.
 5. Input-state inheritance: `material_origin` + `parent_output_refs`
    producer for downstream ports (v2.py:467-468), pending the Q1 answer
    (whole-set vs per-part).
@@ -117,3 +141,33 @@ Machine-side stopping rule: fix representation/derivation where premises
 exist; targeted supplementation where evidence might exist elsewhere;
 review/authorization where a decision is genuinely required. "Pending" is
 no longer a single queue.
+
+## E. Operation-boundary verification for the two conditional items
+
+Verified against the paper's published Methods text (p.2, signed KB):
+
+- **graph[7] (ms7)** covers the *composite* operation "a second
+  centrifugation−redispersion protocol one time" — the node boundary is the
+  composite endpoint (redispersed material), not the centrifugation
+  instant. The retained-phase-is-wet-solid argument applies to the
+  centrifugation sub-step only; the composite endpoint is consistent with a
+  redispersed state. The source still never uses the word "suspension"
+  after b69, so this output is a **derivation case** (needs the Q4
+  capability wiring: redispersion rule with verified premises), not a
+  quote-binding case. Reclassified: conditional evidence → capability,
+  pending the state-change derivation slice.
+- **graph[8] (ms8)** "all the samples are collected for further
+  characterization" is a **collection-set endpoint, not a material output
+  requiring a uniform state**. With this round's `collected_set`
+  representation, what needs proving changes: member states are checked
+  per member (from their own operation chains); the set itself carries no
+  state. The current proposal's graph[8] output port with state
+  "precipitate" quoting b67 (an ms3-time observation) is a modeling error
+  to be corrected when the collection structure is wired — not an evidence
+  gap requiring a state word for "the collection".
+
+Also noted from the same Methods page: the parallel **Etching** variant
+states "after the first centrifugation−redispersion protocol, *each
+sample* was mixed with ..." — i.e. per-sample processing is explicit there
+and absent in the pristine NiFe Control text. This is context for Q1, not
+a substitute for the pristine group's own wording.

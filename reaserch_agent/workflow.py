@@ -36,9 +36,11 @@ from chem_agent_contracts.v2 import (
     MaterialContractStatusV2,
     MaterialOperationSegmentV2,
     MaterialRelationV2,
+    QuantityV2,
     canonical_digest,
     evidence_contains_exact_quantity,
     normalize_material_state,
+    quantity_scope_allocation_issue,
 )
 
 from .core import BaseAgent
@@ -3982,6 +3984,56 @@ class ResearchAgent(BaseAgent):
                         f"第 {index} 步重复产出"
                     )
                 produced_at[instance_id] = index
+            # Quantity scope guard: a scope-dependent allocation is blocked
+            # while the quantity's scope is unresolved, but only for the port
+            # whose population is determinable from existing refs; unrelated
+            # fields are never blocked by this guard.
+            for key in ("material_inputs", "material_intermediates", "material_outputs"):
+                for port_index, material in enumerate(step.get(key) or []):
+                    if not isinstance(material, dict):
+                        continue
+                    quantity = material.get("quantity")
+                    if not isinstance(quantity, dict):
+                        continue
+                    try:
+                        quantity_model = QuantityV2.model_validate(quantity)
+                    except Exception:
+                        continue  # malformed quantities are flagged elsewhere
+                    addressing: List[str] = []
+                    for ref in material.get("parent_output_refs") or []:
+                        match = re.fullmatch(
+                            r"material_graph\[(\d+)\]\.material_outputs\[(\d+)\]",
+                            str(ref).strip(),
+                        )
+                        if match is None:
+                            continue
+                        try:
+                            port = macro_plan[int(match.group(1))]["material_outputs"][int(match.group(2))]
+                            instance = str(port.get("material_instance_id") or "").strip()
+                        except (IndexError, KeyError, TypeError, AttributeError):
+                            continue
+                        if instance:
+                            addressing.append(instance)
+                    port_instance = str(material.get("material_instance_id") or "").strip()
+                    if len(addressing) < 2 and port_instance:
+                        for relation in step.get("material_relations") or []:
+                            if not isinstance(relation, dict):
+                                continue
+                            if str(relation.get("event_kind") or "") != "collect_same_material":
+                                continue
+                            members = {
+                                str(value).strip()
+                                for value in (relation.get("input_material_instance_ids") or [])
+                                if str(value).strip()
+                            }
+                            if port_instance in members:
+                                addressing = sorted(members)
+                                break
+                    if quantity_scope_allocation_issue(quantity_model, addressing):
+                        issues.append(
+                            f"quantity_scope_unresolved:material_graph[{index - 1}]"
+                            f".{key}[{port_index}].quantity"
+                        )
             for relation in step.get("material_relations") or []:
                 note_relation(relation, index)
             lineage = step.get("lineage_relation")

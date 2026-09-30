@@ -999,5 +999,151 @@ class QuantityV2ScopeTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             QuantityV2(value=30, unit="mL", scope="each_vial")
 
+
+class CollectedSetSemanticsTest(unittest.TestCase):
+    def test_collected_set_references_members_without_merging(self):
+        from chem_agent_contracts.v2 import LogicalContainerV2
+
+        container = LogicalContainerV2(
+            logical_container_id="set_final",
+            container_type="collected_set",
+            member_material_instance_ids=["c1", "c2", "c8"],
+        )
+        self.assertEqual(container.member_material_instance_ids, ["c1", "c2", "c8"])
+
+    def test_collected_set_requires_members_and_rejects_duplicates(self):
+        from chem_agent_contracts.v2 import LogicalContainerV2
+        from pydantic import ValidationError
+
+        with self.assertRaises(ValidationError):
+            LogicalContainerV2(
+                logical_container_id="set_empty",
+                container_type="collected_set",
+            )
+        with self.assertRaises(ValidationError):
+            LogicalContainerV2(
+                logical_container_id="set_dup",
+                container_type="collected_set",
+                member_material_instance_ids=["c1", "c1"],
+            )
+        with self.assertRaises(ValidationError):
+            LogicalContainerV2(
+                logical_container_id="vat1",
+                container_type="vial",
+                member_material_instance_ids=["c1"],
+            )
+
+    def test_collect_relation_registers_without_allocations(self):
+        from chem_agent_contracts.v2 import MaterialRelationV2, ProvenanceV2
+
+        provenance = ProvenanceV2(
+            kind="paper", reference="fact:f_collect", excerpt="all the samples are collected",
+            source_digest="sha256_x",
+        )
+        relation = MaterialRelationV2(
+            relation_id="rel_collect",
+            event_kind="collect_same_material",
+            input_material_instance_ids=["c1", "c2"],
+            output_material_instance_ids=["c2", "c1"],
+            logical_container_ids=["set_final"],
+            quantity_basis="runtime_measurement_required",
+            source_operation_ref="ms8",
+            provenance=provenance,
+        )
+        self.assertEqual(set(relation.input_material_instance_ids), {"c1", "c2"})
+
+    def test_collect_relation_rejects_transformation_shapes(self):
+        from chem_agent_contracts.v2 import MaterialRelationV2, ProvenanceV2
+        from pydantic import ValidationError
+
+        provenance = ProvenanceV2(
+            kind="paper", reference="fact:f_collect", excerpt="collected",
+            source_digest="sha256_x",
+        )
+        base = dict(
+            relation_id="rel_collect",
+            event_kind="collect_same_material",
+            input_material_instance_ids=["c1", "c2"],
+            output_material_instance_ids=["c1", "c2"],
+            logical_container_ids=["set_final"],
+            source_operation_ref="ms8",
+            provenance=provenance,
+        )
+        with self.assertRaises(ValidationError):
+            MaterialRelationV2(**{**base, "quantity_basis": "whole_batch"})
+        with self.assertRaises(ValidationError):
+            MaterialRelationV2(**{**base, "quantity_basis": "runtime_measurement_required",
+                                  "output_material_instance_ids": ["merged1"]})
+        with self.assertRaises(ValidationError):
+            MaterialRelationV2(**{**base, "quantity_basis": "runtime_measurement_required",
+                                  "output_material_instance_ids": []})
+
+
+class QuantityScopeAllocationGuardTest(unittest.TestCase):
+    def _agent(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        return agent
+
+    def _step(self, quantity, instance="inst_x", refs=()):
+        step = {
+            "macro_step_id": "S1", "sequence": 1, "operation": "distribute",
+            "sample_id": "s1",
+            "material_inputs": [{
+                "material_id": "m", "material_instance_id": instance,
+                "name": "water", "state": "solution",
+                "quantity": quantity,
+                **({"parent_output_refs": list(refs)} if refs else {}),
+            }],
+            "material_intermediates": [], "material_outputs": [],
+        }
+        return step
+
+    def _parents(self):
+        return {
+            "macro_step_id": "S0", "sequence": 0, "operation": "split",
+            "sample_id": "s1", "material_inputs": [],
+            "material_intermediates": [],
+            "material_outputs": [
+                {"material_id": "m", "material_instance_id": "c1",
+                 "name": "suspension", "state": "suspension"},
+                {"material_id": "m", "material_instance_id": "c2",
+                 "name": "suspension", "state": "suspension"},
+            ],
+        }
+
+    def test_unspecified_scope_blocks_only_the_distributing_port(self):
+        agent = self._agent()
+        plan = [self._parents(), self._step(
+            {"value": 30, "unit": "mL"}, refs=["material_graph[0].material_outputs[0]",
+                                               "material_graph[0].material_outputs[1]"])]
+        issues = agent._v2_material_graph_issues(plan, [])
+        self.assertIn("quantity_scope_unresolved:material_graph[1]"
+                      ".material_inputs[0].quantity", issues)
+
+    def test_per_part_and_total_allow_allocation(self):
+        agent = self._agent()
+        refs = ["material_graph[0].material_outputs[0]",
+                "material_graph[0].material_outputs[1]"]
+        for scope in ("per_part", "total"):
+            plan = [self._parents(), self._step(
+                {"value": 30, "unit": "mL", "scope": scope}, refs=refs)]
+            with self.subTest(scope=scope):
+                self.assertNotIn("quantity_scope_unresolved:material_graph[1]"
+                                 ".material_inputs[0].quantity",
+                                 agent._v2_material_graph_issues(plan, []))
+
+    def test_single_object_and_unresolved_population_stay_unblocked(self):
+        agent = self._agent()
+        plan = [self._parents(), self._step({"value": 30, "unit": "mL"},
+                                            refs=["material_graph[0].material_outputs[0]"])]
+        self.assertNotIn("quantity_scope_unresolved:material_graph[1]"
+                         ".material_inputs[0].quantity",
+                         agent._v2_material_graph_issues(plan, []))
+        plan = [self._parents(), self._step({"value": 30, "unit": "mL"})]
+        self.assertNotIn("quantity_scope_unresolved:material_graph[1]"
+                         ".material_inputs[0].quantity",
+                         agent._v2_material_graph_issues(plan, []))
+
 if __name__ == "__main__":
     unittest.main()

@@ -320,6 +320,7 @@ MaterialEventKindV2 = Literal[
     "process_same_material",
     "split_same_material",
     "replicate_same_material",
+    "collect_same_material",
 ]
 MaterialRelationQuantityBasisV2 = Literal[
     "whole_batch",
@@ -345,6 +346,7 @@ MaterialEffectV2 = Literal[
     "transfer_material",
     "split_material",
     "merge_material",
+    "register_collection",
     "unknown",
 ]
 
@@ -540,6 +542,29 @@ class MaterialRelationV2(StrictModel):
             ):
                 raise ValueError("event_kind=none cannot declare quantity information")
             return self
+        if self.event_kind == "collect_same_material":
+            # A collection registration records that existing instances are
+            # collected into a set; it moves nothing and transforms nothing,
+            # so it never substitutes for a merge or a device transfer.
+            if not self.input_material_instance_ids:
+                raise ValueError("collect_same_material requires input instance IDs")
+            if set(self.input_material_instance_ids) != set(
+                self.output_material_instance_ids
+            ):
+                raise ValueError(
+                    "collect_same_material registers the same instances it "
+                    "references; input and output instance IDs must match"
+                )
+            if self.quantity_basis != "runtime_measurement_required":
+                raise ValueError(
+                    "collect_same_material is a registration and requires "
+                    "runtime_measurement_required (no quantity allocation)"
+                )
+            if self.input_allocations or self.output_allocations:
+                raise ValueError(
+                    "collect_same_material cannot declare quantity allocations"
+                )
+            return self
         if not self.input_material_instance_ids or not self.output_material_instance_ids:
             raise ValueError("material relation requires input and output instance IDs")
         if self.quantity_basis is None:
@@ -613,6 +638,31 @@ class MaterialRelationV2(StrictModel):
         return self
 
 
+def quantity_scope_allocation_issue(
+    quantity: "QuantityV2",
+    addressing_instance_ids: List[str],
+) -> str:
+    """Block scope-dependent allocation while a quantity's scope is unresolved.
+
+    ``addressing_instance_ids`` is the population an exact quantity would be
+    distributed over, determined from existing material/operation refs.
+    Fewer than two IDs means no distribution question arises — or the
+    population is not yet determinable, which stays pending at the binding
+    layer and is NOT this guard's business.  ``per_part`` allows per-part
+    processing once the part set is explicit; ``total`` records a total over
+    the identified set without inferring an equal split; ``None`` /
+    ``unspecified`` blocks only the allocation that depends on the scope,
+    never unrelated fields.
+    """
+    if quantity.mode != "exact" or quantity.value is None:
+        return ""
+    if len(addressing_instance_ids) < 2:
+        return ""
+    if quantity.scope in {"per_part", "total"}:
+        return ""
+    return "quantity_scope_unresolved"
+
+
 class MaterialContractStatusV2(StrictModel):
     """Completeness/applicability, separate from the material records themselves."""
 
@@ -662,6 +712,36 @@ class LogicalContainerV2(StrictModel):
     lid_state: LogicalLidStateV2 = Field(
         default="unknown", description=LOGICAL_LID_STATE_PROMPT
     )
+    # Set semantics, only for container_type == "collected_set": the member
+    # material instance IDs this collection record refers to.  A collected
+    # set is bookkeeping, not a material: it adds no usable material of its
+    # own, carries no state and no mass of its own, does not merge its
+    # members, and never forces a uniform state on them.  Members keep
+    # their own states until a separate, independently justified merge
+    # operation is declared.
+    member_material_instance_ids: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_collection_semantics(self) -> "LogicalContainerV2":
+        members = self.member_material_instance_ids
+        if any(not isinstance(value, str) or not value.strip() for value in members):
+            raise ValueError(
+                "member_material_instance_ids must contain nonempty string IDs"
+            )
+        if len(set(members)) != len(members):
+            raise ValueError(
+                "member_material_instance_ids must not contain duplicate IDs"
+            )
+        if self.container_type == "collected_set":
+            if not members:
+                raise ValueError(
+                    "collected_set container requires member_material_instance_ids"
+                )
+        elif members:
+            raise ValueError(
+                "member_material_instance_ids is only allowed for collected_set"
+            )
+        return self
 
 
 class EvidenceItemV2(StrictModel):
