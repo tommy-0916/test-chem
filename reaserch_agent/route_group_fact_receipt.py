@@ -18,7 +18,10 @@ from chem_agent_contracts.route_field_basis import (
     controlled_state_mapping, is_material_port_state_path,
     output_state_parent_role_issue, state_source_locally_attributed,
 )
-from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
+from chem_agent_contracts.route_convention_basis import (
+    convention_fact_evidence_by_id, derive_unreviewed_input_state,
+    derive_unreviewed_output_state, verify_bound_output_state,
+)
 from chem_agent_contracts.route_source_labels import (
     SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
     build_source_label_context, competing_quantity_identity_surfaces,
@@ -210,6 +213,47 @@ def _proposal_key(protocol: Mapping[str, Any]) -> tuple[str, str, str] | None:
     return key if all(key) else None
 
 
+def _state_derivation_proof(
+    fact: Mapping[str, Any], facts: Sequence[Mapping[str, Any]],
+    graph: Any, scope: Any,
+) -> dict[str, Any] | None:
+    """Output derivation first, then verified input-state inheritance.
+
+    An inherited state is accepted only when the recomputed proof verifies via
+    ``verify_bound_output_state`` and the fact value equals the proof target;
+    anything else returns ``None`` so the existing literal gates stay in charge.
+    """
+    field_path = _text(fact.get("field_path"))
+    if not field_path.endswith(".state"):
+        return None
+    graph_list = graph if isinstance(graph, list) else []
+    derived, _issue = derive_unreviewed_output_state(
+        graph_list, facts, field_path,
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
+    )
+    if derived is not None:
+        return derived
+    inherited, _inherit_issue = derive_unreviewed_input_state(
+        graph_list, facts, field_path, fact.get("source"),
+    )
+    if (inherited is None
+            or _text(fact.get("value")) != _text(inherited.get("target_state"))):
+        return None
+    if verify_bound_output_state(
+        inherited, graph_list,
+        convention_fact_evidence_by_id(
+            facts, paper_id=scope.paper_id,
+            experimental_group_id=scope.experimental_group_id),
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
+    ):
+        return None
+    return inherited
+
+
 def _literal_fact_reason(
     fact: Mapping[str, Any], group: PdfExperimentalGroupV1,
     blocks: Sequence[tuple[str, str]],
@@ -270,12 +314,7 @@ def _literal_fact_reason(
     if not isinstance(unit, str):
         return "fact_unit_invalid"
     field_path = _text(fact.get("field_path"))
-    derived, _derivation_issue = derive_unreviewed_output_state(
-        graph if isinstance(graph, list) else [], facts, field_path,
-        paper_id=scope.paper_id,
-        experimental_group_id=scope.experimental_group_id,
-        source_digest=scope.source_digest,
-    ) if field_path.endswith(".state") else (None, "")
+    derived = _state_derivation_proof(fact, facts, graph, scope)
     if is_material_port_state_path(field_path):
         if derived is None:
             if output_state_parent_role_issue(field_path, graph, value, excerpt):
@@ -528,12 +567,9 @@ def produce_pdf_group_fact_receipt(
             if reason:
                 reasons.append(f"fact[{index}]:{reason}")
             else:
-                derived, _ = derive_unreviewed_output_state(
-                    protocol.get("material_graph", []), facts, field_path,
-                    paper_id=scope.paper_id,
-                    experimental_group_id=scope.experimental_group_id,
-                    source_digest=scope.source_digest,
-                ) if field_path.endswith(".state") else (None, "")
+                derived = _state_derivation_proof(
+                    fact, facts, protocol.get("material_graph", []), scope,
+                )
                 if derived is not None:
                     derived_paths.append(field_path)
                 else:

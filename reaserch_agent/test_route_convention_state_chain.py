@@ -14,7 +14,8 @@ from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1, RouteCandidateV1, RouteGoalV1, RouteTargetV1,
 )
 from chem_agent_contracts.route_convention_basis import (
-    derive_unreviewed_output_state, verify_bound_output_state,
+    derive_unreviewed_input_state, derive_unreviewed_output_state,
+    verify_bound_output_state,
 )
 from chem_agent_contracts.route_field_basis import (
     output_state_parent_role_issue, passive_material_operation_span,
@@ -751,6 +752,484 @@ class RouteConventionStateChainTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "output quantity role differs"):
             ResearchActionPackageV2.model_validate(wrong_count, strict=True)
+
+
+class StateChangeAndInheritanceTest(unittest.TestCase):
+    """Controlled state-change derivation and input-state inheritance."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source_file = self.root / "paper.md"
+        self.source_file.write_text("# Study\n## Methods\n### Group A\nplaceholder\n",
+                                    encoding="utf-8")
+        self.digest = "sha256_" + sha256(self.source_file.read_bytes()).hexdigest()
+        self.source = {
+            "paper_id": "paper-A", "experimental_group_id": "Group A",
+            "section": "Methods", "locator": "lines:4-4",
+            "source_digest": self.digest,
+        }
+
+    def _fact(self, fact_id: str, path: str, value: str, excerpt: str) -> dict:
+        return {
+            "fact_id": fact_id, "field_path": path, "value": value,
+            "unit": "", "required": True, "excerpt": excerpt,
+            "source": deepcopy(self.source),
+        }
+
+    @staticmethod
+    def _state_change_step(
+        *, step_id: str, sequence: int, operation: str,
+        input_port: dict, output_port: dict, relation_provenance_ref: str,
+    ) -> dict:
+        return {
+            "macro_step_id": step_id, "macro_action_id": "A1",
+            "sequence": sequence, "operation": operation, "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": relation_provenance_ref},
+            "material_inputs": [input_port],
+            "material_outputs": [output_port],
+            "operation_segments": [{
+                "segment_id": f"{step_id}-seg1", "material_effect": "transform_material",
+                "source_operation_ref": step_id,
+                "provenance": {"kind": "paper", "reference": relation_provenance_ref},
+            }],
+            "material_relations": [{
+                "relation_id": f"{step_id}-rel1", "event_kind": "state_change",
+                "input_material_instance_ids": [input_port["material_instance_id"]],
+                "output_material_instance_ids": [output_port["material_instance_id"]],
+                "quantity_basis": "whole_batch",
+                "source_operation_ref": f"{step_id}-seg1",
+                "provenance": {"kind": "paper", "reference": relation_provenance_ref},
+            }],
+            "lineage_relation": {
+                "relation_type": "state_change_of",
+                "parent_material_instance_ids": [input_port["material_instance_id"]],
+                "child_material_instance_ids": [output_port["material_instance_id"]],
+            },
+        }
+
+    def _centrifuge_proposal(self) -> dict:
+        quote = ("In this collection route, the product suspension was "
+                 "centrifuged to collect precipitate as retained_wet_solid.")
+        step = self._state_change_step(
+            step_id="S1", sequence=1, operation="centrifuged",
+            input_port={
+                "material_id": "product", "material_instance_id": "susp1",
+                "name": "product suspension", "state": "suspension",
+                "material_origin": "external_inventory",
+                "provenance": {"kind": "paper", "reference": "fact:in_state"},
+            },
+            output_port={
+                "material_id": "product", "material_instance_id": "ppt1",
+                "name": "product suspension", "state": "retained_wet_solid",
+                "provenance": {"kind": "paper", "reference": "fact:out_name"},
+            },
+            relation_provenance_ref="fact:op",
+        )
+        path = STATE_1
+        facts = [
+            self._fact("sig1", "route_signature.route_family", "collection route", quote),
+            self._fact("sig2", "route_signature.target_transformation",
+                       "collect precipitate", quote),
+            self._fact("sig3", "route_signature.precursor_roles[0]",
+                       "product suspension", quote),
+            self._fact("sig4", "route_signature.operations[0]", "centrifuged", quote),
+            self._fact("sig5", "route_signature.endpoint_state",
+                       "retained_wet_solid", quote),
+            self._fact("op", "material_graph[0].operation", "centrifuged", quote),
+            self._fact("in_name", "material_graph[0].material_inputs[0].name",
+                       "product suspension", quote),
+            self._fact("in_state", "material_graph[0].material_inputs[0].state",
+                       "suspension", quote),
+            self._fact("out_name", "material_graph[0].material_outputs[0].name",
+                       "product suspension", quote),
+            self._fact("out_state", path, "retained_wet_solid", quote),
+        ]
+        return {
+            "paper_id": "paper-A", "experimental_group_id": "Group A",
+            "group_role": "synthesis",
+            "source": {
+                "source_document": str(self.source_file),
+                "section": "Methods", "locator": "lines:3-4",
+                "source_digest": self.digest,
+            },
+            "target": {
+                "material": "product suspension", "desired_state": "retained_wet_solid",
+                "objective": "collect the precipitate",
+            },
+            "route_signature": {
+                "route_family": "collection route",
+                "target_transformation": "collect precipitate",
+                "precursor_roles": ["product suspension"], "reagent_roles": [],
+                "operations": ["centrifuged"], "control_modes": [],
+                "phase_transitions": [], "endpoint_state": "retained_wet_solid",
+            },
+            "material_graph": [step],
+            "required_capabilities": ["centrifuge"],
+            "route_facts": facts,
+        }
+
+    def _derive(self, proposal: dict, path: str):
+        return derive_unreviewed_output_state(
+            proposal["material_graph"], proposal["route_facts"], path,
+            paper_id="paper-A", experimental_group_id="Group A",
+            source_digest=self.digest,
+        )
+
+    def test_centrifuge_collect_precipitate_derives_retained_wet_solid(self) -> None:
+        proposal = self._centrifuge_proposal()
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+        self.assertEqual(proof["target_state"], "retained_wet_solid")
+        self.assertEqual(proof["parent_state_path"],
+                         "material_graph[0].material_inputs[0].state")
+        compiled = compile_experimental_group_protocols([proposal])
+        self.assertEqual(compiled.diagnostics, [])
+        group = compiled.protocols[0]
+        field = next(item for item in group["evidence_matrix"]
+                     if item["field_path"] == STATE_1)
+        self.assertEqual(field["provenance"]["kind"], "agent_inferred")
+        self.assertEqual(field["provenance"]["evidence_class"], "chemistry_convention")
+        self.assertEqual(field["provenance"]["inference_rule"],
+                         "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+        self.assertEqual(json.loads(field["provenance"]["derivation"]), proof)
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, group["material_graph"],
+                {item["evidence_id"]: item for item in group["evidence_bundle"]},
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+            ), "",
+        )
+        locator = "pdf:p1:b1-p1:b1"
+        receipt_group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-A", experimental_group_id="Group A",
+                section="Methods", locator=locator, source_digest=self.digest,
+            ),
+            source_document="/controlled/paper.pdf",
+            blocks=(PdfSourceBlockV1(locator, proposal["route_facts"][0]["excerpt"]),),
+        )
+        proposal["source"]["source_document"] = receipt_group.source_document
+        proposal["source"]["locator"] = locator
+        for fact in proposal["route_facts"]:
+            fact["source"]["locator"] = locator
+        receipt = produce_pdf_group_fact_receipt(
+            [receipt_group], [proposal], signed_inventory_verified=True,
+        )
+        self.assertEqual(receipt.status, "literal_facts_verified_pending_review")
+        self.assertIn(STATE_1, receipt.group_results[0].derived_state_field_paths)
+
+    def test_centrifuge_precipitate_rule_needs_affirmed_precipitate(self) -> None:
+        proposal = self._centrifuge_proposal()
+        quote = ("In this collection route, the product suspension was "
+                 "centrifuged to isolate the solid as retained_wet_solid.")
+        for fact in proposal["route_facts"]:
+            if fact["fact_id"] in {"op", "in_state", "out_state"}:
+                fact["excerpt"] = quote
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def _redisperse_proposal(self, operation: str, quote: str,
+                             liquid_port: dict | None = None) -> dict:
+        inputs = [{
+            "material_id": "product", "material_instance_id": "solid1",
+            "name": "washed_wet_solid", "state": "washed_wet_solid",
+            "material_origin": "external_inventory",
+            "provenance": {"kind": "paper", "reference": "fact:in_state"},
+        }]
+        if liquid_port is not None:
+            inputs.append(liquid_port)
+        step = self._state_change_step(
+            step_id="S1", sequence=1, operation=operation,
+            input_port=inputs[0],
+            output_port={
+                "material_id": "product", "material_instance_id": "susp1",
+                "name": "washed_wet_solid", "state": "suspension",
+                "provenance": {"kind": "paper", "reference": "fact:op"},
+            },
+            relation_provenance_ref="fact:op",
+        )
+        step["material_inputs"] = inputs
+        path = STATE_1
+        facts = [
+            self._fact("op", "material_graph[0].operation", operation, quote),
+            self._fact("in_state", "material_graph[0].material_inputs[0].state",
+                       "washed_wet_solid", quote),
+            self._fact("out_state", path, "suspension", quote),
+        ]
+        return {"material_graph": [step], "route_facts": facts}
+
+    def test_redispersion_derives_suspension_with_liquid_participation(self) -> None:
+        quote = "The washed_wet_solid was redispersed in water."
+        proposal = self._redisperse_proposal("redispersed", quote)
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+        self.assertEqual(proof["target_state"], "suspension")
+        liquid = {
+            "material_id": "water", "material_instance_id": "water1",
+            "name": "water", "state": "solution",
+            "material_origin": "external_inventory",
+            "provenance": {"kind": "paper", "reference": "fact:op"},
+        }
+        quote = "The washed_wet_solid was redispersed under sonication."
+        proposal = self._redisperse_proposal("redispersed", quote, liquid)
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+
+    def test_redispersion_does_not_fire_without_explicit_disperse_operation(self) -> None:
+        # Solid plus water is not a suspension: no disperse operation matches.
+        quote = "The washed_wet_solid was mixed with water."
+        proposal = self._redisperse_proposal("mixed", quote)
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_redispersion_does_not_fire_without_liquid_participation(self) -> None:
+        quote = "The washed_wet_solid was redispersed."
+        proposal = self._redisperse_proposal("redispersed", quote)
+        proof, issue = self._derive(proposal, STATE_1)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def _inheritance_proposal(self) -> dict:
+        quote_1 = "In this transfer route, we transfer feed A as a solution to the vial."
+        quote_2 = "The vial content was mixed at room temperature."
+        self._quotes = (quote_1, quote_2)
+        step_1 = {
+            "macro_step_id": "S1", "macro_action_id": "A1", "sequence": 1,
+            "operation": "transfer", "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": "fact:op1"},
+            "material_inputs": [{
+                "material_id": "solutionA", "material_instance_id": "feed1",
+                "name": "feed A", "state": "solution",
+                "material_origin": "external_inventory",
+                "provenance": {"kind": "paper", "reference": "fact:in1_name"},
+            }],
+            "material_outputs": [{
+                "material_id": "solutionA", "material_instance_id": "child1",
+                "name": "feed A", "state": "solution",
+                "provenance": {"kind": "paper", "reference": "fact:out1_name"},
+            }],
+            "operation_segments": [{
+                "segment_id": "S1-seg1", "material_effect": "transfer_material",
+                "source_operation_ref": "S1",
+                "provenance": {"kind": "paper", "reference": "fact:op1"},
+            }],
+            "material_relations": [{
+                "relation_id": "S1-rel1", "event_kind": "process_same_material",
+                "input_material_instance_ids": ["feed1"],
+                "output_material_instance_ids": ["child1"],
+                "quantity_basis": "whole_batch",
+                "source_operation_ref": "S1-seg1",
+                "provenance": {"kind": "paper", "reference": "fact:op1"},
+            }],
+            "lineage_relation": {
+                "relation_type": "transfer_of",
+                "parent_material_instance_ids": ["feed1"],
+                "child_material_instance_ids": ["child1"],
+            },
+        }
+        step_2 = {
+            "macro_step_id": "S2", "macro_action_id": "A1", "sequence": 2,
+            "operation": "mixed", "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": "fact:op2"},
+            "material_inputs": [{
+                "material_id": "solutionA", "material_instance_id": "child1",
+                "name": "feed A", "state": "solution",
+                "material_origin": "upstream_output",
+                "parent_output_refs": [{
+                    "macro_step_id": "S1", "material_instance_id": "child1",
+                }],
+                "provenance": {"kind": "paper", "reference": "fact:in2_name"},
+            }],
+            "material_outputs": [{
+                "material_id": "solutionA", "material_instance_id": "mix1",
+                "name": "feed A", "state": "solution",
+                "provenance": {"kind": "paper", "reference": "fact:out2_name"},
+            }],
+        }
+        input_state_path = "material_graph[1].material_inputs[0].state"
+        facts = [
+            self._fact("sig1", "route_signature.route_family",
+                       "transfer route", quote_1),
+            self._fact("sig2", "route_signature.target_transformation",
+                       "transfer", quote_1),
+            self._fact("sig3", "route_signature.precursor_roles[0]",
+                       "feed A", quote_1),
+            self._fact("sig4", "route_signature.operations[0]",
+                       "transfer", quote_1),
+            self._fact("sig5", "route_signature.operations[1]", "mixed", quote_2),
+            self._fact("sig6", "route_signature.endpoint_state",
+                       "solution", quote_1),
+            self._fact("op1", "material_graph[0].operation", "transfer", quote_1),
+            self._fact("in1_name", "material_graph[0].material_inputs[0].name",
+                       "feed A", quote_1),
+            self._fact("in1_state", "material_graph[0].material_inputs[0].state",
+                       "solution", quote_1),
+            self._fact("out1_name", "material_graph[0].material_outputs[0].name",
+                       "feed A", quote_1),
+            self._fact("out1_state", STATE_1, "solution", quote_1),
+            self._fact("op2", "material_graph[1].operation", "mixed", quote_2),
+            self._fact("in2_name", "material_graph[1].material_inputs[0].name",
+                       "feed A", quote_1),
+            # The input state quote names no state word: inheritance is required.
+            self._fact("in2_state", input_state_path, "solution", quote_2),
+            self._fact("out2_name", "material_graph[1].material_outputs[0].name",
+                       "feed A", quote_1),
+            self._fact("out2_state", "material_graph[1].material_outputs[0].state",
+                       "solution", quote_1),
+        ]
+        return {
+            "paper_id": "paper-A", "experimental_group_id": "Group A",
+            "group_role": "synthesis",
+            "source": {
+                "source_document": str(self.source_file),
+                "section": "Methods", "locator": "lines:3-4",
+                "source_digest": self.digest,
+            },
+            "target": {
+                "material": "feed A", "desired_state": "solution",
+                "objective": "keep the state",
+            },
+            "route_signature": {
+                "route_family": "transfer route",
+                "target_transformation": "transfer",
+                "precursor_roles": ["feed A"], "reagent_roles": [],
+                "operations": ["transfer", "mixed"], "control_modes": [],
+                "phase_transitions": [], "endpoint_state": "solution",
+            },
+            "material_graph": [step_1, step_2],
+            "required_capabilities": ["transfer", "mix"],
+            "route_facts": facts,
+        }
+
+    def test_input_state_inherits_verified_parent_output(self) -> None:
+        proposal = self._inheritance_proposal()
+        input_state_path = "material_graph[1].material_inputs[0].state"
+        proof, issue = derive_unreviewed_input_state(
+            proposal["material_graph"], proposal["route_facts"],
+            input_state_path, deepcopy(self.source),
+        )
+        self.assertEqual(issue, "")
+        self.assertIsNotNone(proof)
+        self.assertEqual(proof["rule_id"], "PARENT_OUTPUT_STATE_INHERITANCE_V1")
+        self.assertEqual(proof["target_state"], "solution")
+        self.assertEqual(proof["parent_state_path"], STATE_1)
+        # The parent output state was itself TRANSFER-derived: the inheritance
+        # record binds the grandparent state evidence and parent operation.
+        self.assertEqual(proof["parent_state_path"],
+                         "material_graph[0].material_outputs[0].state")
+        self.assertEqual(proof["parent_instance_id"], "child1")
+        self.assertEqual(proof["child_instance_id"], "child1")
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, proposal["material_graph"],
+                {("route_fact_" + sha256(
+                    f"paper-A\0Group A\0{fact['fact_id']}".encode("utf-8")
+                ).hexdigest()[:24]): fact for fact in proposal["route_facts"]},
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+            ), "",
+        )
+        # The unsigned receipt accepts the input state although its excerpt
+        # names no state word, and records it as derived, not literal.
+        quote_1, quote_2 = self._quotes
+        locator = "pdf:p1:b1-p1:b1"
+        receipt_group = PdfExperimentalGroupV1(
+            source_scope=ExperimentalGroupScopeV1(
+                paper_id="paper-A", experimental_group_id="Group A",
+                section="Methods", locator=locator, source_digest=self.digest,
+            ),
+            source_document="/controlled/paper.pdf",
+            blocks=(PdfSourceBlockV1(locator, quote_1 + " " + quote_2),),
+        )
+        proposal["source"]["source_document"] = receipt_group.source_document
+        proposal["source"]["locator"] = locator
+        for fact in proposal["route_facts"]:
+            fact["source"]["locator"] = locator
+        receipt = produce_pdf_group_fact_receipt(
+            [receipt_group], [proposal], signed_inventory_verified=True,
+        )
+        self.assertEqual(receipt.status, "literal_facts_verified_pending_review")
+        self.assertIn(input_state_path,
+                      receipt.group_results[0].derived_state_field_paths)
+        self.assertNotIn(input_state_path,
+                         receipt.group_results[0].verified_field_paths)
+        # The compiler emits the same proof as agent_inferred derivation.
+        compiled = compile_experimental_group_protocols([proposal])
+        self.assertEqual(compiled.diagnostics, [])
+        group = compiled.protocols[0]
+        field = next(item for item in group["evidence_matrix"]
+                     if item["field_path"] == input_state_path)
+        self.assertEqual(field["provenance"]["kind"], "agent_inferred")
+        self.assertEqual(field["provenance"]["evidence_class"], "chemistry_convention")
+        self.assertEqual(field["provenance"]["inference_rule"],
+                         "PARENT_OUTPUT_STATE_INHERITANCE_V1")
+        self.assertEqual(json.loads(field["provenance"]["derivation"]), proof)
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, group["material_graph"],
+                {item["evidence_id"]: item for item in group["evidence_bundle"]},
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+            ), "",
+        )
+
+    def test_input_inheritance_ambiguous_or_missing_refs_yield_no_proof(self) -> None:
+        proposal = self._inheritance_proposal()
+        input_state_path = "material_graph[1].material_inputs[0].state"
+        port = proposal["material_graph"][1]["material_inputs"][0]
+        ambiguous = deepcopy(proposal)
+        ambiguous["material_graph"][1]["material_inputs"][0][
+            "parent_output_refs"
+        ] = port["parent_output_refs"] + [{
+            "macro_step_id": "S1", "material_instance_id": "child1",
+        }]
+        proof, issue = derive_unreviewed_input_state(
+            ambiguous["material_graph"], ambiguous["route_facts"],
+            input_state_path, deepcopy(self.source),
+        )
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "")
+        missing = deepcopy(proposal)
+        missing["material_graph"][1]["material_inputs"][0][
+            "parent_output_refs"
+        ] = []
+        proof, issue = derive_unreviewed_input_state(
+            missing["material_graph"], missing["route_facts"],
+            input_state_path, deepcopy(self.source),
+        )
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "")
+        dangling = deepcopy(proposal)
+        dangling["material_graph"][1]["material_inputs"][0][
+            "parent_output_refs"
+        ] = [{"macro_step_id": "S1", "material_instance_id": "ghost"}]
+        proof, issue = derive_unreviewed_input_state(
+            dangling["material_graph"], dangling["route_facts"],
+            input_state_path, deepcopy(self.source),
+        )
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "")
+        # A state word the parent output does not carry cannot be inherited.
+        mismatched = deepcopy(proposal)
+        mismatched["material_graph"][1]["material_inputs"][0]["state"] = "powder"
+        mismatched["route_facts"] = [
+            {**fact, "value": "powder"} if fact["fact_id"] == "in2_state"
+            else fact for fact in mismatched["route_facts"]
+        ]
+        proof, issue = derive_unreviewed_input_state(
+            mismatched["material_graph"], mismatched["route_facts"],
+            input_state_path, deepcopy(self.source),
+        )
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "")
 
 
 if __name__ == "__main__":

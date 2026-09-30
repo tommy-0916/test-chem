@@ -10,6 +10,7 @@ publication and Device dispatch gates still run after macro-plan generation.
 from __future__ import annotations
 
 from collections import Counter
+import json
 import re
 from typing import Callable, Dict, List, Literal, Optional, Sequence
 
@@ -21,6 +22,9 @@ from .route_candidate import (
     RouteGoalV1,
     RouteFieldEvidenceV1,
     RouteSignatureV1,
+)
+from .route_convention_basis import (
+    is_convention_inheritance_proof, verify_bound_output_state,
 )
 from .route_field_basis import (
     classify_route_field_basis, is_material_port_state_path,
@@ -220,6 +224,25 @@ def targeted_search_status(
     return "continue"
 
 
+def _inheritance_field_issue(
+    field: RouteFieldEvidenceV1, candidate: RouteCandidateV1, proof: Any,
+) -> str:
+    """Recompute a parent-output inheritance proof for an input/intermediate state."""
+    scope = candidate.source_scope
+    if scope is None:
+        return "semantic_binding_pending"
+    if (proof.get("field_path") != field.field_path
+            or proof.get("target_state") != field.value):
+        return "convention_proof_mismatch"
+    evidence_by_id = {item.evidence_id: item for item in candidate.evidence_bundle}
+    return verify_bound_output_state(
+        proof, candidate.material_graph, evidence_by_id,
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
+    )
+
+
 def _field_issue(
     field: RouteFieldEvidenceV1,
     candidate: RouteCandidateV1,
@@ -263,6 +286,17 @@ def _field_issue(
         )
         if mapping_issue:
             return mapping_issue
+        if provenance.kind == "agent_inferred" and provenance.derivation:
+            try:
+                derivation_proof = json.loads(provenance.derivation)
+            except (TypeError, ValueError):
+                derivation_proof = None
+            if is_convention_inheritance_proof(derivation_proof):
+                inheritance_issue = _inheritance_field_issue(
+                    field, candidate, derivation_proof,
+                )
+                if inheritance_issue:
+                    return inheritance_issue
         if (provenance.kind == "paper"
                 and output_state_parent_role_issue(
                     field.field_path, candidate.material_graph,

@@ -9,7 +9,8 @@
       "preconditions": {
         "operation_patterns": ["centrifug", "离心"],
         "intent_patterns": ["collect precipitate", "collect the precipitate", "collect pellet", "保留沉淀", "收集沉淀", "离心收集沉淀", "留固"],
-        "input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"]
+        "input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
+        "retained_object_patterns": ["precipitate", "pellet", "沉淀"]
       },
       "allowed_input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
       "output_states": ["retained_wet_solid", "supernatant"],
@@ -61,6 +62,33 @@
         "relation_type": "state_change_of",
         "lineage_preserved": true,
         "repeated_application": "same_lineage",
+        "parent_role": "input",
+        "child_role": "retained_output"
+      },
+      "numeric_generation_allowed": false
+    },
+    {
+      "rule_id": "REDISPERSION_V1",
+      "version": "1.0.0",
+      "operation": "redispersion",
+      "event_kind": "state_change",
+      "preconditions": {
+        "operation_patterns": ["redisperse", "re-disperse", "disperse", "重分散", "重新分散", "分散"],
+        "intent_patterns": ["redisperse", "re-disperse", "disperse", "重分散", "重新分散", "分散"],
+        "input_states": ["retained_wet_solid", "washed_wet_solid"]
+      },
+      "allowed_input_states": ["retained_wet_solid", "washed_wet_solid"],
+      "output_states": ["suspension"],
+      "retained_output": "suspension",
+      "discard_outputs": [],
+      "liquid_participation": {
+        "required": true,
+        "liquid_states": ["solution"],
+        "excerpt_tokens": ["water", "solvent", "aqua", "水", "溶剂"]
+      },
+      "lineage_effect": {
+        "relation_type": "state_change_of",
+        "lineage_preserved": true,
         "parent_role": "input",
         "child_role": "retained_output"
       },

@@ -22,8 +22,10 @@ from chem_agent_contracts.route_field_basis import (
     state_source_locally_attributed,
 )
 from chem_agent_contracts.route_convention_basis import (
-    canonical_state_derivation, derive_unreviewed_output_state,
-    output_quantity_role_issue,
+    canonical_state_derivation, convention_fact_evidence_by_id,
+    derive_unreviewed_input_state, derive_unreviewed_output_state,
+    is_convention_inheritance_proof, output_quantity_role_issue,
+    verify_bound_output_state,
 )
 from chem_agent_contracts.route_source_labels import (
     SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
@@ -815,6 +817,42 @@ def _replace_paper_placeholders(
             _replace_paper_placeholders(child, provenance_by_fact_id)
 
 
+def _state_derivation_proof(
+    raw: Mapping[str, Any], graph: list[Any], facts: Sequence[Mapping[str, Any]],
+    *, paper_id: str, group_id: str, document_digest: str,
+) -> dict[str, Any] | None:
+    """Output derivation first, then verified input-state inheritance.
+
+    An inherited state is accepted only when the recomputed proof verifies via
+    ``verify_bound_output_state`` and the fact value equals the proof target;
+    anything else returns ``None`` so the existing literal gates stay in charge.
+    """
+    field_path = _text(raw.get("field_path"))
+    if not field_path.endswith(".state"):
+        return None
+    derived, _issue = derive_unreviewed_output_state(
+        graph, facts, field_path, paper_id=paper_id,
+        experimental_group_id=group_id, source_digest=document_digest,
+    )
+    if derived is not None:
+        return derived
+    inherited, _inherit_issue = derive_unreviewed_input_state(
+        graph, facts, field_path, raw.get("source"),
+    )
+    if (inherited is None
+            or _text(raw.get("value")) != _text(inherited.get("target_state"))):
+        return None
+    if verify_bound_output_state(
+        inherited, graph,
+        convention_fact_evidence_by_id(
+            facts, paper_id=paper_id, experimental_group_id=group_id),
+        paper_id=paper_id, experimental_group_id=group_id,
+        source_digest=document_digest,
+    ):
+        return None
+    return inherited
+
+
 def _fact_issue(
     raw: Any, *, paper_id: str, group_id: str, section: str,
     document_digest: str, graph: list[Any], signature: Mapping[str, Any],
@@ -871,10 +909,10 @@ def _fact_issue(
         return "route_fact_value_invalid"
     if isinstance(claimed, float) and not math.isfinite(claimed):
         return "route_fact_value_invalid"
-    derived_proof, _derived_issue = derive_unreviewed_output_state(
-        graph, facts, field_path, paper_id=paper_id,
-        experimental_group_id=group_id, source_digest=document_digest,
-    ) if facts and field_path.endswith(".state") else (None, "")
+    derived_proof = _state_derivation_proof(
+        raw, graph, facts, paper_id=paper_id, group_id=group_id,
+        document_digest=document_digest,
+    ) if facts else None
     if is_material_port_state_path(field_path):
         if derived_proof is None:
             if output_state_parent_role_issue(field_path, graph, claimed, excerpt):
@@ -1076,9 +1114,9 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         fact_id = raw["fact_id"].strip()
         scoped = _scoped_claim(graph, signature, field_path)
         if scoped is not None and is_material_port_state_path(field_path):
-            derived, _ = derive_unreviewed_output_state(
-                graph, raw_facts, field_path, paper_id=paper_id,
-                experimental_group_id=group_id, source_digest=document_digest,
+            derived = _state_derivation_proof(
+                raw, graph, raw_facts, paper_id=paper_id, group_id=group_id,
+                document_digest=document_digest,
             )
             if derived is not None:
                 derived_state_by_path[field_path] = derived
@@ -1200,8 +1238,22 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
         source = raw["source"]
         field_path = raw["field_path"].strip()
         derivation = derived_state_by_path.get(field_path)
-        field_provenance = (
-            {
+        if derivation is None:
+            field_provenance = deepcopy(provenance_by_fact_id[fact_id])
+        elif is_convention_inheritance_proof(derivation):
+            field_provenance = {
+                "kind": "agent_inferred",
+                "reference": derivation["parent_evidence_id"],
+                "rationale": (
+                    "input state inherited from a verified parent output "
+                    "under a declared upstream reference"
+                ),
+                "evidence_class": "chemistry_convention",
+                "inference_rule": derivation["rule_id"],
+                "derivation": canonical_state_derivation(derivation),
+            }
+        else:
+            field_provenance = {
                 "kind": "agent_inferred",
                 "reference": derivation["operation_evidence_id"],
                 "rationale": "same-state material lineage under a verified chemistry convention",
@@ -1209,8 +1261,6 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
                 "inference_rule": derivation["rule_id"],
                 "derivation": canonical_state_derivation(derivation),
             }
-            if derivation is not None else deepcopy(provenance_by_fact_id[fact_id])
-        )
         matrix.append({
             "field_path": field_path,
             "value": raw["value"],

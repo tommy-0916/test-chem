@@ -18,11 +18,17 @@ from .route_field_basis import (
     affirmative_material_operation_span, controlled_state_mapping,
     split_rule_pattern_matches, state_source_locally_attributed,
 )
+from .v2 import normalize_material_state
 
 
 _RESOURCE = Path(__file__).resolve().parents[1] / "chem_resources" / "chemistry_conventions" / "conventions.json"
 _OUTPUT_STATE = re.compile(
     r"material_graph\[(0|[1-9][0-9]*)\]\.material_outputs"
+    r"\[(0|[1-9][0-9]*)\]\.state\Z"
+)
+_INPUT_STATE = re.compile(
+    r"material_graph\[(0|[1-9][0-9]*)\]\."
+    r"(material_inputs|material_intermediates)"
     r"\[(0|[1-9][0-9]*)\]\.state\Z"
 )
 _OUTPUT_QUANTITY = re.compile(
@@ -38,6 +44,10 @@ _RULE_EVENTS = {
     "SPLIT_V1": ("split_same_material", "split_material", "split_from_parent"),
     "TRANSFER_V1": ("process_same_material", "transfer_material", "transfer_of"),
 }
+_STATE_CHANGE_RULE_EVENTS = ("state_change", "transform_material", "state_change_of")
+_INHERITANCE_RULE_ID = "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+_INHERITANCE_RULE_VERSION = "1.0.0"
+_LIQUID_EXCERPT_TOKENS = ("water", "solvent", "aqua", "水", "溶剂")
 
 
 def _text(value: Any) -> str:
@@ -74,6 +84,53 @@ def output_quantity_role_issue(field_path: str, graph: Sequence[Any], unit: str)
     return unit.strip().casefold() in _SPLIT_COUNT_UNITS
 
 
+def _rule_is_state_change(rule: Mapping[str, Any]) -> bool:
+    """A rule derives a new state when it declares so by any of its fields."""
+    if rule.get("event_kind") == "state_change":
+        return True
+    if rule.get("output_states") != ["same_as_input"]:
+        return True
+    return _mapping(rule.get("lineage_effect")).get("relation_type") == "state_change_of"
+
+
+def _state_change_rule_shape_ok(rule: Mapping[str, Any]) -> bool:
+    preconditions = rule.get("preconditions")
+    outputs = rule.get("output_states")
+    retained = rule.get("retained_output")
+    return bool(
+        isinstance(preconditions, Mapping)
+        and isinstance(preconditions.get("operation_patterns"), list)
+        and isinstance(preconditions.get("intent_patterns"), list)
+        and isinstance(rule.get("allowed_input_states"), list)
+        and rule.get("allowed_input_states")
+        and isinstance(outputs, list)
+        and isinstance(retained, str)
+        and retained
+        and retained in outputs
+        and _mapping(rule.get("lineage_effect")).get("relation_type") == "state_change_of"
+    )
+
+
+def _rule_liquid_participation(rule: Mapping[str, Any]) -> Mapping[str, Any]:
+    premise = _mapping(rule.get("liquid_participation"))
+    return premise if premise.get("required") is True else {}
+
+
+def _step_has_liquid_participation(
+    inputs: Sequence[Mapping[str, Any]], operation_excerpt: str,
+    liquid_states: Sequence[str] = ("solution",),
+    excerpt_tokens: Sequence[str] = _LIQUID_EXCERPT_TOKENS,
+) -> bool:
+    """Whether a liquid takes part: a liquid-state input port or named liquid."""
+    liquid = {_text(state) for state in liquid_states if _text(state)} or {"solution"}
+    for port in inputs:
+        state = _text(_mapping(port).get("state"))
+        if state and normalize_material_state(state) in liquid:
+            return True
+    blob = _text(operation_excerpt).casefold()
+    return any(_text(token).casefold() in blob for token in excerpt_tokens if _text(token))
+
+
 def _rule_resource() -> tuple[dict[str, Mapping[str, Any]], str]:
     try:
         raw = _RESOURCE.read_bytes()
@@ -84,14 +141,20 @@ def _rule_resource() -> tuple[dict[str, Mapping[str, Any]], str]:
             or payload.get("schema") != "chemistry-conventions/v1"
             or not isinstance(payload.get("rules"), list)):
         return {}, ""
-    rules = {
-        rule["rule_id"]: rule for rule in payload["rules"]
-        if isinstance(rule, dict)
-        and rule.get("rule_id") in _RULE_EVENTS
-        and rule.get("numeric_generation_allowed") is False
-        and isinstance(rule.get("version"), str)
-        and rule.get("output_states") == ["same_as_input"]
-    }
+    rules: dict[str, Mapping[str, Any]] = {}
+    for rule in payload["rules"]:
+        if (not isinstance(rule, dict)
+                or not isinstance(rule.get("rule_id"), str)
+                or rule.get("numeric_generation_allowed") is not False
+                or not isinstance(rule.get("version"), str)):
+            continue
+        rule_id = rule["rule_id"]
+        if rule_id in _RULE_EVENTS:
+            if rule.get("output_states") != ["same_as_input"]:
+                continue
+        elif not (_rule_is_state_change(rule) and _state_change_rule_shape_ok(rule)):
+            continue
+        rules[rule_id] = rule
     return rules, "sha256_" + sha256(raw).hexdigest()
 
 
@@ -154,9 +217,9 @@ def _proof_for_evidence(
     if len(parents) != 1:
         return None, "convention_parent_material_missing"
     input_index, parent = parents[0]
-    if (_text(parent.get("material_id")) != child_material_id
-            or _text(parent.get("state")) != target_state):
+    if _text(parent.get("material_id")) != child_material_id:
         return None, "convention_parent_state_or_identity_mismatch"
+    parent_state = _text(parent.get("state"))
     if _text(parent.get("material_origin")) == "upstream_output":
         references = parent.get("parent_output_refs")
         if not isinstance(references, list) or len(references) != 1:
@@ -170,9 +233,12 @@ def _proof_for_evidence(
                 and _text(port.get("material_instance_id"))
                 == _text(reference.get("material_instance_id")))
         ]
+        # The declared upstream output is this input port carried forward, so
+        # its state must equal the parent input state exactly.  For a
+        # same-state rule that is also the child state checked below.
         if (len(upstream) != 1
                 or _text(upstream[0].get("material_id")) != child_material_id
-                or _text(upstream[0].get("state")) != target_state):
+                or _text(upstream[0].get("state")) != parent_state):
             return None, "convention_upstream_reference_mismatch"
     parent_state_path = f"material_graph[{step_index}].material_inputs[{input_index}].state"
     _state_mapping, issue = controlled_state_mapping(
@@ -207,13 +273,23 @@ def _proof_for_evidence(
 
     rules, resource_digest = _rule_resource()
     eligible: list[Mapping[str, Any]] = []
-    for rule_id, (event_kind, material_effect, lineage_type) in _RULE_EVENTS.items():
-        rule = rules.get(rule_id)
-        if (rule is None or relation.get("event_kind") != event_kind
+    liquid_denied = False
+    for rule_id, rule in rules.items():
+        if rule_id in _RULE_EVENTS:
+            event_kind, material_effect, lineage_type = _RULE_EVENTS[rule_id]
+            state_change_rule = False
+        else:
+            event_kind, material_effect, lineage_type = _STATE_CHANGE_RULE_EVENTS
+            state_change_rule = True
+        if (relation.get("event_kind") != event_kind
                 or segments[0].get("material_effect") != material_effect
                 or _mapping(rule.get("lineage_effect")).get("relation_type") != lineage_type):
             continue
-        if rule_id == "TRANSFER_V1" and len(relation.get("output_material_instance_ids", [])) != 1:
+        relation_output_ids = relation.get("output_material_instance_ids", [])
+        if state_change_rule:
+            if len(relation_output_ids) != 1:
+                continue
+        elif rule_id == "TRANSFER_V1" and len(relation_output_ids) != 1:
             continue
         preconditions = _mapping(rule.get("preconditions"))
         operation_blob = operation_value.casefold()
@@ -230,28 +306,62 @@ def _proof_for_evidence(
                 or not any(pattern_matches(pattern, operation_blob)
                            for pattern in patterns if _text(pattern))
                 or not any(pattern_matches(pattern, intent_blob)
-                           for pattern in intents if _text(pattern))
-                or target_state not in allowed_states
-                or target_state not in rule.get("allowed_input_states", [])):
+                           for pattern in intents if _text(pattern))):
             continue
+        rule_inputs = rule.get("allowed_input_states", [])
+        if not isinstance(rule_inputs, list):
+            continue
+        if state_change_rule:
+            declared_output = _text(rule.get("retained_output"))
+            if (target_state != declared_output
+                    or parent_state not in allowed_states
+                    or parent_state not in rule_inputs):
+                continue
+            retained_objects = preconditions.get("retained_object_patterns", [])
+            if isinstance(retained_objects, list) and retained_objects:
+                # A retained/affected-object rule must find its object affirmed
+                # in the operation evidence, never in a negated mention.
+                if not any(split_rule_pattern_matches(pattern, operation_excerpt)
+                           for pattern in retained_objects if _text(pattern)):
+                    continue
+            liquid_premise = _rule_liquid_participation(rule)
+            if liquid_premise:
+                liquid_states = liquid_premise.get("liquid_states", ["solution"])
+                excerpt_tokens = liquid_premise.get("excerpt_tokens")
+                tokens = tuple(excerpt_tokens) if isinstance(excerpt_tokens, list) and excerpt_tokens else _LIQUID_EXCERPT_TOKENS
+                if not _step_has_liquid_participation(inputs, operation_excerpt, liquid_states, tokens):
+                    liquid_denied = True
+                    continue
+        else:
+            # Same-state inheritance: the child keeps the verified parent state.
+            if (parent_state != target_state
+                    or target_state not in allowed_states
+                    or target_state not in rule_inputs):
+                continue
         eligible.append(rule)
+    if not eligible and liquid_denied:
+        return None, "convention_liquid_participation_missing"
     if len(eligible) != 1:
         return None, "convention_rule_not_applicable_or_ambiguous"
     rule = eligible[0]
     lineage = _mapping(step.get("lineage_relation"))
-    expected_lineage_type = _RULE_EVENTS[rule["rule_id"]][2]
+    expected_lineage_type = (
+        _RULE_EVENTS[rule["rule_id"]][2] if rule["rule_id"] in _RULE_EVENTS
+        else _STATE_CHANGE_RULE_EVENTS[2]
+    )
     if (lineage.get("relation_type") != expected_lineage_type
             or lineage.get("parent_material_instance_ids") != [parent_id]
             or lineage.get("child_material_instance_ids")
             != relation.get("output_material_instance_ids")):
         return None, "convention_lineage_relation_mismatch"
-    operation_kind = "split" if rule["rule_id"] == "SPLIT_V1" else "transfer"
-    if affirmative_material_operation_span(
-        operation_excerpt, _text(parent.get("name")), operation_kind,
-    ) is None:
-        # A transferred vessel, electron, or unrelated material is not proof
-        # that this exact parent material was transferred or split.
-        return None, "convention_operation_material_attribution_unresolved"
+    if rule["rule_id"] in _RULE_EVENTS:
+        operation_kind = "split" if rule["rule_id"] == "SPLIT_V1" else "transfer"
+        if affirmative_material_operation_span(
+            operation_excerpt, _text(parent.get("name")), operation_kind,
+        ) is None:
+            # A transferred vessel, electron, or unrelated material is not proof
+            # that this exact parent material was transferred or split.
+            return None, "convention_operation_material_attribution_unresolved"
     if rule["rule_id"] == "SPLIT_V1":
         child_ids = relation.get("output_material_instance_ids", [])
         resolved = [port for port in outputs
@@ -385,6 +495,284 @@ def derive_unreviewed_output_state(
     )
 
 
+def is_convention_inheritance_proof(proof: Any) -> bool:
+    """Whether a proof record denotes parent-output state inheritance."""
+    return isinstance(proof, Mapping) and proof.get("rule_id") == _INHERITANCE_RULE_ID
+
+
+def convention_fact_evidence_by_id(
+    facts: Sequence[Any], *, paper_id: str, experimental_group_id: str,
+) -> dict[str, Mapping[str, Any]]:
+    """Key raw route facts by the evidence id a convention proof binds to."""
+    evidence: dict[str, Mapping[str, Any]] = {}
+    for raw in facts or []:
+        fact = _mapping(raw)
+        fact_id = _text(fact.get("fact_id"))
+        if fact_id:
+            evidence[_evidence_id(paper_id, experimental_group_id, fact_id)] = fact
+    return evidence
+
+
+def _resolve_parent_output(
+    graph: Sequence[Any], step_index: int, reference: Mapping[str, Any],
+) -> tuple[int, int, Mapping[str, Any]] | tuple[None, None, None]:
+    """Resolve one declared parent output ref to an earlier output port."""
+    ref_step = _text(reference.get("macro_step_id"))
+    ref_instance = _text(reference.get("material_instance_id"))
+    if not ref_step or not ref_instance:
+        return None, None, None
+    upstream = [
+        (index, output_index, port)
+        for index, earlier in enumerate(graph[:step_index])
+        for output_index, port in enumerate(_items(_mapping(earlier).get("material_outputs")))
+        if (_text(_mapping(earlier).get("macro_step_id")) == ref_step
+            and _text(port.get("material_instance_id")) == ref_instance)
+    ]
+    if len(upstream) != 1:
+        return None, None, None
+    return upstream[0]
+
+
+def _resolve_fact_provenance(
+    graph: Sequence[Any], *, paper_id: str, experimental_group_id: str,
+    operation_evidence_id: str,
+) -> list[Any]:
+    """Rewrite ``fact:<id>`` operation placeholders to their bound evidence id.
+
+    At receipt/compile time a graph still carries unsigned ``fact:`` references;
+    a saved proof binds only evidence ids.  A placeholder is rewritten only when
+    its fact id deterministically hashes to the operation evidence id the proof
+    claims, so no unrelated reference is touched.
+    """
+    prepared = json.loads(json.dumps([_mapping(step) for step in graph]))
+    for step in prepared:
+        if not isinstance(step, dict):
+            continue
+        for node in (*step.get("material_relations", []),
+                     *step.get("operation_segments", [])):
+            if not isinstance(node, dict):
+                continue
+            provenance = node.get("provenance")
+            reference = (provenance.get("reference")
+                         if isinstance(provenance, dict) else None)
+            if (isinstance(reference, str) and reference.startswith("fact:")
+                    and _evidence_id(paper_id, experimental_group_id,
+                                     reference[len("fact:"):]) == operation_evidence_id):
+                provenance["reference"] = operation_evidence_id
+    return prepared
+
+
+def _inheritance_proof_for_evidence(
+    graph: Sequence[Any], field_path: str, *,
+    parent_source_value: str, parent_excerpt: str, parent_evidence_id: str,
+    operation_excerpt: str, operation_evidence_id: str,
+    paper_id: str, experimental_group_id: str, source_digest: str,
+) -> tuple[dict[str, str] | None, str]:
+    """Recompute one input-state inheritance proof; never guess missing refs."""
+    match = _INPUT_STATE.fullmatch(field_path)
+    if match is None:
+        return None, "semantic_binding_pending"
+    step_index, collection, port_index = (
+        int(match.group(1)), match.group(2), int(match.group(3)),
+    )
+    if step_index >= len(graph):
+        return None, "convention_graph_path_missing"
+    step = _mapping(graph[step_index])
+    ports = _items(step.get(collection))
+    if port_index >= len(ports):
+        return None, "convention_graph_path_missing"
+    port = ports[port_index]
+    target_state = _text(port.get("state"))
+    child_instance = _text(port.get("material_instance_id"))
+    material_id = _text(port.get("material_id"))
+    if not all((target_state, child_instance, material_id)):
+        return None, "convention_material_identity_missing"
+    if not all((paper_id, experimental_group_id, source_digest,
+                parent_source_value, parent_evidence_id)):
+        return None, "convention_source_scope_missing"
+    if _text(port.get("material_origin")) != "upstream_output":
+        return None, "convention_upstream_reference_missing"
+    references = port.get("parent_output_refs")
+    if not isinstance(references, list) or len(references) != 1:
+        return None, "convention_upstream_reference_missing"
+    parent_step_index, parent_output_index, parent_port = _resolve_parent_output(
+        graph, step_index, _mapping(references[0]),
+    )
+    if parent_port is None:
+        return None, "convention_upstream_reference_mismatch"
+    parent_state = _text(parent_port.get("state"))
+    parent_instance = _text(parent_port.get("material_instance_id"))
+    parent_state_path = (
+        f"material_graph[{parent_step_index}]"
+        f".material_outputs[{parent_output_index}].state"
+    )
+    if (not parent_state
+            or parent_state != target_state
+            or _text(parent_port.get("material_id")) != material_id):
+        return None, "convention_parent_state_or_identity_mismatch"
+    record = {
+        "schema_version": "route-convention-state/v1",
+        "field_path": field_path,
+        "target_state": target_state,
+        "parent_state_path": parent_state_path,
+        "parent_instance_id": parent_instance,
+        "child_instance_id": child_instance,
+        "rule_id": _INHERITANCE_RULE_ID,
+        "rule_version": _INHERITANCE_RULE_VERSION,
+        "resource_digest": "",
+        "paper_id": paper_id,
+        "experimental_group_id": experimental_group_id,
+        "source_digest": source_digest,
+    }
+    if operation_evidence_id:
+        # The parent output state is itself convention-derived; re-derive that
+        # proof first.  The record then binds the grandparent state evidence
+        # exactly like the parent proof did.
+        prepared = _resolve_fact_provenance(
+            graph, paper_id=paper_id, experimental_group_id=experimental_group_id,
+            operation_evidence_id=operation_evidence_id,
+        )
+        parent_proof, parent_issue = _proof_for_evidence(
+            prepared, parent_state_path,
+            parent_source_value=parent_source_value,
+            parent_excerpt=parent_excerpt,
+            operation_value=_text(_mapping(graph[parent_step_index]).get("operation")),
+            operation_excerpt=operation_excerpt,
+            parent_evidence_id=parent_evidence_id,
+            operation_evidence_id=operation_evidence_id,
+            paper_id=paper_id, experimental_group_id=experimental_group_id,
+            source_digest=source_digest,
+        )
+        if parent_issue or parent_proof is None:
+            return None, "convention_parent_state_unverified"
+        if (parent_proof["target_state"] != target_state
+                or parent_proof["child_instance_id"] != parent_instance):
+            return None, "convention_parent_state_or_identity_mismatch"
+        record.update({
+            "parent_source_value": parent_proof["parent_source_value"],
+            "parent_evidence_id": parent_proof["parent_evidence_id"],
+            "operation_path": parent_proof["operation_path"],
+            "operation_evidence_id": parent_proof["operation_evidence_id"],
+            "relation_id": parent_proof["relation_id"],
+        })
+        return record, ""
+    # The parent output state stands on its own literal/attribution gates.
+    _state_mapping, mapping_issue = controlled_state_mapping(
+        parent_state_path, parent_source_value, parent_port.get("state"),
+    )
+    if (mapping_issue
+            or not state_source_locally_attributed(
+                parent_source_value, parent_excerpt, parent_port.get("name"),
+            )):
+        return None, "convention_parent_state_unverified"
+    record.update({
+        "parent_source_value": parent_source_value,
+        "parent_evidence_id": parent_evidence_id,
+        "operation_path": "",
+        "operation_evidence_id": "",
+        "relation_id": "",
+    })
+    return record, ""
+
+
+def derive_unreviewed_input_state(
+    graph: Sequence[Any], facts: Sequence[Any], field_path: str,
+    source_scope: Mapping[str, Any],
+) -> tuple[dict[str, str] | None, str]:
+    """Prove an input/intermediate state by inheritance from a verified parent.
+
+    The port must declare ``material_origin="upstream_output"`` with exactly
+    one ``parent_output_ref`` resolving to an earlier output port whose state
+    was itself verified — by the output convention derivation first, then by
+    the unchanged literal/attribution gates.  Ambiguous or missing references
+    return no proof (``""`` issue) so the caller's existing gates stay in
+    charge; nothing is ever guessed.
+    """
+    scope = _mapping(source_scope)
+    paper_id = _text(scope.get("paper_id"))
+    experimental_group_id = _text(scope.get("experimental_group_id"))
+    source_digest = _text(scope.get("source_digest"))
+    match = _INPUT_STATE.fullmatch(field_path)
+    if match is None:
+        return None, "semantic_binding_pending"
+    if not all((paper_id, experimental_group_id, source_digest)):
+        return None, ""
+    by_path: dict[str, Mapping[str, Any]] = {}
+    for raw in facts or []:
+        fact = _mapping(raw)
+        path = _text(fact.get("field_path"))
+        if path and path not in by_path:
+            by_path[path] = fact
+    fact = by_path.get(field_path)
+    if fact is None:
+        return None, ""
+    step_index, collection, port_index = (
+        int(match.group(1)), match.group(2), int(match.group(3)),
+    )
+    if step_index >= len(graph):
+        return None, ""
+    step = _mapping(graph[step_index])
+    ports = _items(step.get(collection))
+    if port_index >= len(ports):
+        return None, ""
+    port = ports[port_index]
+    target_state = _text(port.get("state"))
+    if _text(fact.get("value")) != target_state or not target_state:
+        return None, ""
+    if _text(port.get("material_origin")) != "upstream_output":
+        return None, ""
+    references = port.get("parent_output_refs")
+    if not isinstance(references, list) or len(references) != 1:
+        return None, ""
+    parent_step_index, parent_output_index, parent_port = _resolve_parent_output(
+        graph, step_index, _mapping(references[0]),
+    )
+    if parent_port is None:
+        return None, ""
+    parent_state = _text(parent_port.get("state"))
+    if parent_state != target_state:
+        return None, ""
+    parent_state_path = (
+        f"material_graph[{parent_step_index}]"
+        f".material_outputs[{parent_output_index}].state"
+    )
+    parent_fact = by_path.get(parent_state_path)
+    if (parent_fact is None
+            or _text(parent_fact.get("value")) != parent_state
+            or not _text(parent_fact.get("fact_id"))):
+        return None, ""
+    parent_proof, _parent_issue = derive_unreviewed_output_state(
+        graph, facts, parent_state_path,
+        paper_id=paper_id, experimental_group_id=experimental_group_id,
+        source_digest=source_digest,
+    )
+    if parent_proof is not None:
+        grandparent_fact = by_path.get(parent_proof["parent_state_path"])
+        operation_fact = by_path.get(parent_proof["operation_path"])
+        return _inheritance_proof_for_evidence(
+            graph, field_path,
+            parent_source_value=parent_proof["parent_source_value"],
+            parent_excerpt=(_text(grandparent_fact.get("excerpt"))
+                            if grandparent_fact is not None else ""),
+            parent_evidence_id=parent_proof["parent_evidence_id"],
+            operation_excerpt=(_text(operation_fact.get("excerpt"))
+                               if operation_fact is not None else ""),
+            operation_evidence_id=parent_proof["operation_evidence_id"],
+            paper_id=paper_id, experimental_group_id=experimental_group_id,
+            source_digest=source_digest,
+        )
+    return _inheritance_proof_for_evidence(
+        graph, field_path,
+        parent_source_value=_text(parent_fact.get("value")),
+        parent_excerpt=_text(parent_fact.get("excerpt")),
+        parent_evidence_id=_evidence_id(
+            paper_id, experimental_group_id, _text(parent_fact.get("fact_id"))),
+        operation_excerpt="", operation_evidence_id="",
+        paper_id=paper_id, experimental_group_id=experimental_group_id,
+        source_digest=source_digest,
+    )
+
+
 def verify_bound_output_state(
     proof: Any, graph: Sequence[Any], evidence_by_id: Mapping[str, Any], *,
     paper_id: str, experimental_group_id: str, source_digest: str,
@@ -397,32 +785,53 @@ def verify_bound_output_state(
             or proof.get("experimental_group_id") != experimental_group_id
             or proof.get("source_digest") != source_digest):
         return "convention_source_scope_mismatch"
-    parent = _mapping(evidence_by_id.get(_text(proof.get("parent_evidence_id"))))
-    operation = _mapping(evidence_by_id.get(_text(proof.get("operation_evidence_id"))))
-    if not parent or not operation:
-        return "convention_support_evidence_missing"
     field_path = _text(proof.get("field_path"))
-    match = _OUTPUT_STATE.fullmatch(field_path)
-    if match is None:
-        return "convention_proof_invalid"
-    step_index = int(match.group(1))
-    if step_index >= len(graph):
-        return "convention_graph_path_missing"
-    step = _mapping(graph[step_index])
-    expected, issue = _proof_for_evidence(
-        graph, field_path,
-        parent_source_value=_text(proof.get("parent_source_value")),
-        parent_excerpt=_text(parent.get("excerpt")),
-        operation_value=_text(step.get("operation")),
-        operation_excerpt=_text(operation.get("excerpt")),
-        parent_evidence_id=_text(proof.get("parent_evidence_id")),
-        operation_evidence_id=_text(proof.get("operation_evidence_id")),
-        paper_id=paper_id, experimental_group_id=experimental_group_id,
-        source_digest=source_digest,
-    )
-    if issue:
-        return issue
-    return "" if dict(proof) == expected else "convention_proof_mismatch"
+    if _OUTPUT_STATE.fullmatch(field_path) is not None:
+        parent = _mapping(evidence_by_id.get(_text(proof.get("parent_evidence_id"))))
+        operation = _mapping(evidence_by_id.get(_text(proof.get("operation_evidence_id"))))
+        if not parent or not operation:
+            return "convention_support_evidence_missing"
+        step_index = int(_OUTPUT_STATE.fullmatch(field_path).group(1))
+        if step_index >= len(graph):
+            return "convention_graph_path_missing"
+        step = _mapping(graph[step_index])
+        expected, issue = _proof_for_evidence(
+            graph, field_path,
+            parent_source_value=_text(proof.get("parent_source_value")),
+            parent_excerpt=_text(parent.get("excerpt")),
+            operation_value=_text(step.get("operation")),
+            operation_excerpt=_text(operation.get("excerpt")),
+            parent_evidence_id=_text(proof.get("parent_evidence_id")),
+            operation_evidence_id=_text(proof.get("operation_evidence_id")),
+            paper_id=paper_id, experimental_group_id=experimental_group_id,
+            source_digest=source_digest,
+        )
+        if issue:
+            return issue
+        return "" if dict(proof) == expected else "convention_proof_mismatch"
+    if (_INPUT_STATE.fullmatch(field_path) is not None
+            and is_convention_inheritance_proof(proof)):
+        parent = _mapping(evidence_by_id.get(_text(proof.get("parent_evidence_id"))))
+        if not parent:
+            return "convention_support_evidence_missing"
+        operation_evidence_id = _text(proof.get("operation_evidence_id"))
+        operation = _mapping(evidence_by_id.get(operation_evidence_id))
+        if operation_evidence_id and not operation:
+            return "convention_support_evidence_missing"
+        expected, issue = _inheritance_proof_for_evidence(
+            graph, field_path,
+            parent_source_value=_text(proof.get("parent_source_value")),
+            parent_excerpt=_text(parent.get("excerpt")),
+            parent_evidence_id=_text(proof.get("parent_evidence_id")),
+            operation_excerpt=_text(operation.get("excerpt")),
+            operation_evidence_id=operation_evidence_id,
+            paper_id=paper_id, experimental_group_id=experimental_group_id,
+            source_digest=source_digest,
+        )
+        if issue:
+            return issue
+        return "" if dict(proof) == expected else "convention_proof_mismatch"
+    return "convention_proof_invalid"
 
 
 def canonical_state_derivation(proof: Mapping[str, str]) -> str:
@@ -431,6 +840,8 @@ def canonical_state_derivation(proof: Mapping[str, str]) -> str:
 
 
 __all__ = [
-    "derive_unreviewed_output_state", "verify_bound_output_state",
-    "canonical_state_derivation", "output_quantity_role_issue",
+    "derive_unreviewed_output_state", "derive_unreviewed_input_state",
+    "verify_bound_output_state", "canonical_state_derivation",
+    "output_quantity_role_issue", "is_convention_inheritance_proof",
+    "convention_fact_evidence_by_id",
 ]

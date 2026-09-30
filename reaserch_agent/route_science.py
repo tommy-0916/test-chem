@@ -18,7 +18,8 @@ from chem_agent_contracts.route_field_basis import (
     verify_controlled_state_mapping,
 )
 from chem_agent_contracts.route_convention_basis import (
-    output_quantity_role_issue, verify_bound_output_state,
+    is_convention_inheritance_proof, output_quantity_role_issue,
+    verify_bound_output_state,
 )
 from chem_agent_contracts.route_source_labels import (
     build_source_label_context, state_attribution_outcome,
@@ -206,6 +207,51 @@ def _inventory_resolved_state_field(field: Any) -> bool:
     return re.fullmatch(r"sha256_[0-9a-f]{64}", provenance.source_digest) is not None
 
 
+def _verified_inherited_state_field(
+    candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
+    fields_by_path: dict[str, Any], proof: dict[str, Any],
+) -> bool:
+    """Bind an inherited input state to its separately verified parent output."""
+    provenance = field.provenance
+    scope = candidate.source_scope
+    if (proof.get("field_path") != field.field_path
+            or proof.get("target_state") != field.value
+            or proof.get("rule_id") != provenance.inference_rule
+            or provenance.reference != proof.get("parent_evidence_id")
+            or field.controlled_mapping is not None
+            or field.unit != ""):
+        return False
+    parent_field = fields_by_path.get(proof.get("parent_state_path"))
+    if (parent_field is None or parent_field.status != "supported"
+            or parent_field.provenance is None
+            or parent_field.provenance.kind != "paper"
+            or parent_field.provenance.evidence_class != "paper_explicit"
+            or parent_field.evidence_id != proof.get("parent_evidence_id")
+            or parent_field.provenance.reference != parent_field.evidence_id
+            or parent_field.source_scope is None
+            or (parent_field.source_scope.paper_id,
+                parent_field.source_scope.experimental_group_id,
+                parent_field.source_scope.source_digest)
+            != (scope.paper_id, scope.experimental_group_id, scope.source_digest)):
+        return False
+    if parent_field.value != proof.get("parent_source_value"):
+        return False
+    resolved_parent = _graph_field(steps, proof["parent_state_path"])
+    if resolved_parent is None or verify_controlled_state_mapping(
+        proof["parent_state_path"], parent_field.value, resolved_parent[0],
+        parent_field.controlled_mapping.model_dump(mode="json")
+        if parent_field.controlled_mapping is not None else None,
+    ):
+        return False
+    evidence_by_id = {item.evidence_id: item for item in candidate.evidence_bundle}
+    return not verify_bound_output_state(
+        proof, steps, evidence_by_id,
+        paper_id=scope.paper_id,
+        experimental_group_id=scope.experimental_group_id,
+        source_digest=scope.source_digest,
+    )
+
+
 def _verified_convention_state_field(
     candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
     fields_by_path: dict[str, Any],
@@ -222,7 +268,13 @@ def _verified_convention_state_field(
     except (TypeError, ValueError):
         return False
     if (not isinstance(proof, dict)
-            or proof.get("field_path") != field.field_path
+            or proof.get("schema_version") != "route-convention-state/v1"):
+        return False
+    if is_convention_inheritance_proof(proof):
+        return _verified_inherited_state_field(
+            candidate, steps, field, fields_by_path, proof,
+        )
+    if (proof.get("field_path") != field.field_path
             or proof.get("target_state") != field.value
             or proof.get("rule_id") != provenance.inference_rule
             or provenance.reference != proof.get("operation_evidence_id")

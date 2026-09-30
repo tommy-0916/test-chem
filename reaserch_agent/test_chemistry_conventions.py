@@ -99,6 +99,7 @@ class ConventionResourceTest(unittest.TestCase):
                 "transfer",
                 "split",
                 "merge",
+                "redispersion",
             },
         )
         for rule in rules:
