@@ -199,11 +199,12 @@ def literal_quantity_present(excerpt: Any, value: Any, unit: Any) -> bool:
 def dimensionless_numeric_field_pending(field_path: str, graph: Any) -> bool:
     """Recognize explicit dimensionless graph fields without approving a value.
 
-    No literal verifier for pH, repetition counts, or ratios exists yet. A
-    recognized unitless field therefore gets a distinct pending reason, while
-    material quantities and unrecognized numeric parameters still require a
-    physical unit. The field path and parameter name, never the number alone,
-    select this branch.
+    A recognized unitless field gets a distinct pending reason while its
+    bounded literal verifier is unfinished; the pH family is verified by
+    ``dimensionless_labeled_value_verified``, and counts/ratios still have
+    no literal verifier.  Material quantities and unrecognized numeric
+    parameters still require a physical unit.  The field path and parameter
+    name, never the number alone, select this branch.
     """
     parameter = _DIMENSIONLESS_PARAMETER_PATH.fullmatch(field_path)
     container_count = _DIMENSIONLESS_CONTAINER_COUNT_PATH.fullmatch(field_path)
@@ -226,6 +227,71 @@ def dimensionless_numeric_field_pending(field_path: str, graph: Any) -> bool:
         return isinstance(node, Mapping) and type(node.get("count")) is int
     except (IndexError, KeyError, TypeError, ValueError):
         return False
+
+
+def dimensionless_parameter_name(field_path: str, graph: Any) -> str:
+    """The graph parameter name behind a recognized dimensionless path."""
+    parameter = _DIMENSIONLESS_PARAMETER_PATH.fullmatch(field_path)
+    if parameter is None:
+        return ""
+    try:
+        node = graph[int(parameter.group(1))]["parameters"][int(parameter.group(2))]
+    except (IndexError, KeyError, TypeError, ValueError):
+        return ""
+    return _text(node.get("name")) if isinstance(node, Mapping) else ""
+
+
+_PH_LABEL = re.compile(r"(?<!\w)pH(?!\w)")
+_NUMBER_TOKEN = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)")
+_PH_SETPOINT_CONNECTOR = re.compile(
+    r"(?:controlled|adjusted|set|maintained|kept|held)\s+"
+    r"(?:to\s+be|at|to)\s*$|(?<!\w)pH\s+of\s*$",
+    re.IGNORECASE,
+)
+_QUANTIFIED_UNIT_AFTER = re.compile(
+    r"\s*(?:M|mM|mol|mmol|μmol|umol|L|mL|μL|uL|h|min|s|g|mg|kg|rpm)\b"
+)
+
+
+def dimensionless_labeled_value_verified(
+    value: Any, excerpt: Any, field_path: str, graph: Any,
+) -> bool:
+    """Bounded labeled-quote verification for one recognized dimensionless field.
+
+    Only the pH family is completed here.  The quote must carry the ``pH``
+    label before the value, the exact value exactly once as the only number
+    in the quote, unquantified by a physical unit, and a setpoint connector
+    (``controlled to be`` / ``adjusted to`` / ``pH of`` / ...) immediately
+    binding that value — so one step's pH target is separated from a time,
+    count or other number in the same passage.  Count and ratio categories
+    keep returning False until their own bounded grammar exists; a unitless
+    number is never approved by the number alone, and no unit is invented.
+    """
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or isinstance(excerpt, bool) or not isinstance(excerpt, str)
+            or not isinstance(field_path, str)
+            or dimensionless_parameter_name(field_path, graph).casefold()
+            not in {"ph", "ph_target"}):
+        return False
+    text = normalize_pdf_quote_whitespace(excerpt)
+    label = _PH_LABEL.search(text)
+    if label is None:
+        return False
+    number_matches = list(_NUMBER_TOKEN.finditer(text))
+    value_matches = [
+        match for match in number_matches
+        if math.isfinite(float(match.group()))
+        and math.isclose(float(match.group()), float(value),
+                         rel_tol=1e-12, abs_tol=1e-12)
+    ]
+    if len(number_matches) != 1 or len(value_matches) != 1:
+        return False
+    match = value_matches[0]
+    if label.start() > match.start():
+        return False
+    if _QUANTIFIED_UNIT_AFTER.match(text, match.end()):
+        return False
+    return _PH_SETPOINT_CONNECTOR.search(text[:match.start()]) is not None
 
 
 def material_identity_for_amount_path(
@@ -845,10 +911,13 @@ def _fact_issue(
         if output_quantity_role_issue(field_path, graph, unit):
             return "route_fact_quantity_role_mismatch"
         if not unit:
+            if not dimensionless_numeric_field_pending(field_path, graph):
+                return "route_fact_numeric_unit_missing"
             return (
-                "dimensionless_semantic_pending"
-                if dimensionless_numeric_field_pending(field_path, graph)
-                else "route_fact_numeric_unit_missing"
+                ""
+                if dimensionless_labeled_value_verified(
+                    claimed, excerpt, field_path, graph)
+                else "dimensionless_semantic_pending"
             )
         if not literal_quantity_present(excerpt, claimed, unit):
             return "route_fact_quantity_absent_from_excerpt"

@@ -28,8 +28,8 @@ from chem_agent_contracts.route_source_labels import (
 
 from .route_group_compiler import (
     _port_material_for_path, _scoped_claim, classify_route_field_basis,
-    dimensionless_numeric_field_pending, literal_quantity_present,
-    material_identity_for_amount_path,
+    dimensionless_labeled_value_verified, dimensionless_numeric_field_pending,
+    literal_quantity_present, material_identity_for_amount_path,
     output_quantity_role_issue,
     quantity_has_local_attribution,
 )
@@ -316,10 +316,13 @@ def _literal_fact_reason(
         if output_quantity_role_issue(field_path, graph, unit):
             return "fact_quantity_role_mismatch"
         if not unit.strip():
+            if not dimensionless_numeric_field_pending(field_path, graph):
+                return "fact_numeric_unit_missing"
             return (
-                "dimensionless_semantic_pending"
-                if dimensionless_numeric_field_pending(field_path, graph)
-                else "fact_numeric_unit_missing"
+                ""
+                if dimensionless_labeled_value_verified(
+                    value, excerpt, field_path, graph)
+                else "dimensionless_semantic_pending"
             )
         if not literal_quantity_present(excerpt, value, unit):
             return "fact_quantity_not_in_excerpt"

@@ -15,8 +15,8 @@ from chem_agent_contracts.route_candidate import (
 from reaserch_agent.route_discovery import discover_route_candidates
 from reaserch_agent.route_group_compiler import (
     _fact_issue, compile_experimental_group_protocols,
-    dimensionless_numeric_field_pending, material_identity_for_amount_path,
-    quantity_has_local_attribution,
+    dimensionless_labeled_value_verified, dimensionless_numeric_field_pending,
+    material_identity_for_amount_path, quantity_has_local_attribution,
 )
 from reaserch_agent.route_science import audit_route_candidate_science
 from reaserch_agent.route_source import verify_route_source
@@ -320,6 +320,58 @@ class RouteGroupCompilerTest(unittest.TestCase):
             reason("material_graph[0].material_inputs[0].quantity.value", 2),
             "route_fact_numeric_unit_missing",
         )
+
+    def test_ph_labeled_value_verification_is_bounded(self) -> None:
+        graph = [{
+            "parameters": [
+                {"name": "pH", "value": 10, "unit": ""},
+                {"name": "molar_ratio", "value": 2, "unit": ""},
+            ],
+        }]
+        ph_path = "material_graph[0].parameters[0].value"
+        quote = ("The pH of the solution was monitored using a pH meter "
+                 "(Mettler Toledo) and controlled to be 10")
+        self.assertTrue(dimensionless_labeled_value_verified(
+            10, quote, ph_path, graph))
+        # the setpoint connector alone, without the pH label, verifies nothing
+        self.assertFalse(dimensionless_labeled_value_verified(
+            10, "controlled to be 10 by dropwise adding", ph_path, graph))
+        # a value quantified by a physical unit is not a bare pH target
+        self.assertFalse(dimensionless_labeled_value_verified(
+            10, "the pH was controlled to be 10 mM", ph_path, graph))
+        # the number in the quote must be the claimed value
+        self.assertFalse(dimensionless_labeled_value_verified(
+            10, "the pH was controlled to be 7", ph_path, graph))
+        # other numbers in the same quote keep the claim unresolved
+        self.assertFalse(dimensionless_labeled_value_verified(
+            10, "the pH was controlled to be 10 at 25", ph_path, graph))
+        # no setpoint connector binding the label to the value
+        self.assertFalse(dimensionless_labeled_value_verified(
+            10, "the pH of the solution and 10 mL water", ph_path, graph))
+        # count and ratio categories have no literal verifier yet
+        ratio_path = "material_graph[0].parameters[1].value"
+        self.assertFalse(dimensionless_labeled_value_verified(
+            2, "at a molar ratio of 2", ratio_path, graph))
+
+        def reason(excerpt: str) -> str:
+            fact = {
+                "fact_id": "numeric", "field_path": ph_path,
+                "value": 10, "unit": "", "excerpt": excerpt,
+                "source": {
+                    "paper_id": "paper-A", "experimental_group_id": "Group A",
+                    "section": "Methods", "locator": "lines:4-4",
+                    "source_digest": self.digest,
+                },
+            }
+            return _fact_issue(
+                fact, paper_id="paper-A", group_id="Group A",
+                section="Methods", document_digest=self.digest,
+                graph=graph, signature={},
+            )
+
+        self.assertEqual(reason(quote), "")
+        self.assertEqual(reason("controlled to be 10 by dropwise adding"),
+                         "dimensionless_semantic_pending")
 
     def test_intervening_entity_is_not_an_attribution_link(self) -> None:
         self.assertFalse(quantity_has_local_attribution(

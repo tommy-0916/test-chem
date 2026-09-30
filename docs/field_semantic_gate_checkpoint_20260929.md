@@ -531,33 +531,129 @@ artifacts `local-revision-r2-proposal.json` / `-audit.json` / `-replay.json`).
 
 Gate result after the round (same strict entry, zero repair budget):
 **admitted = 0 → G2 not entered; nothing compiled; nothing reported as
-passed.**  Remaining G1 items are honest and smaller: 7
-`semantic_binding_pending` NAME facts (5× 'LDH seeds', 2× 'samples' — the
-labeling/collection bare labels stay unresolved as names), 1
-dimensionless-numeric pending (pH 10), 1 `fact_quantity_attribution_unresolved`
-(the 1 M concentration — the verified arm-repaired basis shows the identical
-single pending under the current gates, so this is an inherited genuine
-gap, not round-2 damage), and the deionized-water state requirement.
-`precipitate` received **no** alias: its state facts now bind through the
-unchanged anchored-association rules; the token stays outside the
-controlled vocabulary (`material-states/v1`), and any future mapping (e.g.
-to `retained_wet_solid`) is a reviewed vocabulary decision, not this
-round's.  Net: the two blockers this round targeted (identity conflict,
-count representation) are resolved; the split downstream consumption is
-explicitly unresolved rather than wrong; all preserved facts match the
-verified basis or are declared model-chain gaps.
+passed.**  Remaining G1 items (as recorded by field_path in
+`local-revision-r2-replay.json`): 7 `semantic_binding_pending` **STATE**
+facts on the post-split chain (see the correction in round 3 — they were
+misreported as name pendings in the round-2 narrative), 1
+dimensionless-numeric pending (pH 10), 1
+`fact_quantity_attribution_unresolved` (the 1 M concentration — the
+verified arm-repaired basis shows the identical single pending under the
+current gates, so this is an inherited genuine gap, not round-2 damage),
+and the deionized-water state requirement.  On the 28 restored excerpts:
+they are **evidence restored and re-submitted** — the same strict
+association re-checked every one of them in this replay, none of the 28
+appears in the issue list, so all 28 pass the existing
+object/operation/field attribution checks; the 7 pendings above are not
+restored fields (they are model-chain state facts with no verified
+counterpart).  `precipitate` received **no** alias; the token stays
+outside the controlled vocabulary (`material-states/v1`).  Net: the two
+blockers this round targeted (identity conflict, count representation) are
+resolved; the split downstream consumption is explicitly unresolved rather
+than wrong; all preserved facts match the verified basis or are declared
+model-chain gaps.
 
 Test suite (full research discovery, same environment): **949 tests**
 ran on the changed tree (835 at the f957b64 baseline + 114 added since);
 **8 failures + 21 errors, and the 29 failing test IDs are byte-identical to
 the f957b64 baseline set** (compared both directions, zero differences) —
-all added tests, including the split-repair regressions, pass.  Per the
-standing caveat this fingerprint match does not by itself prove every
-semantic change in this round correct; it bounds this round's blast radius
-to zero new failing IDs.  The known flaky category difference on
+all added tests, including the split-repair regressions, pass.  Reported
+narrowly per the review's wording: **zero new failing test IDs**; whether
+failure categories, reasons and stack origins are fully identical follows
+from this ID comparison.  The known category difference on
 `test_concurrent_same_identity_records_do_not_overwrite` (FAIL in the full
 suite, reproducible verbatim when isolated) is part of that inherited set
 and remains tracked as a test-stability issue.
+
+## Round 3 (same day): pH labeled verification; honest state of the rest
+
+Scope, fixed: close only the field items the source and the existing
+machinery can legitimately close; leave every other dependency explicit.
+Producer `local-revision-r3.py`; artifacts `local-revision-r3-proposal.json`
+/ `-audit.json` / `-replay.json`; review questions
+`split-downstream-review-questions.json`.  Zero model calls.
+
+Correction carried into this round: the round-2 narrative misreported the
+7 `semantic_binding_pending` items as NAME facts.  The recorded
+field_paths in `local-revision-r2-replay.json` were always correct — they
+are **STATE** facts on the post-split chain (g5 out 'precipitate', g6
+in/out, g7 in/out, g8 in/out).  The misreading came from correlating the
+gate's fact indexes against the raw envelope after the split constructor
+had inserted child facts; every statement below uses the recorded paths.
+
+1. **pH=10 — completed the existing labeled-quote verification.**
+   `dimensionless_numeric_field_pending` already recognized the pH family
+   and deliberately returned `dimensionless_semantic_pending` ("no literal
+   verifier exists yet").  The bounded verifier
+   `dimensionless_labeled_value_verified` (route_group_compiler) now
+   completes that branch for the pH category only: the quote must carry
+   the `pH` label before the value, the exact value exactly once as the
+   only number in the quote, unquantified by a physical unit, and a
+   setpoint connector (`controlled to be` / `adjusted to` / `pH of`).
+   This separates one step's pH target from a time, count or other number
+   in the same passage.  No unit is invented; counts and ratios keep
+   returning False (their own bounded grammar is future work); material
+   quantities and unrecognized unit-less numerics still require a unit.
+   Wired identically into the fact receipt, the literal-shape diagnostics
+   and the G2 matrix-row builder, with positive and negative tests.  The
+   pH fact's excerpt moved to the label-bearing span of the same source
+   sentence (b64-b66, verification-budget bound); `dimensionless_semantic_pending`
+   is gone from the replay.
+
+2. **Seven state pendings — disposition per fact, none forced.**
+   - 'precipitate' (g5 out, g6 in): the original-word localization IS
+     source-supported (b72 "The precipitates were labeled as LDH seeds",
+     plural), but the canonical machine state is a separate, still-pending
+     track: `precipitate` stays outside the controlled vocabulary, no alias
+     was minted, and the plural surface cannot bind to the singular value
+     under the word-boundary rules.  Status: 原词定位有来源依据 / 规范状态映射未决.
+   - 'suspension' (g6 out, g7 in/out, g8 in): the local source support is
+     the operation wording "dispersed in 30 mL of water" /
+     "centrifugation−redispersion", never the state word after b69; the
+     only 'suspension' mention (b69) predates an intermediate
+     suspension→precipitate state change, so it cannot anchor the later
+     ports.  Derivation (`derive_unreviewed_output_state`) requires typed
+     split/transfer relations and does not apply to ordinary steps.
+     Status: pending with the specific gap named.
+3. **1 M concentration — wiring verified, refusal intentional.**
+   The implemented source-label association is generated in the fact
+   receipt (binding_sink), recorded as versioned `source-label-binding/v1`
+   rows, and consumed by the verifier.  On this real sentence the
+   definition-site grammar intentionally returns unresolved: the recipe
+   names NaOH, another source-bound entity, and the grammar refuses
+   multi-entity passages rather than guess whose concentration "(1 M)"
+   describes.  The earlier "passes through the definition-site
+   parenthetical" described the mechanism's synthetic positive test, not
+   this instance; the verified arm-repaired basis pends identically.  No
+   new matching rules were added.
+4. **deionized water — gap narrowed, concrete question routed.**
+   `spec_water_milliq`'s paper identity explicitly cites "Deionized water
+   (15 MΩ/cm) was obtained from a Milli-Q water purification system"
+   (Materials, b51-b52), so the quality IS supported; the gap today is the
+   register naming key (`material_name` 'water' vs the port's exact source
+   name 'deionized water').  The name is not simplified and no alias is
+   minted; question Q5 in `split-downstream-review-questions.json` asks the
+   reviewer/lab to confirm amending the record (digest re-verified), after
+   which the existing resolver binds with zero code change.
+5. **Split downstream — concrete questions, named recipient.**
+   `split-downstream-review-questions.json` hands the independent reviewer
+   (the already-issued work order) the 8 constructed child instance IDs,
+   the exact source span, the current single-chain modeling, and five
+   specific questions: per-part vs combined washing, the 30 mL per-part or
+   total ambiguity, whether collection is a real merge, the canonical state
+   decision, and the water-register amendment.  No default is taken.
+
+Gate state after the round (same strict entry): **admitted = 0 → G2 not
+entered**; remaining G1 = the 7 documented state pendings + the
+deionized-water requirement + the 1 M concentration attribution.  Offline
+field work continues; formal admission stays blocked; nothing here is an
+A01 completion signal.
+
+Test suite (full research discovery): **950 tests**, failing-ID set
+compared to the f957b64 baseline run in the same environment — **zero new
+failing test IDs** (categories/reasons/stacks per the ID comparison).
+Round-3 WIP checkpoint: commit "Verify pH setpoints by labeled source
+quote" (with this document); round-2 checkpoint: `538e6d1`.  Neither is
+pushed; the branch stays local like the previous checkpoints.
 
 ## Independent review track (current external dependency)
 

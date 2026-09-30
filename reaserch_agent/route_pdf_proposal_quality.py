@@ -20,8 +20,8 @@ from chem_agent_contracts.route_convention_basis import derive_unreviewed_output
 
 from .route_group_compiler import (
     _scoped_claim, classify_route_field_basis,
-    dimensionless_numeric_field_pending, literal_quantity_present,
-    output_quantity_role_issue,
+    dimensionless_labeled_value_verified, dimensionless_numeric_field_pending,
+    literal_quantity_present, output_quantity_role_issue,
 )
 from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
 
@@ -107,18 +107,27 @@ def assess_unreviewed_proposal_literal_shape(
                 })
             elif isinstance(value, (int, float)):
                 if isinstance(unit, str):
-                    reason = (
-                        "fact_quantity_role_mismatch" if output_quantity_role_issue(
-                            record["field_path"], proposal.get("material_graph"), unit,
-                        ) else
-                        ("dimensionless_semantic_pending" if
-                         dimensionless_numeric_field_pending(
-                             record["field_path"], proposal.get("material_graph")
-                         ) else "fact_numeric_unit_missing")
-                        if not unit.strip() else
-                        "fact_quantity_not_in_excerpt" if not
-                        literal_quantity_present(excerpt, value, unit) else ""
-                    )
+                    if output_quantity_role_issue(
+                            record["field_path"], proposal.get("material_graph"),
+                            unit):
+                        reason = "fact_quantity_role_mismatch"
+                    elif not unit.strip():
+                        if not dimensionless_numeric_field_pending(
+                                record["field_path"],
+                                proposal.get("material_graph")):
+                            reason = "fact_numeric_unit_missing"
+                        else:
+                            reason = (
+                                ""
+                                if dimensionless_labeled_value_verified(
+                                    value, excerpt, record["field_path"],
+                                    proposal.get("material_graph"))
+                                else "dimensionless_semantic_pending"
+                            )
+                    elif not literal_quantity_present(excerpt, value, unit):
+                        reason = "fact_quantity_not_in_excerpt"
+                    else:
+                        reason = ""
                     if reason:
                         diagnostics.append({**record, "reason_code": reason})
             elif isinstance(value, str):
