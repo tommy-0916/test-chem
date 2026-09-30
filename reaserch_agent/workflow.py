@@ -4023,12 +4023,16 @@ class ResearchAgent(BaseAgent):
                         # Cross-step collection reference: a downstream port
                         # may address a previously declared collected set by
                         # referencing its container; the member list is the
-                        # addressing population.  Not resolvable references
+                        # addressing population.  Only steps BEFORE the
+                        # current one are visible — a set declared later is
+                        # not a legal addressing target — and duplicate
+                        # container IDs must be reported ambiguous instead of
+                        # silently taking the first.  Unresolvable references
                         # stay pending at the binding layer.
-                        for other in macro_plan:
+                        candidates: List[List[str]] = []
+                        for other in macro_plan[:index - 1]:
                             if not isinstance(other, dict):
                                 continue
-                            found = False
                             for container in other.get("logical_containers") or []:
                                 if not isinstance(container, dict):
                                     continue
@@ -4043,12 +4047,14 @@ class ResearchAgent(BaseAgent):
                                     for value in (container.get("member_material_instance_ids") or [])
                                     if str(value).strip()
                                 ]
-                                if len(members) >= 2:
-                                    addressing = members
-                                found = True
-                                break
-                            if found:
-                                break
+                                candidates.append(members)
+                        if len({tuple(candidate) for candidate in candidates}) > 1:
+                            issues.append(
+                                f"quantity_scope_ambiguous_collection:"
+                                f"material_graph[{index - 1}].{key}[{port_index}].quantity"
+                            )
+                        elif candidates and len(candidates[0]) >= 2:
+                            addressing = candidates[0]
                     port_instance = str(material.get("material_instance_id") or "").strip()
                     if len(addressing) < 2 and port_instance:
                         for relation in step.get("material_relations") or []:

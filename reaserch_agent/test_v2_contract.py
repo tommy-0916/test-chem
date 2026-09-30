@@ -1167,6 +1167,41 @@ class QuantityScopeAllocationGuardTest(unittest.TestCase):
                          agent._v2_material_graph_issues([parents, scoped], []))
 
 
+    def test_container_reference_rejects_future_and_ambiguous_sets(self):
+        agent = self._agent()
+        step = self._step({"value": 30, "unit": "mL"})
+        step["material_inputs"][0]["logical_container_id"] = "set_final"
+        # A set declared on a LATER step is not a legal addressing target.
+        later = self._step({"value": 1, "unit": "mL"})
+        later["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c1", "c2"],
+        }]
+        plan = [self._parents(), step, later]
+        self.assertNotIn("quantity_scope_unresolved:material_graph[1]"
+                         ".material_inputs[0].quantity",
+                         agent._v2_material_graph_issues(plan, []))
+        # Duplicate container IDs with different members are ambiguous, not
+        # "first match wins".
+        first = self._parents()
+        first["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c1", "c2"],
+        }]
+        second = self._step({"value": 1, "unit": "mL"})
+        second["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c1", "c2", "c8"],
+        }]
+        plan = [first, second, step]
+        self.assertIn("quantity_scope_ambiguous_collection:"
+                      "material_graph[2].material_inputs[0].quantity",
+                      agent._v2_material_graph_issues(plan, []))
+
+
 class CollectRegistrationTraceabilityTest(unittest.TestCase):
     def test_collect_registration_does_not_create_lineage_edges(self):
         agent = ResearchAgent.__new__(ResearchAgent)
@@ -1217,17 +1252,19 @@ class CollectRegistrationTraceabilityTest(unittest.TestCase):
         # external root through c1 and this issue would be masked.
         self.assertIn("final sample final1 不可追溯到 root materials", issues)
 
-    def test_device_compiler_rejects_collect_events_fail_closed(self):
+    def test_device_compiler_treats_collect_as_explicit_noop(self):
         from device_agent.material_relationship_compiler import (
             ALLOWED_EVENT_KINDS,
         )
 
-        # Registration events never enter the Device relationship compiler,
-        # so their runtime_measurement_required basis can never mint a
-        # weighing/measurement obligation there.  Obligations are only
-        # generated for admitted event kinds (event-kind validation runs
-        # before any obligation record is created).
-        self.assertNotIn("collect_same_material", ALLOWED_EVENT_KINDS)
+        # Collection registrations have an explicit Device handoff semantic:
+        # accepted as a non-executing registration (zero workstation
+        # actions, zero runtime-measurement obligations, zero material
+        # transitions), not rejected as an unknown event.  The zero-
+        # obligation guarantee is pinned end-to-end in
+        # device_agent/test_collection_registration_compiler.py.
+        self.assertIn("collect_same_material", ALLOWED_EVENT_KINDS)
+
 
 if __name__ == "__main__":
     unittest.main()
