@@ -1145,5 +1145,89 @@ class QuantityScopeAllocationGuardTest(unittest.TestCase):
                          ".material_inputs[0].quantity",
                          agent._v2_material_graph_issues(plan, []))
 
+
+    def test_container_reference_addresses_cross_step_collection(self):
+        agent = self._agent()
+        parents = self._parents()
+        parents["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c1", "c2"],
+        }]
+        step = self._step({"value": 30, "unit": "mL"})
+        step["material_inputs"][0]["logical_container_id"] = "set_final"
+        plan = [parents, step]
+        issues = agent._v2_material_graph_issues(plan, [])
+        self.assertIn("quantity_scope_unresolved:material_graph[1]"
+                      ".material_inputs[0].quantity", issues)
+        scoped = self._step({"value": 30, "unit": "mL", "scope": "per_part"})
+        scoped["material_inputs"][0]["logical_container_id"] = "set_final"
+        self.assertNotIn("quantity_scope_unresolved:material_graph[1]"
+                         ".material_inputs[0].quantity",
+                         agent._v2_material_graph_issues([parents, scoped], []))
+
+
+class CollectRegistrationTraceabilityTest(unittest.TestCase):
+    def test_collect_registration_does_not_create_lineage_edges(self):
+        agent = ResearchAgent.__new__(ResearchAgent)
+        agent._contract_version = "v2"
+        plan = [
+            {
+                "macro_step_id": "S0", "sequence": 1, "operation": "split",
+                "sample_id": "s1", "material_inputs": [{
+                    "material_id": "m", "material_instance_id": "root1",
+                    "name": "suspension", "state": "suspension",
+                    "material_origin": "external_inventory",
+                }],
+                "material_intermediates": [],
+                "material_outputs": [
+                    {"material_id": "m", "material_instance_id": "c1",
+                     "name": "suspension", "state": "suspension"},
+                ],
+            },
+            {
+                "macro_step_id": "S1", "sequence": 2, "operation": "collect",
+                "sample_id": "s1", "material_inputs": [{
+                    "material_id": "m", "material_instance_id": "c1",
+                    "name": "suspension", "state": "suspension",
+                }],
+                "material_intermediates": [],
+                "material_outputs": [
+                    {"material_id": "m", "material_instance_id": "final1",
+                     "name": "samples", "state": "suspension"},
+                ],
+                "material_relations": [{
+                    "relation_id": "rel_collect",
+                    "event_kind": "collect_same_material",
+                    "input_material_instance_ids": ["c1", "final1"],
+                    "output_material_instance_ids": ["final1", "c1"],
+                    "logical_container_ids": ["set_final"],
+                    "quantity_basis": "runtime_measurement_required",
+                    "source_operation_ref": "ms8",
+                }],
+                "logical_containers": [{
+                    "logical_container_id": "set_final",
+                    "container_type": "collected_set",
+                    "member_material_instance_ids": ["c1", "final1"],
+                }],
+            },
+        ]
+        issues = agent._v2_material_graph_issues(plan, [])
+        # If the registration leaked into lineage, final1 would reach the
+        # external root through c1 and this issue would be masked.
+        self.assertIn("final sample final1 不可追溯到 root materials", issues)
+
+    def test_device_compiler_rejects_collect_events_fail_closed(self):
+        from device_agent.material_relationship_compiler import (
+            ALLOWED_EVENT_KINDS,
+        )
+
+        # Registration events never enter the Device relationship compiler,
+        # so their runtime_measurement_required basis can never mint a
+        # weighing/measurement obligation there.  Obligations are only
+        # generated for admitted event kinds (event-kind validation runs
+        # before any obligation record is created).
+        self.assertNotIn("collect_same_material", ALLOWED_EVENT_KINDS)
+
 if __name__ == "__main__":
     unittest.main()

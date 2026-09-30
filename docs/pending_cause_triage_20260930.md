@@ -103,10 +103,21 @@ instead of converting every failure into "human review".
    output set), forbids quantity allocations, and is rejected in any
    transformation shape — bookkeeping never generates a device transfer or
    merge. The single-parent split/transfer/state-change checks are NOT
-   globally relaxed; each relation kind keeps its own shape. Remaining: the
-   source-verified producer that wires a collection sentence into this
-   structure, and derivation's acceptance of a declared collection parent
-   set (route_convention_basis.py:328-330).
+   globally relaxed; each relation kind keeps its own shape.
+   **Tail items closed the same day**: (a) cross-step collection addressing
+   — a downstream port references a declared collected set via
+   `logical_container_id`, and the scope guard resolves the member list
+   from that container (no same-step-relation inference); (b) lineage
+   non-pollution — `collect_same_material` is excluded from publish-gate
+   parent_map edges, so a registration can never mask a traceability gap;
+   (c) consumer check — the Device relationship compiler rejects
+   `collect_same_material` as an unsupported event kind
+   (ALLOWED_EVENT_KINDS, fail-closed) before any runtime-measurement
+   obligation can be minted, so `runtime_measurement_required` on a
+   registration has no semantic leak into weighing/measurement tasks.
+   Remaining: the source-verified producer that wires a collection sentence
+   into this structure, and derivation's acceptance of a declared
+   collection parent set (route_convention_basis.py:328-330).
 3. State-change derivation wiring for Q4-capability: extend `_RULE_EVENTS`,
    add REDISPERSION_V1 to conventions.json with verified object/operation/
    applicability premises (never any solid-plus-water ⇒ suspension), and

@@ -3948,8 +3948,12 @@ class ResearchAgent(BaseAgent):
                     f"第 {step_number} 步存在重复 material relation {sorted(outputs)}"
                 )
             relation_seen.add(marker)
-            for output_id in outputs:
-                parent_map.setdefault(output_id, []).extend(inputs)
+            if kind != "collect_same_material":
+                # A collection registration is bookkeeping, not lineage:
+                # it must not make every member a parent of every other
+                # member in traceability checks.
+                for output_id in outputs:
+                    parent_map.setdefault(output_id, []).extend(inputs)
 
         for index, step in enumerate(macro_plan, start=1):
             if not isinstance(step, dict):
@@ -4014,6 +4018,37 @@ class ResearchAgent(BaseAgent):
                             continue
                         if instance:
                             addressing.append(instance)
+                    container_id = str(material.get("logical_container_id") or "").strip()
+                    if len(addressing) < 2 and container_id:
+                        # Cross-step collection reference: a downstream port
+                        # may address a previously declared collected set by
+                        # referencing its container; the member list is the
+                        # addressing population.  Not resolvable references
+                        # stay pending at the binding layer.
+                        for other in macro_plan:
+                            if not isinstance(other, dict):
+                                continue
+                            found = False
+                            for container in other.get("logical_containers") or []:
+                                if not isinstance(container, dict):
+                                    continue
+                                if (str(container.get("logical_container_id") or "").strip()
+                                        != container_id):
+                                    continue
+                                if (str(container.get("container_type") or "").strip()
+                                        != "collected_set"):
+                                    continue
+                                members = [
+                                    str(value).strip()
+                                    for value in (container.get("member_material_instance_ids") or [])
+                                    if str(value).strip()
+                                ]
+                                if len(members) >= 2:
+                                    addressing = members
+                                found = True
+                                break
+                            if found:
+                                break
                     port_instance = str(material.get("material_instance_id") or "").strip()
                     if len(addressing) < 2 and port_instance:
                         for relation in step.get("material_relations") or []:
