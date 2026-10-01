@@ -2907,6 +2907,13 @@ def compile_material_relationships(
                 # A collection registration is a Device-visible NO-OP: it is
                 # preserved as package metadata, never bound to a workstation
                 # action, never measured, and never transitions material.
+                # Because this branch skips the generic endpoint-resolution
+                # checks below, it validates its own endpoints fail-closed:
+                # the registration must reference exactly one logical
+                # container declared in the same macro step, that container
+                # must be a collected_set whose members equal the registered
+                # member set, and the quantity basis must stay
+                # runtime_measurement_required.
                 non_bindable_collection_relationship_ids.add(relationship_id)
                 registration_issues: List[RelationshipCompileIssue] = []
                 if not input_ids or set(input_ids) != set(output_ids):
@@ -2925,6 +2932,80 @@ def compile_material_relationships(
                             "collect_registration_missing_logical_container",
                             "collect_same_material registration requires the collected_set logical container endpoint",
                             relationship_id=relationship_id,
+                        )
+                    )
+                else:
+                    distinct_container_ids = list(dict.fromkeys(logical_ids))
+                    unresolved_containers = [
+                        value
+                        for value in distinct_container_ids
+                        if value not in container_by_id
+                    ]
+                    if unresolved_containers:
+                        registration_issues.append(
+                            RelationshipCompileIssue(
+                                "collect_registration_unresolved_logical_container",
+                                "collect_same_material registration must reference a logical container declared in the same macro step",
+                                relationship_id=relationship_id,
+                                missing_logical_containers=unresolved_containers,
+                            )
+                        )
+                    if len(distinct_container_ids) != 1:
+                        registration_issues.append(
+                            RelationshipCompileIssue(
+                                "collect_registration_logical_container_not_unique",
+                                "collect_same_material registration requires exactly one collected_set logical container endpoint",
+                                relationship_id=relationship_id,
+                                logical_container_ids=distinct_container_ids,
+                            )
+                        )
+                    for container_id in distinct_container_ids:
+                        container = container_by_id.get(container_id)
+                        if container is None:
+                            continue
+                        if (
+                            str(container.get("container_type") or "").strip()
+                            != "collected_set"
+                        ):
+                            registration_issues.append(
+                                RelationshipCompileIssue(
+                                    "collect_registration_container_type_mismatch",
+                                    "collect_same_material registration must reference a collected_set logical container",
+                                    relationship_id=relationship_id,
+                                    logical_container_id=container_id,
+                                    container_type=str(
+                                        container.get("container_type") or ""
+                                    ).strip(),
+                                )
+                            )
+                            continue
+                        raw_members = container.get("member_material_instance_ids")
+                        container_members = [
+                            str(value).strip()
+                            for value in (raw_members if isinstance(raw_members, list) else [])
+                            if str(value).strip()
+                        ]
+                        if set(container_members) != set(input_ids):
+                            registration_issues.append(
+                                RelationshipCompileIssue(
+                                    "collect_registration_member_mismatch",
+                                    "collected_set container members must equal the registered member set",
+                                    relationship_id=relationship_id,
+                                    logical_container_id=container_id,
+                                    container_member_material_instance_ids=container_members,
+                                    member_material_instance_ids=list(input_ids),
+                                )
+                            )
+                quantity_basis_value = str(
+                    raw_relation.get("quantity_basis") or ""
+                ).strip()
+                if quantity_basis_value != RUNTIME_QUANTITY_MODE:
+                    registration_issues.append(
+                        RelationshipCompileIssue(
+                            "collect_registration_quantity_basis_unsupported",
+                            "collect_same_material registration requires quantity_basis runtime_measurement_required (a registration carries no allocated quantity)",
+                            relationship_id=relationship_id,
+                            quantity_basis=quantity_basis_value,
                         )
                     )
                 if raw_relation.get("input_allocations") or raw_relation.get(

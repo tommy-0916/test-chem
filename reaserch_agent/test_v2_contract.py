@@ -1201,6 +1201,35 @@ class QuantityScopeAllocationGuardTest(unittest.TestCase):
                       "material_graph[2].material_inputs[0].quantity",
                       agent._v2_material_graph_issues(plan, []))
 
+    def test_container_reference_member_order_is_not_ambiguous(self):
+        agent = self._agent()
+        step = self._step({"value": 30, "unit": "mL"})
+        step["material_inputs"][0]["logical_container_id"] = "set_final"
+        # A collected set is unordered bookkeeping: duplicate container
+        # declarations listing the same members in a different order are the
+        # same set, not an ambiguity.
+        first = self._parents()
+        first["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c1", "c2", "c8"],
+        }]
+        second = self._step({"value": 1, "unit": "mL"})
+        second["logical_containers"] = [{
+            "logical_container_id": "set_final",
+            "container_type": "collected_set",
+            "member_material_instance_ids": ["c8", "c2", "c1"],
+        }]
+        plan = [first, second, step]
+        issues = agent._v2_material_graph_issues(plan, [])
+        self.assertNotIn("quantity_scope_ambiguous_collection:"
+                         "material_graph[2].material_inputs[0].quantity",
+                         issues)
+        # The reordered declarations still resolve as an addressing
+        # population, so a scope-dependent quantity is blocked as before.
+        self.assertIn("quantity_scope_unresolved:material_graph[2]"
+                      ".material_inputs[0].quantity", issues)
+
 
 class CollectRegistrationTraceabilityTest(unittest.TestCase):
     def test_collect_registration_does_not_create_lineage_edges(self):

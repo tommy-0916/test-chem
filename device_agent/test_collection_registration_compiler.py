@@ -4,7 +4,14 @@ A collect_same_material relationship is a Device-visible NO-OP: the compiler
 accepts the registration, preserves its endpoints as package metadata, and
 never turns it into a Device binding, a workstation action, a runtime
 measurement obligation, a material transition, or a consumption event --
-even when its quantity_basis is runtime_measurement_required.
+even though its quantity_basis is runtime_measurement_required.
+
+Because the registration branch bypasses the generic endpoint-resolution
+checks, it validates its own endpoints fail-closed: the referenced logical
+container must resolve to exactly one declared collected_set container whose
+member set equals the registered members, and the quantity basis must be
+runtime_measurement_required.  Dangling containers, plain vials, mismatched
+member sets, and allocated quantity bases are all rejected.
 """
 
 from __future__ import annotations
@@ -79,7 +86,14 @@ def _macro_step(relation):
         "material_inputs": [_member_input_port()],
         "material_intermediates": [],
         "material_outputs": [],
-        "logical_containers": [{"logical_container_id": COLLECTED_SET_ID, "count": 1}],
+        "logical_containers": [
+            {
+                "logical_container_id": COLLECTED_SET_ID,
+                "container_type": "collected_set",
+                "member_material_instance_ids": list(MEMBER_IDS),
+                "count": 1,
+            }
+        ],
         "operation_segments": [
             {
                 "segment_id": SOURCE_OPERATION_REF,
@@ -234,6 +248,96 @@ def test_missing_collected_set_container_rejected():
     updated, issues, _ = _compile(_candidate(), _authority(relation))
 
     assert "collect_registration_missing_logical_container" in _codes(issues)
+
+
+def _authority_with_containers(relation, containers):
+    authority = _authority(relation)
+    authority["macro_steps"][0]["logical_containers"] = containers
+    return authority
+
+
+def test_dangling_collected_set_container_rejected():
+    relation = _collect_registration(logical_container_ids=["set-dangling"])
+    candidate = _candidate()
+    updated, issues, applied = _compile(candidate, _authority(relation))
+
+    assert "collect_registration_unresolved_logical_container" in _codes(issues)
+    assert applied == []
+    assert updated == candidate
+    assert updated is not candidate
+
+
+def test_plain_vial_container_rejected():
+    authority = _authority_with_containers(
+        _collect_registration(),
+        [
+            {
+                "logical_container_id": COLLECTED_SET_ID,
+                "container_type": "vial",
+                "count": 1,
+            }
+        ],
+    )
+    candidate = _candidate()
+    updated, issues, applied = _compile(candidate, authority)
+
+    assert "collect_registration_container_type_mismatch" in _codes(issues)
+    assert applied == []
+    assert updated == candidate
+    assert updated is not candidate
+
+
+def test_container_member_mismatch_rejected():
+    authority = _authority_with_containers(
+        _collect_registration(),
+        [
+            {
+                "logical_container_id": COLLECTED_SET_ID,
+                "container_type": "collected_set",
+                "member_material_instance_ids": ["member-1", "member-9"],
+                "count": 1,
+            }
+        ],
+    )
+    candidate = _candidate()
+    updated, issues, applied = _compile(candidate, authority)
+
+    assert "collect_registration_member_mismatch" in _codes(issues)
+    assert applied == []
+    assert updated == candidate
+    assert updated is not candidate
+
+
+def test_multiple_logical_containers_rejected():
+    other = {
+        "logical_container_id": "collected-set-2",
+        "container_type": "collected_set",
+        "member_material_instance_ids": list(MEMBER_IDS),
+        "count": 1,
+    }
+    relation = _collect_registration(
+        logical_container_ids=[COLLECTED_SET_ID, "collected-set-2"]
+    )
+    authority = _authority(relation)
+    authority["macro_steps"][0]["logical_containers"].append(other)
+    candidate = _candidate()
+    updated, issues, applied = _compile(candidate, authority)
+
+    assert "collect_registration_logical_container_not_unique" in _codes(issues)
+    assert applied == []
+    assert updated == candidate
+    assert updated is not candidate
+
+
+def test_non_runtime_quantity_basis_rejected():
+    relation = _collect_registration(quantity_basis="whole_batch")
+    candidate = _candidate()
+    updated, issues, applied = _compile(candidate, _authority(relation))
+
+    assert "collect_registration_quantity_basis_unsupported" in _codes(issues)
+    assert applied == []
+    assert updated == candidate
+    assert updated is not candidate
 
 
 def test_device_step_may_not_claim_collect_registration():

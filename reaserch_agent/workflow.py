@@ -4027,8 +4027,11 @@ class ResearchAgent(BaseAgent):
                         # current one are visible — a set declared later is
                         # not a legal addressing target — and duplicate
                         # container IDs must be reported ambiguous instead of
-                        # silently taking the first.  Unresolvable references
-                        # stay pending at the binding layer.
+                        # silently taking the first.  Membership is compared
+                        # with set semantics: a collected set is unordered, so
+                        # the same members in a different order are NOT
+                        # ambiguous.  Unresolvable references stay pending at
+                        # the binding layer.
                         candidates: List[List[str]] = []
                         for other in macro_plan[:index - 1]:
                             if not isinstance(other, dict):
@@ -4048,7 +4051,7 @@ class ResearchAgent(BaseAgent):
                                     if str(value).strip()
                                 ]
                                 candidates.append(members)
-                        if len({tuple(candidate) for candidate in candidates}) > 1:
+                        if len({frozenset(candidate) for candidate in candidates}) > 1:
                             issues.append(
                                 f"quantity_scope_ambiguous_collection:"
                                 f"material_graph[{index - 1}].{key}[{port_index}].quantity"
