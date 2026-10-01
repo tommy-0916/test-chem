@@ -4,13 +4,14 @@
   "rules": [
     {
       "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "operation": "centrifugation",
       "preconditions": {
         "operation_patterns": ["centrifug", "离心"],
         "intent_patterns": ["collect precipitate", "collect the precipitate", "collect pellet", "保留沉淀", "收集沉淀", "离心收集沉淀", "留固"],
         "input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
-        "retained_object_patterns": ["precipitate", "pellet", "沉淀"]
+        "retained_object_patterns": ["precipitate", "pellet", "沉淀"],
+        "accept_post_operation_retained_object": true
       },
       "allowed_input_states": ["suspension", "retained_wet_solid", "washed_wet_solid"],
       "output_states": ["retained_wet_solid", "supernatant"],

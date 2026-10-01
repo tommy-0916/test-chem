@@ -120,6 +120,25 @@ class ConventionResourceTest(unittest.TestCase):
             self.assertIn("intent_patterns", rule["preconditions"])
             self.assertIn("operation_patterns", rule["preconditions"])
 
+    def test_precipitate_rule_accepts_post_operation_retained_object(self):
+        payload = json.loads(CONVENTIONS_PATH.read_text(encoding="utf-8"))
+        by_id = {rule["rule_id"]: rule for rule in payload["rules"]}
+        precipitate = by_id["CENTRIFUGE_COLLECT_PRECIPITATE_V1"]
+        self.assertEqual(precipitate["version"], "1.1.0")
+        self.assertIs(
+            precipitate["preconditions"]["accept_post_operation_retained_object"],
+            True,
+        )
+        # The declaration is scoped to this one rule; no other rule may
+        # consume the post-operation retained-object source relation.
+        for rule_id, rule in by_id.items():
+            if rule_id != "CENTRIFUGE_COLLECT_PRECIPITATE_V1":
+                self.assertNotIn(
+                    "accept_post_operation_retained_object",
+                    rule["preconditions"],
+                    rule_id,
+                )
+
     def test_precipitate_and_supernatant_are_distinct_rules(self):
         payload = json.loads(CONVENTIONS_PATH.read_text(encoding="utf-8"))
         by_id = {rule["rule_id"]: rule for rule in payload["rules"]}

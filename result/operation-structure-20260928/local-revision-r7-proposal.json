@@ -1,0 +1,1484 @@
+{
+ "proposals": [
+  {
+   "source_group_ref": {
+    "paper_id": "doi_10_1021_acsami_3c11651",
+    "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+    "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8"
+   },
+   "role_hint": "synthesis",
+   "target": {
+    "name": "pristine Ni3Fe LDH",
+    "alternate_label": "NiFe Control",
+    "state": "precipitate"
+   },
+   "route_signature": {
+    "version": "RouteSignatureV1",
+    "target": "pristine Ni3Fe LDH",
+    "strategy": "classical pH-controlled coprecipitation and centrifugation protocol",
+    "operations": [
+     "mixed and dissolved",
+     "dissolving",
+     "dissolving",
+     "pH-controlled coprecipitation",
+     "divided into 8 parts",
+     "centrifugation−redispersion",
+     "aged",
+     "centrifugation−redispersion",
+     "collected"
+    ]
+   },
+   "material_graph": [
+    {
+     "macro_step_id": "ms0",
+     "macro_action_id": "prepare_solution_a",
+     "sequence": 0,
+     "operation": "mixed and dissolved",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g0_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_ni_nitrate",
+       "material_instance_id": "inst_ni_nitrate_1",
+       "name": "Ni(NO3)2·6H2O",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g0_in0_name"
+       },
+       "quantity": {
+        "value": 37.5,
+        "unit": "mmol"
+       }
+      },
+      {
+       "material_id": "mat_fe_nitrate",
+       "material_instance_id": "inst_fe_nitrate_1",
+       "name": "Fe(NO3)3·9H2O",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g0_in1_name"
+       },
+       "quantity": {
+        "value": 12.5,
+        "unit": "mmol"
+       }
+      },
+      {
+       "material_id": "mat_water",
+       "material_instance_id": "inst_water_a",
+       "name": "water",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g0_in2_name"
+       },
+       "quantity": {
+        "value": 50,
+        "unit": "mL"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_solution_a",
+       "material_instance_id": "inst_solution_a",
+       "name": "solution A",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g0_out0_name"
+       }
+      }
+     ]
+    },
+    {
+     "macro_step_id": "ms1",
+     "macro_action_id": "prepare_solution_b",
+     "sequence": 1,
+     "operation": "dissolving",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g1_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_naoh",
+       "material_instance_id": "inst_naoh_1",
+       "name": "NaOH",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g1_in0_name"
+       },
+       "quantity": {
+        "value": 100,
+        "unit": "mmol"
+       }
+      },
+      {
+       "material_id": "mat_water",
+       "material_instance_id": "inst_water_b",
+       "name": "water",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g1_in1_name"
+       },
+       "quantity": {
+        "value": 100,
+        "unit": "mL"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_solution_b",
+       "material_instance_id": "inst_solution_b",
+       "name": "solution B",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g1_out0_name"
+       },
+       "concentration_value": 1,
+       "concentration_unit": "M"
+      }
+     ]
+    },
+    {
+     "macro_step_id": "ms2",
+     "macro_action_id": "prepare_solution_c",
+     "sequence": 2,
+     "operation": "dissolving",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g2_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_na2co3",
+       "material_instance_id": "inst_na2co3_1",
+       "name": "Na2CO3",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g2_in0_name"
+       },
+       "quantity": {
+        "value": 6.25,
+        "unit": "mmol"
+       }
+      },
+      {
+       "material_id": "mat_water",
+       "material_instance_id": "inst_water_c",
+       "name": "water",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g2_in1_name"
+       },
+       "quantity": {
+        "value": 50,
+        "unit": "mL"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_solution_c",
+       "material_instance_id": "inst_solution_c",
+       "name": "solution C",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g2_out0_name"
+       }
+      }
+     ]
+    },
+    {
+     "macro_step_id": "ms3",
+     "macro_action_id": "ph_controlled_coprecipitation",
+     "sequence": 3,
+     "operation": "pH-controlled coprecipitation",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g3_op"
+     },
+     "parameters": [
+      {
+       "name": "flow_rate",
+       "value": 115,
+       "unit": "mL/h"
+      },
+      {
+       "name": "stirring_speed",
+       "value": 800,
+       "unit": "rpm"
+      },
+      {
+       "name": "pH",
+       "value": 10,
+       "unit": ""
+      },
+      {
+       "name": "reaction_time",
+       "value": 1,
+       "unit": "h"
+      }
+     ],
+     "material_inputs": [
+      {
+       "material_id": "mat_solution_a",
+       "material_instance_id": "inst_solution_a",
+       "name": "solution A",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g3_in0_name"
+       }
+      },
+      {
+       "material_id": "mat_solution_c",
+       "material_instance_id": "inst_solution_c",
+       "name": "solution C",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g3_in1_name"
+       }
+      },
+      {
+       "material_id": "mat_solution_b",
+       "material_instance_id": "inst_solution_b",
+       "name": "solution B",
+       "state": "solution",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g3_in2_name"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_susp",
+       "name": "Ni3Fe LDH",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g3_out0_name"
+       }
+      }
+     ]
+    },
+    {
+     "macro_step_id": "ms4",
+     "macro_action_id": "split_suspension_into_8_parts",
+     "sequence": 4,
+     "operation": "divided into 8 parts",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g4_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_susp",
+       "name": "suspension",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g4_in0_name"
+       },
+       "quantity": {
+        "value": 200,
+        "unit": "mL"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [],
+     "count": 8
+    },
+    {
+     "macro_step_id": "ms5",
+     "macro_action_id": "first_centrifugation_redispersion",
+     "sequence": 5,
+     "operation": "centrifugation−redispersion protocol",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g5_op"
+     },
+     "parameters": [
+      {
+       "name": "repetitions",
+       "value": "three",
+       "unit": ""
+      }
+     ],
+     "material_inputs": [
+      {
+       "material_id": "mat_water",
+       "material_instance_id": "inst_water_wash_1",
+       "name": "deionized water",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_in0_name"
+       }
+      },
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_parts",
+       "name": "suspension",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_in1_name"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_seeds",
+       "name": "LDH seeds",
+       "state": "retained_wet_solid",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_out0_name"
+       }
+      }
+     ],
+     "operation_segments": [
+      {
+       "segment_id": "ms5-seg-centrifugation",
+       "material_effect": "transform_material",
+       "source_operation_ref": "ms5",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_op"
+       }
+      },
+      {
+       "segment_id": "ms5-seg-redispersion",
+       "material_effect": "unknown",
+       "source_operation_ref": "ms5",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_op"
+       }
+      }
+     ],
+     "material_relations": [
+      {
+       "relation_id": "ms5-rel-centrifugation",
+       "event_kind": "state_change",
+       "input_material_instance_ids": [
+        "inst_ldh_parts"
+       ],
+       "output_material_instance_ids": [
+        "inst_ldh_seeds"
+       ],
+       "quantity_basis": "whole_batch",
+       "source_operation_ref": "ms5-seg-centrifugation",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g5_op"
+       }
+      }
+     ],
+     "lineage_relation": {
+      "relation_type": "state_change_of",
+      "parent_material_instance_ids": [
+       "inst_ldh_parts"
+      ],
+      "child_material_instance_ids": [
+       "inst_ldh_seeds"
+      ]
+     }
+    },
+    {
+     "macro_step_id": "ms6",
+     "macro_action_id": "age_ldh_seeds",
+     "sequence": 6,
+     "operation": "dispersed",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g6_op"
+     },
+     "parameters": [
+      {
+       "name": "aging_time",
+       "value": 20,
+       "unit": "h"
+      },
+      {
+       "name": "temperature",
+       "value": "room temperature",
+       "unit": ""
+      },
+      {
+       "name": "stirring_speed",
+       "value": 100,
+       "unit": "rpm"
+      }
+     ],
+     "material_inputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_seeds",
+       "name": "LDH seeds",
+       "state": "retained_wet_solid",
+       "material_origin": "upstream_output",
+       "parent_output_refs": [
+        {
+         "macro_step_id": "ms5",
+         "material_instance_id": "inst_ldh_seeds"
+        }
+       ],
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g6_in0_name"
+       }
+      },
+      {
+       "material_id": "mat_water",
+       "material_instance_id": "inst_water_d",
+       "name": "water",
+       "state": null,
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g6_in1_name"
+       },
+       "quantity": {
+        "value": 30,
+        "unit": "mL"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_aged",
+       "name": "LDH seeds",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g6_out0_name"
+       }
+      }
+     ],
+     "operation_segments": [
+      {
+       "segment_id": "ms6-seg-redispersion",
+       "material_effect": "transform_material",
+       "source_operation_ref": "ms6",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g6_op"
+       }
+      }
+     ],
+     "material_relations": [
+      {
+       "relation_id": "ms6-rel-redispersion",
+       "event_kind": "state_change",
+       "input_material_instance_ids": [
+        "inst_ldh_seeds"
+       ],
+       "output_material_instance_ids": [
+        "inst_ldh_aged"
+       ],
+       "quantity_basis": "whole_batch",
+       "source_operation_ref": "ms6-seg-redispersion",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g6_op"
+       }
+      }
+     ],
+     "lineage_relation": {
+      "relation_type": "state_change_of",
+      "parent_material_instance_ids": [
+       "inst_ldh_seeds"
+      ],
+      "child_material_instance_ids": [
+       "inst_ldh_aged"
+      ]
+     }
+    },
+    {
+     "macro_step_id": "ms7a",
+     "macro_action_id": "second_centrifugation",
+     "sequence": 7,
+     "operation": "centrifugation",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g7a_op"
+     },
+     "parameters": [
+      {
+       "name": "repetitions",
+       "value": "one",
+       "unit": ""
+      }
+     ],
+     "material_inputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_aged",
+       "name": "LDH seeds",
+       "state": "suspension",
+       "material_origin": "upstream_output",
+       "parent_output_refs": [
+        {
+         "macro_step_id": "ms6",
+         "material_instance_id": "inst_ldh_aged"
+        }
+       ],
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7a_in0_name"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_wet_2",
+       "name": "LDH seeds",
+       "state": "retained_wet_solid",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7a_out0_name"
+       }
+      }
+     ],
+     "operation_segments": [
+      {
+       "segment_id": "ms7a-seg-centrifugation",
+       "material_effect": "transform_material",
+       "source_operation_ref": "ms7a",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7a_op"
+       }
+      }
+     ],
+     "material_relations": [
+      {
+       "relation_id": "ms7a-rel-centrifugation",
+       "event_kind": "state_change",
+       "input_material_instance_ids": [
+        "inst_ldh_aged"
+       ],
+       "output_material_instance_ids": [
+        "inst_ldh_wet_2"
+       ],
+       "quantity_basis": "whole_batch",
+       "source_operation_ref": "ms7a-seg-centrifugation",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7a_op"
+       }
+      }
+     ],
+     "lineage_relation": {
+      "relation_type": "state_change_of",
+      "parent_material_instance_ids": [
+       "inst_ldh_aged"
+      ],
+      "child_material_instance_ids": [
+       "inst_ldh_wet_2"
+      ]
+     }
+    },
+    {
+     "macro_step_id": "ms7b",
+     "macro_action_id": "second_redispersion",
+     "sequence": 8,
+     "operation": "redispersion",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g7b_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_wet_2",
+       "name": "LDH seeds",
+       "state": "retained_wet_solid",
+       "material_origin": "upstream_output",
+       "parent_output_refs": [
+        {
+         "macro_step_id": "ms7a",
+         "material_instance_id": "inst_ldh_wet_2"
+        }
+       ],
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7b_in0_name"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_washed",
+       "name": "LDH seeds",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7b_out0_name"
+       }
+      }
+     ],
+     "operation_segments": [
+      {
+       "segment_id": "ms7b-seg-redispersion",
+       "material_effect": "transform_material",
+       "source_operation_ref": "ms7b",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7b_op"
+       }
+      }
+     ],
+     "material_relations": [
+      {
+       "relation_id": "ms7b-rel-redispersion",
+       "event_kind": "state_change",
+       "input_material_instance_ids": [
+        "inst_ldh_wet_2"
+       ],
+       "output_material_instance_ids": [
+        "inst_ldh_washed"
+       ],
+       "quantity_basis": "whole_batch",
+       "source_operation_ref": "ms7b-seg-redispersion",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g7b_op"
+       }
+      }
+     ],
+     "lineage_relation": {
+      "relation_type": "state_change_of",
+      "parent_material_instance_ids": [
+       "inst_ldh_wet_2"
+      ],
+      "child_material_instance_ids": [
+       "inst_ldh_washed"
+      ]
+     }
+    },
+    {
+     "macro_step_id": "ms8",
+     "macro_action_id": "collect_samples",
+     "sequence": 9,
+     "operation": "collected",
+     "sample_id": "sample_nife_control",
+     "provenance": {
+      "kind": "paper",
+      "reference": "fact:f_g8_op"
+     },
+     "material_inputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_washed",
+       "name": "samples",
+       "state": "suspension",
+       "material_origin": "upstream_output",
+       "parent_output_refs": [
+        {
+         "macro_step_id": "ms7b",
+         "material_instance_id": "inst_ldh_washed"
+        }
+       ],
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g8_in0_name"
+       }
+      }
+     ],
+     "material_intermediates": [],
+     "material_outputs": [
+      {
+       "material_id": "mat_ni3fe_ldh",
+       "material_instance_id": "inst_ldh_washed",
+       "name": "samples",
+       "state": "suspension",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g8_out0_name"
+       }
+      }
+     ],
+     "logical_containers": [
+      {
+       "logical_container_id": "lc_nife_control_set",
+       "container_type": "collected_set",
+       "member_material_instance_ids": [
+        "inst_ldh_washed"
+       ]
+      }
+     ],
+     "operation_segments": [
+      {
+       "segment_id": "ms8-seg-collection",
+       "material_effect": "register_collection",
+       "source_operation_ref": "ms8",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g8_op"
+       }
+      }
+     ],
+     "material_relations": [
+      {
+       "relation_id": "ms8-rel-collection",
+       "event_kind": "collect_same_material",
+       "input_material_instance_ids": [
+        "inst_ldh_washed"
+       ],
+       "output_material_instance_ids": [
+        "inst_ldh_washed"
+       ],
+       "logical_container_ids": [
+        "lc_nife_control_set"
+       ],
+       "quantity_basis": "runtime_measurement_required",
+       "source_operation_ref": "ms8-seg-collection",
+       "provenance": {
+        "kind": "paper",
+        "reference": "fact:f_g8_op"
+       }
+      }
+     ]
+    }
+   ],
+   "route_facts": [
+    {
+     "fact_id": "f_rs_target",
+     "field_path": "route_signature.target",
+     "value": "pristine Ni3Fe LDH",
+     "unit": "",
+     "excerpt": "The pristine Ni3Fe LDH, labeled as NiFe Control, was synthesized by a",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_strategy",
+     "field_path": "route_signature.strategy",
+     "value": "classical pH-controlled coprecipitation and centrifugation protocol",
+     "unit": "",
+     "excerpt": "classical pH-controlled coprecipitation and centrifugation protocol.",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op0",
+     "field_path": "route_signature.operations[0]",
+     "value": "mixed and dissolved",
+     "unit": "",
+     "excerpt": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op1",
+     "field_path": "route_signature.operations[1]",
+     "value": "dissolving",
+     "unit": "",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op2",
+     "field_path": "route_signature.operations[2]",
+     "value": "dissolving",
+     "unit": "",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op3",
+     "field_path": "route_signature.operations[3]",
+     "value": "pH-controlled coprecipitation",
+     "unit": "",
+     "excerpt": "classical pH-controlled coprecipitation and centrifugation protocol.",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op4",
+     "field_path": "route_signature.operations[4]",
+     "value": "divided into 8 parts",
+     "unit": "",
+     "excerpt": "the suspension (∼500 mg samples) was divided into 8 parts, followed",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op5",
+     "field_path": "route_signature.operations[5]",
+     "value": "centrifugation−redispersion",
+     "unit": "",
+     "excerpt": "by a centrifugation−redispersion protocol using deionized water three times, which was the first centrifugation−redispersion protocol",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op6",
+     "field_path": "route_signature.operations[6]",
+     "value": "aged",
+     "unit": "",
+     "excerpt": "mL of water and aged for 20 h at room temperature under a stirring",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op7",
+     "field_path": "route_signature.operations[7]",
+     "value": "centrifugation−redispersion",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_rs_op8",
+     "field_path": "route_signature.operations[8]",
+     "value": "collected",
+     "unit": "",
+     "excerpt": "all the samples are collected for further",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_op",
+     "field_path": "material_graph[0].operation",
+     "value": "mixed and dissolved",
+     "unit": "",
+     "excerpt": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in0_name",
+     "field_path": "material_graph[0].material_inputs[0].name",
+     "value": "Ni(NO3)2·6H2O",
+     "unit": "",
+     "excerpt": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in0_qty",
+     "field_path": "material_graph[0].material_inputs[0].quantity.value",
+     "value": 37.5,
+     "unit": "mmol",
+     "excerpt": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in1_name",
+     "field_path": "material_graph[0].material_inputs[1].name",
+     "value": "Fe(NO3)3·9H2O",
+     "unit": "",
+     "excerpt": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in1_qty",
+     "field_path": "material_graph[0].material_inputs[1].quantity.value",
+     "value": 12.5,
+     "unit": "mmol",
+     "excerpt": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in2_name",
+     "field_path": "material_graph[0].material_inputs[2].name",
+     "value": "water",
+     "unit": "",
+     "excerpt": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_in2_qty",
+     "field_path": "material_graph[0].material_inputs[2].quantity.value",
+     "value": 50,
+     "unit": "mL",
+     "excerpt": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_out0_name",
+     "field_path": "material_graph[0].material_outputs[0].name",
+     "value": "solution A",
+     "unit": "",
+     "excerpt": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g0_out0_state",
+     "field_path": "material_graph[0].material_outputs[0].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution A.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_op",
+     "field_path": "material_graph[1].operation",
+     "value": "dissolving",
+     "unit": "",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_in0_name",
+     "field_path": "material_graph[1].material_inputs[0].name",
+     "value": "NaOH",
+     "unit": "",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL of water (1 M).",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_in0_qty",
+     "field_path": "material_graph[1].material_inputs[0].quantity.value",
+     "value": 100,
+     "unit": "mmol",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL of water (1 M).",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_in1_name",
+     "field_path": "material_graph[1].material_inputs[1].name",
+     "value": "water",
+     "unit": "",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL of water (1 M).",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_in1_qty",
+     "field_path": "material_graph[1].material_inputs[1].quantity.value",
+     "value": 100,
+     "unit": "mL",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL of water (1 M).",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_out0_name",
+     "field_path": "material_graph[1].material_outputs[0].name",
+     "value": "solution B",
+     "unit": "",
+     "excerpt": "The pH of the solution was monitored using a pH meter (Mettler Toledo) and controlled to be 10 by dropwise adding solution B manually.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_out0_state",
+     "field_path": "material_graph[1].material_outputs[0].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "The pH of the solution was monitored using a pH meter (Mettler Toledo) and controlled to be 10 by dropwise adding solution B manually.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_out0_cv",
+     "field_path": "material_graph[1].material_outputs[0].concentration_value",
+     "value": 1,
+     "unit": "M",
+     "excerpt": "Solution B is prepared by dissolving 100 mmol NaOH in 100 mL of water (1 M).",
+     "required": true
+    },
+    {
+     "fact_id": "f_g1_out0_cu",
+     "field_path": "material_graph[1].material_outputs[0].concentration_unit",
+     "value": "M",
+     "unit": "",
+     "excerpt": "of water (1 M). Solution C is obtained",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_op",
+     "field_path": "material_graph[2].operation",
+     "value": "dissolving",
+     "unit": "",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_in0_name",
+     "field_path": "material_graph[2].material_inputs[0].name",
+     "value": "Na2CO3",
+     "unit": "",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_in0_qty",
+     "field_path": "material_graph[2].material_inputs[0].quantity.value",
+     "value": 6.25,
+     "unit": "mmol",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_in1_name",
+     "field_path": "material_graph[2].material_inputs[1].name",
+     "value": "water",
+     "unit": "",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_in1_qty",
+     "field_path": "material_graph[2].material_inputs[1].quantity.value",
+     "value": 50,
+     "unit": "mL",
+     "excerpt": "Solution C is obtained by dissolving 6.25 mmol Na2CO3 in 50 mL of water.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_out0_name",
+     "field_path": "material_graph[2].material_outputs[0].name",
+     "value": "solution C",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g2_out0_state",
+     "field_path": "material_graph[2].material_outputs[0].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_op",
+     "field_path": "material_graph[3].operation",
+     "value": "pH-controlled coprecipitation",
+     "unit": "",
+     "excerpt": "classical pH-controlled coprecipitation and centrifugation protocol.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in0_name",
+     "field_path": "material_graph[3].material_inputs[0].name",
+     "value": "solution A",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in0_state",
+     "field_path": "material_graph[3].material_inputs[0].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in1_name",
+     "field_path": "material_graph[3].material_inputs[1].name",
+     "value": "solution C",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in1_state",
+     "field_path": "material_graph[3].material_inputs[1].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "Then, solution A is injected into solution C in a beaker using a syringe pump at a flow speed of 115 mL/h, and the reaction was kept at a stirring speed of 800 rpm.",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in2_name",
+     "field_path": "material_graph[3].material_inputs[2].name",
+     "value": "solution B",
+     "unit": "",
+     "excerpt": "controlled to be 10 by dropwise adding solution B manually",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_in2_state",
+     "field_path": "material_graph[3].material_inputs[2].state",
+     "value": "solution",
+     "unit": "",
+     "excerpt": "controlled to be 10 by dropwise adding solution B manually",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_p0",
+     "field_path": "material_graph[3].parameters[0].value",
+     "value": 115,
+     "unit": "mL/h",
+     "excerpt": "using a syringe pump at a flow speed of 115 mL/h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_p1",
+     "field_path": "material_graph[3].parameters[1].value",
+     "value": 800,
+     "unit": "rpm",
+     "excerpt": "the reaction was kept at a stirring speed of 800 rpm",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_p2",
+     "field_path": "material_graph[3].parameters[2].value",
+     "value": 10,
+     "unit": "",
+     "excerpt": "The pH of the solution was monitored using a pH meter (Mettler Toledo) and controlled to be 10",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_p3",
+     "field_path": "material_graph[3].parameters[3].value",
+     "value": 1,
+     "unit": "h",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_out0_name",
+     "field_path": "material_graph[3].material_outputs[0].name",
+     "value": "Ni3Fe LDH",
+     "unit": "",
+     "excerpt": "yellow-green precipitate of Ni3Fe LDH was observed",
+     "required": true
+    },
+    {
+     "fact_id": "f_g3_out0_state",
+     "field_path": "material_graph[3].material_outputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of the suspension (∼500 mg samples) was divided into 8 parts, followed by a centrifugation−redispersion protocol using deionized water three times",
+     "required": true
+    },
+    {
+     "fact_id": "f_g4_op",
+     "field_path": "material_graph[4].operation",
+     "value": "divided into 8 parts",
+     "unit": "",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of the suspension (∼500 mg samples) was divided into 8 parts, followed by a centrifugation−redispersion protocol using deionized water three times",
+     "required": true
+    },
+    {
+     "fact_id": "f_g4_p0",
+     "field_path": "material_graph[4].count",
+     "value": 8,
+     "unit": "",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of the suspension (∼500 mg samples) was divided into 8 parts, followed by a centrifugation−redispersion protocol using deionized water three times",
+     "required": true
+    },
+    {
+     "fact_id": "f_g4_in0_name",
+     "field_path": "material_graph[4].material_inputs[0].name",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of the suspension (∼500 mg samples) was divided into 8 parts, followed by a centrifugation−redispersion protocol using deionized water three times",
+     "required": true
+    },
+    {
+     "fact_id": "f_g4_in0_state",
+     "field_path": "material_graph[4].material_inputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "After a total reaction time of 1 h, around 200 mL of the suspension (∼500 mg samples) was divided into 8 parts, followed by a centrifugation−redispersion protocol using deionized water three times",
+     "required": true
+    },
+    {
+     "fact_id": "f_g4_in0_qty",
+     "field_path": "material_graph[4].material_inputs[0].quantity.value",
+     "value": 200,
+     "unit": "mL",
+     "excerpt": "around 200 mL of the suspension",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_op",
+     "field_path": "material_graph[5].operation",
+     "value": "centrifugation−redispersion protocol",
+     "unit": "",
+     "excerpt": "by a centrifugation−redispersion protocol using deionized water three times, which was the first centrifugation−redispersion protocol",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_p0",
+     "field_path": "material_graph[5].parameters[0].value",
+     "value": "three",
+     "unit": "",
+     "excerpt": "by a centrifugation−redispersion protocol using deionized water three times, which was the first centrifugation−redispersion protocol",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_in0_name",
+     "field_path": "material_graph[5].material_inputs[0].name",
+     "value": "deionized water",
+     "unit": "",
+     "excerpt": "by a centrifugation−redispersion protocol using deionized water three times, which was the first centrifugation−redispersion protocol",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_in1_name",
+     "field_path": "material_graph[5].material_inputs[1].name",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "the suspension (∼500 mg samples) was divided into 8 parts, followed",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_in1_state",
+     "field_path": "material_graph[5].material_inputs[1].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "the suspension (∼500 mg samples) was divided into 8 parts, followed",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_out0_name",
+     "field_path": "material_graph[5].material_outputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g5_out0_state",
+     "field_path": "material_graph[5].material_outputs[0].state",
+     "value": "retained_wet_solid",
+     "unit": "",
+     "excerpt": "by a centrifugation−redispersion protocol using deionized water three times, which was the first centrifugation−redispersion protocol",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_op",
+     "field_path": "material_graph[6].operation",
+     "value": "dispersed",
+     "unit": "",
+     "excerpt": "were dispersed in 30 mL of water and aged for 20 h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_in0_name",
+     "field_path": "material_graph[6].material_inputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_in0_state",
+     "field_path": "material_graph[6].material_inputs[0].state",
+     "value": "retained_wet_solid",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_in1_name",
+     "field_path": "material_graph[6].material_inputs[1].name",
+     "value": "water",
+     "unit": "",
+     "excerpt": "were dispersed in 30 mL of water and aged for 20 h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_in1_qty",
+     "field_path": "material_graph[6].material_inputs[1].quantity.value",
+     "value": 30,
+     "unit": "mL",
+     "excerpt": "were dispersed in 30 mL of water and aged for 20 h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_p0",
+     "field_path": "material_graph[6].parameters[0].value",
+     "value": 20,
+     "unit": "h",
+     "excerpt": "were dispersed in 30 mL of water and aged for 20 h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_p1",
+     "field_path": "material_graph[6].parameters[1].value",
+     "value": "room temperature",
+     "unit": "",
+     "excerpt": "aged for 20 h at room temperature under a stirring",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_p2",
+     "field_path": "material_graph[6].parameters[2].value",
+     "value": 100,
+     "unit": "rpm",
+     "excerpt": "under a stirring speed of 100 rpm",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_out0_name",
+     "field_path": "material_graph[6].material_outputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30 mL of water",
+     "required": true
+    },
+    {
+     "fact_id": "f_g6_out0_state",
+     "field_path": "material_graph[6].material_outputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "were dispersed in 30 mL of water and aged for 20 h",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_op",
+     "field_path": "material_graph[7].operation",
+     "value": "centrifugation",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_p0",
+     "field_path": "material_graph[7].parameters[0].value",
+     "value": "one",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_in0_name",
+     "field_path": "material_graph[7].material_inputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_in0_state",
+     "field_path": "material_graph[7].material_inputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "which were dispersed in 30 mL of water and aged for 20 h at room temperature",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_out0_name",
+     "field_path": "material_graph[7].material_outputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7a_out0_state",
+     "field_path": "material_graph[7].material_outputs[0].state",
+     "value": "retained_wet_solid",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7b_op",
+     "field_path": "material_graph[8].operation",
+     "value": "redispersion",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7b_in0_name",
+     "field_path": "material_graph[8].material_inputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7b_in0_state",
+     "field_path": "material_graph[8].material_inputs[0].state",
+     "value": "retained_wet_solid",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7b_out0_name",
+     "field_path": "material_graph[8].material_outputs[0].name",
+     "value": "LDH seeds",
+     "unit": "",
+     "excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+     "required": true
+    },
+    {
+     "fact_id": "f_g7b_out0_state",
+     "field_path": "material_graph[8].material_outputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+     "required": true
+    },
+    {
+     "fact_id": "f_g8_op",
+     "field_path": "material_graph[9].operation",
+     "value": "collected",
+     "unit": "",
+     "excerpt": "all the samples are collected for further",
+     "required": true
+    },
+    {
+     "fact_id": "f_g8_in0_name",
+     "field_path": "material_graph[9].material_inputs[0].name",
+     "value": "samples",
+     "unit": "",
+     "excerpt": "all the samples are collected for further",
+     "required": true
+    },
+    {
+     "fact_id": "f_g8_in0_state",
+     "field_path": "material_graph[9].material_inputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "after a second centrifugation−redispersion protocol one time, all the samples are collected",
+     "required": true
+    },
+    {
+     "fact_id": "f_g8_out0_name",
+     "field_path": "material_graph[9].material_outputs[0].name",
+     "value": "samples",
+     "unit": "",
+     "excerpt": "all the samples are collected for further",
+     "required": true
+    },
+    {
+     "fact_id": "f_g8_out0_state",
+     "field_path": "material_graph[9].material_outputs[0].state",
+     "value": "suspension",
+     "unit": "",
+     "excerpt": "all the samples are collected for further",
+     "required": true
+    }
+   ]
+  }
+ ]
+}

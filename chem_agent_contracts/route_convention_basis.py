@@ -18,6 +18,10 @@ from .route_field_basis import (
     affirmative_material_operation_span, controlled_state_mapping,
     split_rule_pattern_matches, state_source_locally_attributed,
 )
+from .route_retained_object import (
+    POST_OPERATION_RETAINED_OBJECT_RULE_ID,
+    POST_OPERATION_RETAINED_OBJECT_SCHEMA,
+)
 from .v2 import normalize_material_state
 
 
@@ -163,6 +167,32 @@ def _evidence_id(paper_id: str, group_id: str, fact_id: str) -> str:
     ).hexdigest()[:24]
 
 
+def _validated_retained_object_record(
+    resolver: Any, field_path: str,
+) -> tuple[Mapping[str, Any] | None, str, bool]:
+    """Resolve and validate a post-operation retained-object record.
+
+    Returns ``(record, issue, invalid)``: the validated record, or the
+    resolver's own issue string when no record exists for the field, or
+    ``invalid=True`` when a record was returned but is not a usable
+    post-operation-retained-object/v1 record for this exact output state
+    path (the caller maps that to ``retained_object_output_binding_unresolved``).
+    """
+    raw, issue = resolver(field_path)
+    if raw is None:
+        return None, _text(issue), False
+    record = _mapping(raw)
+    output = _mapping(record.get("output"))
+    valid = bool(
+        record
+        and record.get("schema_version") == POST_OPERATION_RETAINED_OBJECT_SCHEMA
+        and _text(record.get("rule_id")) == POST_OPERATION_RETAINED_OBJECT_RULE_ID
+        and _text(output.get("state_path")) == field_path
+        and _text(record.get("retained_object"))
+    )
+    return (record if valid else None), "", not valid
+
+
 def _literal_in_quote(value: str, quote: str) -> bool:
     """Locate a proposed operation word inside its own quote.
 
@@ -274,6 +304,8 @@ def _proof_for_evidence(
     operation_value: str, operation_excerpt: str,
     parent_evidence_id: str, operation_evidence_id: str,
     paper_id: str, experimental_group_id: str, source_digest: str,
+    retained_object_record: Mapping[str, Any] | None = None,
+    retained_object_issue: str = "",
 ) -> tuple[dict[str, str] | None, str]:
     """Recompute one exact proof; no candidate-provided rule identifier is used."""
     match = _OUTPUT_STATE.fullmatch(field_path)
@@ -378,12 +410,16 @@ def _proof_for_evidence(
         if any(_text(pattern).casefold() in operation_blob
                for pattern in family_patterns if _text(pattern)):
             matched_families.add(_text(rule.get("operation")) or rule_id)
-    if len(matched_families) > 1:
+    if len(matched_families) > 1 and retained_object_record is None:
         # The step declares several distinct state-change operations (e.g.
-        # "centrifugation−redispersion"): a composite operation may not be
+        # "centrifugation−redispersion"): without a validated post-operation
+        # retained-object source record a composite operation may not be
         # proven by picking the one rule whose endpoint the proposal likes.
-        return None, "convention_rule_not_applicable_or_ambiguous"
+        # The source relation's own blocker (a preceding mention, an
+        # intervening operation, ...) surfaces when one was recorded.
+        return None, retained_object_issue or "convention_rule_not_applicable_or_ambiguous"
     eligible: list[Mapping[str, Any]] = []
+    record_matched_rule_ids: set[str] = set()
     liquid_denied = False
     for rule_id, rule in rules.items():
         if rule_id in _RULE_EVENTS:
@@ -416,6 +452,11 @@ def _proof_for_evidence(
                 or not any(pattern_matches(pattern, operation_blob)
                            for pattern in patterns if _text(pattern))):
             continue
+        accepts_record = bool(
+            state_change_rule
+            and retained_object_record is not None
+            and preconditions.get("accept_post_operation_retained_object") is True
+        )
         if state_change_rule:
             # The paper must affirm this operation and its intent: mentions
             # scoped by an adjacent negation, and operation mentions
@@ -428,10 +469,14 @@ def _proof_for_evidence(
                 for pattern in patterns if _text(pattern)
             ):
                 continue
-            if not any(
-                _affirmative_pattern_match(pattern, operation_excerpt)
-                for pattern in intents if _text(pattern)
-            ):
+            # A rule declaring accept_post_operation_retained_object takes
+            # the post-operation naming record as the intent/object source
+            # relation; the verbatim intent phrase is not required then.
+            if (not accepts_record
+                    and not any(
+                        _affirmative_pattern_match(pattern, operation_excerpt)
+                        for pattern in intents if _text(pattern)
+                    )):
                 continue
         elif not any(pattern_matches(pattern, intent_blob)
                      for pattern in intents if _text(pattern)):
@@ -447,10 +492,26 @@ def _proof_for_evidence(
                 continue
             retained_objects = preconditions.get("retained_object_patterns", [])
             if isinstance(retained_objects, list) and retained_objects:
-                # A retained/affected-object rule must find its object affirmed
-                # in the operation evidence, never in a negated mention.
-                if not any(split_rule_pattern_matches(pattern, operation_excerpt)
-                           for pattern in retained_objects if _text(pattern)):
+                if accepts_record:
+                    # The source relation discharges the object premise: the
+                    # rule's object patterns match the naming record's
+                    # normalized retained object, never the operation quote.
+                    if not any(
+                        split_rule_pattern_matches(
+                            pattern,
+                            _text(retained_object_record.get("retained_object")),
+                        )
+                        for pattern in retained_objects if _text(pattern)
+                    ):
+                        continue
+                    record_matched_rule_ids.add(_text(rule.get("rule_id")))
+                elif not any(
+                    split_rule_pattern_matches(pattern, operation_excerpt)
+                    for pattern in retained_objects if _text(pattern)
+                ):
+                    # A retained/affected-object rule must find its object
+                    # affirmed in the operation evidence, never in a negated
+                    # mention.
                     continue
             liquid_premise = _rule_liquid_participation(rule)
             if liquid_premise:
@@ -467,6 +528,30 @@ def _proof_for_evidence(
                     or target_state not in rule_inputs):
                 continue
         eligible.append(rule)
+    if len(matched_families) > 1:
+        # Composite operation with a validated source record: only
+        # record-consistent rules survive.  A rule with retained-object
+        # patterns is consistent only when the record object matched them;
+        # a rule without them is consistent only when the record object
+        # normalizes to exactly its retained endpoint (fail-closed: an
+        # unmapped object normalizes to "unknown" and matches nothing).
+        # A conflict between the record and a family endpoint stays
+        # pending; nothing may stand on segment order or one family's
+        # premises alone.
+        record_object = _text(retained_object_record.get("retained_object"))
+        consistent: list[Mapping[str, Any]] = []
+        for rule in eligible:
+            rule_objects = _mapping(rule.get("preconditions")).get(
+                "retained_object_patterns",
+            )
+            if isinstance(rule_objects, list) and rule_objects:
+                if _text(rule.get("rule_id")) in record_matched_rule_ids:
+                    consistent.append(rule)
+            elif normalize_material_state(record_object) == _text(
+                rule.get("retained_output")
+            ):
+                consistent.append(rule)
+        eligible = consistent
     if not eligible and liquid_denied:
         return None, "convention_liquid_participation_missing"
     if len(eligible) != 1:
@@ -506,7 +591,7 @@ def _proof_for_evidence(
                        or _text(port.get("state")) != target_state
                        for port in resolved)):
             return None, "convention_split_children_incomplete"
-    return {
+    proof = {
         "schema_version": "route-convention-state/v1",
         "field_path": field_path,
         "target_state": target_state,
@@ -524,12 +609,28 @@ def _proof_for_evidence(
         "paper_id": paper_id,
         "experimental_group_id": experimental_group_id,
         "source_digest": source_digest,
-    }, ""
+    }
+    if _text(rule.get("rule_id")) in record_matched_rule_ids:
+        # The winning rule stood on the post-operation retained-object
+        # source relation; the proof names that relation and its evidence.
+        proof["retained_object_rule_id"] = _text(
+            retained_object_record.get("rule_id"),
+        )
+        proof["retained_object_rule_version"] = _text(
+            retained_object_record.get("rule_version"),
+        )
+        proof["retained_object"] = _text(retained_object_record.get("retained_object"))
+        proof["retained_object_evidence_id"] = _evidence_id(
+            paper_id, experimental_group_id,
+            _text(retained_object_record.get("naming_fact_id")),
+        )
+    return proof, ""
 
 
 def derive_unreviewed_output_state(
     graph: Sequence[Any], facts: Sequence[Any], field_path: str, *,
     paper_id: str, experimental_group_id: str, source_digest: str,
+    retained_object_resolver: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Produce a proof only from existing graph edges and proposed source facts."""
     by_path: dict[str, Mapping[str, Any]] = {}
@@ -543,6 +644,14 @@ def derive_unreviewed_output_state(
     match = _OUTPUT_STATE.fullmatch(field_path)
     if child_fact is None or match is None:
         return None, "semantic_binding_pending"
+    retained_object_record: Mapping[str, Any] | None = None
+    retained_object_issue = ""
+    if retained_object_resolver is not None:
+        retained_object_record, retained_object_issue, invalid_record = (
+            _validated_retained_object_record(retained_object_resolver, field_path)
+        )
+        if invalid_record:
+            return None, "retained_object_output_binding_unresolved"
     step_index, output_index = int(match.group(1)), int(match.group(2))
     try:
         step = _mapping(graph[step_index])
@@ -620,6 +729,8 @@ def derive_unreviewed_output_state(
         operation_evidence_id=operation_evidence_id,
         paper_id=paper_id, experimental_group_id=experimental_group_id,
         source_digest=source_digest,
+        retained_object_record=retained_object_record,
+        retained_object_issue=retained_object_issue,
     )
 
 
@@ -695,6 +806,7 @@ def _inheritance_proof_for_evidence(
     parent_source_value: str, parent_excerpt: str, parent_evidence_id: str,
     operation_excerpt: str, operation_evidence_id: str,
     paper_id: str, experimental_group_id: str, source_digest: str,
+    retained_object_resolver: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Recompute one input-state inheritance proof; never guess missing refs."""
     match = _INPUT_STATE.fullmatch(field_path)
@@ -757,6 +869,19 @@ def _inheritance_proof_for_evidence(
         # The parent output state is itself convention-derived; re-derive that
         # proof first.  The record then binds the grandparent state evidence
         # exactly like the parent proof did.
+        parent_record: Mapping[str, Any] | None = None
+        parent_record_issue = ""
+        if retained_object_resolver is not None:
+            # A composite parent operation may stand on the post-operation
+            # retained-object source relation; re-validate that record for
+            # the parent output state path before re-deriving its proof.
+            parent_record, parent_record_issue, invalid_record = (
+                _validated_retained_object_record(
+                    retained_object_resolver, parent_state_path,
+                )
+            )
+            if invalid_record:
+                return None, "convention_parent_state_unverified"
         prepared = _resolve_fact_provenance(
             graph, paper_id=paper_id, experimental_group_id=experimental_group_id,
             operation_evidence_id=operation_evidence_id,
@@ -771,6 +896,8 @@ def _inheritance_proof_for_evidence(
             operation_evidence_id=operation_evidence_id,
             paper_id=paper_id, experimental_group_id=experimental_group_id,
             source_digest=source_digest,
+            retained_object_record=parent_record,
+            retained_object_issue=parent_record_issue,
         )
         if parent_issue or parent_proof is None:
             return None, "convention_parent_state_unverified"
@@ -806,7 +933,8 @@ def _inheritance_proof_for_evidence(
 
 def derive_unreviewed_input_state(
     graph: Sequence[Any], facts: Sequence[Any], field_path: str,
-    source_scope: Mapping[str, Any],
+    source_scope: Mapping[str, Any], *,
+    retained_object_resolver: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Prove an input/intermediate state by inheritance from a verified parent.
 
@@ -874,6 +1002,7 @@ def derive_unreviewed_input_state(
         graph, facts, parent_state_path,
         paper_id=paper_id, experimental_group_id=experimental_group_id,
         source_digest=source_digest,
+        retained_object_resolver=retained_object_resolver,
     )
     if parent_proof is not None:
         grandparent_fact = by_path.get(parent_proof["parent_state_path"])
@@ -889,6 +1018,7 @@ def derive_unreviewed_input_state(
             operation_evidence_id=parent_proof["operation_evidence_id"],
             paper_id=paper_id, experimental_group_id=experimental_group_id,
             source_digest=source_digest,
+            retained_object_resolver=retained_object_resolver,
         )
     return _inheritance_proof_for_evidence(
         graph, field_path,
@@ -905,6 +1035,7 @@ def derive_unreviewed_input_state(
 def verify_bound_output_state(
     proof: Any, graph: Sequence[Any], evidence_by_id: Mapping[str, Any], *,
     paper_id: str, experimental_group_id: str, source_digest: str,
+    retained_object_resolver: Any = None,
 ) -> str:
     """Recompute a saved proof from the typed graph, evidence and rule bytes."""
     if not isinstance(proof, Mapping) or any(not isinstance(value, str)
@@ -920,6 +1051,23 @@ def verify_bound_output_state(
         operation = _mapping(evidence_by_id.get(_text(proof.get("operation_evidence_id"))))
         if not parent or not operation:
             return "convention_support_evidence_missing"
+        retained_object_record: Mapping[str, Any] | None = None
+        retained_object_issue = ""
+        if _text(proof.get("retained_object_rule_id")):
+            # A proof standing on the post-operation retained-object source
+            # relation must re-resolve and re-validate that record; proofs
+            # without retained-object fields recompute without one.
+            if retained_object_resolver is None:
+                return "convention_support_evidence_missing"
+            retained_object_record, retained_object_issue, invalid_record = (
+                _validated_retained_object_record(
+                    retained_object_resolver, field_path,
+                )
+            )
+            if invalid_record:
+                return "retained_object_output_binding_unresolved"
+            if retained_object_record is None:
+                return "convention_support_evidence_missing"
         step_index = int(_OUTPUT_STATE.fullmatch(field_path).group(1))
         if step_index >= len(graph):
             return "convention_graph_path_missing"
@@ -934,6 +1082,8 @@ def verify_bound_output_state(
             operation_evidence_id=_text(proof.get("operation_evidence_id")),
             paper_id=paper_id, experimental_group_id=experimental_group_id,
             source_digest=source_digest,
+            retained_object_record=retained_object_record,
+            retained_object_issue=retained_object_issue,
         )
         if issue:
             return issue

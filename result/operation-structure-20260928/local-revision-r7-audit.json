@@ -1,0 +1,999 @@
+{
+  "schema_version": "bounded_local_revision/v7",
+  "model_generated": false,
+  "scope": "Round 2: graph[5] (ms5) declares the verbatim composite operation 'centrifugation−redispersion protocol' plus a containment segment (unknown effect); a new post-operation-retained-object/v1 SOURCE relation derives precipitates ↔ 'LDH seeds' from the signed blocks; the convention layer consumes the validated record only via the reviewed accept_post_operation_retained_object declaration on CENTRIFUGE_COLLECT_PRECIPITATE_V1 v1.1.0, with composite-guard arbitration fail-closed on conflict.  graph[0..4] and graph[6..9], all other facts, G1 receipt/compile plumbing, and every hardening default are unchanged; diagnostics are reported honestly, never pre-empted",
+  "audit": [
+    {
+      "kind": "round2_post_operation_retained_object",
+      "step": "ms5",
+      "structure": "operation value is now the verbatim composite 'centrifugation−redispersion protocol' (U+2212, exact substring of the unchanged f_g5_op excerpt b70-b71); repetitions='three' stays bound to the whole protocol; a second segment ms5-seg-redispersion (material_effect=unknown) documents containment without claiming a micro-sequence endpoint; the state_change relation still references only ms5-seg-centrifugation",
+      "source_relation": "post-operation-retained-object/v1 derives, from the signed blocks only, that 'The precipitates were labeled as LDH seeds' (b71-b72) follows the composite operation (b70-b71) and binds 'precipitates' to the output label 'LDH seeds'; the module performs no chemistry and never maps the object to a state",
+      "ordering_note": "the naming sentence's first word ('The') is the last word of physical block b71, the same block where the operation sentence ends; the block-index ordering guard is therefore tie-broken by exact character spans inside the shared block (operation quote's last character precedes the naming quote's first: '...protocol. The precipitates...').  A textually preceding mention is never admitted",
+      "expectation": "with the validated record, the composite family guard arbitrates to record-consistent rules only: CENTRIFUGE_COLLECT_PRECIPITATE_V1 v1.1.0 (declared accept_post_operation_retained_object) derives retained_wet_solid; REDISPERSION_V1's endpoint conflicts and stays out; without the record the composite stays convention_rule_not_applicable_or_ambiguous"
+    },
+    {
+      "kind": "graph6_input_inheritance_unblocked",
+      "step": "ms6",
+      "structure": "unchanged from round 6: inst_ldh_seeds input material_origin=upstream_output + one parent_output_ref to the ms5 output",
+      "expectation": "with the ms5 output state now proven, PARENT_OUTPUT_STATE_INHERITANCE_V1 proves the ms6 input state; without the resolver it stays convention_parent_state_unverified"
+    },
+    {
+      "kind": "deliberately_not_done",
+      "items": [
+        "G1 _prepare_unsigned_proposal / compiler / receipt plumbing of the resolver (they run with the default None: byte-identical behavior; next integration step)",
+        "Chinese C1 naming/discard aliases (Round 2 is English-only)",
+        "no generic centrifugation-redispersion x3 -> washed_wet_solid rule and no composite-endpoint rule was added",
+        "graph[6] output / multi-hop chains / Q1 are not solved",
+        "duplicate container ID question deferred"
+      ]
+    },
+    {
+      "kind": "post_operation_retained_object_per_step",
+      "rows": [
+        {
+          "step_index": 0,
+          "macro_step_id": "ms0",
+          "status": "issue: retained_object_output_binding_unresolved",
+          "state_path": "material_graph[0].material_outputs[0].state"
+        },
+        {
+          "step_index": 1,
+          "macro_step_id": "ms1",
+          "status": "issue: retained_object_output_binding_unresolved",
+          "state_path": "material_graph[1].material_outputs[0].state"
+        },
+        {
+          "step_index": 2,
+          "macro_step_id": "ms2",
+          "status": "issue: retained_object_output_binding_unresolved",
+          "state_path": "material_graph[2].material_outputs[0].state"
+        },
+        {
+          "step_index": 3,
+          "macro_step_id": "ms3",
+          "status": "issue: retained_object_output_binding_unresolved",
+          "state_path": "material_graph[3].material_outputs[0].state"
+        },
+        {
+          "step_index": 4,
+          "macro_step_id": "ms4",
+          "status": "issue: retained_object_operation_span_missing",
+          "state_path": ""
+        },
+        {
+          "step_index": 5,
+          "macro_step_id": "ms5",
+          "status": "record",
+          "state_path": "material_graph[5].material_outputs[0].state",
+          "retained_object": "precipitate",
+          "retained_object_surface": "precipitates",
+          "label": "LDH seeds",
+          "operation_span": [
+            16,
+            17
+          ],
+          "naming_span": [
+            17,
+            18
+          ]
+        },
+        {
+          "step_index": 6,
+          "macro_step_id": "ms6",
+          "status": "issue: retained_object_mention_precedes_operation",
+          "state_path": "material_graph[6].material_outputs[0].state"
+        },
+        {
+          "step_index": 7,
+          "macro_step_id": "ms7a",
+          "status": "issue: retained_object_mention_precedes_operation",
+          "state_path": "material_graph[7].material_outputs[0].state"
+        },
+        {
+          "step_index": 8,
+          "macro_step_id": "ms7b",
+          "status": "issue: retained_object_mention_precedes_operation",
+          "state_path": "material_graph[8].material_outputs[0].state"
+        },
+        {
+          "step_index": 9,
+          "macro_step_id": "ms8",
+          "status": "issue: retained_object_output_binding_unresolved",
+          "state_path": "material_graph[9].material_outputs[0].state"
+        }
+      ]
+    },
+    {
+      "kind": "contract_validation",
+      "rows": [
+        {
+          "step": "ms5",
+          "kind": "MaterialRelationV2",
+          "id": "ms5-rel-centrifugation",
+          "status": "valid"
+        },
+        {
+          "step": "ms5",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms5-seg-centrifugation",
+          "status": "valid"
+        },
+        {
+          "step": "ms5",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms5-seg-redispersion",
+          "status": "valid"
+        },
+        {
+          "step": "ms5",
+          "kind": "LineageRelationV2",
+          "id": "state_change_of",
+          "status": "valid"
+        },
+        {
+          "step": "ms6",
+          "kind": "MaterialRelationV2",
+          "id": "ms6-rel-redispersion",
+          "status": "valid"
+        },
+        {
+          "step": "ms6",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms6-seg-redispersion",
+          "status": "valid"
+        },
+        {
+          "step": "ms6",
+          "kind": "LineageRelationV2",
+          "id": "state_change_of",
+          "status": "valid"
+        },
+        {
+          "step": "ms7a",
+          "kind": "MaterialRelationV2",
+          "id": "ms7a-rel-centrifugation",
+          "status": "valid"
+        },
+        {
+          "step": "ms7a",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms7a-seg-centrifugation",
+          "status": "valid"
+        },
+        {
+          "step": "ms7a",
+          "kind": "LineageRelationV2",
+          "id": "state_change_of",
+          "status": "valid"
+        },
+        {
+          "step": "ms7b",
+          "kind": "MaterialRelationV2",
+          "id": "ms7b-rel-redispersion",
+          "status": "valid"
+        },
+        {
+          "step": "ms7b",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms7b-seg-redispersion",
+          "status": "valid"
+        },
+        {
+          "step": "ms7b",
+          "kind": "LineageRelationV2",
+          "id": "state_change_of",
+          "status": "valid"
+        },
+        {
+          "step": "ms8",
+          "kind": "MaterialRelationV2",
+          "id": "ms8-rel-collection",
+          "status": "valid"
+        },
+        {
+          "step": "ms8",
+          "kind": "MaterialOperationSegmentV2",
+          "id": "ms8-seg-collection",
+          "status": "valid"
+        },
+        {
+          "step": "ms8",
+          "kind": "LogicalContainerV2",
+          "id": "lc_nife_control_set",
+          "status": "valid"
+        }
+      ]
+    },
+    {
+      "kind": "excerpt_binding",
+      "rows": [
+        {
+          "fact_id": "f_rs_target",
+          "field_path": "route_signature.target",
+          "locator": "pdf:p2:b55-p2:b56",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_strategy",
+          "field_path": "route_signature.strategy",
+          "locator": "pdf:p2:b57-p2:b57",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op0",
+          "field_path": "route_signature.operations[0]",
+          "locator": "pdf:p2:b59-p2:b59",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op1",
+          "field_path": "route_signature.operations[1]",
+          "locator": "pdf:p2:b60-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op2",
+          "field_path": "route_signature.operations[2]",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op3",
+          "field_path": "route_signature.operations[3]",
+          "locator": "pdf:p2:b57-p2:b57",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op4",
+          "field_path": "route_signature.operations[4]",
+          "locator": "pdf:p2:b69-p2:b69",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op5",
+          "field_path": "route_signature.operations[5]",
+          "locator": "pdf:p2:b70-p2:b71",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op6",
+          "field_path": "route_signature.operations[6]",
+          "locator": "pdf:p2:b73-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op7",
+          "field_path": "route_signature.operations[7]",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_rs_op8",
+          "field_path": "route_signature.operations[8]",
+          "locator": "pdf:p2:b75-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_op",
+          "field_path": "material_graph[0].operation",
+          "locator": "pdf:p2:b58-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in0_name",
+          "field_path": "material_graph[0].material_inputs[0].name",
+          "locator": "pdf:p2:b58-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in0_qty",
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "locator": "pdf:p2:b58-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in1_name",
+          "field_path": "material_graph[0].material_inputs[1].name",
+          "locator": "pdf:p2:b58-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in1_qty",
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "locator": "pdf:p2:b58-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in2_name",
+          "field_path": "material_graph[0].material_inputs[2].name",
+          "locator": "pdf:p2:b59-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_in2_qty",
+          "field_path": "material_graph[0].material_inputs[2].quantity.value",
+          "locator": "pdf:p2:b59-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_out0_name",
+          "field_path": "material_graph[0].material_outputs[0].name",
+          "locator": "pdf:p2:b59-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g0_out0_state",
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "locator": "pdf:p2:b59-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_op",
+          "field_path": "material_graph[1].operation",
+          "locator": "pdf:p2:b60-p2:b60",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_in0_name",
+          "field_path": "material_graph[1].material_inputs[0].name",
+          "locator": "pdf:p2:b60-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_in0_qty",
+          "field_path": "material_graph[1].material_inputs[0].quantity.value",
+          "locator": "pdf:p2:b60-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_in1_name",
+          "field_path": "material_graph[1].material_inputs[1].name",
+          "locator": "pdf:p2:b60-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_in1_qty",
+          "field_path": "material_graph[1].material_inputs[1].quantity.value",
+          "locator": "pdf:p2:b60-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_out0_name",
+          "field_path": "material_graph[1].material_outputs[0].name",
+          "locator": "pdf:p2:b64-p2:b66",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_out0_state",
+          "field_path": "material_graph[1].material_outputs[0].state",
+          "locator": "pdf:p2:b64-p2:b66",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_out0_cv",
+          "field_path": "material_graph[1].material_outputs[0].concentration_value",
+          "locator": "pdf:p2:b60-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g1_out0_cu",
+          "field_path": "material_graph[1].material_outputs[0].concentration_unit",
+          "locator": "pdf:p2:b61-p2:b61",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_op",
+          "field_path": "material_graph[2].operation",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_in0_name",
+          "field_path": "material_graph[2].material_inputs[0].name",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_in0_qty",
+          "field_path": "material_graph[2].material_inputs[0].quantity.value",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_in1_name",
+          "field_path": "material_graph[2].material_inputs[1].name",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_in1_qty",
+          "field_path": "material_graph[2].material_inputs[1].quantity.value",
+          "locator": "pdf:p2:b61-p2:b62",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_out0_name",
+          "field_path": "material_graph[2].material_outputs[0].name",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g2_out0_state",
+          "field_path": "material_graph[2].material_outputs[0].state",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_op",
+          "field_path": "material_graph[3].operation",
+          "locator": "pdf:p2:b57-p2:b57",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in0_name",
+          "field_path": "material_graph[3].material_inputs[0].name",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in0_state",
+          "field_path": "material_graph[3].material_inputs[0].state",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in1_name",
+          "field_path": "material_graph[3].material_inputs[1].name",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in1_state",
+          "field_path": "material_graph[3].material_inputs[1].state",
+          "locator": "pdf:p2:b62-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in2_name",
+          "field_path": "material_graph[3].material_inputs[2].name",
+          "locator": "pdf:p2:b66-p2:b66",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_in2_state",
+          "field_path": "material_graph[3].material_inputs[2].state",
+          "locator": "pdf:p2:b66-p2:b66",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_p0",
+          "field_path": "material_graph[3].parameters[0].value",
+          "locator": "pdf:p2:b63-p2:b63",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_p1",
+          "field_path": "material_graph[3].parameters[1].value",
+          "locator": "pdf:p2:b64-p2:b64",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_p2",
+          "field_path": "material_graph[3].parameters[2].value",
+          "locator": "pdf:p2:b64-p2:b66",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_p3",
+          "field_path": "material_graph[3].parameters[3].value",
+          "locator": "pdf:p2:b68-p2:b68",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_out0_name",
+          "field_path": "material_graph[3].material_outputs[0].name",
+          "locator": "pdf:p2:b67-p2:b67",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g3_out0_state",
+          "field_path": "material_graph[3].material_outputs[0].state",
+          "locator": "",
+          "binding_issue": "fact_excerpt_span_too_long"
+        },
+        {
+          "fact_id": "f_g4_op",
+          "field_path": "material_graph[4].operation",
+          "locator": "",
+          "binding_issue": "fact_excerpt_span_too_long"
+        },
+        {
+          "fact_id": "f_g4_p0",
+          "field_path": "material_graph[4].count",
+          "locator": "",
+          "binding_issue": "fact_excerpt_span_too_long"
+        },
+        {
+          "fact_id": "f_g4_in0_name",
+          "field_path": "material_graph[4].material_inputs[0].name",
+          "locator": "",
+          "binding_issue": "fact_excerpt_span_too_long"
+        },
+        {
+          "fact_id": "f_g4_in0_state",
+          "field_path": "material_graph[4].material_inputs[0].state",
+          "locator": "",
+          "binding_issue": "fact_excerpt_span_too_long"
+        },
+        {
+          "fact_id": "f_g4_in0_qty",
+          "field_path": "material_graph[4].material_inputs[0].quantity.value",
+          "locator": "pdf:p2:b68-p2:b69",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_op",
+          "field_path": "material_graph[5].operation",
+          "locator": "pdf:p2:b70-p2:b71",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_p0",
+          "field_path": "material_graph[5].parameters[0].value",
+          "locator": "pdf:p2:b70-p2:b71",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_in0_name",
+          "field_path": "material_graph[5].material_inputs[0].name",
+          "locator": "pdf:p2:b70-p2:b71",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_in1_name",
+          "field_path": "material_graph[5].material_inputs[1].name",
+          "locator": "pdf:p2:b69-p2:b69",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_in1_state",
+          "field_path": "material_graph[5].material_inputs[1].state",
+          "locator": "pdf:p2:b69-p2:b69",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_out0_name",
+          "field_path": "material_graph[5].material_outputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g5_out0_state",
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "locator": "pdf:p2:b70-p2:b71",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_op",
+          "field_path": "material_graph[6].operation",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_in0_name",
+          "field_path": "material_graph[6].material_inputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_in0_state",
+          "field_path": "material_graph[6].material_inputs[0].state",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_in1_name",
+          "field_path": "material_graph[6].material_inputs[1].name",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_in1_qty",
+          "field_path": "material_graph[6].material_inputs[1].quantity.value",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_p0",
+          "field_path": "material_graph[6].parameters[0].value",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_p1",
+          "field_path": "material_graph[6].parameters[1].value",
+          "locator": "pdf:p2:b73-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_p2",
+          "field_path": "material_graph[6].parameters[2].value",
+          "locator": "pdf:p2:b73-p2:b74",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_out0_name",
+          "field_path": "material_graph[6].material_outputs[0].name",
+          "locator": "pdf:p2:b71-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g6_out0_state",
+          "field_path": "material_graph[6].material_outputs[0].state",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_op",
+          "field_path": "material_graph[7].operation",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_p0",
+          "field_path": "material_graph[7].parameters[0].value",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_in0_name",
+          "field_path": "material_graph[7].material_inputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_in0_state",
+          "field_path": "material_graph[7].material_inputs[0].state",
+          "locator": "pdf:p2:b72-p2:b73",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_out0_name",
+          "field_path": "material_graph[7].material_outputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7a_out0_state",
+          "field_path": "material_graph[7].material_outputs[0].state",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7b_op",
+          "field_path": "material_graph[8].operation",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7b_in0_name",
+          "field_path": "material_graph[8].material_inputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7b_in0_state",
+          "field_path": "material_graph[8].material_inputs[0].state",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7b_out0_name",
+          "field_path": "material_graph[8].material_outputs[0].name",
+          "locator": "pdf:p2:b71-p2:b72",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g7b_out0_state",
+          "field_path": "material_graph[8].material_outputs[0].state",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g8_op",
+          "field_path": "material_graph[9].operation",
+          "locator": "pdf:p2:b75-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g8_in0_name",
+          "field_path": "material_graph[9].material_inputs[0].name",
+          "locator": "pdf:p2:b75-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g8_in0_state",
+          "field_path": "material_graph[9].material_inputs[0].state",
+          "locator": "pdf:p2:b74-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g8_out0_name",
+          "field_path": "material_graph[9].material_outputs[0].name",
+          "locator": "pdf:p2:b75-p2:b75",
+          "binding_issue": ""
+        },
+        {
+          "fact_id": "f_g8_out0_state",
+          "field_path": "material_graph[9].material_outputs[0].state",
+          "locator": "pdf:p2:b75-p2:b75",
+          "binding_issue": ""
+        }
+      ]
+    },
+    {
+      "kind": "per_graph_proofs",
+      "items": [
+        {
+          "field_path": "material_graph[5].material_inputs[1].state",
+          "graph_element": "",
+          "fact_id": "f_g5_in1_state",
+          "port_name": "suspension",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": null,
+          "derivation": "semantic_binding_pending",
+          "rule_id": "",
+          "output_derivation_issue": "semantic_binding_pending",
+          "input_derivation_issue": "",
+          "receipt_gate_outcome": "passes_literal_gates",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "binding",
+            "state_word_literal_in_excerpt": true
+          }
+        },
+        {
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "graph_element": "graph[5] composite protocol output",
+          "fact_id": "f_g5_out0_state",
+          "port_name": "LDH seeds",
+          "state_value": "retained_wet_solid",
+          "graph_state": "retained_wet_solid",
+          "material_origin": null,
+          "derivation": "output_state_proof",
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "output_derivation_issue": "",
+          "input_derivation_issue": "semantic_binding_pending",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "legacy",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[6].material_inputs[0].state",
+          "graph_element": "graph[6] LDH-seeds input (inheritance)",
+          "fact_id": "f_g6_in0_state",
+          "port_name": "LDH seeds",
+          "state_value": "retained_wet_solid",
+          "graph_state": "retained_wet_solid",
+          "material_origin": "upstream_output",
+          "derivation": "input_state_inheritance",
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "output_derivation_issue": "semantic_binding_pending",
+          "input_derivation_issue": "",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "legacy",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[6].material_outputs[0].state",
+          "graph_element": "graph[6] redispersion output",
+          "fact_id": "f_g6_out0_state",
+          "port_name": "LDH seeds",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": null,
+          "derivation": "convention_parent_state_unverified",
+          "rule_id": "",
+          "output_derivation_issue": "convention_parent_state_unverified",
+          "input_derivation_issue": "semantic_binding_pending",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "pending",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[7].material_inputs[0].state",
+          "graph_element": "graph[7a] aged input (inheritance)",
+          "fact_id": "f_g7a_in0_state",
+          "port_name": "LDH seeds",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": "upstream_output",
+          "derivation": "semantic_binding_pending",
+          "rule_id": "",
+          "output_derivation_issue": "semantic_binding_pending",
+          "input_derivation_issue": "convention_parent_state_unverified",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "pending",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[7].material_outputs[0].state",
+          "graph_element": "graph[7a] centrifugation output",
+          "fact_id": "f_g7a_out0_state",
+          "port_name": "LDH seeds",
+          "state_value": "retained_wet_solid",
+          "graph_state": "retained_wet_solid",
+          "material_origin": null,
+          "derivation": "convention_parent_state_unverified",
+          "rule_id": "",
+          "output_derivation_issue": "convention_parent_state_unverified",
+          "input_derivation_issue": "semantic_binding_pending",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "legacy",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[8].material_inputs[0].state",
+          "graph_element": "graph[7b] wet-solid input (inheritance)",
+          "fact_id": "f_g7b_in0_state",
+          "port_name": "LDH seeds",
+          "state_value": "retained_wet_solid",
+          "graph_state": "retained_wet_solid",
+          "material_origin": "upstream_output",
+          "derivation": "semantic_binding_pending",
+          "rule_id": "",
+          "output_derivation_issue": "semantic_binding_pending",
+          "input_derivation_issue": "convention_parent_state_unverified",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "legacy",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[8].material_outputs[0].state",
+          "graph_element": "graph[7b] redispersion output",
+          "fact_id": "f_g7b_out0_state",
+          "port_name": "LDH seeds",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": null,
+          "derivation": "convention_parent_state_unverified",
+          "rule_id": "",
+          "output_derivation_issue": "convention_parent_state_unverified",
+          "input_derivation_issue": "semantic_binding_pending",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "pending",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[9].material_inputs[0].state",
+          "graph_element": "graph[8] samples input (inheritance)",
+          "fact_id": "f_g8_in0_state",
+          "port_name": "samples",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": "upstream_output",
+          "derivation": "semantic_binding_pending",
+          "rule_id": "",
+          "output_derivation_issue": "semantic_binding_pending",
+          "input_derivation_issue": "convention_parent_state_unverified",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "pending",
+            "state_word_literal_in_excerpt": false
+          }
+        },
+        {
+          "field_path": "material_graph[9].material_outputs[0].state",
+          "graph_element": "graph[8] collected output",
+          "fact_id": "f_g8_out0_state",
+          "port_name": "samples",
+          "state_value": "suspension",
+          "graph_state": "suspension",
+          "material_origin": null,
+          "derivation": "convention_parent_state_unverified",
+          "rule_id": "",
+          "output_derivation_issue": "convention_parent_state_unverified",
+          "input_derivation_issue": "semantic_binding_pending",
+          "receipt_gate_outcome": "semantic_binding_pending",
+          "gates": {
+            "controlled_state_mapping": "pass",
+            "state_attribution_outcome": "pending",
+            "state_word_literal_in_excerpt": false
+          }
+        }
+      ]
+    },
+    {
+      "kind": "round2_acceptance",
+      "items": {
+        "graph5_macro_operation": "centrifugation−redispersion protocol",
+        "post_operation_retained_object": {
+          "status": "PASS",
+          "record": {
+            "schema_version": "post-operation-retained-object/v1",
+            "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+            "rule_version": "1.0.0",
+            "step_index": 5,
+            "macro_step_id": "ms5",
+            "operation_fact_id": "f_g5_op",
+            "output": {
+              "state_path": "material_graph[5].material_outputs[0].state",
+              "name_path": "material_graph[5].material_outputs[0].name",
+              "output_index": 0,
+              "material_instance_id": "inst_ldh_seeds",
+              "material_id": "mat_ni3fe_ldh",
+              "label": "LDH seeds"
+            },
+            "retained_object_surface": "precipitates",
+            "retained_object": "precipitate",
+            "naming_fact_id": "f_g5_out0_name",
+            "naming_excerpt": "The precipitates were labeled as LDH seeds, which were dispersed in 30",
+            "operation_span": [
+              16,
+              17
+            ],
+            "naming_span": [
+              17,
+              18
+            ]
+          }
+        },
+        "output_label_binding": {
+          "status": "PASS",
+          "retained_object": "precipitate",
+          "label": "LDH seeds",
+          "output_name": "LDH seeds"
+        },
+        "graph5_output_canonical_state": {
+          "status": "PASS: CENTRIFUGE_COLLECT_PRECIPITATE_V1 1.1.0",
+          "proof": {
+            "schema_version": "route-convention-state/v1",
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "parent_state_path": "material_graph[5].material_inputs[1].state",
+            "parent_source_value": "suspension",
+            "parent_evidence_id": "route_fact_abc97d874d50809250c200d2",
+            "operation_path": "material_graph[5].operation",
+            "operation_evidence_id": "route_fact_7931591ece6209db307915ee",
+            "relation_id": "ms5-rel-centrifugation",
+            "parent_instance_id": "inst_ldh_parts",
+            "child_instance_id": "inst_ldh_seeds",
+            "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+            "rule_version": "1.1.0",
+            "resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+            "paper_id": "doi_10_1021_acsami_3c11651",
+            "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+            "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+            "retained_object_rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+            "retained_object_rule_version": "1.0.0",
+            "retained_object": "precipitate",
+            "retained_object_evidence_id": "route_fact_9a2f0bc3e4b842696a361dbe"
+          }
+        }
+      }
+    }
+  ]
+}
