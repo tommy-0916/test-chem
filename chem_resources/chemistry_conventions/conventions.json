@@ -69,12 +69,12 @@
     },
     {
       "rule_id": "REDISPERSION_V1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "operation": "redispersion",
       "event_kind": "state_change",
       "preconditions": {
-        "operation_patterns": ["redisperse", "re-disperse", "disperse", "重分散", "重新分散", "分散"],
-        "intent_patterns": ["redisperse", "re-disperse", "disperse", "重分散", "重新分散", "分散"],
+        "operation_patterns": ["redisperse", "re-disperse", "disperse", "redispersion", "re-dispersion", "重分散", "重新分散", "分散"],
+        "intent_patterns": ["redisperse", "re-disperse", "disperse", "redispersion", "re-dispersion", "重分散", "重新分散", "分散"],
         "input_states": ["retained_wet_solid", "washed_wet_solid"]
       },
       "allowed_input_states": ["retained_wet_solid", "washed_wet_solid"],

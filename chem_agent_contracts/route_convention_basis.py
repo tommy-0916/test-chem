@@ -127,8 +127,7 @@ def _step_has_liquid_participation(
         state = _text(_mapping(port).get("state"))
         if state and normalize_material_state(state) in liquid:
             return True
-    blob = _text(operation_excerpt).casefold()
-    return any(_text(token).casefold() in blob for token in excerpt_tokens if _text(token))
+    return _liquid_medium_in_excerpt(operation_excerpt, excerpt_tokens)
 
 
 def _rule_resource() -> tuple[dict[str, Mapping[str, Any]], str]:
@@ -165,10 +164,108 @@ def _evidence_id(paper_id: str, group_id: str, fact_id: str) -> str:
 
 
 def _literal_in_quote(value: str, quote: str) -> bool:
-    return bool(value and re.search(
-        rf"(?<!\w){re.escape(value)}(?!\w)", quote,
-        flags=re.IGNORECASE,
+    """Locate a proposed operation word inside its own quote.
+
+    ASCII words keep word-boundary matching.  CJK text has no word
+    boundaries, so a value with a non-ASCII edge binds by plain occurrence;
+    without this a Chinese operation word could never bind its own quote.
+    """
+    if not value or not quote:
+        return False
+    left = r"(?<!\w)" if value[0].isascii() else ""
+    right = r"(?!\w)" if value[-1].isascii() else ""
+    return bool(re.search(
+        left + re.escape(value) + right, quote, flags=re.IGNORECASE,
     ))
+
+
+_NEGATION_PREFIX_EN = re.compile(
+    r"\b(?:not|never|no|without|wasn't|weren't|isn't|aren't"
+    r"|didn't|doesn't|don't|won't)\s*$",
+    flags=re.IGNORECASE,
+)
+_NEGATION_PREFIX_ZH = re.compile(r"(?:未|没有|没|不|无|非)$")
+_SUBSTRATE_SUFFIX_EN = re.compile(
+    r"^[A-Za-z]{0,6}\s+(?:onto|upon|over|on)\b", flags=re.IGNORECASE,
+)
+_SUBSTRATE_SUFFIX_ZH = re.compile(r"^(?:到|于|在)[^。，,;；]{0,8}?(?:上|表面)")
+_NEGATION_WINDOW = 25
+
+
+def _affirmative_pattern_match(
+    pattern: str, text: str, *, reject_substrate: bool = False,
+) -> bool:
+    """Whether a convention pattern occurs affirmed in the evidence text.
+
+    Patterns are stems and match by substring, but an occurrence counts
+    only when the paper affirms it: an occurrence scoped by an adjacent
+    English or Chinese negation ("was not redispersed", "未重新分散") does
+    not count, and with ``reject_substrate`` an occurrence governed by a
+    surface preposition ("dispersed onto carbon paper", "分散到…上") is a
+    coating/deposition mention, never the bulk operation a state-change
+    convention rule proves.
+    """
+    stem = _text(pattern)
+    haystack = _text(text)
+    if not stem or not haystack:
+        return False
+    for match in re.finditer(re.escape(stem.casefold()), haystack.casefold()):
+        # A stem may match inside a larger Latin word ("disperse" inside
+        # "redispersed"); negation scopes the whole word, not the stem.
+        token_start = match.start()
+        while (token_start > 0
+               and haystack[token_start - 1].isascii()
+               and (haystack[token_start - 1].isalnum()
+                    or haystack[token_start - 1] == "_")):
+            token_start -= 1
+        prefix = haystack[max(0, token_start - _NEGATION_WINDOW):token_start]
+        if (_NEGATION_PREFIX_EN.search(prefix)
+                or _NEGATION_PREFIX_ZH.search(prefix)):
+            continue
+        if reject_substrate:
+            suffix = haystack[match.end():match.end() + 24]
+            if (_SUBSTRATE_SUFFIX_EN.match(suffix)
+                    or _SUBSTRATE_SUFFIX_ZH.match(suffix)):
+                continue
+        return True
+    return False
+
+
+def _liquid_medium_in_excerpt(
+    excerpt: str, excerpt_tokens: Sequence[str],
+) -> bool:
+    """Whether the excerpt names a liquid as the dispersing medium.
+
+    Token presence alone is not participation: "a water bath" only heats,
+    "脱水" removes water, and "rinsed with water" washes a surface — none of
+    them disperses.  English counts only a governed medium phrase
+    ("redispersed in water", "dispersed into deionized water"); Chinese
+    counts 于水/…水中 while excluding 脱水 and 水浴.
+    """
+    text = _text(excerpt)
+    if not text:
+        return False
+    for token in excerpt_tokens:
+        liquid = _text(token)
+        if not liquid:
+            continue
+        if liquid.isascii():
+            medium = re.compile(
+                rf"\b(?:in|into)\s+(?:[\w.%µ/-]+\s+){{0,3}}?"
+                rf"{re.escape(liquid)}\b(?![\s-]*bath)",
+                flags=re.IGNORECASE,
+            )
+            if medium.search(text):
+                return True
+            continue
+        for match in re.finditer(re.escape(liquid), text):
+            before = text[match.start() - 1:match.start()]
+            after = text[match.end():match.end() + 1]
+            if before in ("脱", "除", "无") or after == "浴":
+                continue
+            if before == "于" or after == "中":
+                return True
+    return False
 
 
 def _proof_for_evidence(
@@ -272,6 +369,20 @@ def _proof_for_evidence(
         return None, "convention_operation_evidence_missing"
 
     rules, resource_digest = _rule_resource()
+    operation_blob = operation_value.casefold()
+    matched_families = set()
+    for rule_id, rule in rules.items():
+        if rule_id in _RULE_EVENTS:
+            continue
+        family_patterns = _mapping(rule.get("preconditions")).get("operation_patterns") or []
+        if any(_text(pattern).casefold() in operation_blob
+               for pattern in family_patterns if _text(pattern)):
+            matched_families.add(_text(rule.get("operation")) or rule_id)
+    if len(matched_families) > 1:
+        # The step declares several distinct state-change operations (e.g.
+        # "centrifugation−redispersion"): a composite operation may not be
+        # proven by picking the one rule whose endpoint the proposal likes.
+        return None, "convention_rule_not_applicable_or_ambiguous"
     eligible: list[Mapping[str, Any]] = []
     liquid_denied = False
     for rule_id, rule in rules.items():
@@ -292,7 +403,6 @@ def _proof_for_evidence(
         elif rule_id == "TRANSFER_V1" and len(relation_output_ids) != 1:
             continue
         preconditions = _mapping(rule.get("preconditions"))
-        operation_blob = operation_value.casefold()
         intent_blob = (operation_value + " " + operation_excerpt).casefold()
         patterns = preconditions.get("operation_patterns", [])
         intents = preconditions.get("intent_patterns", [])
@@ -304,9 +414,27 @@ def _proof_for_evidence(
         if (not isinstance(patterns, list) or not isinstance(intents, list)
                 or not isinstance(allowed_states, list)
                 or not any(pattern_matches(pattern, operation_blob)
-                           for pattern in patterns if _text(pattern))
-                or not any(pattern_matches(pattern, intent_blob)
-                           for pattern in intents if _text(pattern))):
+                           for pattern in patterns if _text(pattern))):
+            continue
+        if state_change_rule:
+            # The paper must affirm this operation and its intent: mentions
+            # scoped by an adjacent negation, and operation mentions
+            # governed by a surface preposition, are not the bulk
+            # state-change operation this rule proves.
+            if not any(
+                _affirmative_pattern_match(
+                    pattern, operation_excerpt, reject_substrate=True,
+                )
+                for pattern in patterns if _text(pattern)
+            ):
+                continue
+            if not any(
+                _affirmative_pattern_match(pattern, operation_excerpt)
+                for pattern in intents if _text(pattern)
+            ):
+                continue
+        elif not any(pattern_matches(pattern, intent_blob)
+                     for pattern in intents if _text(pattern)):
             continue
         rule_inputs = rule.get("allowed_input_states", [])
         if not isinstance(rule_inputs, list):
@@ -608,6 +736,7 @@ def _inheritance_proof_for_evidence(
     )
     if (not parent_state
             or parent_state != target_state
+            or parent_instance != child_instance
             or _text(parent_port.get("material_id")) != material_id):
         return None, "convention_parent_state_or_identity_mismatch"
     record = {

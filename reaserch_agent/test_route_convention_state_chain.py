@@ -14,6 +14,7 @@ from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1, RouteCandidateV1, RouteGoalV1, RouteTargetV1,
 )
 from chem_agent_contracts.route_convention_basis import (
+    _affirmative_pattern_match, _liquid_medium_in_excerpt, _literal_in_quote,
     derive_unreviewed_input_state, derive_unreviewed_output_state,
     verify_bound_output_state,
 )
@@ -1230,6 +1231,257 @@ class StateChangeAndInheritanceTest(unittest.TestCase):
         )
         self.assertIsNone(proof)
         self.assertEqual(issue, "")
+
+
+class SingleHopProofHardeningTest(unittest.TestCase):
+    """Single-hop proof hardening: affirmation, medium role, composites.
+
+    Mirrors the Q4 review probes: a negated or substrate-governed operation
+    mention is not the operation a state-change convention proves, a liquid
+    counts only as a governed dispersing medium, a composite operation may
+    not be collapsed into one rule's endpoint, and inheritance requires the
+    very instance the upstream reference names.
+    """
+
+    _TOKENS = ("water", "solvent", "aqua", "水", "溶剂")
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source_file = self.root / "paper.md"
+        self.source_file.write_text("# Study\n## Methods\n### Group A\nplaceholder\n",
+                                    encoding="utf-8")
+        self.digest = "sha256_" + sha256(self.source_file.read_bytes()).hexdigest()
+        self.source = {
+            "paper_id": "paper-A", "experimental_group_id": "Group A",
+            "section": "Methods", "locator": "lines:4-4",
+            "source_digest": self.digest,
+        }
+
+    def _fact(self, fact_id: str, path: str, value: str, excerpt: str) -> dict:
+        return {
+            "fact_id": fact_id, "field_path": path, "value": value,
+            "unit": "", "required": True, "excerpt": excerpt,
+            "source": deepcopy(self.source),
+        }
+
+    def _one_step(self, operation: str, quote: str,
+                  in_state: str, out_state: str,
+                  in_name: str = "washed_wet_solid") -> dict:
+        input_port = {
+            "material_id": "product", "material_instance_id": "i1",
+            "name": in_name, "state": in_state,
+            "material_origin": "external_inventory",
+            "provenance": {"kind": "paper", "reference": "fact:in_state"},
+        }
+        step = StateChangeAndInheritanceTest._state_change_step(
+            step_id="S1", sequence=1, operation=operation,
+            input_port=input_port,
+            output_port={
+                "material_id": "product", "material_instance_id": "o1",
+                "name": in_name, "state": out_state,
+                "provenance": {"kind": "paper", "reference": "fact:op"},
+            },
+            relation_provenance_ref="fact:op",
+        )
+        facts = [
+            self._fact("op", "material_graph[0].operation", operation, quote),
+            self._fact("in_state", "material_graph[0].material_inputs[0].state",
+                       in_state, quote),
+            self._fact("out_state", STATE_1, out_state, quote),
+        ]
+        return {"material_graph": [step], "route_facts": facts}
+
+    def _derive(self, proposal: dict, path: str = STATE_1):
+        return derive_unreviewed_output_state(
+            proposal["material_graph"], proposal["route_facts"], path,
+            paper_id="paper-A", experimental_group_id="Group A",
+            source_digest=self.digest,
+        )
+
+    def test_affirmative_match_rejects_negated_mentions(self) -> None:
+        match = _affirmative_pattern_match
+        self.assertFalse(match("redisperse", "The solid was not redispersed in water."))
+        self.assertFalse(match("redisperse", "The solid was never redispersed."))
+        self.assertFalse(match("重新分散", "洗后湿固体未重新分散于水中。"))
+        self.assertFalse(match("重新分散", "洗后湿固体没有重新分散。"))
+        self.assertTrue(match("redisperse", "The solid was redispersed in water."))
+        self.assertTrue(match("重新分散", "洗后湿固体重新分散于水中。"))
+
+    def test_affirmative_match_rejects_substrate_mentions(self) -> None:
+        match = _affirmative_pattern_match
+        self.assertFalse(match(
+            "disperse", "The solid was dispersed onto carbon paper.",
+            reject_substrate=True,
+        ))
+        self.assertFalse(match("分散", "将固体分散到碳纸上。", reject_substrate=True))
+        self.assertTrue(match(
+            "disperse", "The solid was dispersed in water.",
+            reject_substrate=True,
+        ))
+        # Without the substrate role check the same mention still matches.
+        self.assertTrue(match("disperse", "The solid was dispersed onto carbon paper."))
+
+    def test_liquid_medium_requires_a_governed_medium_role(self) -> None:
+        medium = _liquid_medium_in_excerpt
+        self.assertTrue(medium("The washed_wet_solid was redispersed in water.", self._TOKENS))
+        self.assertTrue(medium("The solid was dispersed in 30 mL of water.", self._TOKENS))
+        self.assertTrue(medium("洗后湿固体重新分散于水中。", self._TOKENS))
+        self.assertFalse(medium("The solid was redispersed by grinding, then heated in a water bath.", self._TOKENS))
+        self.assertFalse(medium("The solid was dispersed onto carbon paper and rinsed with water.", self._TOKENS))
+        self.assertFalse(medium("洗后湿固体脱水后重新分散。", self._TOKENS))
+        self.assertFalse(medium("洗后湿固体脱水后，重新分散。", self._TOKENS))
+        self.assertFalse(medium("样品在水浴中加热。", self._TOKENS))
+
+    def test_cjk_operation_binds_its_own_quote(self) -> None:
+        self.assertTrue(_literal_in_quote("重新分散", "洗后湿固体重新分散于水中。"))
+        self.assertTrue(_literal_in_quote("redispersed", "The solid was redispersed in water."))
+        self.assertFalse(_literal_in_quote("wash", "washing"))
+        self.assertFalse(_literal_in_quote("重新分散", "洗后湿固体脱水。"))
+
+    def test_negated_redispersion_is_not_proven(self) -> None:
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was not redispersed in water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_negated_chinese_redispersion_is_not_proven(self) -> None:
+        proposal = self._one_step(
+            "重新分散", "洗后湿固体未重新分散于水中。",
+            "washed_wet_solid", "suspension",
+        )
+        proof, _issue = self._derive(proposal)
+        self.assertIsNone(proof)
+
+    def test_composite_operation_is_not_collapsed_to_one_endpoint(self) -> None:
+        proposal = self._one_step(
+            "centrifugation−redispersion",
+            "The suspension was treated by a centrifugation−redispersion "
+            "protocol in water to collect the precipitate.",
+            "suspension", "retained_wet_solid", in_name="suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_water_bath_is_not_a_dispersion_medium(self) -> None:
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was redispersed by grinding, "
+            "then heated in a water bath.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def test_dehydration_token_is_not_liquid_participation(self) -> None:
+        proposal = self._one_step(
+            "重新分散", "洗后湿固体脱水后重新分散。",
+            "washed_wet_solid", "suspension",
+        )
+        proof, _issue = self._derive(proposal)
+        self.assertIsNone(proof)
+
+    def test_dispersed_onto_substrate_is_not_redispersion(self) -> None:
+        proposal = self._one_step(
+            "dispersed",
+            "The washed_wet_solid was dispersed onto carbon paper "
+            "and rinsed with water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_noun_form_redispersion_is_proven(self) -> None:
+        proposal = self._one_step(
+            "redispersion",
+            "The washed_wet_solid underwent redispersion in water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+        self.assertEqual(proof["target_state"], "suspension")
+
+    def _two_step_inheritance(self, downstream_instance: str) -> dict:
+        quote = ("In this collection route, the product suspension was "
+                 "centrifuged to collect precipitate as retained_wet_solid.")
+        parent = StateChangeAndInheritanceTest._state_change_step(
+            step_id="S1", sequence=1, operation="centrifuged",
+            input_port={
+                "material_id": "product", "material_instance_id": "susp1",
+                "name": "product suspension", "state": "suspension",
+                "material_origin": "external_inventory",
+                "provenance": {"kind": "paper", "reference": "fact:in_state"},
+            },
+            output_port={
+                "material_id": "product", "material_instance_id": "ppt1",
+                "name": "product suspension", "state": "retained_wet_solid",
+                "provenance": {"kind": "paper", "reference": "fact:out_name"},
+            },
+            relation_provenance_ref="fact:op",
+        )
+        downstream = {
+            "macro_step_id": "S2", "macro_action_id": "A1", "sequence": 2,
+            "operation": "held", "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": "fact:op2"},
+            "material_inputs": [{
+                "material_id": "product",
+                "material_instance_id": downstream_instance,
+                "name": "product suspension", "state": "retained_wet_solid",
+                "material_origin": "upstream_output",
+                "parent_output_refs": [{
+                    "macro_step_id": "S1", "material_instance_id": "ppt1",
+                }],
+                "provenance": {"kind": "paper", "reference": "fact:in1_state"},
+            }],
+            "material_outputs": [{
+                "material_id": "product", "material_instance_id": "x1",
+                "name": "product suspension", "state": "retained_wet_solid",
+                "provenance": {"kind": "paper", "reference": "fact:op2"},
+            }],
+        }
+        facts = [
+            self._fact("op", "material_graph[0].operation", "centrifuged", quote),
+            self._fact("in_state", "material_graph[0].material_inputs[0].state",
+                       "suspension", quote),
+            self._fact("out_state", STATE_1, "retained_wet_solid", quote),
+            self._fact("op2", "material_graph[1].operation", "held",
+                       "The solid was held."),
+            self._fact("in1_state", "material_graph[1].material_inputs[0].state",
+                       "retained_wet_solid", "The solid was held."),
+        ]
+        return {"material_graph": [parent, downstream], "route_facts": facts}
+
+    def test_inheritance_requires_the_referenced_instance(self) -> None:
+        proposal = self._two_step_inheritance("SOME_OTHER_INSTANCE")
+        parent_proof, parent_issue = self._derive(proposal)
+        self.assertEqual(parent_issue, "")
+        self.assertEqual(parent_proof["rule_id"], "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+        proof, issue = derive_unreviewed_input_state(
+            proposal["material_graph"], proposal["route_facts"],
+            "material_graph[1].material_inputs[0].state", deepcopy(self.source),
+        )
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_parent_state_or_identity_mismatch")
+
+    def test_inheritance_accepts_the_same_instance(self) -> None:
+        proposal = self._two_step_inheritance("ppt1")
+        proof, issue = derive_unreviewed_input_state(
+            proposal["material_graph"], proposal["route_facts"],
+            "material_graph[1].material_inputs[0].state", deepcopy(self.source),
+        )
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "PARENT_OUTPUT_STATE_INHERITANCE_V1")
+        self.assertEqual(proof["parent_instance_id"], "ppt1")
+        self.assertEqual(proof["child_instance_id"], "ppt1")
 
 
 if __name__ == "__main__":
