@@ -16,8 +16,16 @@ premise id — changes its own id, so a tampered node either fails id
 recomputation or leaves a dangling premise reference.
 
 The engine is reused, never reimplemented: convention nodes lift their typed
-fields from a freshly recomputed flat proof, with ``parent_state_proven``
-set only after the parent premise node has its own verified node in the DAG.
+fields from a freshly recomputed flat proof, with a
+``_VerifiedParentStateEvidence`` capability token minted only after the
+parent premise node has its own verified node in the DAG and the premise
+claim's binding triple (field path, material instance id, target state) has
+been checked against the dependent node's typed fields — the exact
+parent-state proposition the flat proof references
+(``proof_dag_parent_state_binding_mismatch`` otherwise).  The parent premise
+of a convention node is the canonical chain node for THIS step's own input
+state path (a paper literal when literal gates prove it, an inheritance node
+otherwise), never the upstream step's output node directly.
 """
 
 from __future__ import annotations
@@ -126,6 +134,51 @@ def _claim(
         "material_id": material_id,
         "material_instance_id": material_instance_id,
     }
+
+
+def _role_premise(node: Mapping[str, Any], role: str) -> Mapping[str, str]:
+    """The unique premise carrying ``role`` (roles are deduped upstream)."""
+    return next(
+        premise for premise in node["premises"] if premise["role"] == role
+    )
+
+
+def _parent_state_binding_issue(
+    premise_node: Mapping[str, Any], *, field_path: str,
+    material_instance_id: str, target_state: str,
+) -> str:
+    """The parent-state premise binding check, shared by builder and verifier.
+
+    A node hanging on role ``parent_state`` proves nothing unless the
+    premise node's claim is EXACTLY the parent-state proposition the
+    dependent node's own (recomputed) proof references: same field path,
+    same material instance id, same target state.  An otherwise-valid but
+    unrelated node substituted into the role — or the correct ancestor at
+    the wrong chain level — fails here, even though every node verifies on
+    its own and every content address is honestly recomputed.
+    """
+    claim = _mapping(premise_node.get("claim"))
+    if (_text(claim.get("field_path")) != field_path
+            or _text(claim.get("material_instance_id")) != material_instance_id
+            or _text(claim.get("target_state")) != target_state):
+        return "proof_dag_parent_state_binding_mismatch"
+    return ""
+
+
+def _verified_parent_token(premise_node: Mapping[str, Any]) -> Any:
+    """Mint the capability token carrying the premise claim's binding triple.
+
+    Minted only after the premise node is built/verified and
+    ``_parent_state_binding_issue`` passed for it; the engine re-checks the
+    triple against its own computed parent binding and fails closed on any
+    mismatch, so the token never widens what the premise proves.
+    """
+    claim = _mapping(premise_node.get("claim"))
+    return _basis._VerifiedParentStateEvidence(
+        field_path=_text(claim.get("field_path")),
+        state_value=_text(claim.get("target_state")),
+        material_instance_id=_text(claim.get("material_instance_id")),
+    )
 
 
 def _source_evidence_leaf(
@@ -480,9 +533,12 @@ class _DagBuilder:
         if self.resolver is not None:
             record, _record_issue = self.resolver(field_path)
 
-        # Parent premise: literal gates first, then a proven upstream output.
+        # Parent premise: literal gates first, then the canonical chain
+        # through THIS step's own input state path — an inheritance node (or
+        # a paper literal when the input state is literal-provable), never
+        # the upstream step's output node directly.
         parent_node_id: str | None = None
-        parent_state_proven = False
+        verified_parent: Any = None
         if parent_fact is not None:
             gates = _literal_state_gates(
                 parent_state_path, _text(parent_fact.get("value")),
@@ -500,14 +556,22 @@ class _DagBuilder:
                     self.graph, step_index, _mapping(references[0]),
                 )
                 if ref_port is not None:
-                    parent_output_path = (
-                        f"material_graph[{ref_step}]"
-                        f".material_outputs[{ref_output}].state"
-                    )
-                    parent_node_id, issue = self.build_node(parent_output_path)
+                    parent_node_id, issue = self.build_node(parent_state_path)
                     if parent_node_id is None:
                         return None, issue
-                    parent_state_proven = True
+                    # The token is minted only after the premise claim's
+                    # binding triple is checked against this step's own
+                    # computed parent binding.
+                    binding_issue = _parent_state_binding_issue(
+                        self.nodes[parent_node_id],
+                        field_path=parent_state_path,
+                        material_instance_id=_text(parent_ids[0]),
+                        target_state=_text(parent_port.get("state")),
+                    )
+                    if binding_issue:
+                        return None, binding_issue
+                    verified_parent = _verified_parent_token(
+                        self.nodes[parent_node_id])
         if parent_node_id is None:
             # The engine's honest issue for this exact configuration.
             _proof, honest = derive_unreviewed_output_state(
@@ -525,7 +589,7 @@ class _DagBuilder:
             experimental_group_id=self.experimental_group_id,
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
-            parent_state_proven=parent_state_proven,
+            verified_parent_state=verified_parent,
         )
         if proof is None:
             return None, issue
@@ -619,6 +683,23 @@ class _DagBuilder:
         parent_node = self.nodes[parent_node_id]
         if parent_node.get("node_type") not in ("state_change", "same_state"):
             return None, "convention_parent_state_unverified"
+        # The premise claim must be exactly the resolved upstream output
+        # state this input port carries forward.
+        binding_issue = _parent_state_binding_issue(
+            parent_node,
+            field_path=parent_output_path,
+            material_instance_id=_text(reference.get("material_instance_id")),
+            target_state=_text(ref_port.get("state")),
+        )
+        if binding_issue:
+            return None, binding_issue
+        # The capability token certifies the GRANDPARENT binding — the
+        # parent output node's own parent_state premise claim — so the
+        # re-derived parent proof needs no literal gate for a non-literal
+        # grandparent state already proven in this DAG (arbitrary chains of
+        # non-literal hops compose through this recursion).
+        verified_grandparent = _verified_parent_token(
+            self.nodes[_role_premise(parent_node, "parent_state")["node_id"]])
         grandparent_fact = self.evidence.get(
             _text(parent_node.get("parent_evidence_id")))
         operation_fact = self.evidence.get(
@@ -637,6 +718,7 @@ class _DagBuilder:
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
             facts=self.facts,
+            verified_parent_state=verified_grandparent,
         )
         if record is None:
             return None, issue
@@ -1042,15 +1124,32 @@ class StateProofDagVerifier:
     ) -> str:
         claim = _mapping(node.get("claim"))
         field_path = _text(claim.get("field_path"))
-        # The parent premise node has already verified by recursion here, so
-        # the flat engine's literal parent gate is discharged by the DAG.
+        # Premises have already verified by recursion here.  Bind first:
+        # the parent_state premise's claim must be exactly the parent-state
+        # proposition this node's flat proof references — a substituted
+        # otherwise-valid node fails even with every content address
+        # honestly resealed, as does the correct ancestor at the wrong
+        # chain level (parent_state_path is this step's own input path).
+        premise_node = nodes[_role_premise(node, "parent_state")["node_id"]]
+        binding_issue = _parent_state_binding_issue(
+            premise_node,
+            field_path=_text(node.get("parent_state_path")),
+            material_instance_id=_text(node.get("parent_instance_id")),
+            target_state=_text(node.get("parent_source_value")),
+        )
+        if binding_issue:
+            return binding_issue
+        # The flat engine's literal parent gate is discharged by the DAG
+        # through a capability token carrying the verified premise claim's
+        # binding triple; the engine re-checks it against its own computed
+        # parent binding and fails closed on any mismatch.
         proof, issue = derive_unreviewed_output_state(
             self.graph, self.facts, field_path,
             paper_id=self.paper_id,
             experimental_group_id=self.experimental_group_id,
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
-            parent_state_proven=True,
+            verified_parent_state=_verified_parent_token(premise_node),
         )
         if proof is None:
             return issue or "proof_dag_node_mismatch"
@@ -1138,6 +1237,40 @@ class StateProofDagVerifier:
         parent_node = nodes[premise["node_id"]]
         if parent_node.get("node_type") not in ("state_change", "same_state"):
             return "proof_dag_node_mismatch"
+        # Bind the premise claim to the typed parent_ref: resolve the
+        # reference to the matching upstream output port and require the
+        # premise to claim exactly that port's state path, the referenced
+        # material instance id, and the carried-forward state value.  Per
+        # the inheritance record's semantics the record's target_state is
+        # the input port's state, which the engine constrains to equal the
+        # upstream output port's state; the premise node proves the
+        # upstream output state, so the resolved port's own ``state`` value
+        # is the proposition bound here (it coincides with this node's
+        # claim.target_state).
+        ref_step, ref_output, ref_port = _resolve_parent_output(
+            self.graph, step_index, parent_ref,
+        )
+        if ref_port is None:
+            return "proof_dag_parent_ref_mismatch"
+        binding_issue = _parent_state_binding_issue(
+            parent_node,
+            field_path=(
+                f"material_graph[{ref_step}]"
+                f".material_outputs[{ref_output}].state"
+            ),
+            material_instance_id=_text(parent_ref.get("material_instance_id")),
+            target_state=_text(ref_port.get("state")),
+        )
+        if binding_issue:
+            return binding_issue
+        # The capability token certifies the GRANDPARENT binding — the
+        # parent output node's own parent_state premise claim, itself
+        # verified by recursion — so a non-literal grandparent state needs
+        # no literal gate in the re-derived parent proof; chains of more
+        # than two consecutive non-literal hops re-derive through this
+        # recursion alone.
+        verified_grandparent = _verified_parent_token(
+            nodes[_role_premise(parent_node, "parent_state")["node_id"]])
         grandparent_fact = self.evidence.get(
             _text(parent_node.get("parent_evidence_id")))
         operation_fact = self.evidence.get(
@@ -1156,6 +1289,7 @@ class StateProofDagVerifier:
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
             facts=self.facts,
+            verified_parent_state=verified_grandparent,
         )
         if record is None:
             return issue or "proof_dag_node_mismatch"

@@ -70,6 +70,33 @@ def _items(value: Any) -> list[Mapping[str, Any]]:
     return [_mapping(item) for item in value] if isinstance(value, (list, tuple)) else []
 
 
+class _VerifiedParentStateEvidence:
+    """Capability token discharging the flat literal parent gate for exactly
+    one parent-state proposition.
+
+    The typed proof-DAG layer (``route_proof_dag``) mints this token only
+    after the parent premise node carries its own verified node in the DAG
+    and the premise claim's binding triple has been checked against the
+    dependent node's typed fields.  The token carries exactly that triple —
+    ``field_path``, ``state_value``, ``material_instance_id`` — and the
+    engine re-computes its own parent binding for the field path under
+    proof: the literal parent gate is skipped only when the triple equals
+    the engine's binding exactly, and any mismatch fails closed with
+    ``convention_parent_state_unverified``.  Underscore-private and absent
+    from ``__all__``: code outside the proof-DAG layer has no business
+    minting one.
+    """
+
+    __slots__ = ("field_path", "state_value", "material_instance_id")
+
+    def __init__(
+        self, field_path: str, state_value: str, material_instance_id: str,
+    ) -> None:
+        self.field_path = field_path
+        self.state_value = state_value
+        self.material_instance_id = material_instance_id
+
+
 def is_concentration_unit(unit: Any) -> bool:
     """Whether a unit string denotes a concentration in the controlled set."""
     return isinstance(unit, str) and unit.strip() in _CONCENTRATION_UNITS
@@ -535,14 +562,16 @@ def _proof_for_evidence(
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_record: Mapping[str, Any] | None = None,
     retained_object_issue: str = "",
-    parent_state_proven: bool = False,
+    verified_parent_state: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Recompute one exact proof; no candidate-provided rule identifier is used.
 
-    ``parent_state_proven`` is the proof-DAG hook: a composed proof graph sets
-    it only after the parent state premise carries its own verified node, so
-    the flat literal parent gate is skipped.  The default keeps legacy
-    behavior byte-identical.
+    ``verified_parent_state`` is the proof-DAG capability hook: a composed
+    proof graph passes a ``_VerifiedParentStateEvidence`` token only after
+    the parent state premise carries its own verified node, so the flat
+    literal parent gate is skipped — and only when the token's binding
+    triple equals the engine's own computed parent binding exactly.  The
+    default keeps legacy behavior byte-identical.
     """
     match = _OUTPUT_STATE.fullmatch(field_path)
     if match is None:
@@ -606,7 +635,7 @@ def _proof_for_evidence(
                 or _text(upstream[0].get("state")) != parent_state):
             return None, "convention_upstream_reference_mismatch"
     parent_state_path = f"material_graph[{step_index}].material_inputs[{input_index}].state"
-    if not parent_state_proven:
+    if verified_parent_state is None:
         _state_mapping, issue = controlled_state_mapping(
             parent_state_path, parent_source_value, parent.get("state"),
         )
@@ -614,6 +643,16 @@ def _proof_for_evidence(
             parent_source_value, parent_excerpt, parent.get("name"),
         ):
             return None, "convention_parent_state_unverified"
+    elif not (
+        isinstance(verified_parent_state, _VerifiedParentStateEvidence)
+        and verified_parent_state.field_path == parent_state_path
+        and verified_parent_state.state_value == parent_state
+        and verified_parent_state.material_instance_id == parent_id
+    ):
+        # A capability token discharges the literal parent gate only for the
+        # exact parent-state proposition this engine instance computed on
+        # its own; anything else fails closed, never bypasses.
+        return None, "convention_parent_state_unverified"
 
     relation_id = _text(relation.get("relation_id"))
     segment_id = _text(relation.get("source_operation_ref"))
@@ -904,11 +943,12 @@ def derive_unreviewed_output_state(
     graph: Sequence[Any], facts: Sequence[Any], field_path: str, *,
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_resolver: Any = None,
-    parent_state_proven: bool = False,
+    verified_parent_state: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Produce a proof only from existing graph edges and proposed source facts.
 
-    ``parent_state_proven`` is set only by the typed proof-DAG layer after the
+    ``verified_parent_state`` is a ``_VerifiedParentStateEvidence``
+    capability token minted only by the typed proof-DAG layer after the
     parent premise carries its own verified node; the default is the legacy
     literal parent gate.
     """
@@ -1018,7 +1058,7 @@ def derive_unreviewed_output_state(
         source_digest=source_digest,
         retained_object_record=retained_object_record,
         retained_object_issue=retained_object_issue,
-        parent_state_proven=parent_state_proven,
+        verified_parent_state=verified_parent_state,
     )
 
 
@@ -1096,8 +1136,18 @@ def _inheritance_proof_for_evidence(
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_resolver: Any = None,
     facts: Sequence[Any] | None = None,
+    verified_parent_state: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
-    """Recompute one input-state inheritance proof; never guess missing refs."""
+    """Recompute one input-state inheritance proof; never guess missing refs.
+
+    ``verified_parent_state`` is the proof-DAG capability token certifying
+    the GRANDPARENT binding: when the parent output state is itself
+    convention-derived, its re-derivation inside this proof forwards the
+    token so a non-literal grandparent state discharged by the DAG's own
+    verified nodes needs no literal gate.  The token names exactly one
+    binding triple; the forwarded ``_proof_for_evidence`` call re-checks it
+    against its own computed parent binding and fails closed on mismatch.
+    """
     match = _INPUT_STATE.fullmatch(field_path)
     if match is None:
         return None, "semantic_binding_pending"
@@ -1199,6 +1249,7 @@ def _inheritance_proof_for_evidence(
             source_digest=source_digest,
             retained_object_record=parent_record,
             retained_object_issue=parent_record_issue,
+            verified_parent_state=verified_parent_state,
         )
         if parent_issue or parent_proof is None:
             return None, "convention_parent_state_unverified"

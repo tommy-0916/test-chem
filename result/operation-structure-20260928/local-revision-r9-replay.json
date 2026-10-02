@@ -52,7 +52,7 @@
       "rule_id": "REDISPERSION_V1",
       "rule_version": "1.1.0",
       "premise_chain_summary": {
-        "description": "paper literals (operation graph[6], operation graph[5], graph[5] input state, graph[5] output name) -> source_relation POST_OPERATION_RETAINED_OBJECT_V1 -> state_change CENTRIFUGE_COLLECT_PRECIPITATE_V1 (graph[5].out retained_wet_solid) -> state_change REDISPERSION_V1 (graph[6].out suspension); the graph[6].out root's parent_state premise is the graph[5] output's own proven state-change node, composing the proof the flat engine could not derive",
+        "description": "paper literals (operation graph[6], operation graph[5], graph[5] input state, graph[5] output name) -> source_relation POST_OPERATION_RETAINED_OBJECT_V1 -> state_change CENTRIFUGE_COLLECT_PRECIPITATE_V1 (graph[5].out retained_wet_solid) -> inheritance PARENT_OUTPUT_STATE_INHERITANCE_V1 (graph[6].in retained_wet_solid) -> state_change REDISPERSION_V1 (graph[6].out suspension); the canonical chain: the graph[6].out root's parent_state premise is the graph[6] input's own inheritance node, which stands on the graph[5] output's proven state-change node — each node answers only its local question, composing the proof the flat engine could not derive",
         "tree": [
           {
             "depth": 0,
@@ -74,13 +74,21 @@
           {
             "depth": 1,
             "role_to_parent": "parent_state",
+            "node_type": "inheritance",
+            "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+            "claim_field_path": "material_graph[6].material_inputs[0].state",
+            "claim_target_state": "retained_wet_solid"
+          },
+          {
+            "depth": 2,
+            "role_to_parent": "parent_state",
             "node_type": "state_change",
             "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
             "claim_field_path": "material_graph[5].material_outputs[0].state",
             "claim_target_state": "retained_wet_solid"
           },
           {
-            "depth": 2,
+            "depth": 3,
             "role_to_parent": "operation",
             "node_type": "paper_literal",
             "rule_id": "",
@@ -89,7 +97,7 @@
             "leaf_field_path": "material_graph[5].operation"
           },
           {
-            "depth": 2,
+            "depth": 3,
             "role_to_parent": "parent_state",
             "node_type": "paper_literal",
             "rule_id": "",
@@ -98,7 +106,7 @@
             "leaf_field_path": "material_graph[5].material_inputs[1].state"
           },
           {
-            "depth": 2,
+            "depth": 3,
             "role_to_parent": "retained_object",
             "node_type": "source_relation",
             "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
@@ -106,7 +114,7 @@
             "claim_target_state": "retained_wet_solid"
           },
           {
-            "depth": 3,
+            "depth": 4,
             "role_to_parent": "naming",
             "node_type": "paper_literal",
             "rule_id": "",
@@ -116,7 +124,7 @@
           }
         ]
       },
-      "node_count": 7,
+      "node_count": 8,
       "verify_with_span_resolver": "",
       "verify_blocks_only": ""
     },
@@ -151,12 +159,17 @@
               "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1"
             },
             {
+              "node_id": "proof_node_887e9e20d560bc934148aba1",
+              "node_type": "inheritance",
+              "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+            },
+            {
               "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
               "node_type": "state_change",
               "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
             },
             {
-              "node_id": "proof_node_f925d19c84ad2e9a7c810833",
+              "node_id": "proof_node_d1d772c2010db8114b9212dd",
               "node_type": "state_change",
               "rule_id": "REDISPERSION_V1"
             }
@@ -182,12 +195,17 @@
               "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1"
             },
             {
+              "node_id": "proof_node_887e9e20d560bc934148aba1",
+              "node_type": "inheritance",
+              "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+            },
+            {
               "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
               "node_type": "state_change",
               "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
             },
             {
-              "node_id": "proof_node_f925d19c84ad2e9a7c810833",
+              "node_id": "proof_node_d1d772c2010db8114b9212dd",
               "node_type": "state_change",
               "rule_id": "REDISPERSION_V1"
             }
@@ -576,7 +594,7 @@
     },
     "graph6_output": {
       "schema_version": "state-proof-dag/v1",
-      "root_id": "proof_node_f925d19c84ad2e9a7c810833",
+      "root_id": "proof_node_d1d772c2010db8114b9212dd",
       "root_node_type": "state_change",
       "root_schema": "state-change-convention-proof/v1",
       "root_rule_id": "REDISPERSION_V1",
@@ -588,7 +606,7 @@
         "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
         "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
       },
-      "node_count": 7,
+      "node_count": 8,
       "nodes": [
         {
           "node_id": "proof_node_3568cbe8618508c957b5b6dc",
@@ -679,7 +697,23 @@
           }
         },
         {
-          "node_id": "proof_node_f925d19c84ad2e9a7c810833",
+          "node_id": "proof_node_887e9e20d560bc934148aba1",
+          "node_type": "inheritance",
+          "schema_version": "state-inheritance-proof/v1",
+          "premise_roles": [
+            "parent_state"
+          ],
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[6].material_inputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_d1d772c2010db8114b9212dd",
           "node_type": "state_change",
           "schema_version": "state-change-convention-proof/v1",
           "premise_roles": [

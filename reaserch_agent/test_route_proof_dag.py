@@ -7,7 +7,11 @@ standing on a post-operation retained-object record, then a redispersion
 step whose input state is that same retained_wet_solid carried by
 ``material_origin="upstream_output"``.  The flat engine cannot prove the
 second step's output because its parent premise accepts only literal gates;
-the DAG composes the parent output's own proof node instead.
+the DAG composes the canonical chain instead — the second step's own input
+state node (an inheritance node) standing on the parent output's proven
+node.  Round 3C-0 adds the premise-binding acceptance tests: a node
+substituted into the ``parent_state`` role must claim exactly the
+parent-state proposition the dependent node's proof references.
 """
 
 from __future__ import annotations
@@ -45,6 +49,7 @@ OUT_STATE = "material_graph[0].material_outputs[0].state"
 OUT_NAME = "material_graph[0].material_outputs[0].name"
 STEP1_INPUT_STATE = "material_graph[1].material_inputs[0].state"
 STEP1_OUT_STATE = "material_graph[1].material_outputs[0].state"
+STEP2_INPUT_STATE = "material_graph[2].material_inputs[0].state"
 
 OP_VALUE = "centrifugation−redispersion protocol"
 OP_SENTENCE = (
@@ -230,6 +235,46 @@ class ProofDagFixtureMixin(unittest.TestCase):
         span_of = build_excerpt_span_resolver(blocks)
         return proposal, blocks, span_of
 
+    def _three_step_proposal(self) -> dict:
+        """The two-step chain plus an aging step: a second inheritance hop.
+
+        graph[2]'s input is graph[1]'s output instance carried by
+        ``material_origin="upstream_output"``, and its input-state quote
+        never names the state word — proving graph[2].in needs TWO
+        consecutive non-literal hops (graph[2].in -> graph[1].out ->
+        graph[1].in -> graph[0].out).  Round 3C-2 reuses this fixture.
+        """
+        proposal = self._two_step_proposal()
+        step_3 = self._state_change_step(
+            step_id="S3", sequence=3, operation="aged",
+            input_port={
+                "material_id": "product", "material_instance_id": "inst_c",
+                "name": "LDH seeds", "state": "suspension",
+                "material_origin": "upstream_output",
+                "parent_output_refs": [{
+                    "macro_step_id": "S2", "material_instance_id": "inst_c",
+                }],
+                "provenance": {"kind": "paper", "reference": "fact:in3_name"},
+            },
+            output_port={
+                "material_id": "product", "material_instance_id": "inst_d",
+                "name": "LDH seeds", "state": "suspension",
+                "provenance": {"kind": "paper", "reference": "fact:out3_name"},
+            },
+            relation_provenance_ref="fact:op3",
+        )
+        proposal["material_graph"].append(step_3)
+        proposal["route_facts"].append(self._fact(
+            "in3_state", STEP2_INPUT_STATE, "suspension", OP2_EXCERPT))
+        return proposal
+
+    def _chain3(self):
+        """The three-step proposal with its signed blocks and resolver."""
+        proposal = self._three_step_proposal()
+        blocks = _blocks(FILLER, OP_SENTENCE, NAMING_SENTENCE, OP2_SENTENCE)
+        span_of = build_excerpt_span_resolver(blocks)
+        return proposal, blocks, span_of
+
     def _kwargs(self):
         return {
             "paper_id": "paper-A", "experimental_group_id": "Group A",
@@ -331,11 +376,23 @@ class TwoStepChainDagTest(ProofDagFixtureMixin):
         roles = {premise["role"]: premise["node_id"]
                  for premise in root["premises"]}
         self.assertEqual(set(roles), {"parent_state", "operation"})
-        # The parent premise is the composite step's own proven output node.
+        # The canonical chain: the parent premise is THIS step's own input
+        # state node — an inheritance node — never the upstream step's
+        # output node directly; the inheritance node then stands on the
+        # composite step's proven output node.  Each node answers only its
+        # local question.
         parent = dag["nodes"][roles["parent_state"]]
-        self.assertEqual(parent["node_type"], "state_change")
-        self.assertEqual(parent["rule_id"], "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
-        self.assertEqual(parent["claim"]["field_path"], OUT_STATE)
+        self.assertEqual(parent["node_type"], "inheritance")
+        self.assertEqual(parent["rule_id"], "PARENT_OUTPUT_STATE_INHERITANCE_V1")
+        self.assertEqual(parent["claim"]["field_path"], STEP1_INPUT_STATE)
+        self.assertEqual(parent["claim"]["target_state"], "retained_wet_solid")
+        self.assertEqual(parent["claim"]["material_instance_id"], "inst_b")
+        grandparent = dag["nodes"][parent["premises"][0]["node_id"]]
+        self.assertEqual(grandparent["node_type"], "state_change")
+        self.assertEqual(grandparent["rule_id"],
+                         "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+        self.assertEqual(grandparent["claim"]["field_path"], OUT_STATE)
+        self.assertEqual(len(dag["nodes"]), 8)
         self.assertEqual(self._verify(proposal, dag, span_of), "")
         self.assertEqual(self._verify(proposal, dag, span_of, blocks=blocks), "")
 
@@ -365,6 +422,145 @@ class TwoStepChainDagTest(ProofDagFixtureMixin):
                 and node["leaf"]["field_path"] == STEP1_INPUT_STATE
                 for node in dag["nodes"].values()
             ))
+
+
+class PremiseBindingTest(ProofDagFixtureMixin):
+    """3C-0 acceptance: the parent_state premise's claim must be exactly the
+    parent-state proposition the dependent node's own proof references.
+
+    Any substitution — an unrelated valid node, the right claim shape with
+    a wrong instance or state, or the correct ancestor at the wrong chain
+    level — fails with ``proof_dag_parent_state_binding_mismatch`` even
+    when every node verifies on its own and every content address is
+    honestly resealed with the module's own hashing.
+    """
+
+    BINDING = "proof_dag_parent_state_binding_mismatch"
+
+    @staticmethod
+    def _parent_role_id(dag: dict, node_id: str) -> str:
+        return next(
+            premise["node_id"] for premise in dag["nodes"][node_id]["premises"]
+            if premise["role"] == "parent_state")
+
+    def test_unrelated_valid_node_substitution_fails(self) -> None:
+        proposal, blocks, span_of = self._chain()
+        dag = self._build(proposal, STEP1_OUT_STATE, span_of)
+        # The donor verifies on its own inside this very DAG: only the
+        # binding check can reject its presence in the parent_state role.
+        donor_id = next(node_id for node_id, node in dag["nodes"].items()
+                        if node["node_type"] == "source_relation")
+
+        def substitute(node):
+            for premise in node["premises"]:
+                if premise["role"] == "parent_state":
+                    premise["node_id"] = donor_id
+
+        tampered = _reseal(dag, dag["root_id"], substitute)
+        self.assertEqual(
+            node_id_for(tampered["nodes"][tampered["root_id"]]),
+            tampered["root_id"])
+        self.assertEqual(self._verify(proposal, tampered, span_of),
+                         self.BINDING)
+        self.assertEqual(self._verify(proposal, dag, span_of), "")
+
+    def test_premise_claim_wrong_instance_fails(self) -> None:
+        proposal, blocks, span_of = self._chain()
+        dag = self._build(proposal, STEP1_OUT_STATE, span_of)
+        inheritance_id = self._parent_role_id(dag, dag["root_id"])
+        self.assertEqual(dag["nodes"][inheritance_id]["node_type"],
+                         "inheritance")
+        # Same field path, same state value, wrong material_instance_id.
+        tampered = _reseal(
+            dag, inheritance_id,
+            lambda node: node["claim"].update(material_instance_id="inst_bx"))
+        self.assertEqual(self._verify(proposal, tampered, span_of),
+                         self.BINDING)
+        self.assertEqual(self._verify(proposal, dag, span_of), "")
+
+    def test_premise_claim_wrong_state_fails(self) -> None:
+        proposal, blocks, span_of = self._chain()
+        dag = self._build(proposal, OUT_STATE, span_of)
+        literal_id = self._parent_role_id(dag, dag["root_id"])
+        self.assertEqual(dag["nodes"][literal_id]["node_type"], "paper_literal")
+        # Same field path, same instance, wrong target_state.
+        tampered = _reseal(
+            dag, literal_id,
+            lambda node: node["claim"].update(target_state="powder"))
+        self.assertEqual(self._verify(proposal, tampered, span_of),
+                         self.BINDING)
+        self.assertEqual(self._verify(proposal, dag, span_of), "")
+
+    def test_correct_ancestor_wrong_level_fails(self) -> None:
+        proposal, blocks, span_of = self._chain()
+        dag = self._build(proposal, STEP1_OUT_STATE, span_of)
+        # The graph[0].out node is the correct ancestor one level up and
+        # verifies on its own; the root's parent_state_path is graph[1].in,
+        # so exact field_path equality rejects the level skip.
+        ancestor_id = next(
+            node_id for node_id, node in dag["nodes"].items()
+            if node["node_type"] == "state_change"
+            and node.get("rule_id") == "CENTRIFUGE_COLLECT_PRECIPITATE_V1")
+
+        def substitute(node):
+            for premise in node["premises"]:
+                if premise["role"] == "parent_state":
+                    premise["node_id"] = ancestor_id
+
+        tampered = _reseal(dag, dag["root_id"], substitute)
+        self.assertEqual(self._verify(proposal, tampered, span_of),
+                         self.BINDING)
+        self.assertEqual(self._verify(proposal, dag, span_of), "")
+
+    def test_three_hop_contamination_invalidates_all_roots(self) -> None:
+        proposal, blocks, span_of = self._chain3()
+        # Two consecutive non-literal inheritance hops: graph[2].in stands
+        # on graph[1].out, whose parent graph[1].in is not literal-provable
+        # and stands on graph[0].out.  The capability token forwarded
+        # through the inheritance re-derivation makes this compose (the
+        # 3B-1 follow-up); no special multi-hop logic exists.
+        dag2 = self._build(proposal, STEP2_INPUT_STATE, span_of)
+        root = dag2["nodes"][dag2["root_id"]]
+        self.assertEqual(root["node_type"], "inheritance")
+        self.assertEqual(root["claim"]["field_path"], STEP2_INPUT_STATE)
+        hop1 = dag2["nodes"][root["premises"][0]["node_id"]]
+        self.assertEqual(hop1["node_type"], "state_change")
+        self.assertEqual(hop1["claim"]["field_path"], STEP1_OUT_STATE)
+        hop2 = dag2["nodes"][self._parent_role_id(dag2, hop1["node_id"])]
+        self.assertEqual(hop2["node_type"], "inheritance")
+        self.assertEqual(hop2["claim"]["field_path"], STEP1_INPUT_STATE)
+        hop3 = dag2["nodes"][self._parent_role_id(dag2, hop2["node_id"])]
+        self.assertEqual(hop3["node_type"], "state_change")
+        self.assertEqual(hop3["claim"]["field_path"], OUT_STATE)
+        self.assertEqual(self._verify(proposal, dag2, span_of), "")
+        self.assertEqual(
+            self._verify(proposal, dag2, span_of, blocks=blocks), "")
+
+        # Mutate graph[0]'s retained-object naming evidence: every
+        # pre-mutation root fails under the mutated facts (no stale node
+        # keeps passing), every content address moves on rebuild, and the
+        # rebuilt chain verifies against the mutated facts.
+        modified = deepcopy(proposal)
+        for fact in modified["route_facts"]:
+            if fact["fact_id"] == "out_name":
+                fact["excerpt"] = "The precipitates were labeled as LDH seeds"
+        paths = (OUT_STATE, STEP1_INPUT_STATE, STEP1_OUT_STATE,
+                 STEP2_INPUT_STATE)
+        originals = {path: self._build(proposal, path, span_of)
+                     for path in paths}
+        for path, dag in originals.items():
+            self.assertEqual(
+                verify_state_proof_dag(
+                    dag, modified["material_graph"], modified["route_facts"],
+                    span_of=span_of, **self._kwargs()),
+                "proof_dag_leaf_fact_mismatch",
+                f"stale root for {path} kept passing under mutated facts")
+        for path, dag in originals.items():
+            rebuilt = self._build(modified, path, span_of)
+            self.assertNotEqual(rebuilt["root_id"], dag["root_id"])
+            self.assertEqual(self._verify(modified, rebuilt, span_of), "")
+        for dag in originals.values():
+            self.assertEqual(self._verify(proposal, dag, span_of), "")
 
 
 class SameStateNodeTest(ProofDagFixtureMixin):

@@ -20,8 +20,10 @@ records), then builds and verifies proof DAGs on the REAL signed group for:
 - ``material_graph[6].material_inputs[0].state`` (LDH-seeds input,
   inheritance node with a typed parent_ref),
 - ``material_graph[6].material_outputs[0].state`` (redispersion output,
-  REDISPERSION_V1 whose parent_state premise is the graph[5] output's own
-  proven state-change node — the chain the flat engine could not prove).
+  REDISPERSION_V1 whose parent_state premise is the graph[6] input's own
+  inheritance node, which in turn stands on the graph[5] output's proven
+  state-change node — the canonical chain the flat engine could not
+  prove).
 
 The replay JSON's ``round3b_acceptance`` section reports the nine
 acceptance items with PASS/FAIL plus evidence; anything not proven is
@@ -411,16 +413,23 @@ def _accept_1_2_3(dags, graph, facts, scope, span_of, blocks, captions):
     out_root = g6out["nodes"][g6out["root_id"]]
     out_roles = {premise["role"]: g6out["nodes"][premise["node_id"]]
                  for premise in out_root["premises"]}
+    in_node = out_roles["parent_state"]
+    in_parent = g6out["nodes"][next(
+        premise["node_id"] for premise in in_node["premises"]
+        if premise["role"] == "parent_state")]
     v6out = _verify_both(g6out, graph, facts, scope, span_of, blocks, captions)
     chain = _chain_summary(g6out)
     item3_ok = (
         out_root["node_type"] == "state_change"
         and out_root["rule_id"] == "REDISPERSION_V1"
         and out_root["rule_version"] == "1.1.0"
-        and out_roles["parent_state"]["node_type"] == "state_change"
-        and out_roles["parent_state"]["rule_id"]
-            == "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
-        and out_roles["parent_state"]["claim"]["field_path"] == G5_OUT_STATE
+        and in_node["node_type"] == "inheritance"
+        and in_node["rule_id"] == "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+        and in_node["claim"]["field_path"] == G6_IN_STATE
+        and in_node["claim"]["target_state"] == "retained_wet_solid"
+        and in_parent["node_type"] == "state_change"
+        and in_parent["rule_id"] == "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
+        and in_parent["claim"]["field_path"] == G5_OUT_STATE
         and v6out == {"verify_with_span_resolver": "",
                       "verify_blocks_only": ""}
     )
@@ -436,11 +445,15 @@ def _accept_1_2_3(dags, graph, facts, scope, span_of, blocks, captions):
                 "graph[5] input state, graph[5] output name) -> "
                 "source_relation POST_OPERATION_RETAINED_OBJECT_V1 -> "
                 "state_change CENTRIFUGE_COLLECT_PRECIPITATE_V1 "
-                "(graph[5].out retained_wet_solid) -> state_change "
-                "REDISPERSION_V1 (graph[6].out suspension); the "
-                "graph[6].out root's parent_state premise is the graph[5] "
-                "output's own proven state-change node, composing the "
-                "proof the flat engine could not derive"),
+                "(graph[5].out retained_wet_solid) -> inheritance "
+                "PARENT_OUTPUT_STATE_INHERITANCE_V1 (graph[6].in "
+                "retained_wet_solid) -> state_change REDISPERSION_V1 "
+                "(graph[6].out suspension); the canonical chain: the "
+                "graph[6].out root's parent_state premise is the graph[6] "
+                "input's own inheritance node, which stands on the "
+                "graph[5] output's proven state-change node — each node "
+                "answers only its local question, composing the proof the "
+                "flat engine could not derive"),
             "tree": chain,
         },
         "node_count": len(g6out["nodes"]),
@@ -992,8 +1005,13 @@ def main() -> None:
              "every node type re-derived from the signed blocks, facts and "
              "versioned rules); any failure invalidates the whole DAG",
              "convention nodes lift typed fields from a freshly recomputed "
-             "flat proof, with parent_state_proven set only after the "
-             "parent premise node has its own verified node in the DAG",
+             "flat proof, with a _VerifiedParentStateEvidence capability "
+             "token minted only after the parent premise node has its own "
+             "verified node in the DAG and the premise claim's binding "
+             "triple matches the dependent node's typed parent fields "
+             "(proof_dag_parent_state_binding_mismatch otherwise); the "
+             "parent premise is the canonical chain node for the step's own "
+             "input state path",
              "the flat engine is reused, never reimplemented; legacy "
              "route-convention-state/v1 proofs are byte-compatible",
          ]},

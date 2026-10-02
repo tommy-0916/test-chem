@@ -1,0 +1,1516 @@
+{
+  "audit_rows": 11,
+  "group_identity": {
+    "paper_id": "doi_10_1021_acsami_3c11651",
+    "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+    "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "block_count": 23,
+    "caption_count": 0
+  },
+  "proposal_reuse": {
+    "path": "result/operation-structure-20260928/local-revision-r10-proposal.json",
+    "modified": false,
+    "sha256": "sha256_cb6b1ff7f6cffad29539a2ef560bc0f079cdad0d8953a1a09292d65a6b0dc2e7",
+    "derived_from": "result/operation-structure-20260928/local-revision-r8-proposal.json",
+    "derived_from_sha256": "sha256_58832fa0c660f7dcc5776eadb411d8d5f34da11251a3660791028c149b326811"
+  },
+  "round3c_acceptance": {
+    "compound_operation_representation_3c1": {
+      "status": "PASS",
+      "representation": "graph[7] (ms7a) and graph[8] (ms7b) source operation is the compound 'second centrifugation−redispersion protocol' (U+2212), mirroring graph[5]: two operation_segments (centrifugation + redispersion), provenance kind=paper -> the step's operation evidence id, material_relations[*].source_operation_ref = the claimed segment_id; the claimed segment keeps material_effect transform_material, the unclaimed segment is unknown",
+      "rationale": "the bare-word representation (operation 'centrifugation'/'redispersion' standing alone on the compound quote) bypassed the compound-operation guard and misattributed blockers; this is an evidence-semantics precondition, not cosmetic",
+      "changed_paths_vs_r8": [
+        "proposals[0].material_graph[7].operation",
+        "proposals[0].material_graph[7].operation_segments[len 1!=2]",
+        "proposals[0].material_graph[8].operation",
+        "proposals[0].material_graph[8].operation_segments[len 1!=2]",
+        "proposals[0].route_facts[71].value",
+        "proposals[0].route_facts[77].value"
+      ],
+      "only_graph7_graph8_changed": true,
+      "operation_facts_value_updated": true,
+      "steps": [
+        {
+          "step_index": 7,
+          "macro_step_id": "ms7a",
+          "operation": "second centrifugation−redispersion protocol",
+          "operation_fact_id": "f_g7a_op",
+          "operation_fact_value": "second centrifugation−redispersion protocol",
+          "operation_fact_excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+          "operation_fact_excerpt_locator": "pdf:p2:b74-p2:b75",
+          "operation_fact_binding_issue": "",
+          "value_literal_in_quote": true,
+          "segments": [
+            {
+              "segment_id": "ms7a-seg-centrifugation",
+              "material_effect": "transform_material"
+            },
+            {
+              "segment_id": "ms7a-seg-redispersion",
+              "material_effect": "unknown"
+            }
+          ],
+          "relation_source_operation_ref": [
+            "ms7a-seg-centrifugation"
+          ],
+          "signed_blocks_covering_sentence": [
+            {
+              "locator": "pdf:p2:b74-p2:b74",
+              "text": "speed of 100 rpm. Finally, after a second centrifugation−redispersion"
+            },
+            {
+              "locator": "pdf:p2:b75-p2:b75",
+              "text": "protocol one time, all the samples are collected for further"
+            }
+          ],
+          "status": "PASS"
+        },
+        {
+          "step_index": 8,
+          "macro_step_id": "ms7b",
+          "operation": "second centrifugation−redispersion protocol",
+          "operation_fact_id": "f_g7b_op",
+          "operation_fact_value": "second centrifugation−redispersion protocol",
+          "operation_fact_excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+          "operation_fact_excerpt_locator": "pdf:p2:b74-p2:b75",
+          "operation_fact_binding_issue": "",
+          "value_literal_in_quote": true,
+          "segments": [
+            {
+              "segment_id": "ms7b-seg-centrifugation",
+              "material_effect": "unknown"
+            },
+            {
+              "segment_id": "ms7b-seg-redispersion",
+              "material_effect": "transform_material"
+            }
+          ],
+          "relation_source_operation_ref": [
+            "ms7b-seg-redispersion"
+          ],
+          "signed_blocks_covering_sentence": [
+            {
+              "locator": "pdf:p2:b74-p2:b74",
+              "text": "speed of 100 rpm. Finally, after a second centrifugation−redispersion"
+            },
+            {
+              "locator": "pdf:p2:b75-p2:b75",
+              "text": "protocol one time, all the samples are collected for further"
+            }
+          ],
+          "status": "PASS"
+        }
+      ]
+    },
+    "round3b_carryover": {
+      "graph5_output_typed_dag": {
+        "status": "PASS",
+        "field_path": "material_graph[5].material_outputs[0].state",
+        "root_node_type": "state_change",
+        "root_schema": "state-change-convention-proof/v1",
+        "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+        "rule_version": "1.1.0",
+        "premise_roles": {
+          "operation": "paper_literal",
+          "parent_state": "paper_literal",
+          "retained_object": "source_relation"
+        },
+        "node_count": 5,
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": ""
+      },
+      "graph6_input_inheritance_dag": {
+        "status": "PASS",
+        "field_path": "material_graph[6].material_inputs[0].state",
+        "root_node_type": "inheritance",
+        "root_schema": "state-inheritance-proof/v1",
+        "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+        "parent_ref": {
+          "kind": "material_instance",
+          "macro_step_id": "ms5",
+          "material_instance_id": "inst_ldh_seeds"
+        },
+        "parent_premise_node_type": "state_change",
+        "parent_premise_rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": ""
+      },
+      "graph6_output_redispersion_dag": {
+        "status": "PASS",
+        "field_path": "material_graph[6].material_outputs[0].state",
+        "root_node_type": "state_change",
+        "rule_id": "REDISPERSION_V1",
+        "rule_version": "1.1.0",
+        "premise_chain_summary": {
+          "description": "paper literals (operation graph[6], operation graph[5], graph[5] input state, graph[5] output name) -> source_relation POST_OPERATION_RETAINED_OBJECT_V1 -> state_change CENTRIFUGE_COLLECT_PRECIPITATE_V1 (graph[5].out retained_wet_solid) -> inheritance PARENT_OUTPUT_STATE_INHERITANCE_V1 (graph[6].in retained_wet_solid) -> state_change REDISPERSION_V1 (graph[6].out suspension); the canonical chain: the graph[6].out root's parent_state premise is the graph[6] input's own inheritance node, which stands on the graph[5] output's proven state-change node — each node answers only its local question, composing the proof the flat engine could not derive",
+          "tree": [
+            {
+              "depth": 0,
+              "role_to_parent": "(root)",
+              "node_type": "state_change",
+              "rule_id": "REDISPERSION_V1",
+              "claim_field_path": "material_graph[6].material_outputs[0].state",
+              "claim_target_state": "suspension"
+            },
+            {
+              "depth": 1,
+              "role_to_parent": "operation",
+              "node_type": "paper_literal",
+              "rule_id": "",
+              "claim_field_path": "material_graph[6].operation",
+              "claim_target_state": "",
+              "leaf_field_path": "material_graph[6].operation"
+            },
+            {
+              "depth": 1,
+              "role_to_parent": "parent_state",
+              "node_type": "inheritance",
+              "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+              "claim_field_path": "material_graph[6].material_inputs[0].state",
+              "claim_target_state": "retained_wet_solid"
+            },
+            {
+              "depth": 2,
+              "role_to_parent": "parent_state",
+              "node_type": "state_change",
+              "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+              "claim_field_path": "material_graph[5].material_outputs[0].state",
+              "claim_target_state": "retained_wet_solid"
+            },
+            {
+              "depth": 3,
+              "role_to_parent": "operation",
+              "node_type": "paper_literal",
+              "rule_id": "",
+              "claim_field_path": "material_graph[5].operation",
+              "claim_target_state": "",
+              "leaf_field_path": "material_graph[5].operation"
+            },
+            {
+              "depth": 3,
+              "role_to_parent": "parent_state",
+              "node_type": "paper_literal",
+              "rule_id": "",
+              "claim_field_path": "material_graph[5].material_inputs[1].state",
+              "claim_target_state": "suspension",
+              "leaf_field_path": "material_graph[5].material_inputs[1].state"
+            },
+            {
+              "depth": 3,
+              "role_to_parent": "retained_object",
+              "node_type": "source_relation",
+              "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+              "claim_field_path": "material_graph[5].material_outputs[0].state",
+              "claim_target_state": "retained_wet_solid"
+            },
+            {
+              "depth": 4,
+              "role_to_parent": "naming",
+              "node_type": "paper_literal",
+              "rule_id": "",
+              "claim_field_path": "material_graph[5].material_outputs[0].name",
+              "claim_target_state": "",
+              "leaf_field_path": "material_graph[5].material_outputs[0].name"
+            }
+          ]
+        },
+        "node_count": 8,
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": ""
+      },
+      "no_literal_parent_state": {
+        "status": "PASS",
+        "facts_scanned": 87,
+        "excerpts_containing_retained_wet_solid_literal": [],
+        "flat_engine_graph6_output": {
+          "proof": null,
+          "issue": "convention_parent_state_unverified",
+          "expected_issue": "convention_parent_state_unverified"
+        },
+        "dag_graph6_output_verify": "",
+        "note": "the flat engine's parent premise accepts only literal gates, so graph[6].out stays honestly unverified there; the DAG composes the parent output's own proof node instead and verifies"
+      },
+      "invalidation": {
+        "status": "PASS",
+        "operation_excerpt_tamper": {
+          "tamper": "f_g5_op (material_graph[5].operation) and f_g5_out0_state excerpts changed together to a different real span of the same signed blocks (extended leftwards to start at 'followed'; the child state quote must stay the operation quote, and the span must keep covering the full operation region or the retained-object continuity check rejects the rebuild)",
+          "old_graph6_output_dag_verify_tampered_facts": "proof_dag_leaf_fact_mismatch",
+          "old_graph6_input_dag_verify_tampered_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "root_id_changed": true,
+          "rebuilt_dag_verifies_tampered_facts": true,
+          "old_dag_still_verifies_untouched_facts": true,
+          "downstream": {
+            "leaf_node_id": "proof_node_fc13ffa4898093548d93f1c9",
+            "downstream_nodes": [
+              {
+                "node_id": "proof_node_751788069e4abc43d2d724a4",
+                "node_type": "source_relation",
+                "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1"
+              },
+              {
+                "node_id": "proof_node_887e9e20d560bc934148aba1",
+                "node_type": "inheritance",
+                "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+              },
+              {
+                "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+                "node_type": "state_change",
+                "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
+              },
+              {
+                "node_id": "proof_node_d1d772c2010db8114b9212dd",
+                "node_type": "state_change",
+                "rule_id": "REDISPERSION_V1"
+              }
+            ]
+          },
+          "downstream_note": "verification is whole-DAG with premises verified before dependents and no partial pass: the failed operation leaf invalidates the source_relation node, the graph[5].out state_change node, the graph[6].in inheritance node (shown on the graph6_input DAG), and the graph[6].out root",
+          "status": "PASS"
+        },
+        "naming_excerpt_tamper": {
+          "tamper": "f_g5_out0_name (material_graph[5].material_outputs[0].name) excerpt shortened; the recomputed retained-object record's naming span/digest changes",
+          "old_graph6_output_dag_verify_tampered_facts": "proof_dag_leaf_fact_mismatch",
+          "old_graph6_input_dag_verify_tampered_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "source_relation_node_id_changed": true,
+          "root_id_changed": true,
+          "rebuilt_dag_verifies_tampered_facts": true,
+          "downstream": {
+            "leaf_node_id": "proof_node_90debdc5ab6b615f93a387b0",
+            "downstream_nodes": [
+              {
+                "node_id": "proof_node_751788069e4abc43d2d724a4",
+                "node_type": "source_relation",
+                "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1"
+              },
+              {
+                "node_id": "proof_node_887e9e20d560bc934148aba1",
+                "node_type": "inheritance",
+                "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1"
+              },
+              {
+                "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+                "node_type": "state_change",
+                "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1"
+              },
+              {
+                "node_id": "proof_node_d1d772c2010db8114b9212dd",
+                "node_type": "state_change",
+                "rule_id": "REDISPERSION_V1"
+              }
+            ]
+          },
+          "status": "PASS"
+        },
+        "rule_bytes_tamper": {
+          "tamper": "route_convention_basis._rule_resource mocked to return the real rules with a forged resource digest (sha256_00..00)",
+          "graph5_output_dag_verify_forged_rules": "proof_dag_context_mismatch",
+          "graph6_input_dag_verify_forged_rules": "proof_dag_context_mismatch",
+          "graph6_output_dag_verify_forged_rules": "proof_dag_context_mismatch",
+          "dag_verifies_real_rules_after_mock": true,
+          "downstream_note": "the rule-resource digest is pinned into the DAG context at build time; a verifier under different rule bytes rejects the whole DAG (context mismatch) before any node is trusted, so the inheritance node and both state-change nodes fail with the root",
+          "status": "PASS"
+        }
+      },
+      "forged_upstream_node": {
+        "status": "PASS",
+        "forged_upstream_node": {
+          "forgery": "hand-made paper_literal node with invented content (material_instance_id inst_zzz, claim_value powder) inserted under a stale content address",
+          "verify_issue": "proof_dag_node_id_mismatch",
+          "expected": "proof_dag_node_id_mismatch"
+        },
+        "tampered_premise_id": {
+          "forgery": "graph[6].out root's first premise id replaced with proof_node_ffff..ff",
+          "verify_issue": "proof_dag_premise_missing",
+          "expected": "proof_dag_premise_missing"
+        },
+        "untouched_dag_still_verifies": true
+      },
+      "cycle_future_reference": {
+        "status": "PASS",
+        "cycle": {
+          "construction": "hand-built 2-node mutual-premise DAG under the real graph[5] context",
+          "verify_issue": "proof_dag_cycle",
+          "expected": "proof_dag_cycle"
+        },
+        "future_reference": {
+          "construction": "copy of the real graph with graph[6] input[0] parent_output_refs pointing at a synthetic LATER step ms_late (index 10) whose output port matches the reference",
+          "build_dag": null,
+          "build_issue": "proof_dag_future_reference",
+          "expected": "proof_dag_future_reference"
+        }
+      },
+      "leaf_relocation": {
+        "status": "PASS",
+        "per_dag": {
+          "graph5_output": {
+            "verify_blocks_only": "",
+            "leaf_count": 3,
+            "leaves": [
+              {
+                "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+                "field_path": "material_graph[5].operation",
+                "locator": "pdf:p2:b70-p2:b71",
+                "char_span": [
+                  974,
+                  1107
+                ]
+              },
+              {
+                "node_id": "proof_node_f080935710ecfdf87640f7d5",
+                "field_path": "material_graph[5].material_inputs[1].state",
+                "locator": "pdf:p2:b69-p2:b69",
+                "char_span": [
+                  906,
+                  973
+                ]
+              },
+              {
+                "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+                "field_path": "material_graph[5].material_outputs[0].name",
+                "locator": "pdf:p2:b71-p2:b72",
+                "char_span": [
+                  1109,
+                  1179
+                ]
+              }
+            ]
+          },
+          "graph6_input": {
+            "verify_blocks_only": "",
+            "leaf_count": 3,
+            "leaves": [
+              {
+                "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+                "field_path": "material_graph[5].operation",
+                "locator": "pdf:p2:b70-p2:b71",
+                "char_span": [
+                  974,
+                  1107
+                ]
+              },
+              {
+                "node_id": "proof_node_f080935710ecfdf87640f7d5",
+                "field_path": "material_graph[5].material_inputs[1].state",
+                "locator": "pdf:p2:b69-p2:b69",
+                "char_span": [
+                  906,
+                  973
+                ]
+              },
+              {
+                "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+                "field_path": "material_graph[5].material_outputs[0].name",
+                "locator": "pdf:p2:b71-p2:b72",
+                "char_span": [
+                  1109,
+                  1179
+                ]
+              }
+            ]
+          },
+          "graph6_output": {
+            "verify_blocks_only": "",
+            "leaf_count": 4,
+            "leaves": [
+              {
+                "node_id": "proof_node_3568cbe8618508c957b5b6dc",
+                "field_path": "material_graph[6].operation",
+                "locator": "pdf:p2:b72-p2:b73",
+                "char_span": [
+                  1159,
+                  1209
+                ]
+              },
+              {
+                "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+                "field_path": "material_graph[5].operation",
+                "locator": "pdf:p2:b70-p2:b71",
+                "char_span": [
+                  974,
+                  1107
+                ]
+              },
+              {
+                "node_id": "proof_node_f080935710ecfdf87640f7d5",
+                "field_path": "material_graph[5].material_inputs[1].state",
+                "locator": "pdf:p2:b69-p2:b69",
+                "char_span": [
+                  906,
+                  973
+                ]
+              },
+              {
+                "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+                "field_path": "material_graph[5].material_outputs[0].name",
+                "locator": "pdf:p2:b71-p2:b72",
+                "char_span": [
+                  1109,
+                  1179
+                ]
+              }
+            ]
+          },
+          "graph7_input": {
+            "verify_blocks_only": "",
+            "leaf_count": 4,
+            "leaves": [
+              {
+                "node_id": "proof_node_3568cbe8618508c957b5b6dc",
+                "field_path": "material_graph[6].operation",
+                "locator": "pdf:p2:b72-p2:b73",
+                "char_span": [
+                  1159,
+                  1209
+                ]
+              },
+              {
+                "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+                "field_path": "material_graph[5].operation",
+                "locator": "pdf:p2:b70-p2:b71",
+                "char_span": [
+                  974,
+                  1107
+                ]
+              },
+              {
+                "node_id": "proof_node_f080935710ecfdf87640f7d5",
+                "field_path": "material_graph[5].material_inputs[1].state",
+                "locator": "pdf:p2:b69-p2:b69",
+                "char_span": [
+                  906,
+                  973
+                ]
+              },
+              {
+                "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+                "field_path": "material_graph[5].material_outputs[0].name",
+                "locator": "pdf:p2:b71-p2:b72",
+                "char_span": [
+                  1109,
+                  1179
+                ]
+              }
+            ]
+          }
+        },
+        "tampered_char_span_resealed": {
+          "target_leaf_field_path": "material_graph[6].operation",
+          "forgery": "leaf char_span replaced with [0, 5], then every dependent content address honestly recomputed",
+          "verify_issue": "proof_dag_leaf_relocation_mismatch",
+          "expected": "proof_dag_leaf_relocation_mismatch"
+        },
+        "tampered_char_span_unresealed": {
+          "verify_issue": "proof_dag_node_id_mismatch",
+          "expected": "proof_dag_node_id_mismatch"
+        },
+        "note": "the verifier was handed the signed blocks only (plus the trust scope and leaf metadata); it rebuilt its own span resolver and re-extracted every leaf from the projected normalized source"
+      },
+      "legacy_regression": {
+        "status": "PASS",
+        "legacy_flat_proof": {
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "derive_issue": "",
+          "schema_version": "route-convention-state/v1",
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "rule_version": "1.1.0",
+          "verify_bound_output_state_issue": ""
+        },
+        "legacy_schema_in_dag_nodes": "absent from all DAGs"
+      },
+      "status": "PASS"
+    },
+    "graph7_input_multihop_inheritance_3c2": {
+      "status": "PASS",
+      "field_path": "material_graph[7].material_inputs[0].state",
+      "root_node_type": "inheritance",
+      "root_schema": "state-inheritance-proof/v1",
+      "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+      "parent_ref": {
+        "kind": "material_instance",
+        "macro_step_id": "ms6",
+        "material_instance_id": "inst_ldh_aged"
+      },
+      "node_count": 9,
+      "multi_hop_chain": "inheritance graph[7].in -> state_change REDISPERSION_V1 graph[6].out -> inheritance graph[6].in -> state_change CENTRIFUGE_COLLECT_PRECIPITATE_V1 graph[5].out -> paper literals + source_relation; TWO consecutive non-literal inheritance hops compose through the capability token forwarded by the recursion (the 3B-1 limitation is resolved)",
+      "no_direct_graph5_facts": {
+        "root_parent_evidence_id": "route_fact_61e3a6a88d175d14a126b6c5",
+        "root_operation_evidence_id": "route_fact_9b523fc81f3b416670e9d30c",
+        "both_are_graph6_evidence": true,
+        "note": "graph[5] paper facts appear only as leaves inside the nested verified premise subgraph (graph[6].out -> graph[6].in -> graph[5].out); the graph[7].in node's own re-derivation consults graph[6] evidence plus the verified grandparent token only"
+      },
+      "premise_chain_tree": [
+        {
+          "depth": 0,
+          "role_to_parent": "(root)",
+          "node_type": "inheritance",
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "claim_field_path": "material_graph[7].material_inputs[0].state",
+          "claim_target_state": "suspension"
+        },
+        {
+          "depth": 1,
+          "role_to_parent": "parent_state",
+          "node_type": "state_change",
+          "rule_id": "REDISPERSION_V1",
+          "claim_field_path": "material_graph[6].material_outputs[0].state",
+          "claim_target_state": "suspension"
+        },
+        {
+          "depth": 2,
+          "role_to_parent": "operation",
+          "node_type": "paper_literal",
+          "rule_id": "",
+          "claim_field_path": "material_graph[6].operation",
+          "claim_target_state": "",
+          "leaf_field_path": "material_graph[6].operation"
+        },
+        {
+          "depth": 2,
+          "role_to_parent": "parent_state",
+          "node_type": "inheritance",
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "claim_field_path": "material_graph[6].material_inputs[0].state",
+          "claim_target_state": "retained_wet_solid"
+        },
+        {
+          "depth": 3,
+          "role_to_parent": "parent_state",
+          "node_type": "state_change",
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "claim_field_path": "material_graph[5].material_outputs[0].state",
+          "claim_target_state": "retained_wet_solid"
+        },
+        {
+          "depth": 4,
+          "role_to_parent": "operation",
+          "node_type": "paper_literal",
+          "rule_id": "",
+          "claim_field_path": "material_graph[5].operation",
+          "claim_target_state": "",
+          "leaf_field_path": "material_graph[5].operation"
+        },
+        {
+          "depth": 4,
+          "role_to_parent": "parent_state",
+          "node_type": "paper_literal",
+          "rule_id": "",
+          "claim_field_path": "material_graph[5].material_inputs[1].state",
+          "claim_target_state": "suspension",
+          "leaf_field_path": "material_graph[5].material_inputs[1].state"
+        },
+        {
+          "depth": 4,
+          "role_to_parent": "retained_object",
+          "node_type": "source_relation",
+          "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "claim_field_path": "material_graph[5].material_outputs[0].state",
+          "claim_target_state": "retained_wet_solid"
+        },
+        {
+          "depth": 5,
+          "role_to_parent": "naming",
+          "node_type": "paper_literal",
+          "rule_id": "",
+          "claim_field_path": "material_graph[5].material_outputs[0].name",
+          "claim_target_state": "",
+          "leaf_field_path": "material_graph[5].material_outputs[0].name"
+        }
+      ],
+      "verify_with_span_resolver": "",
+      "verify_blocks_only": ""
+    },
+    "ms7a_output_retained_object_gap_3c3": {
+      "status": "PASS",
+      "node": "ms7a.out (graph[7].out)",
+      "field_path": "material_graph[7].material_outputs[0].state",
+      "verdict": "BLOCKED",
+      "build_issue": "retained_object_mention_precedes_operation",
+      "attribution": "evidence_gap",
+      "primary_attribution": "retained-object evidence gap",
+      "reasoning": "the paper affirms the second centrifugation−redispersion protocol happened but never says which phase the second centrifugation retained; the only 'LDH seeds' naming in the signed blocks is the FIRST protocol's retained-object naming (its span equals graph[5]'s naming span) and it textually precedes the second protocol's mention, so the resolver honestly records retained_object_mention_precedes_operation for ms7a — there is no retained-object mention FOR the second centrifugation at all",
+      "candidate_naming_span": [
+        17,
+        18
+      ],
+      "graph5_naming_span": [
+        17,
+        18
+      ],
+      "candidate_naming_is_graph5_naming": true,
+      "second_protocol_operation_span": [
+        20,
+        21
+      ],
+      "resolver_issue": "retained_object_mention_precedes_operation",
+      "family_guard_note": "with the compound representation the operation matches both the centrifugation and redispersion families; the guard surfaces the recorded source-relation blocker (retained_object_mention_precedes_operation) and would fall back to convention_rule_not_applicable_or_ambiguous only if the resolver had recorded nothing — the retained-object evidence gap is the primary attribution, not 'rule not applicable'",
+      "error_code_note": "the task-sanctioned refinement retained_object_for_operation_unverified was NOT shipped: the per-step resolver issues are recorded verbatim in the r7/r8 replay/audit JSONs and those runners must re-run byte-identical (hard constraint), so the resolver code stays untouched and the honest issue is reported with this reasoning",
+      "not_protocol_reference_inheritance": "'which was the first ... protocol' + 'a second ... protocol' does NOT license copying the first protocol's retained semantics onto the second: protocol-reference inheritance is not a published proof class and no rule was added",
+      "not_operation_precondition_inference": "'redispersion follows, so the solid must have been kept' is operation-precondition inference; no such proof type exists and none was added",
+      "flat_engine_without_token": {
+        "proof": null,
+        "issue": "convention_parent_state_unverified",
+        "note": "the flat engine is gated earlier at the literal parent gate; the DAG build discharges the parent through the genuine graph[7].in inheritance proof, so build_issue is the node's own residual gap"
+      }
+    },
+    "ms7b_dual_result_3c4": {
+      "status": "PASS",
+      "ms7b_in": {
+        "node": "ms7b.in (graph[8].in)",
+        "field_path": "material_graph[8].material_inputs[0].state",
+        "verdict": "BLOCKED",
+        "build_issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "caused_by": "ms7a.out"
+      },
+      "ms7b_out": {
+        "node": "ms7b.out (graph[8].out)",
+        "field_path": "material_graph[8].material_outputs[0].state",
+        "proof status": "BLOCKED",
+        "primary blocker": "parent_state_unverified",
+        "caused_by": "ms7a.out",
+        "proof_blocker": {
+          "blocker": "parent_state_unverified",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "caused_by": "ms7a.out (material_graph[7].material_outputs[0].state)",
+          "root_gap": "retained_object_mention_precedes_operation",
+          "path": "ms7b.out parent_state -> ms7b.in (inheritance) -> ms7a.out (BLOCKED: retained-object evidence gap)"
+        },
+        "independent convention diagnostics": {
+          "diagnostics_only": true,
+          "feeds_verdict": false,
+          "harness": "a local _VerifiedParentStateEvidence minted in the runner discharges the parent gate as if ms7b.in were satisfied; results below are this node's own gaps under that assumption",
+          "engine_what_if": {
+            "proof": null,
+            "issue": "retained_object_mention_precedes_operation",
+            "note": "the full engine under the what-if parent token is independently blocked by the compound-operation guard (the second protocol has no retained-object record either), surfacing the resolver's recorded blocker; this is a SECOND independent gap of ms7b.out, separate from the liquid premise below"
+          },
+          "redispersion_rule_local_probe": {
+            "rule_id": "REDISPERSION_V1",
+            "rule_version": "1.1.0",
+            "scoped_to_declared_segment": "ms7b-seg-redispersion",
+            "premises": {
+              "operation_affirmed": true,
+              "intent_affirmed": true,
+              "input_state_allowed": true,
+              "liquid_participation": false
+            },
+            "only_failing_premise": "liquid_participation"
+          },
+          "liquid_participation": {
+            "premise": "liquid_participation",
+            "status": "FAIL",
+            "issue": "convention_liquid_participation_missing",
+            "evidence": {
+              "liquid_state_input_ports": [],
+              "operation_excerpt": "Finally, after a second centrifugation−redispersion protocol one time",
+              "medium_phrase_in_excerpt": false
+            },
+            "reasoning": "the second protocol's own evidence names no liquid medium and ms7b has no liquid-state input port; the FIRST protocol's water ('using deionized water three times') must NOT propagate to the 'second ... protocol' — no rule licenses cross-protocol liquid propagation"
+          }
+        }
+      }
+    },
+    "graph9_cascade": {
+      "status": "PASS",
+      "graph9_input": {
+        "node": "graph[9].in",
+        "field_path": "material_graph[9].material_inputs[0].state",
+        "verdict": "BLOCKED",
+        "build_issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "caused_by": "ms7a.out (via ms7b.out)"
+      },
+      "graph9_output": {
+        "node": "graph[9].out",
+        "field_path": "material_graph[9].material_outputs[0].state",
+        "verdict": "BLOCKED",
+        "build_issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "caused_by": "ms7a.out (via ms7b.out)"
+      }
+    },
+    "real_chain_three_hop_contamination": {
+      "status": "PASS",
+      "tamper": "f_g5_out0_name (material_graph[5].material_outputs[0].name) excerpt shortened; the recomputed retained-object record's naming span/digest changes, moving every content address up the chain",
+      "hops_contaminated": "graph[5].out -> graph[6].in -> graph[6].out -> graph[7].in: three hops from the mutated source leaf, including the new multi-hop inheritance node",
+      "per_node": {
+        "graph5_output": {
+          "node": "graph[5].out",
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "old_dag_verify_under_mutated_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "root_id_changed": true,
+          "no_stale_source_relation_resurrected": true,
+          "rebuilt_dag_verifies_mutated_facts": true,
+          "old_dag_still_verifies_untouched_facts": true,
+          "status": "PASS"
+        },
+        "graph6_input": {
+          "node": "graph[6].in",
+          "field_path": "material_graph[6].material_inputs[0].state",
+          "old_dag_verify_under_mutated_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "root_id_changed": true,
+          "no_stale_source_relation_resurrected": true,
+          "rebuilt_dag_verifies_mutated_facts": true,
+          "old_dag_still_verifies_untouched_facts": true,
+          "status": "PASS"
+        },
+        "graph6_output": {
+          "node": "graph[6].out",
+          "field_path": "material_graph[6].material_outputs[0].state",
+          "old_dag_verify_under_mutated_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "root_id_changed": true,
+          "no_stale_source_relation_resurrected": true,
+          "rebuilt_dag_verifies_mutated_facts": true,
+          "old_dag_still_verifies_untouched_facts": true,
+          "status": "PASS"
+        },
+        "graph7_input": {
+          "node": "graph[7].in (ms7a.in)",
+          "field_path": "material_graph[7].material_inputs[0].state",
+          "old_dag_verify_under_mutated_facts": "proof_dag_leaf_fact_mismatch",
+          "rebuild_issue": "",
+          "root_id_changed": true,
+          "no_stale_source_relation_resurrected": true,
+          "rebuilt_dag_verifies_mutated_facts": true,
+          "old_dag_still_verifies_untouched_facts": true,
+          "status": "PASS"
+        }
+      }
+    },
+    "premise_binding_soundness_real_chain": {
+      "status": "PASS",
+      "premise_substitution_probes": [
+        {
+          "target_root": "graph[6].out",
+          "donor_node_type": "source_relation",
+          "donor_rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "donor_claim_field_path": "material_graph[5].material_outputs[0].state",
+          "reseal_honest_content_addresses": true,
+          "verify_issue": "proof_dag_parent_state_binding_mismatch",
+          "expected": "proof_dag_parent_state_binding_mismatch",
+          "untouched_dag_still_verifies": true
+        },
+        {
+          "target_root": "graph[7].in",
+          "donor_node_type": "state_change",
+          "donor_rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "donor_claim_field_path": "material_graph[5].material_outputs[0].state",
+          "reseal_honest_content_addresses": true,
+          "verify_issue": "proof_dag_parent_state_binding_mismatch",
+          "expected": "proof_dag_parent_state_binding_mismatch",
+          "untouched_dag_still_verifies": true
+        }
+      ],
+      "canonical_chain": {
+        "graph5_out_parent": {
+          "node_type": "paper_literal",
+          "claim_field_path": "material_graph[5].material_inputs[1].state",
+          "is_this_steps_input_path": true
+        },
+        "graph6_out_parent": {
+          "node_type": "inheritance",
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "claim_field_path": "material_graph[6].material_inputs[0].state",
+          "is_this_steps_input_path": true
+        },
+        "graph7_in_parent": {
+          "node_type": "state_change",
+          "rule_id": "REDISPERSION_V1",
+          "claim_field_path": "material_graph[6].material_outputs[0].state",
+          "is_resolved_upstream_output_port": true
+        },
+        "nested_graph6_out_parent": {
+          "node_type": "inheritance",
+          "claim_field_path": "material_graph[6].material_inputs[0].state",
+          "is_this_steps_input_path": true
+        }
+      },
+      "note": "an otherwise-valid but unrelated node substituted into the parent_state role fails proof_dag_parent_state_binding_mismatch even with every content address honestly resealed; the parent premise is always the canonical chain node for the step's own input state path (graph[6].out via graph[6].in)"
+    },
+    "final_state_table": {
+      "status": "PASS",
+      "nodes": [
+        {
+          "node": "graph[5].out",
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "actual_matches_expected": true,
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": ""
+        },
+        {
+          "node": "graph[6].in",
+          "field_path": "material_graph[6].material_inputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "actual_matches_expected": true,
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": ""
+        },
+        {
+          "node": "graph[6].out",
+          "field_path": "material_graph[6].material_outputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "actual_matches_expected": true,
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": ""
+        },
+        {
+          "node": "graph[7].in (ms7a.in)",
+          "field_path": "material_graph[7].material_inputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "actual_matches_expected": true,
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": ""
+        },
+        {
+          "node": "ms7a.out (graph[7].out)",
+          "field_path": "material_graph[7].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "evidence_gap",
+          "actual_matches_expected": true
+        },
+        {
+          "node": "ms7b.in (graph[8].in)",
+          "field_path": "material_graph[8].material_inputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "actual_matches_expected": true
+        },
+        {
+          "node": "ms7b.out (graph[8].out)",
+          "field_path": "material_graph[8].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "actual_matches_expected": true
+        },
+        {
+          "node": "graph[9].in",
+          "field_path": "material_graph[9].material_inputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "actual_matches_expected": true
+        },
+        {
+          "node": "graph[9].out",
+          "field_path": "material_graph[9].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "actual_matches_expected": true
+        }
+      ],
+      "blocked_split": {
+        "genuine_evidence_gaps": [
+          {
+            "node": "ms7a.out (graph[7].out)",
+            "gap": "retained-object evidence gap (second centrifugation retained phase)",
+            "issue": "retained_object_mention_precedes_operation"
+          },
+          {
+            "node": "ms7b.out (graph[8].out)",
+            "gap": "liquid participation (independent what-if diagnostic — never feeds the verdict)",
+            "issue": "convention_liquid_participation_missing"
+          }
+        ],
+        "dependency_cascades": [
+          {
+            "node": "ms7b.in (graph[8].in)",
+            "caused_by": "ms7a.out"
+          },
+          {
+            "node": "graph[9].in",
+            "caused_by": "ms7a.out (via ms7b.out)"
+          },
+          {
+            "node": "graph[9].out",
+            "caused_by": "ms7a.out (via ms7b.out)"
+          }
+        ]
+      }
+    },
+    "status": "PASS"
+  },
+  "per_dag_summaries": {
+    "graph5_output": {
+      "schema_version": "state-proof-dag/v1",
+      "root_id": "proof_node_aae94eb4d913302e1a6c4d15",
+      "root_node_type": "state_change",
+      "root_schema": "state-change-convention-proof/v1",
+      "root_rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+      "root_rule_version": "1.1.0",
+      "context": {
+        "graph_digest": "sha256_0bd53cf4de2950960dba1842c4dd25ea6a685cde8d97db7fa9b2780961a5811e",
+        "paper_id": "doi_10_1021_acsami_3c11651",
+        "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+        "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+        "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+      },
+      "node_count": 5,
+      "nodes": [
+        {
+          "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].operation",
+          "leaf_claim_value": "centrifugation−redispersion protocol",
+          "leaf_locator": "pdf:p2:b70-p2:b71",
+          "leaf_char_span": [
+            974,
+            1107
+          ]
+        },
+        {
+          "node_id": "proof_node_f080935710ecfdf87640f7d5",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_inputs[1].state",
+          "leaf_claim_value": "suspension",
+          "leaf_locator": "pdf:p2:b69-p2:b69",
+          "leaf_char_span": [
+            906,
+            973
+          ]
+        },
+        {
+          "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_outputs[0].name",
+          "leaf_claim_value": "LDH seeds",
+          "leaf_locator": "pdf:p2:b71-p2:b72",
+          "leaf_char_span": [
+            1109,
+            1179
+          ]
+        },
+        {
+          "node_id": "proof_node_751788069e4abc43d2d724a4",
+          "node_type": "source_relation",
+          "schema_version": "source-relation-proof/v1",
+          "premise_roles": [
+            "naming",
+            "operation",
+            "output_name"
+          ],
+          "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state",
+            "retained_object"
+          ],
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        }
+      ]
+    },
+    "graph6_input": {
+      "schema_version": "state-proof-dag/v1",
+      "root_id": "proof_node_887e9e20d560bc934148aba1",
+      "root_node_type": "inheritance",
+      "root_schema": "state-inheritance-proof/v1",
+      "root_rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+      "root_rule_version": "1.0.0",
+      "context": {
+        "graph_digest": "sha256_0bd53cf4de2950960dba1842c4dd25ea6a685cde8d97db7fa9b2780961a5811e",
+        "paper_id": "doi_10_1021_acsami_3c11651",
+        "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+        "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+        "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+      },
+      "node_count": 6,
+      "nodes": [
+        {
+          "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].operation",
+          "leaf_claim_value": "centrifugation−redispersion protocol",
+          "leaf_locator": "pdf:p2:b70-p2:b71",
+          "leaf_char_span": [
+            974,
+            1107
+          ]
+        },
+        {
+          "node_id": "proof_node_f080935710ecfdf87640f7d5",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_inputs[1].state",
+          "leaf_claim_value": "suspension",
+          "leaf_locator": "pdf:p2:b69-p2:b69",
+          "leaf_char_span": [
+            906,
+            973
+          ]
+        },
+        {
+          "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_outputs[0].name",
+          "leaf_claim_value": "LDH seeds",
+          "leaf_locator": "pdf:p2:b71-p2:b72",
+          "leaf_char_span": [
+            1109,
+            1179
+          ]
+        },
+        {
+          "node_id": "proof_node_751788069e4abc43d2d724a4",
+          "node_type": "source_relation",
+          "schema_version": "source-relation-proof/v1",
+          "premise_roles": [
+            "naming",
+            "operation",
+            "output_name"
+          ],
+          "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state",
+            "retained_object"
+          ],
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_887e9e20d560bc934148aba1",
+          "node_type": "inheritance",
+          "schema_version": "state-inheritance-proof/v1",
+          "premise_roles": [
+            "parent_state"
+          ],
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[6].material_inputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        }
+      ]
+    },
+    "graph6_output": {
+      "schema_version": "state-proof-dag/v1",
+      "root_id": "proof_node_d1d772c2010db8114b9212dd",
+      "root_node_type": "state_change",
+      "root_schema": "state-change-convention-proof/v1",
+      "root_rule_id": "REDISPERSION_V1",
+      "root_rule_version": "1.1.0",
+      "context": {
+        "graph_digest": "sha256_0bd53cf4de2950960dba1842c4dd25ea6a685cde8d97db7fa9b2780961a5811e",
+        "paper_id": "doi_10_1021_acsami_3c11651",
+        "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+        "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+        "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+      },
+      "node_count": 8,
+      "nodes": [
+        {
+          "node_id": "proof_node_3568cbe8618508c957b5b6dc",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[6].operation",
+          "leaf_claim_value": "dispersed",
+          "leaf_locator": "pdf:p2:b72-p2:b73",
+          "leaf_char_span": [
+            1159,
+            1209
+          ]
+        },
+        {
+          "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].operation",
+          "leaf_claim_value": "centrifugation−redispersion protocol",
+          "leaf_locator": "pdf:p2:b70-p2:b71",
+          "leaf_char_span": [
+            974,
+            1107
+          ]
+        },
+        {
+          "node_id": "proof_node_f080935710ecfdf87640f7d5",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_inputs[1].state",
+          "leaf_claim_value": "suspension",
+          "leaf_locator": "pdf:p2:b69-p2:b69",
+          "leaf_char_span": [
+            906,
+            973
+          ]
+        },
+        {
+          "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_outputs[0].name",
+          "leaf_claim_value": "LDH seeds",
+          "leaf_locator": "pdf:p2:b71-p2:b72",
+          "leaf_char_span": [
+            1109,
+            1179
+          ]
+        },
+        {
+          "node_id": "proof_node_751788069e4abc43d2d724a4",
+          "node_type": "source_relation",
+          "schema_version": "source-relation-proof/v1",
+          "premise_roles": [
+            "naming",
+            "operation",
+            "output_name"
+          ],
+          "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state",
+            "retained_object"
+          ],
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_887e9e20d560bc934148aba1",
+          "node_type": "inheritance",
+          "schema_version": "state-inheritance-proof/v1",
+          "premise_roles": [
+            "parent_state"
+          ],
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[6].material_inputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_d1d772c2010db8114b9212dd",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state"
+          ],
+          "rule_id": "REDISPERSION_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[6].material_outputs[0].state",
+            "target_state": "suspension",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_aged"
+          }
+        }
+      ]
+    },
+    "graph7_input": {
+      "schema_version": "state-proof-dag/v1",
+      "root_id": "proof_node_60eeedce72342a33b51ea29b",
+      "root_node_type": "inheritance",
+      "root_schema": "state-inheritance-proof/v1",
+      "root_rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+      "root_rule_version": "1.0.0",
+      "context": {
+        "graph_digest": "sha256_0bd53cf4de2950960dba1842c4dd25ea6a685cde8d97db7fa9b2780961a5811e",
+        "paper_id": "doi_10_1021_acsami_3c11651",
+        "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+        "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+        "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+      },
+      "node_count": 9,
+      "nodes": [
+        {
+          "node_id": "proof_node_3568cbe8618508c957b5b6dc",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[6].operation",
+          "leaf_claim_value": "dispersed",
+          "leaf_locator": "pdf:p2:b72-p2:b73",
+          "leaf_char_span": [
+            1159,
+            1209
+          ]
+        },
+        {
+          "node_id": "proof_node_fc13ffa4898093548d93f1c9",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].operation",
+          "leaf_claim_value": "centrifugation−redispersion protocol",
+          "leaf_locator": "pdf:p2:b70-p2:b71",
+          "leaf_char_span": [
+            974,
+            1107
+          ]
+        },
+        {
+          "node_id": "proof_node_f080935710ecfdf87640f7d5",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_inputs[1].state",
+          "leaf_claim_value": "suspension",
+          "leaf_locator": "pdf:p2:b69-p2:b69",
+          "leaf_char_span": [
+            906,
+            973
+          ]
+        },
+        {
+          "node_id": "proof_node_90debdc5ab6b615f93a387b0",
+          "node_type": "paper_literal",
+          "schema_version": "paper-literal-proof/v1",
+          "premise_roles": [],
+          "leaf_field_path": "material_graph[5].material_outputs[0].name",
+          "leaf_claim_value": "LDH seeds",
+          "leaf_locator": "pdf:p2:b71-p2:b72",
+          "leaf_char_span": [
+            1109,
+            1179
+          ]
+        },
+        {
+          "node_id": "proof_node_751788069e4abc43d2d724a4",
+          "node_type": "source_relation",
+          "schema_version": "source-relation-proof/v1",
+          "premise_roles": [
+            "naming",
+            "operation",
+            "output_name"
+          ],
+          "rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_aae94eb4d913302e1a6c4d15",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state",
+            "retained_object"
+          ],
+          "rule_id": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[5].material_outputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_887e9e20d560bc934148aba1",
+          "node_type": "inheritance",
+          "schema_version": "state-inheritance-proof/v1",
+          "premise_roles": [
+            "parent_state"
+          ],
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[6].material_inputs[0].state",
+            "target_state": "retained_wet_solid",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_seeds"
+          }
+        },
+        {
+          "node_id": "proof_node_d1d772c2010db8114b9212dd",
+          "node_type": "state_change",
+          "schema_version": "state-change-convention-proof/v1",
+          "premise_roles": [
+            "operation",
+            "parent_state"
+          ],
+          "rule_id": "REDISPERSION_V1",
+          "rule_version": "1.1.0",
+          "claim": {
+            "field_path": "material_graph[6].material_outputs[0].state",
+            "target_state": "suspension",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_aged"
+          }
+        },
+        {
+          "node_id": "proof_node_60eeedce72342a33b51ea29b",
+          "node_type": "inheritance",
+          "schema_version": "state-inheritance-proof/v1",
+          "premise_roles": [
+            "parent_state"
+          ],
+          "rule_id": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+          "rule_version": "1.0.0",
+          "claim": {
+            "field_path": "material_graph[7].material_inputs[0].state",
+            "target_state": "suspension",
+            "material_id": "mat_ni3fe_ldh",
+            "material_instance_id": "inst_ldh_aged"
+          }
+        }
+      ]
+    }
+  },
+  "post_operation_retained_object_per_step": [
+    {
+      "step_index": 0,
+      "macro_step_id": "ms0",
+      "status": "issue: retained_object_output_binding_unresolved",
+      "state_path": "material_graph[0].material_outputs[0].state"
+    },
+    {
+      "step_index": 1,
+      "macro_step_id": "ms1",
+      "status": "issue: retained_object_output_binding_unresolved",
+      "state_path": "material_graph[1].material_outputs[0].state"
+    },
+    {
+      "step_index": 2,
+      "macro_step_id": "ms2",
+      "status": "issue: retained_object_output_binding_unresolved",
+      "state_path": "material_graph[2].material_outputs[0].state"
+    },
+    {
+      "step_index": 3,
+      "macro_step_id": "ms3",
+      "status": "issue: retained_object_output_binding_unresolved",
+      "state_path": "material_graph[3].material_outputs[0].state"
+    },
+    {
+      "step_index": 4,
+      "macro_step_id": "ms4",
+      "status": "issue: retained_object_operation_span_missing",
+      "state_path": ""
+    },
+    {
+      "step_index": 5,
+      "macro_step_id": "ms5",
+      "status": "record",
+      "state_path": "material_graph[5].material_outputs[0].state",
+      "retained_object": "precipitate",
+      "label": "LDH seeds"
+    },
+    {
+      "step_index": 6,
+      "macro_step_id": "ms6",
+      "status": "issue: retained_object_mention_precedes_operation",
+      "state_path": "material_graph[6].material_outputs[0].state"
+    },
+    {
+      "step_index": 7,
+      "macro_step_id": "ms7a",
+      "status": "issue: retained_object_mention_precedes_operation",
+      "state_path": "material_graph[7].material_outputs[0].state"
+    },
+    {
+      "step_index": 8,
+      "macro_step_id": "ms7b",
+      "status": "issue: retained_object_mention_precedes_operation",
+      "state_path": "material_graph[8].material_outputs[0].state"
+    },
+    {
+      "step_index": 9,
+      "macro_step_id": "ms8",
+      "status": "issue: retained_object_output_binding_unresolved",
+      "state_path": "material_graph[9].material_outputs[0].state"
+    }
+  ],
+  "excerpt_binding_issue_counts": {
+    "": 82,
+    "fact_excerpt_span_too_long": 5
+  }
+}
