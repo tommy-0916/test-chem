@@ -19,7 +19,12 @@ from typing import Any
 from chem_agent_contracts.route_field_basis import (
     canonicalize_unreviewed_state_facts,
 )
-from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
+from chem_agent_contracts.route_convention_basis import (
+    derive_unreviewed_input_state, derive_unreviewed_output_state,
+)
+from chem_agent_contracts.route_retained_object import (
+    build_retained_object_resolver,
+)
 
 from .route_pdf_group_proposals import (
     PdfGroupProposalAssociationResultV1,
@@ -198,8 +203,18 @@ def _normalize_required_route_fact_flags(
     return audit
 
 
-def _prepare_unsigned_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
-    """Apply bounded representation transforms before literal diagnostics."""
+def _prepare_unsigned_proposal(
+    proposal: dict[str, Any], group: Any = None,
+) -> dict[str, Any]:
+    """Apply bounded representation transforms before literal diagnostics.
+
+    When the signed source ``group`` is supplied, a retained-object
+    resolver is rebuilt LIVE from its signed blocks (never from a stored
+    record) and threaded into the convention derivations: output states
+    first, then parent-output input-state inheritance.  Successful
+    derivations surface as ``convention_state_candidates`` with the
+    unchanged ``unreviewed_prerequisites_only`` status.
+    """
     required_rows = _normalize_required_route_fact_flags(proposal)
     unit_rows = _normalize_qualitative_fact_units(proposal)
     mapped, state_rows = canonicalize_unreviewed_state_facts(proposal)
@@ -209,6 +224,22 @@ def _prepare_unsigned_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
     source_ref = source_ref if isinstance(source_ref, Mapping) else {}
     graph = proposal.get("material_graph")
     facts = proposal.get("route_facts")
+    scope = {
+        "paper_id": str(source_ref.get("paper_id") or ""),
+        "experimental_group_id": str(source_ref.get("experimental_group_id") or ""),
+        "source_digest": str(source_ref.get("source_digest") or ""),
+    }
+    retained_object_resolver = None
+    group_blocks = getattr(group, "blocks", None)
+    if group_blocks and isinstance(graph, list) and isinstance(facts, list):
+        # Recomputed from the signed group blocks at this layer; a record
+        # carried by the proposal or any stored artifact is never read.
+        retained_object_resolver = build_retained_object_resolver(
+            graph, facts,
+            [(block.locator, block.text) for block in group_blocks],
+            [block.locator for block in group_blocks
+             if getattr(block, "caption", False)],
+        )
     state_proofs: list[dict[str, Any]] = []
     if isinstance(graph, list) and isinstance(facts, list):
         for fact in facts:
@@ -219,10 +250,16 @@ def _prepare_unsigned_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
                 continue
             proof, _ = derive_unreviewed_output_state(
                 graph, facts, path,
-                paper_id=str(source_ref.get("paper_id") or ""),
-                experimental_group_id=str(source_ref.get("experimental_group_id") or ""),
-                source_digest=str(source_ref.get("source_digest") or ""),
+                paper_id=scope["paper_id"],
+                experimental_group_id=scope["experimental_group_id"],
+                source_digest=scope["source_digest"],
+                retained_object_resolver=retained_object_resolver,
             )
+            if proof is None:
+                proof, _inherit_issue = derive_unreviewed_input_state(
+                    graph, facts, path, scope,
+                    retained_object_resolver=retained_object_resolver,
+                )
             if proof is not None:
                 state_proofs.append({
                     "status": "unreviewed_prerequisites_only",
@@ -494,7 +531,7 @@ def _invoke_bounded_proposals(
                 else:
                     structured = proposal
                 transformed, rows = canonicalize_proposal_material_ids(structured)
-                normalizations = _prepare_unsigned_proposal(transformed)
+                normalizations = _prepare_unsigned_proposal(transformed, group)
                 canonicalized.append(transformed)
                 generated_id_rows.extend({
                     "proposal_index": proposal_index, **row,

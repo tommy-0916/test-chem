@@ -16,7 +16,12 @@ from chem_agent_contracts.route_field_basis import (
     controlled_state_mapping, is_material_port_state_path,
     output_state_parent_role_issue,
 )
-from chem_agent_contracts.route_convention_basis import derive_unreviewed_output_state
+from chem_agent_contracts.route_convention_basis import (
+    derive_unreviewed_input_state, derive_unreviewed_output_state,
+)
+from chem_agent_contracts.route_retained_object import (
+    build_retained_object_resolver,
+)
 
 from .route_group_compiler import (
     _scoped_claim, classify_route_field_basis,
@@ -28,13 +33,62 @@ from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
 
 def assess_unreviewed_proposal_literal_shape(
     proposals: Sequence[Mapping[str, Any]],
+    *,
+    groups: Sequence[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Return per-fact shape diagnostics; never mutate an unreviewed proposal.
 
     This only checks the value, unit, and proposed excerpt. It deliberately
     cannot establish that an excerpt occurs in the signed PDF or belongs to
     the claimed material and experimental group.
+
+    When the signed ``groups`` inventory is supplied, a retained-object
+    resolver is rebuilt LIVE from each proposal's signed group blocks and
+    threaded into the convention derivations (output state first, then
+    parent-output input-state inheritance), so a convention-derived state
+    is no longer reported ``semantic_binding_pending`` here.  Without
+    ``groups`` the behavior is byte-identical to before.
     """
+
+    group_by_key: dict[tuple[str, str, str], Any] = {}
+    for group in groups or ():
+        group_scope = getattr(group, "source_scope", None)
+        if group_scope is None or not getattr(group, "blocks", None):
+            continue
+        key = (
+            group_scope.paper_id, group_scope.experimental_group_id,
+            group_scope.source_digest,
+        )
+        if all(isinstance(value, str) and value for value in key):
+            group_by_key.setdefault(key, group)
+    resolvers: dict[int, Any] = {}
+
+    def retained_object_resolver_for(
+        proposal_index: int, proposal: Mapping[str, Any],
+    ) -> Any:
+        if not group_by_key:
+            return None
+        if proposal_index not in resolvers:
+            resolver = None
+            ref = proposal.get("source_group_ref")
+            graph = proposal.get("material_graph")
+            facts = proposal.get("route_facts")
+            if isinstance(ref, Mapping):
+                group = group_by_key.get(tuple(
+                    ref.get(name) for name in (
+                        "paper_id", "experimental_group_id", "source_digest",
+                    )
+                ))
+                if (group is not None and isinstance(graph, list)
+                        and isinstance(facts, list)):
+                    resolver = build_retained_object_resolver(
+                        graph, facts,
+                        [(block.locator, block.text) for block in group.blocks],
+                        [block.locator for block in group.blocks
+                         if getattr(block, "caption", False)],
+                    )
+            resolvers[proposal_index] = resolver
+        return resolvers[proposal_index]
 
     diagnostics: list[dict[str, Any]] = []
     for proposal_index, proposal in enumerate(proposals):
@@ -74,12 +128,29 @@ def assess_unreviewed_proposal_literal_shape(
             excerpt = fact.get("excerpt")
             scope = proposal.get("source_group_ref")
             scope = scope if isinstance(scope, Mapping) else {}
+            scope_dict = {
+                "paper_id": str(scope.get("paper_id") or ""),
+                "experimental_group_id": str(scope.get("experimental_group_id") or ""),
+                "source_digest": str(scope.get("source_digest") or ""),
+            }
+            resolver = retained_object_resolver_for(proposal_index, proposal)
             derived, _ = derive_unreviewed_output_state(
                 proposal.get("material_graph", []), facts, record["field_path"],
-                paper_id=str(scope.get("paper_id") or ""),
-                experimental_group_id=str(scope.get("experimental_group_id") or ""),
-                source_digest=str(scope.get("source_digest") or ""),
+                paper_id=scope_dict["paper_id"],
+                experimental_group_id=scope_dict["experimental_group_id"],
+                source_digest=scope_dict["source_digest"],
+                retained_object_resolver=resolver,
             ) if record["field_path"].endswith(".state") else (None, "")
+            if (derived is None and group_by_key
+                    and record["field_path"].endswith(".state")):
+                # Input/intermediate inheritance is only attempted when the
+                # signed groups were supplied; without them the diagnostics
+                # are byte-identical to before.
+                derived, _inherit_issue = derive_unreviewed_input_state(
+                    proposal.get("material_graph", []), facts,
+                    record["field_path"], scope_dict,
+                    retained_object_resolver=resolver,
+                )
             if is_material_port_state_path(record["field_path"]):
                 if derived is None:
                     graph = proposal.get("material_graph")

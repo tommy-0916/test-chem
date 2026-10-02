@@ -124,6 +124,7 @@ def _step_has_liquid_participation(
     inputs: Sequence[Mapping[str, Any]], operation_excerpt: str,
     liquid_states: Sequence[str] = ("solution",),
     excerpt_tokens: Sequence[str] = _LIQUID_EXCERPT_TOKENS,
+    operation_patterns: Sequence[str] = (),
 ) -> bool:
     """Whether a liquid takes part: a liquid-state input port or named liquid."""
     liquid = {_text(state) for state in liquid_states if _text(state)} or {"solution"}
@@ -131,6 +132,12 @@ def _step_has_liquid_participation(
         state = _text(_mapping(port).get("state"))
         if state and normalize_material_state(state) in liquid:
             return True
+    if operation_patterns:
+        # The named medium must govern an affirmed mention of this rule's
+        # operation in its own clause, not just appear in the excerpt.
+        return _liquid_medium_for_operation(
+            operation_excerpt, operation_patterns, excerpt_tokens,
+        )
     return _liquid_medium_in_excerpt(operation_excerpt, excerpt_tokens)
 
 
@@ -167,16 +174,19 @@ def _evidence_id(paper_id: str, group_id: str, fact_id: str) -> str:
     ).hexdigest()[:24]
 
 
-def _validated_retained_object_record(
+def _parse_retained_object_record(
     resolver: Any, field_path: str,
 ) -> tuple[Mapping[str, Any] | None, str, bool]:
-    """Resolve and validate a post-operation retained-object record.
+    """Resolve and SHAPE-parse a post-operation retained-object record.
 
-    Returns ``(record, issue, invalid)``: the validated record, or the
+    Returns ``(record, issue, invalid)``: the shape-parsed record, or the
     resolver's own issue string when no record exists for the field, or
-    ``invalid=True`` when a record was returned but is not a usable
-    post-operation-retained-object/v1 record for this exact output state
-    path (the caller maps that to ``retained_object_output_binding_unresolved``).
+    ``invalid=True`` when a record was returned but is not shaped like a
+    post-operation-retained-object/v1 record (schema version, rule id,
+    output state path present, retained object non-empty).  Parsing alone
+    grants ZERO authority: ``_cross_check_retained_object_record`` must
+    also verify the record content against the graph and facts before any
+    rule may stand on it.
     """
     raw, issue = resolver(field_path)
     if raw is None:
@@ -187,10 +197,74 @@ def _validated_retained_object_record(
         record
         and record.get("schema_version") == POST_OPERATION_RETAINED_OBJECT_SCHEMA
         and _text(record.get("rule_id")) == POST_OPERATION_RETAINED_OBJECT_RULE_ID
-        and _text(output.get("state_path")) == field_path
+        and _text(output.get("state_path"))
         and _text(record.get("retained_object"))
     )
     return (record if valid else None), "", not valid
+
+
+def _cross_check_retained_object_record(
+    record: Mapping[str, Any], graph: Sequence[Any], facts: Sequence[Any],
+    field_path: str,
+) -> bool:
+    """Verify a parsed record's CONTENT against the graph and the facts.
+
+    A retained-object record has zero authority of its own: it is trusted
+    only when every claim it makes is reproduced by the typed graph and
+    the route facts at this layer.  Checked, in order: the output state
+    path is exactly the field being proven; the graph output port at that
+    path exists and the record's instance id, material id and label equal
+    the port's; the output name fact carries the record's
+    ``output_name_fact_id`` (which must equal ``naming_fact_id``) and the
+    record's naming excerpt; the step's operation fact carries the
+    record's ``operation_fact_id``; and ``step_index``/``macro_step_id``
+    match the graph step.  Any mismatch rejects the record.
+    """
+    output = _mapping(record.get("output"))
+    if _text(output.get("state_path")) != field_path:
+        return False
+    match = _OUTPUT_STATE.fullmatch(field_path)
+    if match is None:
+        return False
+    step_index, output_index = int(match.group(1)), int(match.group(2))
+    if not isinstance(graph, (list, tuple)) or step_index >= len(graph):
+        return False
+    step = _mapping(graph[step_index])
+    outputs = _items(step.get("material_outputs"))
+    if output_index >= len(outputs):
+        return False
+    port = _mapping(outputs[output_index])
+    if (output.get("output_index") != output_index
+            or _text(output.get("material_instance_id"))
+            != _text(port.get("material_instance_id"))
+            or _text(output.get("material_id")) != _text(port.get("material_id"))
+            or _text(output.get("label")) != _text(port.get("name"))):
+        return False
+    if (record.get("step_index") != step_index
+            or _text(record.get("macro_step_id"))
+            != _text(step.get("macro_step_id"))):
+        return False
+    by_path: dict[str, Mapping[str, Any]] = {}
+    for raw in facts or []:
+        fact = _mapping(raw)
+        path = _text(fact.get("field_path"))
+        if path and path not in by_path:
+            by_path[path] = fact
+    name_fact = by_path.get(_text(output.get("name_path")))
+    if name_fact is None:
+        return False
+    if (_text(name_fact.get("fact_id"))
+            != _text(record.get("output_name_fact_id"))
+            or _text(record.get("output_name_fact_id"))
+            != _text(record.get("naming_fact_id"))
+            or _text(name_fact.get("excerpt"))
+            != _text(record.get("naming_excerpt"))):
+        return False
+    operation_fact = by_path.get(f"material_graph[{step_index}].operation")
+    if operation_fact is None:
+        return False
+    return _text(operation_fact.get("fact_id")) == _text(
+        record.get("operation_fact_id"))
 
 
 def _literal_in_quote(value: str, quote: str) -> bool:
@@ -220,6 +294,72 @@ _SUBSTRATE_SUFFIX_EN = re.compile(
 )
 _SUBSTRATE_SUFFIX_ZH = re.compile(r"^(?:到|于|在)[^。，,;；]{0,8}?(?:上|表面)")
 _NEGATION_WINDOW = 25
+_CLAUSE_BOUNDARY = re.compile(r"[.!?;。；！？]")
+_ALTERNATIVE_PREFIX_EN = re.compile(
+    r"\b(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to)"
+    r"(?:\s+(?:being|be|getting|get))?\s*$",
+    flags=re.IGNORECASE,
+)
+_ALTERNATIVE_PREFIX_ZH = re.compile(r"(?:而不是|而非|而不是被)$")
+_ALTERNATIVE_WINDOW = 48
+_ATTEMPT_PREFIX_EN = re.compile(
+    r"\b(?:attempt(?:ed|s|ing)?|tried|trying|sought|seeking)\s+to\b",
+    flags=re.IGNORECASE,
+)
+_ATTEMPT_PREFIX_ZH = re.compile(r"(?:试图|尝试|妄图)")
+_FAILURE_SUFFIX_EN = re.compile(
+    r"^\s*(?:,?\s*but\s+)?(?:failed|was\s+unsuccessful|were\s+unsuccessful"
+    r"|unsuccessfully|without\s+success|in\s+vain|to\s+no\s+avail)\b",
+    flags=re.IGNORECASE,
+)
+_FAILURE_SUFFIX_ZH = re.compile(r"(?:失败|未果|未遂)")
+
+
+def _operation_assertion_polarity(
+    haystack: str, token_start: int, match_end: int,
+) -> str:
+    """How the surrounding clause asserts one operation mention.
+
+    Returns one of ``"negated"``, ``"alternative"``, ``"attempt_failed"``,
+    or ``"affirmed"``.  The clause is the text between the sentence
+    boundaries around the mention.  A mention the paper negates ("was not
+    redispersed", "未重新分散"), names only as the rejected half of an
+    alternative ("dried instead of being redispersed", "而不是重新分散"), or
+    reports as a failed attempt ("attempted to redisperse … but failed",
+    "重新分散失败") is not the affirmed operation a convention rule proves.
+    """
+    text = haystack if isinstance(haystack, str) else ""
+    if not text or not 0 <= token_start <= match_end <= len(text):
+        return "affirmed"
+    clause_start = 0
+    for boundary in _CLAUSE_BOUNDARY.finditer(text, 0, token_start):
+        clause_start = boundary.end()
+    clause_end = len(text)
+    forward = _CLAUSE_BOUNDARY.search(text, match_end)
+    if forward is not None:
+        clause_end = forward.start()
+    # Assertion words scope the whole Latin token, not the matched stem
+    # ("redispersed but failed", not "redisperse" + "d but failed").
+    token_end = match_end
+    while (token_end < len(text)
+           and text[token_end].isascii()
+           and (text[token_end].isalnum() or text[token_end] == "_")):
+        token_end += 1
+    prefix = text[clause_start:token_start]
+    suffix = text[token_end:clause_end]
+    window = text[max(0, token_start - _NEGATION_WINDOW):token_start]
+    if (_NEGATION_PREFIX_EN.search(window)
+            or _NEGATION_PREFIX_ZH.search(window)):
+        return "negated"
+    if (_ALTERNATIVE_PREFIX_EN.search(prefix[-_ALTERNATIVE_WINDOW:])
+            or _ALTERNATIVE_PREFIX_ZH.search(prefix)):
+        return "alternative"
+    if (_ATTEMPT_PREFIX_EN.search(prefix)
+            or _ATTEMPT_PREFIX_ZH.search(prefix)
+            or _FAILURE_SUFFIX_EN.match(suffix)
+            or _FAILURE_SUFFIX_ZH.search(suffix)):
+        return "attempt_failed"
+    return "affirmed"
 
 
 def _affirmative_pattern_match(
@@ -229,11 +369,13 @@ def _affirmative_pattern_match(
 
     Patterns are stems and match by substring, but an occurrence counts
     only when the paper affirms it: an occurrence scoped by an adjacent
-    English or Chinese negation ("was not redispersed", "未重新分散") does
-    not count, and with ``reject_substrate`` an occurrence governed by a
-    surface preposition ("dispersed onto carbon paper", "分散到…上") is a
-    coating/deposition mention, never the bulk operation a state-change
-    convention rule proves.
+    English or Chinese negation ("was not redispersed", "未重新分散"), named
+    only as the rejected half of an alternative ("dried instead of being
+    redispersed"), or reported as a failed attempt ("attempted to redisperse
+    … but failed") does not count, and with ``reject_substrate`` an
+    occurrence governed by a surface preposition ("dispersed onto carbon
+    paper", "分散到…上") is a coating/deposition mention, never the bulk
+    operation a state-change convention rule proves.
     """
     stem = _text(pattern)
     haystack = _text(text)
@@ -241,16 +383,16 @@ def _affirmative_pattern_match(
         return False
     for match in re.finditer(re.escape(stem.casefold()), haystack.casefold()):
         # A stem may match inside a larger Latin word ("disperse" inside
-        # "redispersed"); negation scopes the whole word, not the stem.
+        # "redispersed"); assertion polarity scopes the whole word, not the
+        # stem.
         token_start = match.start()
         while (token_start > 0
                and haystack[token_start - 1].isascii()
                and (haystack[token_start - 1].isalnum()
                     or haystack[token_start - 1] == "_")):
             token_start -= 1
-        prefix = haystack[max(0, token_start - _NEGATION_WINDOW):token_start]
-        if (_NEGATION_PREFIX_EN.search(prefix)
-                or _NEGATION_PREFIX_ZH.search(prefix)):
+        if (_operation_assertion_polarity(haystack, token_start, match.end())
+                != "affirmed"):
             continue
         if reject_substrate:
             suffix = haystack[match.end():match.end() + 24]
@@ -267,10 +409,11 @@ def _liquid_medium_in_excerpt(
     """Whether the excerpt names a liquid as the dispersing medium.
 
     Token presence alone is not participation: "a water bath" only heats,
-    "脱水" removes water, and "rinsed with water" washes a surface — none of
-    them disperses.  English counts only a governed medium phrase
-    ("redispersed in water", "dispersed into deionized water"); Chinese
-    counts 于水/…水中 while excluding 脱水 and 水浴.
+    "a water-free medium" excludes water, "脱水" removes water, and "rinsed
+    with water" washes a surface — none of them disperses.  English counts
+    only a governed medium phrase ("redispersed in water", "dispersed into
+    deionized water"); Chinese counts 于水/…水中 while excluding 脱水 and
+    水浴.
     """
     text = _text(excerpt)
     if not text:
@@ -282,7 +425,8 @@ def _liquid_medium_in_excerpt(
         if liquid.isascii():
             medium = re.compile(
                 rf"\b(?:in|into)\s+(?:[\w.%µ/-]+\s+){{0,3}}?"
-                rf"{re.escape(liquid)}\b(?![\s-]*bath)",
+                rf"{re.escape(liquid)}\b(?![\s-]*bath)"
+                rf"(?!\s*[-–—](?:free|less)\b)",
                 flags=re.IGNORECASE,
             )
             if medium.search(text):
@@ -294,6 +438,57 @@ def _liquid_medium_in_excerpt(
             if before in ("脱", "除", "无") or after == "浴":
                 continue
             if before == "于" or after == "中":
+                return True
+    return False
+
+
+def _liquid_medium_for_operation(
+    excerpt: str, operation_patterns: Sequence[str],
+    excerpt_tokens: Sequence[str],
+) -> bool:
+    """Whether an affirmed operation mention's own clause names the medium.
+
+    The medium must belong to the operation's clause, not merely to the
+    excerpt: "The solid was redispersed. The reactor was washed in water."
+    never wets the redispersion.  Only affirmed, non-substrate mentions
+    bind a clause (a negated, alternative, failed-attempt, or
+    surface-governed mention is not the bulk operation).
+    """
+    text = _text(excerpt)
+    if not text:
+        return False
+    segments: list[tuple[int, int]] = []
+    segment_start = 0
+    for boundary in _CLAUSE_BOUNDARY.finditer(text):
+        segments.append((segment_start, boundary.start()))
+        segment_start = boundary.end()
+    segments.append((segment_start, len(text)))
+    for pattern in operation_patterns or []:
+        stem = _text(pattern)
+        if not stem:
+            continue
+        for match in re.finditer(re.escape(stem.casefold()), text.casefold()):
+            token_start = match.start()
+            while (token_start > 0
+                   and text[token_start - 1].isascii()
+                   and (text[token_start - 1].isalnum()
+                        or text[token_start - 1] == "_")):
+                token_start -= 1
+            if (_operation_assertion_polarity(text, token_start, match.end())
+                    != "affirmed"):
+                continue
+            suffix = text[match.end():match.end() + 24]
+            if (_SUBSTRATE_SUFFIX_EN.match(suffix)
+                    or _SUBSTRATE_SUFFIX_ZH.match(suffix)):
+                continue
+            segment = next(
+                (span for span in segments
+                 if span[0] <= match.start() < span[1]),
+                None,
+            )
+            if (segment is not None
+                    and _liquid_medium_in_excerpt(
+                        text[segment[0]:segment[1]], excerpt_tokens)):
                 return True
     return False
 
@@ -518,7 +713,10 @@ def _proof_for_evidence(
                 liquid_states = liquid_premise.get("liquid_states", ["solution"])
                 excerpt_tokens = liquid_premise.get("excerpt_tokens")
                 tokens = tuple(excerpt_tokens) if isinstance(excerpt_tokens, list) and excerpt_tokens else _LIQUID_EXCERPT_TOKENS
-                if not _step_has_liquid_participation(inputs, operation_excerpt, liquid_states, tokens):
+                if not _step_has_liquid_participation(
+                    inputs, operation_excerpt, liquid_states, tokens,
+                    operation_patterns=patterns,
+                ):
                     liquid_denied = True
                     continue
         else:
@@ -612,7 +810,11 @@ def _proof_for_evidence(
     }
     if _text(rule.get("rule_id")) in record_matched_rule_ids:
         # The winning rule stood on the post-operation retained-object
-        # source relation; the proof names that relation and its evidence.
+        # source relation; the proof names that relation and its evidence,
+        # including the source-binding spans and fact ids the record was
+        # recomputed from.  Verification re-derives the record from the
+        # live resolver and demands exact dict equality, so any change to
+        # the source text or facts invalidates the proof.
         proof["retained_object_rule_id"] = _text(
             retained_object_record.get("rule_id"),
         )
@@ -623,6 +825,35 @@ def _proof_for_evidence(
         proof["retained_object_evidence_id"] = _evidence_id(
             paper_id, experimental_group_id,
             _text(retained_object_record.get("naming_fact_id")),
+        )
+        proof["retained_object_output_name_fact_id"] = _text(
+            retained_object_record.get("output_name_fact_id"),
+        )
+        proof["retained_object_operation_locator"] = _text(
+            retained_object_record.get("operation_locator"),
+        )
+        proof["retained_object_operation_span"] = json.dumps(
+            _mapping(retained_object_record).get("operation_span") or [],
+            separators=(",", ":"),
+        )
+        proof["retained_object_naming_locator"] = _text(
+            retained_object_record.get("naming_locator"),
+        )
+        proof["retained_object_naming_span"] = json.dumps(
+            _mapping(retained_object_record).get("naming_span") or [],
+            separators=(",", ":"),
+        )
+        operation_char_span = _mapping(retained_object_record).get(
+            "operation_char_span") or []
+        proof["retained_object_operation_char_span"] = (
+            f"{operation_char_span[0]}:{operation_char_span[1]}"
+            if len(operation_char_span) == 2 else ""
+        )
+        naming_char_span = _mapping(retained_object_record).get(
+            "naming_char_span") or []
+        proof["retained_object_naming_char_span"] = (
+            f"{naming_char_span[0]}:{naming_char_span[1]}"
+            if len(naming_char_span) == 2 else ""
         )
     return proof, ""
 
@@ -648,9 +879,17 @@ def derive_unreviewed_output_state(
     retained_object_issue = ""
     if retained_object_resolver is not None:
         retained_object_record, retained_object_issue, invalid_record = (
-            _validated_retained_object_record(retained_object_resolver, field_path)
+            _parse_retained_object_record(retained_object_resolver, field_path)
         )
-        if invalid_record:
+        if invalid_record or (
+            retained_object_record is not None
+            and not _cross_check_retained_object_record(
+                retained_object_record, graph, facts, field_path,
+            )
+        ):
+            # A record that fails shape parsing or whose content does not
+            # match the graph and facts at this layer is rejected outright:
+            # a record has zero authority of its own.
             return None, "retained_object_output_binding_unresolved"
     step_index, output_index = int(match.group(1)), int(match.group(2))
     try:
@@ -807,6 +1046,7 @@ def _inheritance_proof_for_evidence(
     operation_excerpt: str, operation_evidence_id: str,
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_resolver: Any = None,
+    facts: Sequence[Any] | None = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Recompute one input-state inheritance proof; never guess missing refs."""
     match = _INPUT_STATE.fullmatch(field_path)
@@ -873,14 +1113,26 @@ def _inheritance_proof_for_evidence(
         parent_record_issue = ""
         if retained_object_resolver is not None:
             # A composite parent operation may stand on the post-operation
-            # retained-object source relation; re-validate that record for
+            # retained-object source relation; re-parse that record for
             # the parent output state path before re-deriving its proof.
+            # The record has zero authority: its content must also match
+            # the graph and the facts supplied at this layer.
             parent_record, parent_record_issue, invalid_record = (
-                _validated_retained_object_record(
+                _parse_retained_object_record(
                     retained_object_resolver, parent_state_path,
                 )
             )
-            if invalid_record:
+            if invalid_record or (
+                parent_record is not None
+                and (
+                    facts is None
+                    or not _cross_check_retained_object_record(
+                        parent_record, graph, facts, parent_state_path,
+                    )
+                )
+            ):
+                # No record content is ever trusted without a cross-check
+                # against the graph and facts at this layer.
                 return None, "convention_parent_state_unverified"
         prepared = _resolve_fact_provenance(
             graph, paper_id=paper_id, experimental_group_id=experimental_group_id,
@@ -1019,6 +1271,7 @@ def derive_unreviewed_input_state(
             paper_id=paper_id, experimental_group_id=experimental_group_id,
             source_digest=source_digest,
             retained_object_resolver=retained_object_resolver,
+            facts=facts,
         )
     return _inheritance_proof_for_evidence(
         graph, field_path,
@@ -1055,12 +1308,13 @@ def verify_bound_output_state(
         retained_object_issue = ""
         if _text(proof.get("retained_object_rule_id")):
             # A proof standing on the post-operation retained-object source
-            # relation must re-resolve and re-validate that record; proofs
-            # without retained-object fields recompute without one.
+            # relation must re-resolve, re-parse and re-cross-check that
+            # record against the graph and facts; proofs without
+            # retained-object fields recompute without one.
             if retained_object_resolver is None:
                 return "convention_support_evidence_missing"
             retained_object_record, retained_object_issue, invalid_record = (
-                _validated_retained_object_record(
+                _parse_retained_object_record(
                     retained_object_resolver, field_path,
                 )
             )
@@ -1068,6 +1322,11 @@ def verify_bound_output_state(
                 return "retained_object_output_binding_unresolved"
             if retained_object_record is None:
                 return "convention_support_evidence_missing"
+            if not _cross_check_retained_object_record(
+                retained_object_record, graph,
+                tuple(evidence_by_id.values()), field_path,
+            ):
+                return "retained_object_output_binding_unresolved"
         step_index = int(_OUTPUT_STATE.fullmatch(field_path).group(1))
         if step_index >= len(graph):
             return "convention_graph_path_missing"
@@ -1106,6 +1365,12 @@ def verify_bound_output_state(
             operation_evidence_id=operation_evidence_id,
             paper_id=paper_id, experimental_group_id=experimental_group_id,
             source_digest=source_digest,
+            # Forward the resolver: an inheritance proof whose parent output
+            # stands on a retained-object record can only re-derive that
+            # parent proof with the live record, cross-checked against the
+            # same evidence facts.
+            retained_object_resolver=retained_object_resolver,
+            facts=tuple(evidence_by_id.values()),
         )
         if issue:
             return issue

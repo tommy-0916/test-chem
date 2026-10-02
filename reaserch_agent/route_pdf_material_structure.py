@@ -20,6 +20,9 @@ from chem_agent_contracts.route_field_basis import (
     affirmative_material_operation_span, controlled_state_mapping,
     state_source_locally_attributed,
 )
+from chem_agent_contracts.route_retained_object import (
+    build_retained_object_resolver,
+)
 from chem_agent_contracts.v2 import (
     LineageRelationV2, MaterialOperationSegmentV2, MaterialRelationV2,
 )
@@ -496,12 +499,21 @@ def construct_unreviewed_split_transfer_structure(
         raw_step["operation_segments"] = [segment]
         raw_step["material_relations"] = [relation]
         raw_step["lineage_relation"] = lineage
+        # Defensive: rebuild the retained-object resolver LIVE from this
+        # group's signed blocks so a composite parent operation elsewhere in
+        # the graph resolves exactly as in the formal receipt.
+        retained_object_resolver = build_retained_object_resolver(
+            graph, facts,
+            [(block.locator, block.text) for block in group.blocks],
+            [block.locator for block in group.blocks if block.caption],
+        )
         proof_issues = [derive_unreviewed_output_state(
             graph, facts,
             f"material_graph[{step_index}].material_outputs[{index}].state",
             paper_id=scope.paper_id,
             experimental_group_id=scope.experimental_group_id,
             source_digest=scope.source_digest,
+            retained_object_resolver=retained_object_resolver,
         )[1] for index in range(len(outputs))]
         if any(proof_issues):
             raw_step.clear()

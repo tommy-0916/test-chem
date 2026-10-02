@@ -664,11 +664,19 @@ def verify_route_pdf_source(
     source_paths: Mapping[str, str | Path],
     source_root: str | Path,
     inventory_register_paths: Mapping[str, str | Path] | None = None,
+    retained_object_resolver: Any = None,
 ) -> RouteSourceVerificationV1:
     """Reopen registered PDF/spec bytes, never paths supplied by the candidate.
 
     Candidate supply specifications require an explicit trusted register path
     inside ``source_root``. They prove planning form only, never stock.
+
+    Although this verifier rebuilds quote blocks live from the signed PDF
+    bytes, ``retained_object_resolver`` stays ``None`` at every current call
+    site: the compiled candidate retains hashed evidence ids, not the raw
+    route-fact ids a live retained-object record binds, so no resolver can
+    be rebuilt here and retained-object proofs remain rejected
+    (fail-closed).
     """
 
     scope = candidate.source_scope
@@ -762,6 +770,7 @@ def verify_route_pdf_source(
                     paper_id=scope.paper_id,
                     experimental_group_id=scope.experimental_group_id,
                     source_digest=scope.source_digest,
+                    retained_object_resolver=retained_object_resolver,
                 )):
             reasons.append(f"convention_state_support_unverified:{field.field_path}")
             invalid = True

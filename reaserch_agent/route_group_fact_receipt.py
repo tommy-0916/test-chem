@@ -22,6 +22,9 @@ from chem_agent_contracts.route_convention_basis import (
     convention_fact_evidence_by_id, derive_unreviewed_input_state,
     derive_unreviewed_output_state, verify_bound_output_state,
 )
+from chem_agent_contracts.route_retained_object import (
+    build_retained_object_resolver,
+)
 from chem_agent_contracts.route_source_labels import (
     SOURCE_LABEL_RULE_VERSION, RULE_SCOPED_LABEL_IDENTITY, SourceLabelContext,
     build_source_label_context, competing_quantity_identity_surfaces,
@@ -215,7 +218,8 @@ def _proposal_key(protocol: Mapping[str, Any]) -> tuple[str, str, str] | None:
 
 def _state_derivation_proof(
     fact: Mapping[str, Any], facts: Sequence[Mapping[str, Any]],
-    graph: Any, scope: Any,
+    graph: Any, scope: Any, *,
+    retained_object_resolver: Any = None,
 ) -> dict[str, Any] | None:
     """Output derivation first, then verified input-state inheritance.
 
@@ -232,11 +236,13 @@ def _state_derivation_proof(
         paper_id=scope.paper_id,
         experimental_group_id=scope.experimental_group_id,
         source_digest=scope.source_digest,
+        retained_object_resolver=retained_object_resolver,
     )
     if derived is not None:
         return derived
     inherited, _inherit_issue = derive_unreviewed_input_state(
         graph_list, facts, field_path, fact.get("source"),
+        retained_object_resolver=retained_object_resolver,
     )
     if (inherited is None
             or _text(fact.get("value")) != _text(inherited.get("target_state"))):
@@ -249,6 +255,7 @@ def _state_derivation_proof(
         paper_id=scope.paper_id,
         experimental_group_id=scope.experimental_group_id,
         source_digest=scope.source_digest,
+        retained_object_resolver=retained_object_resolver,
     ):
         return None
     return inherited
@@ -260,6 +267,7 @@ def _literal_fact_reason(
     *, graph: Any, facts: Sequence[Mapping[str, Any]],
     label_context: SourceLabelContext | None = None,
     binding_sink: dict[str, Any] | None = None,
+    retained_object_resolver: Any = None,
 ) -> str:
     if set(fact) - _FACT_KEYS:
         return "fact_authority_field_forbidden"
@@ -314,7 +322,10 @@ def _literal_fact_reason(
     if not isinstance(unit, str):
         return "fact_unit_invalid"
     field_path = _text(fact.get("field_path"))
-    derived = _state_derivation_proof(fact, facts, graph, scope)
+    derived = _state_derivation_proof(
+        fact, facts, graph, scope,
+        retained_object_resolver=retained_object_resolver,
+    )
     if is_material_port_state_path(field_path):
         if derived is None:
             if output_state_parent_role_issue(field_path, graph, value, excerpt):
@@ -533,9 +544,19 @@ def produce_pdf_group_fact_receipt(
             role_hint = ""
         blocks = [(block.locator, block.text) for block in group.blocks]
         facts = protocol.get("route_facts", [])
+        graph = protocol.get("material_graph")
+        # The retained-object resolver is rebuilt LIVE from this group's
+        # signed blocks for every receipt; a stored record is never read.
+        retained_object_resolver = (
+            build_retained_object_resolver(
+                graph, facts if isinstance(facts, list) else (),
+                blocks,
+                [block.locator for block in group.blocks if block.caption],
+            )
+            if isinstance(graph, list) else None
+        )
         label_context = build_source_label_context(
-            protocol.get("material_graph")
-            if isinstance(protocol.get("material_graph"), list) else [],
+            graph if isinstance(graph, list) else [],
             facts if isinstance(facts, list) else [],
         )
         # One quoted evidence item may support several distinct field paths.
@@ -563,12 +584,14 @@ def produce_pdf_group_fact_receipt(
             reason = _literal_fact_reason(
                 fact, group, blocks, graph=protocol.get("material_graph"),
                 facts=facts, label_context=label_context,
+                retained_object_resolver=retained_object_resolver,
             )
             if reason:
                 reasons.append(f"fact[{index}]:{reason}")
             else:
                 derived = _state_derivation_proof(
                     fact, facts, protocol.get("material_graph", []), scope,
+                    retained_object_resolver=retained_object_resolver,
                 )
                 if derived is not None:
                     derived_paths.append(field_path)

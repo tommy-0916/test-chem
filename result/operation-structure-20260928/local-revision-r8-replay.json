@@ -1,5 +1,5 @@
 {
-  "audit_rows": 8,
+  "audit_rows": 15,
   "round2_acceptance": {
     "graph5_macro_operation": "centrifugation−redispersion protocol",
     "post_operation_retained_object": {
@@ -85,6 +85,219 @@
       }
     }
   },
+  "round3a_acceptance": {
+    "r1_r3_probes": {
+      "status": "PASS",
+      "probes": [
+        {
+          "probe": "R1_unmodeled_interval_operation",
+          "expected_issue": "retained_object_intervening_operation",
+          "observed_issue": "retained_object_intervening_operation",
+          "observed_object": null,
+          "observed_modifiers": null,
+          "status": "PASS"
+        },
+        {
+          "probe": "R1_negated_interval_operation",
+          "expected_issue": "(record)",
+          "observed_issue": "(record)",
+          "observed_object": "precipitate",
+          "observed_modifiers": [],
+          "status": "PASS"
+        },
+        {
+          "probe": "R1_fallback_stem_interval",
+          "expected_issue": "retained_object_intervening_operation",
+          "observed_issue": "retained_object_intervening_operation",
+          "observed_object": null,
+          "observed_modifiers": null,
+          "status": "PASS"
+        },
+        {
+          "probe": "R2_dried_object_modifier",
+          "expected_issue": "retained_object_state_changing_modifier",
+          "observed_issue": "retained_object_state_changing_modifier",
+          "observed_object": null,
+          "observed_modifiers": null,
+          "status": "PASS"
+        },
+        {
+          "probe": "R2_calcined_object_modifier",
+          "expected_issue": "retained_object_state_changing_modifier",
+          "observed_issue": "retained_object_state_changing_modifier",
+          "observed_object": null,
+          "observed_modifiers": null,
+          "status": "PASS"
+        },
+        {
+          "probe": "R2_benign_object_modifier",
+          "expected_issue": "(record)",
+          "observed_issue": "(record)",
+          "observed_object": "precipitate",
+          "observed_modifiers": [
+            "yellow"
+          ],
+          "status": "PASS"
+        }
+      ]
+    },
+    "e1b_e5_probes": {
+      "status": "PASS",
+      "probes": [
+        {
+          "probe": "E1b_alternative_instead_of",
+          "quote": "The washed_wet_solid was dried instead of being redispersed in water.",
+          "expected_issue": "convention_rule_not_applicable_or_ambiguous",
+          "observed_issue": "convention_rule_not_applicable_or_ambiguous",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E1b_alternative_rather_than",
+          "quote": "The washed_wet_solid was dried rather than redispersed in water.",
+          "expected_issue": "convention_rule_not_applicable_or_ambiguous",
+          "observed_issue": "convention_rule_not_applicable_or_ambiguous",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E2_failed_attempt_participle",
+          "quote": "We attempted to get the washed_wet_solid redispersed in water but failed.",
+          "expected_issue": "convention_rule_not_applicable_or_ambiguous",
+          "observed_issue": "convention_rule_not_applicable_or_ambiguous",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E2_failed_attempt_infinitive",
+          "quote": "We attempted to redisperse the washed_wet_solid in water but failed.",
+          "expected_issue": "convention_rule_not_applicable_or_ambiguous",
+          "observed_issue": "convention_rule_not_applicable_or_ambiguous",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E3_hyphenated_water_free",
+          "quote": "The washed_wet_solid was redispersed in a water-free medium.",
+          "expected_issue": "convention_liquid_participation_missing",
+          "observed_issue": "convention_liquid_participation_missing",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E4_medium_in_another_clause",
+          "quote": "The washed_wet_solid was redispersed. The reactor was washed in water.",
+          "expected_issue": "convention_liquid_participation_missing",
+          "observed_issue": "convention_liquid_participation_missing",
+          "expected_rule": "",
+          "observed_rule": "",
+          "status": "PASS"
+        },
+        {
+          "probe": "E5_affirmed_participle",
+          "quote": "The washed_wet_solid was redispersed in water.",
+          "expected_issue": "(proof)",
+          "observed_issue": "(proof)",
+          "expected_rule": "REDISPERSION_V1",
+          "observed_rule": "REDISPERSION_V1",
+          "status": "PASS"
+        },
+        {
+          "probe": "E5_affirmed_nominal",
+          "quote": "The washed_wet_solid underwent redispersion in water.",
+          "expected_issue": "(proof)",
+          "observed_issue": "(proof)",
+          "expected_rule": "REDISPERSION_V1",
+          "observed_rule": "REDISPERSION_V1",
+          "status": "PASS"
+        }
+      ]
+    },
+    "formal_g1": {
+      "status": "PASS",
+      "graph5_output_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+      "graph6_input_rule": "PARENT_OUTPUT_STATE_INHERITANCE_V1",
+      "g1_final_issue_reasons": {
+        "semantic_binding_pending": 7
+      },
+      "g1_no_longer_flags": [
+        "f_g5_out0_state",
+        "f_g6_in0_state"
+      ],
+      "admitted_protocols": 0
+    },
+    "r4_fabricated_record": {
+      "status": "PASS",
+      "contract_level": {
+        "forgery": "valid record with a forged naming_excerpt fed through the resolver",
+        "expected_issue": "retained_object_output_binding_unresolved",
+        "observed_issue": "retained_object_output_binding_unresolved",
+        "status": "PASS"
+      },
+      "g1_excerpt_swap": {
+        "forgery": "naming fact excerpt swapped to the real b67 block (no naming sentence); the proposal still passes the proposal gate",
+        "graph5_output_in_candidates": false,
+        "graph6_input_in_candidates": false,
+        "f_g5_out0_state_flagged": true,
+        "status": "PASS"
+      },
+      "g1_smuggled_record_gate": {
+        "forgery": "untouched proposal + the byte-perfect valid record smuggled as proposal['retained_object_records']; run with the required-facts gate enabled",
+        "gate_rejection_present": true,
+        "admitted_protocols": 0,
+        "graph5_output_in_candidates_note": "True: informational only — the locator/diagnostics stages legitimately derive from the untouched proposal via the LIVE resolver before the gate runs; the trust boundary is that the proposal is never admitted",
+        "final_issue_reasons": {
+          "semantic_binding_pending": 7,
+          "proposal_source_or_status_field_forbidden": 1,
+          "enumerated_group_proposal_missing": 1
+        },
+        "status": "PASS"
+      },
+      "g1_smuggled_record_raw": {
+        "forgery": "excerpt swap + smuggled byte-perfect record, run through the raw producer path (no required-facts gate); the stored record is never read",
+        "graph5_output_in_candidates": false,
+        "graph6_input_in_candidates": false,
+        "f_g5_out0_state_flagged": true,
+        "status": "PASS"
+      }
+    },
+    "live_resolver": {
+      "status": "PASS",
+      "stages": {
+        "g1_association": {
+          "paper_id": "doi_10_1021_acsami_3c11651",
+          "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+          "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+          "block_count": 23,
+          "caption_count": 0,
+          "resolver_built": "inside _prepare_unsigned_proposal via build_retained_object_resolver(graph, facts, signed group blocks, caption locators); one resolver per group per call"
+        },
+        "receipt": {
+          "paper_id": "doi_10_1021_acsami_3c11651",
+          "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+          "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+          "block_count": 23,
+          "caption_count": 0,
+          "resolver_built": "inside produce_pdf_group_fact_receipt per enumerated group from the signed blocks"
+        },
+        "compiler": {
+          "paper_id": "paper-r8-compiler",
+          "experimental_group_id": "Group R8C",
+          "source_digest": "sha256_4cdacff50712f321a6aab170251f5c1f08b07cde000b3b3e4550cdf8843cdf00",
+          "block_count": 4,
+          "caption_count": 0,
+          "resolver_built": "by the caller via build_retained_object_resolver and passed keyed by (paper_id, experimental_group_id, source_digest)"
+        }
+      },
+      "stored_records_read": "none: no stage reads stored records; proposal['retained_object_records'] is never consulted (proven by r4_fabricated_record.g1_smuggled_record_raw and rejected wholesale by the proposal gate in r4_fabricated_record.g1_smuggled_record_gate)"
+    },
+    "status": "PASS"
+  },
   "post_operation_retained_object_per_step": [
     {
       "step_index": 0,
@@ -131,7 +344,9 @@
       "naming_span": [
         17,
         18
-      ]
+      ],
+      "operation_locator": "pdf:p2:b70-p2:b71",
+      "naming_locator": "pdf:p2:b71-p2:b72"
     },
     {
       "step_index": 6,
@@ -679,6 +894,83 @@
         "mention_anchor": ""
       },
       "diagnostic_present": false
+    }
+  },
+  "receipt": {
+    "status": "PASS",
+    "receipt_status": "blocked",
+    "group_status": "blocked",
+    "group_status_note": "the receipt queues every semantic trust decision: any pending literal reason (here semantic_binding_pending for the honestly unresolved facts) marks the group 'blocked'; derivation results are reported alongside, never substituted for review",
+    "derived_state_field_paths": [
+      "material_graph[5].material_outputs[0].state",
+      "material_graph[6].material_inputs[0].state",
+      "material_graph[4].material_outputs[0].state",
+      "material_graph[4].material_outputs[1].state",
+      "material_graph[4].material_outputs[2].state",
+      "material_graph[4].material_outputs[3].state",
+      "material_graph[4].material_outputs[4].state",
+      "material_graph[4].material_outputs[5].state",
+      "material_graph[4].material_outputs[6].state",
+      "material_graph[4].material_outputs[7].state"
+    ],
+    "expected_derived": [
+      "material_graph[5].material_outputs[0].state",
+      "material_graph[6].material_inputs[0].state"
+    ],
+    "reason_code_counts": {
+      "semantic_binding_pending": 8
+    },
+    "reason_codes": [
+      "fact[48]:semantic_binding_pending",
+      "fact[69]:semantic_binding_pending",
+      "fact[73]:semantic_binding_pending",
+      "fact[75]:semantic_binding_pending",
+      "fact[78]:semantic_binding_pending",
+      "fact[80]:semantic_binding_pending",
+      "fact[83]:semantic_binding_pending",
+      "fact[85]:semantic_binding_pending"
+    ]
+  },
+  "compiler_demo": {
+    "status": "PASS",
+    "group": {
+      "paper_id": "paper-r8-compiler",
+      "experimental_group_id": "Group R8C",
+      "source_digest": "sha256_4cdacff50712f321a6aab170251f5c1f08b07cde000b3b3e4550cdf8843cdf00",
+      "block_count": 4,
+      "caption_count": 0
+    },
+    "with_live_resolver": {
+      "diagnostics": [],
+      "derived_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+      "retained_object_proof_fields": {
+        "retained_object_rule_id": "POST_OPERATION_RETAINED_OBJECT_V1",
+        "retained_object_rule_version": "1.0.0",
+        "retained_object": "precipitate",
+        "retained_object_output_name_fact_id": "f_out_name",
+        "retained_object_operation_locator": "pdf:p1:b2-p1:b2",
+        "retained_object_operation_span": "[1,1]",
+        "retained_object_operation_char_span": "122:192",
+        "retained_object_naming_locator": "pdf:p1:b3-p1:b3",
+        "retained_object_naming_span": "[2,2]",
+        "retained_object_naming_char_span": "194:258"
+      }
+    },
+    "without_resolver": {
+      "diagnostics": [
+        "semantic_binding_pending"
+      ],
+      "expected": [
+        "semantic_binding_pending"
+      ]
+    },
+    "with_fabricated_resolver_record": {
+      "diagnostics": [
+        "semantic_binding_pending"
+      ],
+      "expected": [
+        "semantic_binding_pending"
+      ]
     }
   },
   "g2_compile_reasons": null,

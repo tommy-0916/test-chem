@@ -209,7 +209,8 @@ def _inventory_resolved_state_field(field: Any) -> bool:
 
 def _verified_inherited_state_field(
     candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
-    fields_by_path: dict[str, Any], proof: dict[str, Any],
+    fields_by_path: dict[str, Any], proof: dict[str, Any], *,
+    retained_object_resolver: Any = None,
 ) -> bool:
     """Bind an inherited input state to its separately verified parent output."""
     provenance = field.provenance
@@ -249,12 +250,14 @@ def _verified_inherited_state_field(
         paper_id=scope.paper_id,
         experimental_group_id=scope.experimental_group_id,
         source_digest=scope.source_digest,
+        retained_object_resolver=retained_object_resolver,
     )
 
 
 def _verified_convention_state_field(
     candidate: RouteCandidateV1, steps: list[dict[str, Any]], field: Any,
-    fields_by_path: dict[str, Any],
+    fields_by_path: dict[str, Any], *,
+    retained_object_resolver: Any = None,
 ) -> bool:
     """Bind a derived state to exact, separately source-verified paper fields."""
     provenance = field.provenance
@@ -273,6 +276,7 @@ def _verified_convention_state_field(
     if is_convention_inheritance_proof(proof):
         return _verified_inherited_state_field(
             candidate, steps, field, fields_by_path, proof,
+            retained_object_resolver=retained_object_resolver,
         )
     if (proof.get("field_path") != field.field_path
             or proof.get("target_state") != field.value
@@ -319,6 +323,7 @@ def _verified_convention_state_field(
         paper_id=scope.paper_id,
         experimental_group_id=scope.experimental_group_id,
         source_digest=scope.source_digest,
+        retained_object_resolver=retained_object_resolver,
     )
 
 
@@ -444,12 +449,19 @@ def audit_route_candidate_science(
     candidate: RouteCandidateV1,
     *,
     agent: ResearchAgent | None = None,
+    retained_object_resolver: Any = None,
 ) -> dict[str, Any]:
     """Return a trusted, fail-closed science fragment for RouteValidationReceiptV1.
 
     Every Phase 1–3 method operates on a copy of the candidate's MacroStepV2
     graph.  The adapter never treats a field's own ``supported`` claim or a
     nearby measurement step as verification of its source or runtime path.
+
+    ``retained_object_resolver`` stays ``None`` at every current call site:
+    the compiled candidate retains only hashed evidence ids, not the raw
+    route-fact ids a live retained-object record binds, so no resolver can
+    be rebuilt at this layer and retained-object proofs remain rejected
+    here (fail-closed).
     """
     result: dict[str, Any] = {
         "scientific_completeness": None,
@@ -636,6 +648,7 @@ def audit_route_candidate_science(
             if field.provenance.kind == "agent_inferred":
                 convention_state_verified = _verified_convention_state_field(
                     candidate, steps, field, fields_by_path,
+                    retained_object_resolver=retained_object_resolver,
                 )
                 if not convention_state_verified:
                     issues.append(

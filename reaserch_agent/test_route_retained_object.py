@@ -208,9 +208,27 @@ class PostOperationRetainedObjectTest(unittest.TestCase):
         self.assertEqual(record["retained_object_surface"], "precipitates")
         self.assertEqual(record["retained_object"], "precipitate")
         self.assertEqual(record["naming_fact_id"], "out_name")
+        self.assertEqual(record["output_name_fact_id"], "out_name")
         self.assertEqual(record["naming_excerpt"], NAMING_SENTENCE)
         self.assertEqual(record["operation_span"], [1, 1])
         self.assertEqual(record["naming_span"], [2, 2])
+        # The source-binding proof basis: binding locators and projected
+        # character spans for both excerpts.
+        self.assertEqual(record["operation_locator"], "pdf:p1:b2-p1:b2")
+        self.assertEqual(record["naming_locator"], "pdf:p1:b3-p1:b3")
+        blocks = _blocks(FILLER, OP_SENTENCE, NAMING_SENTENCE)
+        projected = " ".join(
+            " ".join(text.split()) for _locator, text in blocks
+        )
+        for excerpt, key in (
+            (OP_EXCERPT, "operation_char_span"),
+            (NAMING_SENTENCE, "naming_char_span"),
+        ):
+            start, end = record[key]
+            self.assertIsInstance(start, int)
+            self.assertIsInstance(end, int)
+            self.assertLess(start, end)
+            self.assertEqual(projected[start:end], " ".join(excerpt.split()))
         json.dumps(record)  # the record must stay JSON-serializable
 
     def test_positive_derivation_proves_canonical_state(self) -> None:
@@ -505,6 +523,262 @@ class PostOperationRetainedObjectTest(unittest.TestCase):
         )
         self.assertIsNone(record)
         self.assertEqual(issue, "retained_object_operation_span_missing")
+
+
+class Round1SourceRelationHardeningTest(PostOperationRetainedObjectTest):
+    """Round-1 review gaps R1–R3 in the retained-object source relation.
+
+    R1: an operation the graph never modeled still breaks continuity when
+    the raw source interval between the operation quote and the naming
+    quote affirms it ("The solid was then dried at 60 C overnight.");
+    a negated interval mention ("was not dried") does not.  R2/R3: a
+    state-changing modifier on the named object ("The dried precipitates
+    were labeled as X") rejects conservatively, while a benign modifier
+    ("yellow") is recorded and allowed.
+    """
+
+    def test_unmodeled_interval_operation_breaks_continuity(self) -> None:
+        blocks = _blocks(FILLER, OP_SENTENCE,
+                         "The solid was then dried at 60 C overnight.",
+                         NAMING_SENTENCE)
+        proposal = self._composite_proposal()
+        span_of = build_excerpt_span_resolver(blocks)
+        record, issue = derive_post_operation_retained_object(
+            proposal["material_graph"], proposal["route_facts"], 0,
+            span_of=span_of,
+        )
+        self.assertIsNone(record)
+        self.assertEqual(issue, "retained_object_intervening_operation")
+
+    def test_negated_interval_operation_keeps_continuity(self) -> None:
+        blocks = _blocks(FILLER, OP_SENTENCE, "The solid was not dried.",
+                         NAMING_SENTENCE)
+        proposal = self._composite_proposal()
+        span_of = build_excerpt_span_resolver(blocks)
+        record, issue = derive_post_operation_retained_object(
+            proposal["material_graph"], proposal["route_facts"], 0,
+            span_of=span_of,
+        )
+        self.assertEqual(issue, "")
+        self.assertEqual(record["retained_object"], "precipitate")
+        self.assertEqual(record["object_modifiers"], [])
+
+    def test_fallback_only_stem_breaks_continuity(self) -> None:
+        # "calcin" is in the conservative fallback set; no conventions
+        # resource stem matches "calcined".
+        blocks = _blocks(FILLER, OP_SENTENCE, "The solid was calcined at 500 C.",
+                         NAMING_SENTENCE)
+        proposal = self._composite_proposal()
+        span_of = build_excerpt_span_resolver(blocks)
+        record, issue = derive_post_operation_retained_object(
+            proposal["material_graph"], proposal["route_facts"], 0,
+            span_of=span_of,
+        )
+        self.assertIsNone(record)
+        self.assertEqual(issue, "retained_object_intervening_operation")
+
+    def test_state_changing_object_modifier_is_rejected(self) -> None:
+        for naming in (
+            "The dried precipitates were labeled as LDH seeds.",
+            "The calcined precipitates were labeled as LDH seeds.",
+        ):
+            with self.subTest(naming=naming):
+                blocks = _blocks(FILLER, OP_SENTENCE, naming)
+                proposal = self._composite_proposal(name_excerpt=naming)
+                span_of = build_excerpt_span_resolver(blocks)
+                record, issue = derive_post_operation_retained_object(
+                    proposal["material_graph"], proposal["route_facts"], 0,
+                    span_of=span_of,
+                )
+                self.assertIsNone(record)
+                self.assertEqual(
+                    issue, "retained_object_state_changing_modifier",
+                )
+
+    def test_benign_object_modifier_is_recorded(self) -> None:
+        naming = "The yellow precipitates were labeled as LDH seeds."
+        blocks = _blocks(FILLER, OP_SENTENCE, naming)
+        proposal = self._composite_proposal(name_excerpt=naming)
+        span_of = build_excerpt_span_resolver(blocks)
+        record, issue = derive_post_operation_retained_object(
+            proposal["material_graph"], proposal["route_facts"], 0,
+            span_of=span_of,
+        )
+        self.assertEqual(issue, "")
+        self.assertEqual(record["retained_object"], "precipitate")
+        self.assertEqual(record["object_modifiers"], ["yellow"])
+        json.dumps(record)
+
+
+class RetainedObjectTrustBoundaryTest(PostOperationRetainedObjectTest):
+    """R4: a retained-object record has ZERO authority.
+
+    A perfectly shaped but fabricated record — one whose content does not
+    match the graph and facts at the consuming layer — is rejected by the
+    contract cross-check, no matter which single field is forged.  An
+    inheritance proof whose parent output stands on the record verifies
+    only when the live resolver is forwarded into the inheritance branch.
+    """
+
+    def _tampered_resolver(self, record: dict, mutate) -> object:
+        tampered = deepcopy(record)
+        mutate(tampered)
+        return _resolver({OUT_STATE: (tampered, "")})
+
+    def test_fabricated_record_is_rejected(self) -> None:
+        proposal, record, issue = self._positive()
+        self.assertEqual(issue, "")
+        # Perfectly shaped, fully forged: the naming sentence below is not
+        # the excerpt of any fact and matches nothing in the graph.
+        fabricated = deepcopy(record)
+        fabricated["naming_excerpt"] = (
+            "The precipitates were labeled as LDH seeds."
+        )
+        resolver = _resolver({OUT_STATE: (fabricated, "")})
+        proof, derive_issue = self._derive(proposal, resolver=resolver)
+        self.assertIsNone(proof)
+        self.assertEqual(derive_issue,
+                         "retained_object_output_binding_unresolved")
+
+    def test_each_cross_checked_field_mutation_is_rejected(self) -> None:
+        proposal, record, issue = self._positive()
+        self.assertEqual(issue, "")
+        mutations = {
+            "material_instance_id": lambda item: item["output"].update(
+                material_instance_id="inst_zzz"),
+            "material_id": lambda item: item["output"].update(
+                material_id="other_material"),
+            "label": lambda item: item["output"].update(label="NiFe seeds"),
+            "output_index": lambda item: item["output"].update(output_index=1),
+            "naming_excerpt": lambda item: item.update(
+                naming_excerpt="The precipitates were labeled as LDH seeds."),
+            "naming_fact_id": lambda item: item.update(
+                naming_fact_id="other_fact"),
+            "output_name_fact_id": lambda item: item.update(
+                output_name_fact_id="other_fact"),
+            "operation_fact_id": lambda item: item.update(
+                operation_fact_id="op_fabricated"),
+            "step_index": lambda item: item.update(step_index=1),
+            "macro_step_id": lambda item: item.update(macro_step_id="S9"),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(mutation=name):
+                resolver = self._tampered_resolver(record, mutate)
+                proof, derive_issue = self._derive(proposal, resolver=resolver)
+                self.assertIsNone(proof)
+                self.assertEqual(derive_issue,
+                                 "retained_object_output_binding_unresolved")
+
+    def _downstream_proposal(self):
+        proposal, record, issue = self._positive()
+        self.assertEqual(issue, "")
+        downstream = {
+            "macro_step_id": "S2", "macro_action_id": "A1", "sequence": 2,
+            "operation": "redispersed", "sample_id": "sample-A",
+            "provenance": {"kind": "paper", "reference": "fact:op2"},
+            "material_inputs": [{
+                "material_id": "product", "material_instance_id": "inst_b",
+                "name": "LDH seeds", "state": "retained_wet_solid",
+                "material_origin": "upstream_output",
+                "parent_output_refs": [{
+                    "macro_step_id": "S1", "material_instance_id": "inst_b",
+                }],
+                "provenance": {"kind": "paper", "reference": "fact:in1_state"},
+            }],
+            "material_outputs": [{
+                "material_id": "product", "material_instance_id": "inst_c",
+                "name": "LDH seeds", "state": "suspension",
+                "provenance": {"kind": "paper", "reference": "fact:op2"},
+            }],
+        }
+        proposal["material_graph"].append(downstream)
+        proposal["route_facts"].extend([
+            self._fact("op2", "material_graph[1].operation", "redispersed",
+                       "The LDH seeds were redispersed in water."),
+            self._fact("in1_state", STEP1_INPUT_STATE, "retained_wet_solid",
+                       "The LDH seeds were redispersed in water."),
+        ])
+        return proposal, record
+
+    def test_inheritance_over_record_parent_verifies_with_resolver(self) -> None:
+        proposal, record = self._downstream_proposal()
+        resolver = _resolver({OUT_STATE: (record, "")})
+        proof, input_issue = derive_unreviewed_input_state(
+            proposal["material_graph"], proposal["route_facts"],
+            STEP1_INPUT_STATE, deepcopy(self.source),
+            retained_object_resolver=resolver,
+        )
+        self.assertEqual(input_issue, "")
+        self.assertEqual(proof["rule_id"], "PARENT_OUTPUT_STATE_INHERITANCE_V1")
+        evidence = convention_fact_evidence_by_id(
+            proposal["route_facts"], paper_id="paper-A",
+            experimental_group_id="Group A",
+        )
+        prepared = _resolve_fact_provenance(
+            proposal["material_graph"], paper_id="paper-A",
+            experimental_group_id="Group A",
+            operation_evidence_id=proof["operation_evidence_id"],
+        )
+        # The inheritance branch of verify must forward the resolver: the
+        # parent output stands on the retained-object record, so the proof
+        # verifies only with the live record and fails closed without it.
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, prepared, evidence,
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+                retained_object_resolver=resolver,
+            ), "",
+        )
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, prepared, evidence,
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+            ), "convention_parent_state_unverified",
+        )
+
+    def test_fabricated_proof_fields_fail_verify(self) -> None:
+        proposal, record, issue = self._positive()
+        self.assertEqual(issue, "")
+        resolver = _resolver({OUT_STATE: (record, "")})
+        proof, derive_issue = self._derive(proposal, resolver=resolver)
+        self.assertEqual(derive_issue, "")
+        evidence = convention_fact_evidence_by_id(
+            proposal["route_facts"], paper_id="paper-A",
+            experimental_group_id="Group A",
+        )
+        prepared = _resolve_fact_provenance(
+            proposal["material_graph"], paper_id="paper-A",
+            experimental_group_id="Group A",
+            operation_evidence_id=proof["operation_evidence_id"],
+        )
+        self.assertEqual(
+            verify_bound_output_state(
+                proof, prepared, evidence,
+                paper_id="paper-A", experimental_group_id="Group A",
+                source_digest=self.digest,
+                retained_object_resolver=resolver,
+            ), "",
+        )
+        for field, forged in (
+            ("retained_object_naming_locator", "pdf:p9:b9-p9:b9"),
+            ("retained_object_operation_locator", "pdf:p9:b9-p9:b9"),
+            ("retained_object_naming_span", "[0,0]"),
+            ("retained_object_operation_char_span", "0:1"),
+            ("retained_object_output_name_fact_id", "forged_fact"),
+        ):
+            with self.subTest(forged_field=field):
+                tampered_proof = dict(proof)
+                tampered_proof[field] = forged
+                self.assertEqual(
+                    verify_bound_output_state(
+                        tampered_proof, prepared, evidence,
+                        paper_id="paper-A", experimental_group_id="Group A",
+                        source_digest=self.digest,
+                        retained_object_resolver=resolver,
+                    ), "convention_proof_mismatch",
+                )
 
 
 if __name__ == "__main__":

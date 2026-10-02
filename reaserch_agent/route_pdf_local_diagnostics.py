@@ -21,6 +21,9 @@ from chem_agent_contracts.route_convention_basis import derive_unreviewed_output
 from chem_agent_contracts.route_inventory_basis import (
     load_inventory_resource, verified_resolutions,
 )
+from chem_agent_contracts.route_retained_object import (
+    build_retained_object_resolver,
+)
 
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths, _scoped_claim,
@@ -109,6 +112,30 @@ def assess_pdf_group_proposal_fields(
     source_proposals = list(proposals)
     result = PdfProposalFieldAssessmentV1(located=located)
     seen: set[tuple[int, int, str, str]] = set()
+    known = {_group_key(group): group for group in groups}
+    resolvers: dict[tuple[str, str, str], Any] = {}
+
+    def retained_object_resolver_for(
+        proposal: Mapping[str, Any],
+    ) -> Any:
+        """Per-proposal LIVE resolver from the signed group's blocks."""
+        key = _proposal_key(proposal)
+        if key is None or key not in known:
+            return None
+        if key not in resolvers:
+            group = known[key]
+            graph = proposal.get("material_graph")
+            facts = proposal.get("route_facts")
+            resolvers[key] = (
+                build_retained_object_resolver(
+                    graph, facts,
+                    [(block.locator, block.text) for block in group.blocks],
+                    [block.locator for block in group.blocks if block.caption],
+                )
+                if isinstance(graph, list) and isinstance(facts, list)
+                else None
+            )
+        return resolvers[key]
 
     def add_issue(proposal_index: int, fact_index: int, reason: str,
                   field_path: str = "") -> None:
@@ -142,7 +169,9 @@ def assess_pdf_group_proposal_fields(
         else:
             add_issue(diagnostic.proposal_index, -1, diagnostic.reason_code)
 
-    for item in assess_unreviewed_proposal_literal_shape(source_proposals):
+    for item in assess_unreviewed_proposal_literal_shape(
+        source_proposals, groups=groups,
+    ):
         add_issue(item["proposal_index"], item["fact_index"],
                   item["reason_code"])
 
@@ -266,6 +295,9 @@ def assess_pdf_group_proposal_fields(
                             paper_id=str(source_ref.get("paper_id") or ""),
                             experimental_group_id=str(source_ref.get("experimental_group_id") or ""),
                             source_digest=str(source_ref.get("source_digest") or ""),
+                            retained_object_resolver=retained_object_resolver_for(
+                                proposal,
+                            ),
                         )
                         if derived is not None:
                             state_match = True
@@ -280,7 +312,6 @@ def assess_pdf_group_proposal_fields(
                         add_issue(proposal_index, fact_index,
                                   "fact_graph_value_mismatch")
 
-    known = {_group_key(group): group for group in groups}
     locatable_slots: set[tuple[int, int]] = set()
     for record in located.resolutions:
         if record["status"] != "located_unreviewed":
@@ -313,6 +344,7 @@ def assess_pdf_group_proposal_fields(
             diagnostic_fact, group,
             [(block.locator, block.text) for block in group.blocks],
             graph=proposal.get("material_graph"), facts=facts,
+            retained_object_resolver=retained_object_resolver_for(proposal),
         )
         if reason:
             add_issue(proposal_index, fact_index, reason)

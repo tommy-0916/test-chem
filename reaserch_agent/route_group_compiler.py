@@ -820,6 +820,7 @@ def _replace_paper_placeholders(
 def _state_derivation_proof(
     raw: Mapping[str, Any], graph: list[Any], facts: Sequence[Mapping[str, Any]],
     *, paper_id: str, group_id: str, document_digest: str,
+    retained_object_resolver: Any = None,
 ) -> dict[str, Any] | None:
     """Output derivation first, then verified input-state inheritance.
 
@@ -833,11 +834,13 @@ def _state_derivation_proof(
     derived, _issue = derive_unreviewed_output_state(
         graph, facts, field_path, paper_id=paper_id,
         experimental_group_id=group_id, source_digest=document_digest,
+        retained_object_resolver=retained_object_resolver,
     )
     if derived is not None:
         return derived
     inherited, _inherit_issue = derive_unreviewed_input_state(
         graph, facts, field_path, raw.get("source"),
+        retained_object_resolver=retained_object_resolver,
     )
     if (inherited is None
             or _text(raw.get("value")) != _text(inherited.get("target_state"))):
@@ -848,6 +851,7 @@ def _state_derivation_proof(
             facts, paper_id=paper_id, experimental_group_id=group_id),
         paper_id=paper_id, experimental_group_id=group_id,
         source_digest=document_digest,
+        retained_object_resolver=retained_object_resolver,
     ):
         return None
     return inherited
@@ -859,6 +863,7 @@ def _fact_issue(
     facts: Sequence[Mapping[str, Any]] = (),
     label_context: SourceLabelContext | None = None,
     binding_sink: dict[str, Any] | None = None,
+    retained_object_resolver: Any = None,
 ) -> str:
     if not isinstance(raw, Mapping):
         return "route_fact_invalid"
@@ -912,6 +917,7 @@ def _fact_issue(
     derived_proof = _state_derivation_proof(
         raw, graph, facts, paper_id=paper_id, group_id=group_id,
         document_digest=document_digest,
+        retained_object_resolver=retained_object_resolver,
     ) if facts else None
     if is_material_port_state_path(field_path):
         if derived_proof is None:
@@ -1013,7 +1019,10 @@ def _fact_issue(
     return ""
 
 
-def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
+def _compile_group(
+    group: dict[str, Any], parent: Mapping[str, Any], *,
+    retained_object_resolver: Any = None,
+) -> str:
     """Mutate only a detached group copy; return a diagnostic on abstention."""
     raw_facts = group.get("route_facts")
     if not isinstance(raw_facts, list) or not raw_facts:
@@ -1105,6 +1114,7 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             section=section, document_digest=document_digest, graph=graph,
             signature=signature, facts=raw_facts, label_context=label_context,
             binding_sink=binding_sink,
+            retained_object_resolver=retained_object_resolver,
         )
         if issue:
             return issue
@@ -1117,6 +1127,7 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
             derived = _state_derivation_proof(
                 raw, graph, raw_facts, paper_id=paper_id, group_id=group_id,
                 document_digest=document_digest,
+                retained_object_resolver=retained_object_resolver,
             )
             if derived is not None:
                 derived_state_by_path[field_path] = derived
@@ -1320,6 +1331,10 @@ def _compile_group(group: dict[str, Any], parent: Mapping[str, Any]) -> str:
 
 def compile_experimental_group_protocols(
     protocols: Sequence[Mapping[str, Any]],
+    *,
+    retained_object_resolvers: Mapping[
+        tuple[str, str, str], Any,
+    ] | None = None,
 ) -> RouteGroupCompilationResultV1:
     """Bind explicit route facts; preserve incomplete groups for discovery.
 
@@ -1327,6 +1342,13 @@ def compile_experimental_group_protocols(
     untouched.  Groups that declare route facts but fail any binding check are
     also passed through unchanged, with an explicit diagnostic.  The function
     is pure with respect to the caller's protocol objects and reads no files.
+
+    This compiler is block-free BY DESIGN: it never reads PDF blocks and
+    never accepts a stored retained-object record.  Callers that hold the
+    signed group blocks may pass per-group LIVE resolvers via
+    ``retained_object_resolvers``, keyed by
+    ``(paper_id, experimental_group_id, source_digest)``; the default
+    ``None`` keeps byte-identical fail-closed behavior.
     """
     result = RouteGroupCompilationResultV1()
     for protocol_index, original in enumerate(protocols):
@@ -1344,8 +1366,20 @@ def compile_experimental_group_protocols(
         else:
             entries = []
         for group_index, group in entries:
+            resolver = None
+            if retained_object_resolvers is not None:
+                group_source = group.get("source")
+                group_key = (
+                    _text(group.get("paper_id")) or _text(protocol.get("paper_id")),
+                    _text(group.get("experimental_group_id")),
+                    _text(group_source.get("source_digest"))
+                    if isinstance(group_source, Mapping) else "",
+                )
+                resolver = retained_object_resolvers.get(group_key)
             trial = deepcopy(group)
-            reason = _compile_group(trial, protocol)
+            reason = _compile_group(
+                trial, protocol, retained_object_resolver=resolver,
+            )
             if reason:
                 result.diagnostics.append(RouteGroupCompilationDiagnosticV1(
                     protocol_index=protocol_index,

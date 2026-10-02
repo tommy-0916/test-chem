@@ -14,7 +14,8 @@ from chem_agent_contracts.route_candidate import (
     ExperimentalGroupScopeV1, RouteCandidateV1, RouteGoalV1, RouteTargetV1,
 )
 from chem_agent_contracts.route_convention_basis import (
-    _affirmative_pattern_match, _liquid_medium_in_excerpt, _literal_in_quote,
+    _affirmative_pattern_match, _liquid_medium_for_operation,
+    _liquid_medium_in_excerpt, _literal_in_quote, _operation_assertion_polarity,
     derive_unreviewed_input_state, derive_unreviewed_output_state,
     verify_bound_output_state,
 )
@@ -1482,6 +1483,152 @@ class SingleHopProofHardeningTest(unittest.TestCase):
         self.assertEqual(proof["rule_id"], "PARENT_OUTPUT_STATE_INHERITANCE_V1")
         self.assertEqual(proof["parent_instance_id"], "ppt1")
         self.assertEqual(proof["child_instance_id"], "ppt1")
+
+
+class Round1bPolarityTest(SingleHopProofHardeningTest):
+    """Round-1b review probes E1b–E5: assertion polarity and medium binding.
+
+    An operation mention the paper names only as the rejected half of an
+    alternative ("dried instead of being redispersed") or as a failed
+    attempt ("attempted to redisperse … but failed") is not affirmed; a
+    hyphenated "water-free" compound excludes the liquid; and the
+    dispersing medium must govern the operation mention's own clause, not
+    merely appear somewhere in the excerpt.
+    """
+
+    def test_alternative_scoping_is_not_proven(self) -> None:
+        for quote in (
+            "The washed_wet_solid was dried instead of being redispersed in water.",
+            "The washed_wet_solid was dried rather than redispersed in water.",
+        ):
+            with self.subTest(quote=quote):
+                proposal = self._one_step(
+                    "redispersed", quote, "washed_wet_solid", "suspension",
+                )
+                proof, issue = self._derive(proposal)
+                self.assertIsNone(proof)
+                self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_failed_attempt_is_not_proven(self) -> None:
+        for operation, quote in (
+            ("redispersed",
+             "We attempted to get the washed_wet_solid redispersed in water "
+             "but failed."),
+            ("redisperse",
+             "We attempted to redisperse the washed_wet_solid in water "
+             "but failed."),
+        ):
+            with self.subTest(quote=quote):
+                proposal = self._one_step(
+                    operation, quote, "washed_wet_solid", "suspension",
+                )
+                proof, issue = self._derive(proposal)
+                self.assertIsNone(proof)
+                self.assertEqual(issue, "convention_rule_not_applicable_or_ambiguous")
+
+    def test_hyphenated_free_medium_is_not_liquid_participation(self) -> None:
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was redispersed in a water-free medium.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def test_medium_in_another_clause_is_not_liquid_participation(self) -> None:
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was redispersed. The reactor was washed in water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def test_affirmed_redispersion_still_proves(self) -> None:
+        for operation, quote in (
+            ("redispersed", "The washed_wet_solid was redispersed in water."),
+            ("redispersion",
+             "The washed_wet_solid underwent redispersion in water."),
+        ):
+            with self.subTest(quote=quote):
+                proposal = self._one_step(
+                    operation, quote, "washed_wet_solid", "suspension",
+                )
+                proof, issue = self._derive(proposal)
+                self.assertEqual(issue, "")
+                self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+                self.assertEqual(proof["target_state"], "suspension")
+
+    def test_liquid_input_port_still_proves_without_excerpt_medium(self) -> None:
+        # The excerpt names no medium, but a liquid-state input port is an
+        # independent liquid-participation premise (input-port branch).
+        proposal = self._one_step(
+            "redispersed", "The washed_wet_solid was redispersed.",
+            "washed_wet_solid", "suspension",
+        )
+        proposal["material_graph"][0]["material_inputs"].append({
+            "material_id": "water", "material_instance_id": "w1",
+            "name": "deionized water", "state": "solution",
+            "material_origin": "external_inventory",
+            "provenance": {"kind": "paper", "reference": "fact:op"},
+        })
+        proof, issue = self._derive(proposal)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+
+    def test_operation_assertion_polarity_classes(self) -> None:
+        def polarity_of(haystack: str, stem: str) -> str:
+            index = haystack.casefold().index(stem.casefold())
+            return _operation_assertion_polarity(haystack, index, index + len(stem))
+
+        self.assertEqual(polarity_of(
+            "The solid was redispersed in water.", "redisperse"), "affirmed")
+        self.assertEqual(polarity_of(
+            "The washed_wet_solid underwent redispersion in water.",
+            "redispersion"), "affirmed")
+        self.assertEqual(polarity_of(
+            "The solid was not redispersed in water.", "redisperse"), "negated")
+        self.assertEqual(polarity_of(
+            "洗后湿固体未重新分散于水中。", "重新分散"), "negated")
+        self.assertEqual(polarity_of(
+            "The solid was dried instead of being redispersed in water.",
+            "redisperse"), "alternative")
+        self.assertEqual(polarity_of(
+            "The solid was dried rather than redispersed.", "redisperse"),
+            "alternative")
+        self.assertEqual(polarity_of(
+            "固体被干燥而不是重新分散。", "重新分散"), "alternative")
+        self.assertEqual(polarity_of(
+            "We attempted to redisperse the solid in water.", "redisperse"),
+            "attempt_failed")
+        self.assertEqual(polarity_of(
+            "We tried to redisperse the solid.", "redisperse"), "attempt_failed")
+        self.assertEqual(polarity_of(
+            "The solid was redispersed but failed.", "redisperse"),
+            "attempt_failed")
+        self.assertEqual(polarity_of(
+            "洗后湿固体未能重新分散，最终失败。", "重新分散"), "attempt_failed")
+
+    def test_liquid_medium_for_operation_binds_the_operation_clause(self) -> None:
+        medium = _liquid_medium_for_operation
+        patterns = ["redisperse", "disperse", "redispersion"]
+        self.assertFalse(medium(
+            "The washed_wet_solid was redispersed. "
+            "The reactor was washed in water.", patterns, self._TOKENS,
+        ))
+        self.assertTrue(medium(
+            "The washed_wet_solid was redispersed in water.",
+            patterns, self._TOKENS,
+        ))
+        self.assertTrue(medium(
+            "The solid was dispersed in 30 mL of water.", patterns, self._TOKENS,
+        ))
+        self.assertFalse(medium(
+            "The washed_wet_solid was dispersed onto carbon paper "
+            "and rinsed with water.", patterns, self._TOKENS,
+        ))
 
 
 if __name__ == "__main__":
