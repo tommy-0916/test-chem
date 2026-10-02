@@ -177,10 +177,16 @@ here only for line width.)
   PARENT_OUTPUT_STATE_INHERITANCE_V1 (alongside the eight graph[4] SPLIT_V1
   candidates, unchanged). G1 final issues drop from 9 to 7
   `semantic_binding_pending` — `f_g5_out0_state` and `f_g6_in0_state` are
-  no longer flagged; the remaining 7 are the honestly unresolved
-  downstream states (graph[6] output and the ms7a/ms7b/ms8 cascade) plus
-  the graph[5] suspension input. `admitted_protocols: 0`, reported as
-  empty, never as a pass.
+  no longer flagged. For the avoidance of doubt: graph[5]'s suspension
+  input passes the literal gates on its own (literal PASS), graph[5].out
+  passes by derivation (CENTRIFUGE_COLLECT_PRECIPITATE_V1), and
+  graph[6].in passes by inheritance
+  (PARENT_OUTPUT_STATE_INHERITANCE_V1). The remaining 7 pending are
+  exactly `f_g6_out0_state`, `f_g7a_in0_state`, `f_g7a_out0_state`,
+  `f_g7b_in0_state`, `f_g7b_out0_state`, `f_g8_in0_state`, and
+  `f_g8_out0_state` — i.e. graph[6].out onward: the graph[6] output and
+  the honestly unresolved ms7a/ms7b/ms8 cascade. `admitted_protocols: 0`,
+  reported as empty, never as a pass.
 - **Receipt**: feeding the association's located proposal (facts re-bound
   to fresh `bind_pdf_quote` locators, as the receipt demands
   `source.locator == binding.locator`) into

@@ -295,6 +295,20 @@ _SUBSTRATE_SUFFIX_EN = re.compile(
 _SUBSTRATE_SUFFIX_ZH = re.compile(r"^(?:到|于|在)[^。，,;；]{0,8}?(?:上|表面)")
 _NEGATION_WINDOW = 25
 _CLAUSE_BOUNDARY = re.compile(r"[.!?;。；！？]")
+# Event-scope boundary: a coordinated clause with its own new subject and
+# finite predicate (", and the catalyst ink was prepared …") is a different
+# event — its medium never wets the first clause's operation.  Coordinated
+# predicates of one subject (", and redispersed in water", ", and aged for
+# 20 h") carry no new subject/auxiliary pair and do not split.
+_COORDINATED_CLAUSE_BOUNDARY = re.compile(
+    r",\s+and\s+(?="
+    r"(?:(?:the|a|an|this|that|these|those|all|each|both|it|he|she|we|they)\s+)?"
+    r"[A-Za-z][\w-]*(?:\s+[A-Za-z][\w-]*){0,3}?\s+"
+    r"(?:was|were|is|are|has|have|had|been|will|would|could|should|may"
+    r"|might|must|shall|underwent|undergoes|undergo)\b"
+    r")",
+    flags=re.IGNORECASE,
+)
 _ALTERNATIVE_PREFIX_EN = re.compile(
     r"\b(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to)"
     r"(?:\s+(?:being|be|getting|get))?\s*$",
@@ -424,7 +438,14 @@ def _liquid_medium_in_excerpt(
             continue
         if liquid.isascii():
             medium = re.compile(
-                rf"\b(?:in|into)\s+(?:[\w.%µ/-]+\s+){{0,3}}?"
+                # Bounded medium phrase: an optional quantity + volume unit
+                # (+ optional "of") — "in 30 mL of deionized water" — then
+                # up to three modifier words before the liquid token.
+                rf"\b(?:in|into)\s+"
+                rf"(?:(?:[~≈]|ca\.|about|approx\.?)?\s*\d+(?:\.\d+)?\s*"
+                rf"(?:mL|ml|µL|μL|uL|L|liters?|litres?|cc)\s+"
+                rf"(?:of\s+)?)?"
+                rf"(?:[\w.%µ/-]+\s+){{0,3}}?"
                 rf"{re.escape(liquid)}\b(?![\s-]*bath)"
                 rf"(?!\s*[-–—](?:free|less)\b)",
                 flags=re.IGNORECASE,
@@ -450,18 +471,31 @@ def _liquid_medium_for_operation(
 
     The medium must belong to the operation's clause, not merely to the
     excerpt: "The solid was redispersed. The reactor was washed in water."
-    never wets the redispersion.  Only affirmed, non-substrate mentions
-    bind a clause (a negated, alternative, failed-attempt, or
-    surface-governed mention is not the bulk operation).
+    never wets the redispersion, and neither does a coordinated clause with
+    its own new subject and predicate ("…was redispersed, and the catalyst
+    ink was prepared in water.").  Coordinated predicates of the same
+    subject ("…was stirred, and redispersed in water.") stay one segment.
+    Only affirmed, non-substrate mentions bind a clause (a negated,
+    alternative, failed-attempt, or surface-governed mention is not the
+    bulk operation).
     """
     text = _text(excerpt)
     if not text:
         return False
+    boundaries = sorted(
+        (boundary.start(), boundary.end())
+        for boundary in (
+            list(_CLAUSE_BOUNDARY.finditer(text))
+            + list(_COORDINATED_CLAUSE_BOUNDARY.finditer(text))
+        )
+    )
     segments: list[tuple[int, int]] = []
     segment_start = 0
-    for boundary in _CLAUSE_BOUNDARY.finditer(text):
-        segments.append((segment_start, boundary.start()))
-        segment_start = boundary.end()
+    for boundary_start, boundary_end in boundaries:
+        if boundary_start < segment_start:
+            continue
+        segments.append((segment_start, boundary_start))
+        segment_start = boundary_end
     segments.append((segment_start, len(text)))
     for pattern in operation_patterns or []:
         stem = _text(pattern)
@@ -501,8 +535,15 @@ def _proof_for_evidence(
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_record: Mapping[str, Any] | None = None,
     retained_object_issue: str = "",
+    parent_state_proven: bool = False,
 ) -> tuple[dict[str, str] | None, str]:
-    """Recompute one exact proof; no candidate-provided rule identifier is used."""
+    """Recompute one exact proof; no candidate-provided rule identifier is used.
+
+    ``parent_state_proven`` is the proof-DAG hook: a composed proof graph sets
+    it only after the parent state premise carries its own verified node, so
+    the flat literal parent gate is skipped.  The default keeps legacy
+    behavior byte-identical.
+    """
     match = _OUTPUT_STATE.fullmatch(field_path)
     if match is None:
         return None, "semantic_binding_pending"
@@ -565,13 +606,14 @@ def _proof_for_evidence(
                 or _text(upstream[0].get("state")) != parent_state):
             return None, "convention_upstream_reference_mismatch"
     parent_state_path = f"material_graph[{step_index}].material_inputs[{input_index}].state"
-    _state_mapping, issue = controlled_state_mapping(
-        parent_state_path, parent_source_value, parent.get("state"),
-    )
-    if issue or not state_source_locally_attributed(
-        parent_source_value, parent_excerpt, parent.get("name"),
-    ):
-        return None, "convention_parent_state_unverified"
+    if not parent_state_proven:
+        _state_mapping, issue = controlled_state_mapping(
+            parent_state_path, parent_source_value, parent.get("state"),
+        )
+        if issue or not state_source_locally_attributed(
+            parent_source_value, parent_excerpt, parent.get("name"),
+        ):
+            return None, "convention_parent_state_unverified"
 
     relation_id = _text(relation.get("relation_id"))
     segment_id = _text(relation.get("source_operation_ref"))
@@ -862,8 +904,14 @@ def derive_unreviewed_output_state(
     graph: Sequence[Any], facts: Sequence[Any], field_path: str, *,
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_resolver: Any = None,
+    parent_state_proven: bool = False,
 ) -> tuple[dict[str, str] | None, str]:
-    """Produce a proof only from existing graph edges and proposed source facts."""
+    """Produce a proof only from existing graph edges and proposed source facts.
+
+    ``parent_state_proven`` is set only by the typed proof-DAG layer after the
+    parent premise carries its own verified node; the default is the legacy
+    literal parent gate.
+    """
     by_path: dict[str, Mapping[str, Any]] = {}
     for raw in facts:
         fact = _mapping(raw)
@@ -970,6 +1018,7 @@ def derive_unreviewed_output_state(
         source_digest=source_digest,
         retained_object_record=retained_object_record,
         retained_object_issue=retained_object_issue,
+        parent_state_proven=parent_state_proven,
     )
 
 

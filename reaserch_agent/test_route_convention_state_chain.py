@@ -1630,6 +1630,69 @@ class Round1bPolarityTest(SingleHopProofHardeningTest):
             "and rinsed with water.", patterns, self._TOKENS,
         ))
 
+    def test_coordinated_new_subject_clause_is_an_event_boundary(self) -> None:
+        # E5 refinement: ", and <new subject> <finite aux> …" starts a new
+        # event; its medium never wets the first clause's operation.
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was redispersed, "
+            "and the catalyst ink was prepared in water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def test_coordinated_same_subject_predicates_still_prove(self) -> None:
+        # One material's coordinated predicates share the clause: no new
+        # subject follows ", and", so the medium still binds.  "stirred"
+        # matches no rule family, keeping the family count at one.
+        for quote in (
+            "The washed_wet_solid was stirred, and redispersed in water.",
+            "The washed_wet_solid was redispersed in water, and aged for 20 h.",
+        ):
+            with self.subTest(quote=quote):
+                proposal = self._one_step(
+                    "redispersed", quote, "washed_wet_solid", "suspension",
+                )
+                proof, issue = self._derive(proposal)
+                self.assertEqual(issue, "")
+                self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+                self.assertEqual(proof["target_state"], "suspension")
+
+    def test_quantified_medium_phrase_still_proves(self) -> None:
+        # O5: a bounded quantity + unit + "of" phrase governs the medium.
+        proposal = self._one_step(
+            "redispersed",
+            "The washed_wet_solid was redispersed in 30 mL of deionized water.",
+            "washed_wet_solid", "suspension",
+        )
+        proof, issue = self._derive(proposal)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+
+    def test_quantified_medium_phrase_unit_level(self) -> None:
+        self.assertTrue(_liquid_medium_in_excerpt(
+            "dispersed in 30 mL of deionized water", ("water",),
+        ))
+
+    def test_liquid_medium_for_operation_splits_coordinated_clauses(self) -> None:
+        medium = _liquid_medium_for_operation
+        patterns = ["redisperse", "disperse", "redispersion"]
+        self.assertFalse(medium(
+            "The washed_wet_solid was redispersed, "
+            "and the catalyst ink was prepared in water.",
+            patterns, self._TOKENS,
+        ))
+        self.assertTrue(medium(
+            "The washed_wet_solid was stirred, and redispersed in water.",
+            patterns, self._TOKENS,
+        ))
+        self.assertTrue(medium(
+            "The washed_wet_solid was redispersed in water, and aged for 20 h.",
+            patterns, self._TOKENS,
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

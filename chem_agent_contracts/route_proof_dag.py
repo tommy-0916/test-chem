@@ -1,0 +1,1202 @@
+"""Typed state-proof DAG with recomputable source leaves.
+
+The flat convention engine (``route_convention_basis``) proves ONE output or
+input state at a time and gates every parent state on literal checks.  This
+module composes those single-hop proofs into a content-addressed DAG
+(``state-proof-dag/v1``): every node carries a typed schema, a claim, and
+premises referencing other nodes by id, and every source fact becomes a
+``source-evidence-leaf/v1`` that can be re-located inside the signed group
+blocks from its binding locator and projected character span alone.
+
+Node and leaf ids are content addresses: ``sha256`` of the canonical JSON
+payload (keys sorted, ``","``/``":"`` separators, ``ensure_ascii=False``)
+with the id field itself excluded.  Premises are canonicalized by sorting on
+``role`` before hashing.  Any change to a node's content — including a
+premise id — changes its own id, so a tampered node either fails id
+recomputation or leaves a dangling premise reference.
+
+The engine is reused, never reimplemented: convention nodes lift their typed
+fields from a freshly recomputed flat proof, with ``parent_state_proven``
+set only after the parent premise node has its own verified node in the DAG.
+"""
+
+from __future__ import annotations
+
+from hashlib import sha256
+import json
+import re
+from typing import Any, Callable, Mapping, Sequence
+
+from . import route_convention_basis as _basis
+from .route_convention_basis import (
+    _INPUT_STATE, _INHERITANCE_RULE_ID, _OUTPUT_STATE, _RULE_EVENTS,
+    _evidence_id, _inheritance_proof_for_evidence, _items, _literal_in_quote,
+    _mapping, _resolve_parent_output, _text, convention_fact_evidence_by_id,
+    derive_unreviewed_output_state,
+)
+from .route_field_basis import (
+    controlled_state_mapping, state_source_locally_attributed,
+)
+from .route_retained_object import (
+    POST_OPERATION_RETAINED_OBJECT_RULE_ID,
+    POST_OPERATION_RETAINED_OBJECT_RULE_VERSION,
+    derive_post_operation_retained_object,
+)
+
+SOURCE_EVIDENCE_LEAF_SCHEMA = "source-evidence-leaf/v1"
+PAPER_LITERAL_PROOF_SCHEMA = "paper-literal-proof/v1"
+SOURCE_RELATION_PROOF_SCHEMA = "source-relation-proof/v1"
+SAME_STATE_CONVENTION_PROOF_SCHEMA = "same-state-convention-proof/v1"
+STATE_CHANGE_CONVENTION_PROOF_SCHEMA = "state-change-convention-proof/v1"
+STATE_INHERITANCE_PROOF_SCHEMA = "state-inheritance-proof/v1"
+STATE_PROOF_DAG_SCHEMA = "state-proof-dag/v1"
+
+_NODE_TYPE_SCHEMAS = {
+    "paper_literal": PAPER_LITERAL_PROOF_SCHEMA,
+    "source_relation": SOURCE_RELATION_PROOF_SCHEMA,
+    "same_state": SAME_STATE_CONVENTION_PROOF_SCHEMA,
+    "state_change": STATE_CHANGE_CONVENTION_PROOF_SCHEMA,
+    "inheritance": STATE_INHERITANCE_PROOF_SCHEMA,
+}
+_CONVENTION_ROLES = frozenset({"parent_state", "operation", "retained_object"})
+_SOURCE_RELATION_ROLES = ["naming", "operation", "output_name"]
+_OPERATION_PATH = re.compile(r"material_graph\[(0|[1-9][0-9]*)\]\.operation\Z")
+# Binding fields of a route fact: the identity a source leaf stands on.
+_FACT_BINDING_FIELDS = ("fact_id", "field_path", "value", "unit", "excerpt")
+
+
+def _canonical(payload: Any) -> str:
+    return json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+
+
+def _digest_text(text: str) -> str:
+    return "sha256_" + sha256(text.encode("utf-8")).hexdigest()
+
+
+def _normalize_excerpt(text: str) -> str:
+    """The projection normalization used by the span resolver."""
+    try:
+        from reaserch_agent.route_pdf_quote_binding import (
+            normalize_pdf_quote_whitespace,
+        )
+        return normalize_pdf_quote_whitespace(text)
+    except Exception:
+        return " ".join(text.split())
+
+
+def _fact_digest(fact: Mapping[str, Any]) -> str:
+    """Digest of the fact's binding fields (identity, path, value, quote)."""
+    binding = {field: fact.get(field) for field in _FACT_BINDING_FIELDS}
+    return _digest_text(_canonical(binding))
+
+
+def leaf_id_for(leaf: Mapping[str, Any]) -> str:
+    """Recompute a source-evidence leaf's content address."""
+    payload = {key: value for key, value in leaf.items() if key != "leaf_id"}
+    return "source_leaf_" + sha256(
+        _canonical(payload).encode("utf-8")
+    ).hexdigest()[:24]
+
+
+def node_id_for(node: Mapping[str, Any]) -> str:
+    """Recompute a proof node's content address."""
+    payload = {key: value for key, value in node.items() if key != "node_id"}
+    return "proof_node_" + sha256(
+        _canonical(payload).encode("utf-8")
+    ).hexdigest()[:24]
+
+
+def _sorted_premises(premises: Sequence[Mapping[str, str]]) -> list[dict]:
+    """Premises are canonicalized by sorting on role before hashing."""
+    return [
+        {"role": str(premise["role"]), "node_id": str(premise["node_id"])}
+        for premise in sorted(premises, key=lambda item: str(item["role"]))
+    ]
+
+
+def _claim(
+    field_path: str, target_state: str = "",
+    material_id: str = "", material_instance_id: str = "",
+) -> dict:
+    return {
+        "field_path": field_path,
+        "target_state": target_state,
+        "material_id": material_id,
+        "material_instance_id": material_instance_id,
+    }
+
+
+def _source_evidence_leaf(
+    fact: Mapping[str, Any], *, paper_id: str, experimental_group_id: str,
+    source_digest: str, section: str, span_of: Any,
+) -> dict:
+    """Project one route fact into a recomputable source-evidence leaf."""
+    excerpt = _text(fact.get("excerpt"))
+    locator = ""
+    char_span: list[int] = []
+    if span_of is not None and excerpt:
+        locate = getattr(span_of, "locate", None)
+        located = locate(excerpt) if callable(locate) else None
+        if located is not None:
+            locator = located[1]
+            if located[2][0] >= 0:
+                char_span = [located[2][0], located[2][1]]
+    leaf = {
+        "schema_version": SOURCE_EVIDENCE_LEAF_SCHEMA,
+        "paper_id": paper_id,
+        "experimental_group_id": experimental_group_id,
+        "source_digest": source_digest,
+        "section": section,
+        "locator": locator,
+        "char_span": char_span,
+        "excerpt_digest": _digest_text(_normalize_excerpt(excerpt)),
+        "field_path": _text(fact.get("field_path")),
+        "claim_value": fact.get("value"),
+        "unit": _text(fact.get("unit")),
+        "fact_digest": _fact_digest(fact),
+    }
+    leaf["leaf_id"] = leaf_id_for(leaf)
+    return leaf
+
+
+def _literal_state_gates(
+    field_path: str, value: str, excerpt: str, port: Mapping[str, Any],
+) -> dict | None:
+    """The flat literal parent gates, evaluated for a paper-literal node."""
+    _state_mapping, issue = controlled_state_mapping(
+        field_path, value, port.get("state"),
+    )
+    if issue:
+        return None
+    if not state_source_locally_attributed(value, excerpt, port.get("name")):
+        return None
+    return {"controlled_state_mapping": True, "local_attribution": True}
+
+
+def _port_at(graph: Sequence[Any], field_path: str) -> Mapping[str, Any] | None:
+    """Resolve a state/name port path inside the typed graph."""
+    match = _OUTPUT_STATE.fullmatch(field_path)
+    if match is not None:
+        step_index, port_index = int(match.group(1)), int(match.group(2))
+        if step_index >= len(graph):
+            return None
+        ports = _items(_mapping(graph[step_index]).get("material_outputs"))
+        return ports[port_index] if port_index < len(ports) else None
+    match = _INPUT_STATE.fullmatch(field_path)
+    if match is not None:
+        step_index, collection, port_index = (
+            int(match.group(1)), match.group(2), int(match.group(3)),
+        )
+        if step_index >= len(graph):
+            return None
+        ports = _items(_mapping(graph[step_index]).get(collection))
+        return ports[port_index] if port_index < len(ports) else None
+    return None
+
+
+def _upstream_matches(
+    graph: Sequence[Any], reference: Mapping[str, Any],
+) -> list[int]:
+    """Every step index whose output port matches one parent-output ref."""
+    ref_step = _text(reference.get("macro_step_id"))
+    ref_instance = _text(reference.get("material_instance_id"))
+    return [
+        index for index, earlier in enumerate(graph)
+        for port in _items(_mapping(earlier).get("material_outputs"))
+        if (_text(_mapping(earlier).get("macro_step_id")) == ref_step
+            and _text(port.get("material_instance_id")) == ref_instance)
+    ]
+
+
+class _DagBuilder:
+    """Recursive builder with a per-build memo and a cycle guard."""
+
+    def __init__(
+        self, graph: Sequence[Any], facts: Sequence[Any], *, paper_id: str,
+        experimental_group_id: str, source_digest: str, section: str = "",
+        span_of: Any = None,
+    ) -> None:
+        self.graph = (
+            [_mapping(step) for step in graph]
+            if isinstance(graph, (list, tuple)) else []
+        )
+        self.facts = (
+            [_mapping(fact) for fact in facts]
+            if isinstance(facts, (list, tuple)) else []
+        )
+        self.paper_id = paper_id
+        self.experimental_group_id = experimental_group_id
+        self.source_digest = source_digest
+        self.section = section
+        self.span_of = span_of
+        self.by_path: dict[str, Mapping[str, Any]] = {}
+        for fact in self.facts:
+            path = _text(fact.get("field_path"))
+            if path and path not in self.by_path:
+                self.by_path[path] = fact
+        self.by_fact_id = {
+            _text(fact.get("fact_id")): fact
+            for fact in self.facts if _text(fact.get("fact_id"))
+        }
+        self.evidence = convention_fact_evidence_by_id(
+            self.facts, paper_id=paper_id,
+            experimental_group_id=experimental_group_id,
+        )
+        self.nodes: dict[str, dict] = {}
+        self.memo: dict[str, str] = {}
+        self.visiting: set[str] = set()
+        self.resolver = self._resolver_from_span()
+
+    def _resolver_from_span(self) -> Callable[[str], tuple[Any, str]] | None:
+        """A retained-object resolver recomputing records live from span_of."""
+        if self.span_of is None:
+            return None
+        records: dict[str, Any] = {}
+        issues: dict[str, str] = {}
+        for step_index, step in enumerate(self.graph):
+            record, issue = derive_post_operation_retained_object(
+                self.graph, self.facts, step_index, span_of=self.span_of,
+            )
+            outputs = _items(step.get("material_outputs"))
+            fallback = (
+                f"material_graph[{step_index}].material_outputs[0].state"
+                if outputs else ""
+            )
+            if record is not None:
+                records[_text(_mapping(record.get("output")).get("state_path"))] = record
+            elif fallback:
+                issues[fallback] = issue
+
+        def resolve(field_path: str) -> tuple[Any, str]:
+            record = records.get(field_path)
+            if record is not None:
+                return record, ""
+            return None, issues.get(field_path, "")
+
+        return resolve
+
+    def build(self, field_path: str) -> tuple[dict | None, str]:
+        node_id, issue = self.build_node(field_path)
+        if node_id is None:
+            return None, issue
+        _rules, resource_digest = _basis._rule_resource()
+        dag = {
+            "schema_version": STATE_PROOF_DAG_SCHEMA,
+            "nodes": self.nodes,
+            "root_id": node_id,
+            "context": {
+                "graph_digest": _digest_text(_canonical(self.graph)),
+                "paper_id": self.paper_id,
+                "experimental_group_id": self.experimental_group_id,
+                "source_digest": self.source_digest,
+                "rule_resource_digest": resource_digest,
+            },
+        }
+        return dag, ""
+
+    def build_node(self, field_path: str) -> tuple[str | None, str]:
+        if field_path in self.memo:
+            return self.memo[field_path], ""
+        if field_path in self.visiting:
+            return None, "proof_dag_cycle"
+        self.visiting.add(field_path)
+        try:
+            if _OUTPUT_STATE.fullmatch(field_path) is not None:
+                node_id, issue = self._build_output_state(field_path)
+            elif _INPUT_STATE.fullmatch(field_path) is not None:
+                node_id, issue = self._build_input_state(field_path)
+            elif (_OPERATION_PATH.fullmatch(field_path) is not None
+                  or field_path.endswith(".name")):
+                node_id, issue = self._build_non_state_fact(field_path)
+            else:
+                return None, "semantic_binding_pending"
+            if node_id is not None:
+                self.memo[field_path] = node_id
+            return node_id, issue
+        finally:
+            self.visiting.discard(field_path)
+
+    # -- node constructors -------------------------------------------------
+
+    def _add_node(self, node: dict) -> str:
+        node["node_id"] = node_id_for(node)
+        self.nodes[node["node_id"]] = node
+        return node["node_id"]
+
+    def _literal_node(
+        self, fact: Mapping[str, Any], *, claim: Mapping[str, Any],
+        gates: Mapping[str, Any],
+    ) -> str:
+        node = {
+            "schema_version": PAPER_LITERAL_PROOF_SCHEMA,
+            "node_type": "paper_literal",
+            "claim": dict(claim),
+            "premises": [],
+            "rule_id": "",
+            "rule_version": "",
+            "rule_resource_digest": "",
+            "leaf": _source_evidence_leaf(
+                fact, paper_id=self.paper_id,
+                experimental_group_id=self.experimental_group_id,
+                source_digest=self.source_digest, section=self.section,
+                span_of=self.span_of,
+            ),
+            "gates": dict(gates),
+        }
+        return self._add_node(node)
+
+    def _literal_state_node(
+        self, field_path: str, fact: Mapping[str, Any], port: Mapping[str, Any],
+        gates: Mapping[str, Any],
+    ) -> str:
+        return self._literal_node(
+            fact,
+            claim=_claim(
+                field_path, _text(port.get("state")),
+                _text(port.get("material_id")),
+                _text(port.get("material_instance_id")),
+            ),
+            gates=gates,
+        )
+
+    def _build_non_state_fact(self, field_path: str) -> tuple[str | None, str]:
+        """Operation and name facts stand alone as paper-literal leaves."""
+        fact = self.by_path.get(field_path)
+        if fact is None:
+            return None, "convention_fact_path_missing_or_duplicate"
+        value = _text(fact.get("value"))
+        excerpt = _text(fact.get("excerpt"))
+        if _OPERATION_PATH.fullmatch(field_path) is not None:
+            if not _literal_in_quote(value, excerpt):
+                return None, "convention_operation_fact_unbound"
+        elif value.casefold() not in excerpt.casefold():
+            return None, "convention_operation_fact_unbound"
+        node_id = self._literal_node(
+            fact, claim=_claim(field_path),
+            gates={"value_literal_in_quote": True},
+        )
+        return node_id, ""
+
+    def _operation_leaf(self, step_index: int) -> tuple[str | None, str]:
+        operation_path = f"material_graph[{step_index}].operation"
+        fact = self.by_path.get(operation_path)
+        if fact is None:
+            return None, "convention_operation_fact_missing"
+        if not _literal_in_quote(
+            _text(fact.get("value")), _text(fact.get("excerpt")),
+        ):
+            return None, "convention_operation_fact_unbound"
+        return self._literal_node(
+            fact, claim=_claim(operation_path),
+            gates={"value_literal_in_quote": True},
+        ), ""
+
+    def _source_relation_node(
+        self, record: Mapping[str, Any],
+    ) -> tuple[str | None, str]:
+        """The post-operation retained-object relation on its three leaves."""
+        output = _mapping(record.get("output"))
+        leaves: dict[str, str] = {}
+        for role, fact_id in (
+            ("operation", _text(record.get("operation_fact_id"))),
+            ("naming", _text(record.get("naming_fact_id"))),
+            ("output_name", _text(record.get("output_name_fact_id"))),
+        ):
+            fact = self.by_fact_id.get(fact_id)
+            if fact is None:
+                return None, "retained_object_output_binding_unresolved"
+            leaves[role] = self._literal_node(
+                fact, claim=_claim(_text(fact.get("field_path"))),
+                gates={"value_literal_in_quote": True},
+            )
+        node = {
+            "schema_version": SOURCE_RELATION_PROOF_SCHEMA,
+            "node_type": "source_relation",
+            "subtype": "post_operation_retained_object",
+            "claim": _claim(
+                _text(output.get("state_path")),
+                _text((_port_at(self.graph, _text(output.get("state_path")))
+                       or {}).get("state")),
+                _text(output.get("material_id")),
+                _text(output.get("material_instance_id")),
+            ),
+            "premises": _sorted_premises(
+                {"role": role, "node_id": leaves[role]}
+                for role in _SOURCE_RELATION_ROLES
+            ),
+            "rule_id": POST_OPERATION_RETAINED_OBJECT_RULE_ID,
+            "rule_version": POST_OPERATION_RETAINED_OBJECT_RULE_VERSION,
+            "rule_resource_digest": "",
+            "record": json.loads(json.dumps(record)),
+        }
+        return self._add_node(node), ""
+
+    # -- state paths ---------------------------------------------------------
+
+    def _build_output_state(self, field_path: str) -> tuple[str | None, str]:
+        match = _OUTPUT_STATE.fullmatch(field_path)
+        step_index, output_index = int(match.group(1)), int(match.group(2))
+        if step_index >= len(self.graph):
+            return None, "convention_graph_path_missing"
+        step = self.graph[step_index]
+        outputs, inputs = (
+            _items(step.get("material_outputs")),
+            _items(step.get("material_inputs")),
+        )
+        if output_index >= len(outputs):
+            return None, "convention_graph_path_missing"
+        child = outputs[output_index]
+        child_id = _text(child.get("material_instance_id"))
+        relations = [
+            relation for relation in _items(step.get("material_relations"))
+            if child_id in relation.get("output_material_instance_ids", [])
+        ]
+        if len(relations) != 1:
+            return None, "convention_material_relation_missing_or_ambiguous"
+        relation = relations[0]
+        parent_ids = relation.get("input_material_instance_ids")
+        if not isinstance(parent_ids, list) or len(parent_ids) != 1:
+            return None, "convention_parent_relation_ambiguous"
+        parents = [
+            (index, port) for index, port in enumerate(inputs)
+            if _text(port.get("material_instance_id")) == _text(parent_ids[0])
+        ]
+        if len(parents) != 1:
+            return None, "convention_parent_material_missing"
+        input_index, parent_port = parents[0]
+        parent_state_path = (
+            f"material_graph[{step_index}]"
+            f".material_inputs[{input_index}].state"
+        )
+        parent_fact = self.by_path.get(parent_state_path)
+
+        operation_node_id, issue = self._operation_leaf(step_index)
+        if operation_node_id is None:
+            return None, issue
+
+        record = None
+        if self.resolver is not None:
+            record, _record_issue = self.resolver(field_path)
+
+        # Parent premise: literal gates first, then a proven upstream output.
+        parent_node_id: str | None = None
+        parent_state_proven = False
+        if parent_fact is not None:
+            gates = _literal_state_gates(
+                parent_state_path, _text(parent_fact.get("value")),
+                _text(parent_fact.get("excerpt")), parent_port,
+            )
+            if gates is not None:
+                parent_node_id = self._literal_state_node(
+                    parent_state_path, parent_fact, parent_port, gates,
+                )
+        if (parent_node_id is None
+                and _text(parent_port.get("material_origin")) == "upstream_output"):
+            references = parent_port.get("parent_output_refs")
+            if isinstance(references, list) and len(references) == 1:
+                ref_step, ref_output, ref_port = _resolve_parent_output(
+                    self.graph, step_index, _mapping(references[0]),
+                )
+                if ref_port is not None:
+                    parent_output_path = (
+                        f"material_graph[{ref_step}]"
+                        f".material_outputs[{ref_output}].state"
+                    )
+                    parent_node_id, issue = self.build_node(parent_output_path)
+                    if parent_node_id is None:
+                        return None, issue
+                    parent_state_proven = True
+        if parent_node_id is None:
+            # The engine's honest issue for this exact configuration.
+            _proof, honest = derive_unreviewed_output_state(
+                self.graph, self.facts, field_path,
+                paper_id=self.paper_id,
+                experimental_group_id=self.experimental_group_id,
+                source_digest=self.source_digest,
+                retained_object_resolver=self.resolver,
+            )
+            return None, honest or "convention_parent_state_unverified"
+
+        proof, issue = derive_unreviewed_output_state(
+            self.graph, self.facts, field_path,
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+            retained_object_resolver=self.resolver,
+            parent_state_proven=parent_state_proven,
+        )
+        if proof is None:
+            return None, issue
+
+        premises = [
+            {"role": "operation", "node_id": operation_node_id},
+            {"role": "parent_state", "node_id": parent_node_id},
+        ]
+        retained_object_fields = {
+            key: proof[key] for key in proof if key.startswith("retained_object")
+        }
+        if retained_object_fields:
+            if record is None:
+                return None, "retained_object_output_binding_unresolved"
+            relation_node_id, issue = self._source_relation_node(record)
+            if relation_node_id is None:
+                return None, issue
+            premises.append({"role": "retained_object", "node_id": relation_node_id})
+        rule_id = _text(proof.get("rule_id"))
+        node_type = "same_state" if rule_id in _RULE_EVENTS else "state_change"
+        node = {
+            "schema_version": _NODE_TYPE_SCHEMAS[node_type],
+            "node_type": node_type,
+            "claim": _claim(
+                field_path, _text(proof.get("target_state")),
+                _text(child.get("material_id")), child_id,
+            ),
+            "premises": _sorted_premises(premises),
+            "rule_id": rule_id,
+            "rule_version": _text(proof.get("rule_version")),
+            "rule_resource_digest": _text(proof.get("resource_digest")),
+            "relation_id": _text(proof.get("relation_id")),
+            "segment_id": _text(relation.get("source_operation_ref")),
+            "parent_instance_id": _text(proof.get("parent_instance_id")),
+            "child_instance_id": _text(proof.get("child_instance_id")),
+            "parent_state_path": _text(proof.get("parent_state_path")),
+            "parent_source_value": _text(proof.get("parent_source_value")),
+            "parent_evidence_id": _text(proof.get("parent_evidence_id")),
+            "operation_path": _text(proof.get("operation_path")),
+            "operation_evidence_id": _text(proof.get("operation_evidence_id")),
+        }
+        if retained_object_fields:
+            node["retained_object_fields"] = retained_object_fields
+        return self._add_node(node), ""
+
+    def _build_input_state(self, field_path: str) -> tuple[str | None, str]:
+        match = _INPUT_STATE.fullmatch(field_path)
+        step_index, collection, port_index = (
+            int(match.group(1)), match.group(2), int(match.group(3)),
+        )
+        if step_index >= len(self.graph):
+            return None, "convention_graph_path_missing"
+        step = self.graph[step_index]
+        ports = _items(step.get(collection))
+        if port_index >= len(ports):
+            return None, "convention_graph_path_missing"
+        port = ports[port_index]
+        fact = self.by_path.get(field_path)
+        if fact is None:
+            return None, "semantic_binding_pending"
+        if _text(fact.get("value")) != _text(port.get("state")):
+            return None, "convention_child_state_value_mismatch"
+        gates = _literal_state_gates(
+            field_path, _text(fact.get("value")),
+            _text(fact.get("excerpt")), port,
+        )
+        if gates is not None:
+            return self._literal_state_node(field_path, fact, port, gates), ""
+        if _text(port.get("material_origin")) != "upstream_output":
+            return None, "convention_parent_state_unverified"
+        references = port.get("parent_output_refs")
+        if not isinstance(references, list) or len(references) != 1:
+            return None, "convention_upstream_reference_missing"
+        reference = _mapping(references[0])
+        matches = _upstream_matches(self.graph, reference)
+        if matches and all(index >= step_index for index in matches):
+            # An inheritance edge may only reach backwards in the graph.
+            return None, "proof_dag_future_reference"
+        ref_step, ref_output, ref_port = _resolve_parent_output(
+            self.graph, step_index, reference,
+        )
+        if ref_port is None:
+            return None, "convention_upstream_reference_mismatch"
+        parent_output_path = (
+            f"material_graph[{ref_step}]"
+            f".material_outputs[{ref_output}].state"
+        )
+        parent_node_id, issue = self.build_node(parent_output_path)
+        if parent_node_id is None:
+            return None, issue
+        parent_node = self.nodes[parent_node_id]
+        if parent_node.get("node_type") not in ("state_change", "same_state"):
+            return None, "convention_parent_state_unverified"
+        grandparent_fact = self.evidence.get(
+            _text(parent_node.get("parent_evidence_id")))
+        operation_fact = self.evidence.get(
+            _text(parent_node.get("operation_evidence_id")))
+        record, issue = _inheritance_proof_for_evidence(
+            self.graph, field_path,
+            parent_source_value=_text(parent_node.get("parent_source_value")),
+            parent_excerpt=(_text(grandparent_fact.get("excerpt"))
+                            if grandparent_fact is not None else ""),
+            parent_evidence_id=_text(parent_node.get("parent_evidence_id")),
+            operation_excerpt=(_text(operation_fact.get("excerpt"))
+                               if operation_fact is not None else ""),
+            operation_evidence_id=_text(parent_node.get("operation_evidence_id")),
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+            retained_object_resolver=self.resolver,
+            facts=self.facts,
+        )
+        if record is None:
+            return None, issue
+        node = {
+            "schema_version": STATE_INHERITANCE_PROOF_SCHEMA,
+            "node_type": "inheritance",
+            "claim": _claim(
+                field_path, _text(record.get("target_state")),
+                _text(port.get("material_id")),
+                _text(record.get("child_instance_id")),
+            ),
+            "premises": _sorted_premises(
+                [{"role": "parent_state", "node_id": parent_node_id}],
+            ),
+            "rule_id": _text(record.get("rule_id")),
+            "rule_version": _text(record.get("rule_version")),
+            "rule_resource_digest": "",
+            "parent_ref": {
+                "kind": "material_instance",
+                "macro_step_id": _text(reference.get("macro_step_id")),
+                "material_instance_id": _text(reference.get("material_instance_id")),
+            },
+            "parent_instance_id": _text(record.get("parent_instance_id")),
+            "child_instance_id": _text(record.get("child_instance_id")),
+            "parent_state_path": _text(record.get("parent_state_path")),
+            "parent_source_value": _text(record.get("parent_source_value")),
+            "parent_evidence_id": _text(record.get("parent_evidence_id")),
+            "operation_path": _text(record.get("operation_path")),
+            "operation_evidence_id": _text(record.get("operation_evidence_id")),
+            "relation_id": _text(record.get("relation_id")),
+        }
+        return self._add_node(node), ""
+
+
+def build_state_proof_dag(
+    graph: Sequence[Any], facts: Sequence[Any], field_path: str, *,
+    paper_id: str, experimental_group_id: str, source_digest: str,
+    section: str = "", span_of: Any = None,
+) -> tuple[dict | None, str]:
+    """Build the typed proof DAG rooted at one state field path."""
+    builder = _DagBuilder(
+        graph, facts, paper_id=paper_id,
+        experimental_group_id=experimental_group_id,
+        source_digest=source_digest, section=section, span_of=span_of,
+    )
+    return builder.build(field_path)
+
+
+class StateProofDagVerifier:
+    """Recompute a whole proof DAG against one pinned context.
+
+    The context — graph digest, source scope and the live rule-resource
+    digest — is fixed at construction; a DAG built under any other context
+    fails with ``proof_dag_context_mismatch``.  Verification is structural
+    first (premise existence, acyclicity, depth), then content: every node id
+    is recomputed from its payload, and every node type is re-derived from
+    the signed blocks, the facts and the versioned rules.  Any failure
+    invalidates the whole DAG; there is no partial pass.
+    """
+
+    def __init__(
+        self, graph: Sequence[Any], facts: Sequence[Any], *, paper_id: str,
+        experimental_group_id: str, source_digest: str, span_of: Any = None,
+        blocks: Sequence[Any] = None, caption_block_locators: Sequence[str] = (),
+    ) -> None:
+        self.graph = (
+            [_mapping(step) for step in graph]
+            if isinstance(graph, (list, tuple)) else []
+        )
+        self.facts = (
+            [_mapping(fact) for fact in facts]
+            if isinstance(facts, (list, tuple)) else []
+        )
+        self.paper_id = paper_id
+        self.experimental_group_id = experimental_group_id
+        self.source_digest = source_digest
+        if span_of is None and blocks:
+            from .route_retained_object import build_excerpt_span_resolver
+
+            span_of = build_excerpt_span_resolver(blocks, caption_block_locators)
+        self.span_of = span_of
+        self.blocks = (
+            [(locator, text) for locator, text in blocks] if blocks else None
+        )
+        self.captions = tuple(caption_block_locators or ())
+        self.by_path: dict[str, Mapping[str, Any]] = {}
+        for fact in self.facts:
+            path = _text(fact.get("field_path"))
+            if path and path not in self.by_path:
+                self.by_path[path] = fact
+        self.by_fact_id = {
+            _text(fact.get("fact_id")): fact
+            for fact in self.facts if _text(fact.get("fact_id"))
+        }
+        self.evidence = convention_fact_evidence_by_id(
+            self.facts, paper_id=paper_id,
+            experimental_group_id=experimental_group_id,
+        )
+        self.resolver = self._resolver_from_span()
+        self._projection: str | None = None
+        _rules, resource_digest = _basis._rule_resource()
+        self.context = {
+            "graph_digest": _digest_text(_canonical(self.graph)),
+            "paper_id": paper_id,
+            "experimental_group_id": experimental_group_id,
+            "source_digest": source_digest,
+            "rule_resource_digest": resource_digest,
+        }
+
+    def _resolver_from_span(self) -> Callable[[str], tuple[Any, str]] | None:
+        if self.span_of is None:
+            return None
+        records: dict[str, Any] = {}
+        issues: dict[str, str] = {}
+        for step_index, step in enumerate(self.graph):
+            record, issue = derive_post_operation_retained_object(
+                self.graph, self.facts, step_index, span_of=self.span_of,
+            )
+            outputs = _items(step.get("material_outputs"))
+            fallback = (
+                f"material_graph[{step_index}].material_outputs[0].state"
+                if outputs else ""
+            )
+            if record is not None:
+                records[_text(_mapping(record.get("output")).get("state_path"))] = record
+            elif fallback:
+                issues[fallback] = issue
+
+        def resolve(field_path: str) -> tuple[Any, str]:
+            record = records.get(field_path)
+            if record is not None:
+                return record, ""
+            return None, issues.get(field_path, "")
+
+        return resolve
+
+    # -- top level -----------------------------------------------------------
+
+    def verify(self, dag: Any) -> str:
+        if not isinstance(dag, Mapping) or (
+            dag.get("schema_version") != STATE_PROOF_DAG_SCHEMA
+        ):
+            return "proof_dag_invalid"
+        nodes = dag.get("nodes")
+        root_id = dag.get("root_id")
+        if (not isinstance(nodes, Mapping) or not nodes
+                or any(not isinstance(node, Mapping)
+                       for node in nodes.values())
+                or not isinstance(root_id, str)):
+            return "proof_dag_invalid"
+        if dag.get("context") != self.context:
+            return "proof_dag_context_mismatch"
+        if root_id not in nodes:
+            return "proof_dag_root_missing"
+        # Structural pass: premise existence, acyclicity, depth.  This runs
+        # before any content check so a dangling premise id and a mutual
+        # premise cycle are named exactly.
+        for node in nodes.values():
+            premises = node.get("premises")
+            if not isinstance(premises, list):
+                return "proof_dag_invalid"
+            for premise in premises:
+                if (not isinstance(premise, Mapping)
+                        or not isinstance(premise.get("role"), str)
+                        or not isinstance(premise.get("node_id"), str)):
+                    return "proof_dag_invalid"
+                if premise["node_id"] not in nodes:
+                    return "proof_dag_premise_missing"
+        issue = self._structure_check(nodes)
+        if issue:
+            return issue
+        memo: dict[str, str] = {}
+        for node_id in nodes:
+            issue = self._verify_node(node_id, nodes, memo, set(), 1)
+            if issue:
+                return issue
+        return ""
+
+    def _structure_check(self, nodes: Mapping[str, Any]) -> str:
+        color: dict[str, int] = {}
+
+        def visit(node_id: str, depth: int) -> str:
+            state = color.get(node_id, 0)
+            if state == 1:
+                return "proof_dag_cycle"
+            if state == 2:
+                return ""
+            if depth > len(nodes):
+                return "proof_dag_depth_exceeded"
+            color[node_id] = 1
+            for premise in nodes[node_id]["premises"]:
+                issue = visit(premise["node_id"], depth + 1)
+                if issue:
+                    return issue
+            color[node_id] = 2
+            return ""
+
+        for node_id in nodes:
+            issue = visit(node_id, 1)
+            if issue:
+                return issue
+        return ""
+
+    def _verify_node(
+        self, node_id: str, nodes: Mapping[str, Any], memo: dict[str, str],
+        visiting: set[str], depth: int,
+    ) -> str:
+        if node_id in memo:
+            return memo[node_id]
+        if node_id in visiting:
+            return "proof_dag_cycle"
+        if depth > len(nodes):
+            return "proof_dag_depth_exceeded"
+        visiting.add(node_id)
+        node = nodes[node_id]
+        issue = self._verify_node_content(node, nodes, memo, visiting, depth)
+        visiting.discard(node_id)
+        memo[node_id] = issue
+        return issue
+
+    def _verify_node_content(
+        self, node: Mapping[str, Any], nodes: Mapping[str, Any],
+        memo: dict[str, str], visiting: set[str], depth: int,
+    ) -> str:
+        if node_id_for(node) != node.get("node_id"):
+            return "proof_dag_node_id_mismatch"
+        node_type = node.get("node_type")
+        if _NODE_TYPE_SCHEMAS.get(node_type) != node.get("schema_version"):
+            return "proof_dag_node_mismatch"
+        roles = [premise["role"] for premise in node["premises"]]
+        if roles != sorted(roles) or len(set(roles)) != len(roles):
+            return "proof_dag_premise_roles_mismatch"
+        role_set = set(roles)
+        expected = {
+            "paper_literal": set(),
+            "source_relation": set(_SOURCE_RELATION_ROLES),
+            "inheritance": {"parent_state"},
+        }.get(node_type)
+        if expected is None:
+            if node_type in ("state_change", "same_state"):
+                if not ({"parent_state", "operation"} <= role_set
+                        <= _CONVENTION_ROLES):
+                    return "proof_dag_premise_roles_mismatch"
+            else:
+                return "proof_dag_node_mismatch"
+        elif role_set != expected:
+            return "proof_dag_premise_roles_mismatch"
+        # Premises verify before the node that stands on them.
+        for premise in node["premises"]:
+            issue = self._verify_node(
+                premise["node_id"], nodes, memo, visiting, depth + 1,
+            )
+            if issue:
+                return issue
+        if node_type == "paper_literal":
+            return self._verify_paper_literal(node)
+        if node_type == "source_relation":
+            return self._verify_source_relation(node, nodes)
+        if node_type in ("state_change", "same_state"):
+            return self._verify_convention(node, nodes)
+        return self._verify_inheritance(node, nodes)
+
+    # -- leaves --------------------------------------------------------------
+
+    def _projection_text(self) -> str:
+        if self._projection is None:
+            from reaserch_agent.route_pdf_quote_binding import (
+                _project, normalize_pdf_quote_whitespace,
+            )
+
+            normalized = [
+                normalize_pdf_quote_whitespace(text)
+                for _locator, text in self.blocks or ()
+            ]
+            separators = [" "] * (len(normalized) - 1)
+            self._projection, _starts = _project(
+                list(range(len(normalized))), normalized, separators,
+            )
+        return self._projection
+
+    def _relocate_leaf(self, leaf: Mapping[str, Any]) -> tuple[str | None, str]:
+        """Re-extract the leaf's excerpt from the signed blocks alone."""
+        locator = _text(leaf.get("locator"))
+        span = leaf.get("char_span")
+        if (not locator or not isinstance(span, list) or len(span) != 2
+                or any(not isinstance(offset, int) for offset in span)):
+            return None, "proof_dag_leaf_not_relocatable"
+        projection = self._projection_text()
+        start, end = span
+        if not 0 <= start < end <= len(projection):
+            return None, "proof_dag_leaf_relocation_mismatch"
+        text = projection[start:end]
+        if _digest_text(text) != leaf.get("excerpt_digest"):
+            return None, "proof_dag_leaf_relocation_mismatch"
+        located = None
+        if self.span_of is not None:
+            locate = getattr(self.span_of, "locate", None)
+            located = locate(text) if callable(locate) else None
+        if (located is None or located[1] != locator
+                or [located[2][0], located[2][1]] != [start, end]):
+            return None, "proof_dag_leaf_relocation_mismatch"
+        return text, ""
+
+    def _verify_paper_literal(self, node: Mapping[str, Any]) -> str:
+        leaf = node.get("leaf")
+        if not isinstance(leaf, Mapping) or (
+            leaf.get("schema_version") != SOURCE_EVIDENCE_LEAF_SCHEMA
+        ):
+            return "proof_dag_leaf_mismatch"
+        if leaf_id_for(leaf) != leaf.get("leaf_id"):
+            return "proof_dag_leaf_id_mismatch"
+        if any(leaf.get(key) != self.context[key] for key in (
+            "paper_id", "experimental_group_id", "source_digest",
+        )):
+            return "proof_dag_context_mismatch"
+        fact = self.by_path.get(_text(leaf.get("field_path")))
+        if fact is None or _fact_digest(fact) != leaf.get("fact_digest"):
+            return "proof_dag_leaf_fact_mismatch"
+        gates = node.get("gates")
+        if not isinstance(gates, Mapping):
+            return "proof_dag_gate_mismatch"
+        excerpt_text: str | None = None
+        if self.blocks is not None:
+            excerpt_text, issue = self._relocate_leaf(leaf)
+            if issue:
+                return issue
+        if excerpt_text is None:
+            # Without the signed blocks only internal consistency is
+            # verifiable; the leaf stays not source-verified.
+            return ""
+        value = leaf.get("claim_value")
+        if (isinstance(value, str) and value
+                and value.casefold() not in excerpt_text.casefold()):
+            return "proof_dag_leaf_claim_mismatch"
+        return self._verify_gates(node, leaf, excerpt_text)
+
+    def _verify_gates(
+        self, node: Mapping[str, Any], leaf: Mapping[str, Any],
+        excerpt_text: str,
+    ) -> str:
+        field_path = _text(leaf.get("field_path"))
+        value = _text(leaf.get("claim_value"))
+        gates = node["gates"]
+        if (_OUTPUT_STATE.fullmatch(field_path) is not None
+                or _INPUT_STATE.fullmatch(field_path) is not None):
+            port = _port_at(self.graph, field_path)
+            if port is None:
+                return "proof_dag_gate_mismatch"
+            actual = _literal_state_gates(field_path, value, excerpt_text, port)
+            expected = (
+                {"controlled_state_mapping": True, "local_attribution": True}
+                if actual is not None else None
+            )
+        else:
+            if _OPERATION_PATH.fullmatch(field_path) is not None:
+                passed = _literal_in_quote(value, excerpt_text)
+            else:
+                passed = bool(value) and (
+                    value.casefold() in excerpt_text.casefold())
+            expected = {"value_literal_in_quote": True} if passed else None
+        if expected is None or dict(gates) != expected:
+            return "proof_dag_gate_mismatch"
+        return ""
+
+    # -- composite nodes -----------------------------------------------------
+
+    def _verify_source_relation(
+        self, node: Mapping[str, Any], nodes: Mapping[str, Any],
+    ) -> str:
+        if node.get("subtype") != "post_operation_retained_object":
+            return "proof_dag_node_mismatch"
+        if self.span_of is None:
+            return "proof_dag_resolver_missing"
+        record = node.get("record")
+        if not isinstance(record, Mapping):
+            return "proof_dag_node_mismatch"
+        recomputed, issue = derive_post_operation_retained_object(
+            self.graph, self.facts, record.get("step_index"),
+            span_of=self.span_of,
+        )
+        if recomputed is None:
+            return issue or "proof_dag_node_mismatch"
+        if recomputed != record:
+            return "proof_dag_node_mismatch"
+        role_fact_ids = {
+            "operation": _text(record.get("operation_fact_id")),
+            "naming": _text(record.get("naming_fact_id")),
+            "output_name": _text(record.get("output_name_fact_id")),
+        }
+        for premise in node["premises"]:
+            premise_node = nodes[premise["node_id"]]
+            if premise_node.get("node_type") != "paper_literal":
+                return "proof_dag_node_mismatch"
+            fact = self.by_fact_id.get(role_fact_ids[premise["role"]])
+            leaf = _mapping(premise_node.get("leaf"))
+            if (fact is None
+                    or leaf.get("fact_digest") != _fact_digest(fact)):
+                return "proof_dag_node_mismatch"
+        return ""
+
+    def _verify_convention(
+        self, node: Mapping[str, Any], nodes: Mapping[str, Any],
+    ) -> str:
+        claim = _mapping(node.get("claim"))
+        field_path = _text(claim.get("field_path"))
+        # The parent premise node has already verified by recursion here, so
+        # the flat engine's literal parent gate is discharged by the DAG.
+        proof, issue = derive_unreviewed_output_state(
+            self.graph, self.facts, field_path,
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+            retained_object_resolver=self.resolver,
+            parent_state_proven=True,
+        )
+        if proof is None:
+            return issue or "proof_dag_node_mismatch"
+        rule_id = _text(proof.get("rule_id"))
+        expected_type = (
+            "same_state" if rule_id in _RULE_EVENTS else "state_change"
+        )
+        if node.get("node_type") != expected_type:
+            return "proof_dag_node_mismatch"
+        retained = {
+            key: proof[key] for key in proof if key.startswith("retained_object")
+        }
+        roles = {premise["role"] for premise in node["premises"]}
+        if ("retained_object" in roles) != bool(retained):
+            return "proof_dag_node_mismatch"
+        comparisons = {
+            "rule_id": rule_id,
+            "rule_version": _text(proof.get("rule_version")),
+            "rule_resource_digest": _text(proof.get("resource_digest")),
+            "relation_id": _text(proof.get("relation_id")),
+            "parent_instance_id": _text(proof.get("parent_instance_id")),
+            "child_instance_id": _text(proof.get("child_instance_id")),
+            "parent_state_path": _text(proof.get("parent_state_path")),
+            "parent_source_value": _text(proof.get("parent_source_value")),
+            "parent_evidence_id": _text(proof.get("parent_evidence_id")),
+            "operation_path": _text(proof.get("operation_path")),
+            "operation_evidence_id": _text(proof.get("operation_evidence_id")),
+        }
+        if any(node.get(key) != value for key, value in comparisons.items()):
+            return "proof_dag_node_mismatch"
+        if _text(claim.get("target_state")) != _text(proof.get("target_state")):
+            return "proof_dag_node_mismatch"
+        if node.get("retained_object_fields", {}) != retained:
+            return "proof_dag_node_mismatch"
+        # The segment id binds the node to the graph relation it names.
+        match = _OUTPUT_STATE.fullmatch(field_path)
+        if match is None or int(match.group(1)) >= len(self.graph):
+            return "proof_dag_node_mismatch"
+        relation = next(
+            (item for item in _items(
+                _mapping(self.graph[int(match.group(1))]).get("material_relations"))
+             if _text(item.get("relation_id")) == comparisons["relation_id"]),
+            None,
+        )
+        if relation is None or _text(node.get("segment_id")) != _text(
+            relation.get("source_operation_ref")
+        ):
+            return "proof_dag_node_mismatch"
+        return ""
+
+    def _verify_inheritance(
+        self, node: Mapping[str, Any], nodes: Mapping[str, Any],
+    ) -> str:
+        claim = _mapping(node.get("claim"))
+        field_path = _text(claim.get("field_path"))
+        parent_ref = node.get("parent_ref")
+        if (not isinstance(parent_ref, Mapping)
+                or parent_ref.get("kind") != "material_instance"
+                or not _text(parent_ref.get("macro_step_id"))
+                or not _text(parent_ref.get("material_instance_id"))):
+            return "proof_dag_parent_ref_mismatch"
+        match = _INPUT_STATE.fullmatch(field_path)
+        if match is None:
+            return "proof_dag_node_mismatch"
+        step_index, collection, port_index = (
+            int(match.group(1)), match.group(2), int(match.group(3)),
+        )
+        if step_index >= len(self.graph):
+            return "proof_dag_node_mismatch"
+        ports = _items(self.graph[step_index].get(collection))
+        if port_index >= len(ports):
+            return "proof_dag_node_mismatch"
+        port = ports[port_index]
+        references = port.get("parent_output_refs")
+        if (not isinstance(references, list) or len(references) != 1
+                or _text(_mapping(references[0]).get("macro_step_id"))
+                != _text(parent_ref.get("macro_step_id"))
+                or _text(_mapping(references[0]).get("material_instance_id"))
+                != _text(parent_ref.get("material_instance_id"))):
+            return "proof_dag_parent_ref_mismatch"
+        matches = _upstream_matches(self.graph, parent_ref)
+        if matches and all(index >= step_index for index in matches):
+            return "proof_dag_future_reference"
+        premise = node["premises"][0]
+        parent_node = nodes[premise["node_id"]]
+        if parent_node.get("node_type") not in ("state_change", "same_state"):
+            return "proof_dag_node_mismatch"
+        grandparent_fact = self.evidence.get(
+            _text(parent_node.get("parent_evidence_id")))
+        operation_fact = self.evidence.get(
+            _text(parent_node.get("operation_evidence_id")))
+        record, issue = _inheritance_proof_for_evidence(
+            self.graph, field_path,
+            parent_source_value=_text(parent_node.get("parent_source_value")),
+            parent_excerpt=(_text(grandparent_fact.get("excerpt"))
+                            if grandparent_fact is not None else ""),
+            parent_evidence_id=_text(parent_node.get("parent_evidence_id")),
+            operation_excerpt=(_text(operation_fact.get("excerpt"))
+                               if operation_fact is not None else ""),
+            operation_evidence_id=_text(parent_node.get("operation_evidence_id")),
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+            retained_object_resolver=self.resolver,
+            facts=self.facts,
+        )
+        if record is None:
+            return issue or "proof_dag_node_mismatch"
+        comparisons = {
+            "rule_id": _INHERITANCE_RULE_ID,
+            "rule_version": _text(record.get("rule_version")),
+            "parent_instance_id": _text(record.get("parent_instance_id")),
+            "child_instance_id": _text(record.get("child_instance_id")),
+            "parent_state_path": _text(record.get("parent_state_path")),
+            "parent_source_value": _text(record.get("parent_source_value")),
+            "parent_evidence_id": _text(record.get("parent_evidence_id")),
+            "operation_path": _text(record.get("operation_path")),
+            "operation_evidence_id": _text(record.get("operation_evidence_id")),
+            "relation_id": _text(record.get("relation_id")),
+        }
+        if any(node.get(key) != value for key, value in comparisons.items()):
+            return "proof_dag_node_mismatch"
+        if _text(claim.get("target_state")) != _text(record.get("target_state")):
+            return "proof_dag_node_mismatch"
+        return ""
+
+
+def verify_state_proof_dag(
+    dag: Any, graph: Sequence[Any], facts: Sequence[Any], *, paper_id: str,
+    experimental_group_id: str, source_digest: str, span_of: Any = None,
+    blocks: Sequence[Any] = None, caption_block_locators: Sequence[str] = (),
+) -> str:
+    """Convenience wrapper: one verifier, one pinned context, one issue str."""
+    return StateProofDagVerifier(
+        graph, facts, paper_id=paper_id,
+        experimental_group_id=experimental_group_id,
+        source_digest=source_digest, span_of=span_of, blocks=blocks,
+        caption_block_locators=caption_block_locators,
+    ).verify(dag)
+
+
+__all__ = [
+    "PAPER_LITERAL_PROOF_SCHEMA", "SAME_STATE_CONVENTION_PROOF_SCHEMA",
+    "SOURCE_EVIDENCE_LEAF_SCHEMA", "SOURCE_RELATION_PROOF_SCHEMA",
+    "STATE_CHANGE_CONVENTION_PROOF_SCHEMA", "STATE_INHERITANCE_PROOF_SCHEMA",
+    "STATE_PROOF_DAG_SCHEMA", "StateProofDagVerifier",
+    "build_state_proof_dag", "leaf_id_for", "node_id_for",
+    "verify_state_proof_dag",
+]
