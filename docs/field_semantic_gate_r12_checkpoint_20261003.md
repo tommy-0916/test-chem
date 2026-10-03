@@ -1,0 +1,192 @@
+# Field Semantic Gate — Round-12 (Round 3E) Checkpoint (2026-10-03)
+
+Round 3E delivers the operation-precondition-inference **feasibility
+study — diagnostics only** — chartered by
+`docs/field_semantic_gate_3e_design_20261003.md`, on top of the
+double-passed Round 3D (business semantics + safety closure). The
+question under study: can a downstream operation's preconditions ever
+diagnose the state of an upstream output — concretely, can ms7b (the
+redispersion segment of the second centrifugation−redispersion
+protocol) diagnose ms7a.out (the retained phase of the second
+centrifugation)? The study runs over the real signed NiFe Control group
+on the **unchanged** round-10 proposal (read-only) and answers with a
+diagnostic record, never a proof. **Conclusion: `insufficient`.
+ms7a.out stays BLOCKED. This is a COMPLETE research outcome, not a
+failure** — it is exactly the calibration the charter expects ("the
+Control group must be allowed to conclude `insufficient`").
+
+Artifacts: `reaserch_agent/route_operation_precondition_diagnostic.py`
+(diagnostic evaluator, `operation-precondition-diagnostic/v1` — pure
+functions + frozen data classes, no engine derives, no tokens),
+`reaserch_agent/test_route_operation_precondition_diagnostic.py` (20
+tests), `result/operation-structure-20260928/local-revision-r12.py`
+(runner), `local-revision-r12-replay.json` (replay),
+`local-revision-r12-audit.json` (audit, schema
+`bounded_local_revision/v12`). No `chem_agent_contracts/` changes, no
+v1 schema changes, no engine/gate changes, no r7–r11 edits.
+
+## The A01 diagnosis (the real Control case)
+
+Candidate under diagnosis: `ms7a.out =
+material_graph[7].material_outputs[0].state = retained_wet_solid`
+(instance `inst_ldh_wet_2`), scope = NiFe Control / stage ms7a /
+invocation second. The evaluator builds its own dependency view from
+the proposal graph: `parents(ms7b.in) = {ms7a.out}`, and the downstream
+closure of ms7a.out is `{ms7b.in, ms7b.out, graph[9].in, graph[9].out}`
+— any citation of those as support is `circular_dependency_rejected`.
+The three propositions are answered **separately**:
+
+| proposition | real evidence | verdict |
+|---|---|---|
+| **P1 necessary_input_condition** | the operation NAME "Finally, after a second centrifugation−redispersion protocol one time" (`paper_explicit`, `direct_evidence` of the operation's **occurrence** only — fact `f_g7a_op`); SI = D (the three targeted evidence classes were not detected); the REDISPERSION_V1 whitelist enters ONLY as `rule_compatible_states` (conventions.json L72-95) with the non-inversion note | **unproven** — no independent necessity basis |
+| **P2 this_material_flow** | the proposal's own `parent_output_refs` = `[{macro_step_id: ms7a, material_instance_id: inst_ldh_wet_2}]` (`proposal_assertion` — an edge the proposal drew itself); the verified 3D protocol_reference nodes `proof_node_1e3047294567ed7b6b467dde` (graph[7].operation) and `proof_node_181d2b69af719f90c74cf2c5` (graph[8].operation) (`paper_explicit`, subject `operation_sequence_order` — they prove operation ORDER only; `inter_segment_material_flow` is a forbidden slot, so they are constitutionally silent on material flow) | **unproven** — flow assumption recorded |
+| **P3 material_instance_binding** | "after a second centrifugation−redispersion protocol one time, all the samples are collected" (`paper_explicit`, `direct_evidence`, fact `f_g8_in0_state`) — collective and non-individuating (no per-instance identity) | **unproven** — continuity assumption recorded |
+
+Alternative explanations recorded: (1) the supernatant-retained-instead
+reading (the text does not constrain which phase the second
+centrifugation kept); (2) aliquot/portion flow among the 8 divided
+parts; (3) `washed_wet_solid` vs `retained_wet_solid` whitelist
+ambiguity; (4) "all the samples are collected" referring to the
+post-redispersion suspensions directly.
+
+Open items (what would close each proposition): P1 — a paper/SI
+statement of the second centrifugation's retained phase; P2 — an
+explicit inter-segment material-flow statement binding ms7b.in to THIS
+ms7a.out; P3 — instance-individuating language naming the instance
+under proof.
+
+**Conclusion: `insufficient`** (default — at least one proposition
+unproven; here all three). The assumption-only model ceiling is
+`conditional_constraint` and **still non-unique**: the compatible-state
+set is `{retained_wet_solid, washed_wet_solid}`, so even under the
+(rejected) inversion the model cannot single out `retained_wet_solid`.
+`node_verdict_unchanged = BLOCKED` — the diagnostic never changes node
+verdicts; the r10/r11 rows are byte-quoted from the committed r11
+replay (`verdict BLOCKED`, `issue
+retained_object_mention_precedes_operation`, attribution
+`evidence_gap` for ms7a.out and `dependency_cascade` for
+ms7b.in/ms7b.out).
+
+The full record (charter paper-v1 schema: source + figure-snapshot
+digest; group/stage/invocation; per-proposition evidence/assumptions/
+verdicts; alternative explanations; dependency relations; open items;
+constraints block) is embedded verbatim in the r12 replay under
+`round3e_feasibility.a01_diagnosis.diagnostic_record`.
+
+## The necessity-rule basis
+
+`chem_resources/chemistry_conventions/conventions.json` L72-95:
+`REDISPERSION_V1` version `1.1.0`, `allowed_input_states =
+["retained_wet_solid", "washed_wet_solid"]`, `output_states =
+["suspension"]`, `liquid_participation.required = true`. The
+non-inversion analysis (replay section B): the whitelist can ground
+`rule_compatible_states` (rule applicability) and nothing more — it
+cannot ground **necessity** (that the upstream output is a necessary
+input — that needs an independent basis), **membership** (that the
+paper's redispersion actually had an input in the set), or
+**uniqueness** (that the input was uniquely `retained_wet_solid`).
+
+## Counter-example matrix (8 cases, all PASS)
+
+| # | scenario | expected | actual |
+|---|---|---|---|
+| 1 | real Control (calibration anchor, section A restated) | `insufficient` | `insufficient` |
+| 2 | whitelist inversion: `rule_compatible_states` presented as necessity basis | `inversion_rejected`, output non-authoritative | `inversion_rejected`; conclusion `insufficient` |
+| 3 | two compatible states even under inversion | `non_unique`, cannot single out retained_wet_solid | `non_unique=true`, set `{retained_wet_solid, washed_wet_solid}` |
+| 4 | instance/branch swap (evidence individuating `inst_ldh_aged` cited for `inst_ldh_wet_2`) | binding mismatch rejected | `binding_mismatch_rejected` |
+| 5 | first/second invocation swap (real `f_g5_out0_name` "The precipitates were labeled as LDH seeds", invocation `first`, applied to the second) | `invocation_swap_rejected` — recorded as swap, NOT evidence | `invocation_swap_rejected`; item excluded from evidence |
+| 6 | cross-group/cross-stage E10 (real signed Etching group, 10 blocks: "the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample." + SI S5 Figure S1 caption "clear salt solution without precipitates", `supplement_explicit`) | `scope_mismatch_rejected` — Control's conditional constraint is NOT exported into the Etching scope; group/stage/invocation explicit | `scope_mismatch_rejected`; diagnosis scope stays the Etching group / etching_second_wash / second |
+| 7 | circular dependency (ms7b.in state cited as support for ms7a.out) | `circular_dependency_rejected` | `circular_dependency_rejected` |
+| 8 | source mutation (`f_g5_out0_name` excerpt mutated to "NiFe hydroxide seeds") | every citing item recomputes/invalidates honestly — no stale citation | `stale_source_invalidated`; P3 flips proven → unproven; conclusion flips to `insufficient`; a recomputed item validates under the mutated source with a moved digest; the untouched record is byte-identical on rerun |
+
+## Gate to a formal proof class — UNMET
+
+The charter's four gate items, assessed against this study:
+
+1. **Necessary conditions carry independent basis — ✗ FAIL.** The
+   paper offers only the operation name; SI = D; the whitelist may not
+   be inverted.
+2. **Invocation and material binding hold — ✗ FAIL.** P2 rests on a
+   proposal-drawn edge plus an order-only protocol reference; P3 rests
+   on a collective, non-individuating statement.
+3. **Alternative explanations excluded — ✗ FAIL.** Four live
+   alternatives are recorded and none is excluded by evidence.
+4. **Counter-example tests pass — ✗ as a gate item (n-a for
+   promotion).** The counter-example matrix itself passes all 8 cases
+   as diagnostics, but the E10 case shows the same protocol language
+   coexisting with a no-precipitate outcome at another group/stage —
+   so no cross-group support exists for promotion either.
+
+Therefore ms7a.out stays BLOCKED and the study counts as a COMPLETE
+research outcome (`insufficient`), exactly the chartered calibration.
+
+**What evidence would change the verdict:** a paper/SI statement of
+the second centrifugation's retained phase (closes P1); an explicit
+inter-segment material-flow statement binding ms7b.in to this ms7a.out
+(closes P2); instance-individuating language naming the instance under
+proof (closes P3); plus exclusion of the four recorded alternatives.
+
+## Fixed-constraints audit (all PASS)
+
+- **diagnostics_only / feeds_verdict**: every diagnostic output carries
+  `diagnostics_only: true` and `feeds_verdict: false`; the constraints
+  block is enforced by construction (a violated block raises).
+- **Zero tokens minted**: the whole study ran inside a guard sealing
+  every mint channel — `_VerifiedParentStateEvidence`,
+  `_VerifiedLiquidMedium`, `_DiagnosticParentStateAssumption`,
+  `_DiagnosticLiquidMediumAssumption`,
+  `_mint_diagnostic_parent_state_assumption`,
+  `_mint_diagnostic_liquid_medium_assumption`,
+  `_mint_verified_parent_token`, `_mint_verified_liquid_token` (each
+  probed before the study and raising `SystemExit`; the study then ran
+  to completion under the guard). Source-level half: the diagnostic
+  module references no token constructor and imports nothing from the
+  contracts package (module sha256
+  `c6d0ba3f4aaec974607ac4c4698c90713391b0c379b57df373295ea06f822418`).
+- **v1 untouched**: `protocol-definition/v1` module digest
+  `sha256_6109b007e823d9758228d8ef71ec5a1d18b4da5dede3867067b2a3347617805b`;
+  `PROTOCOL_REFERENCE_V1 1.0.0`; the closed-slot probe
+  (`inter_segment_material_flow`) still fails
+  `protocol_definition_unknown_key`. No file under
+  `chem_agent_contracts/` is modified.
+- **Verdicts byte-quoted unchanged**: ms7a.out / ms7b.in / ms7b.out
+  rows byte-quoted from the committed r11 replay — all `BLOCKED` with
+  `retained_object_mention_precedes_operation` (evidence_gap /
+  dependency_cascade), unchanged.
+
+## Regression
+
+- Target set (`test_route_proof_dag`, `test_route_retained_object`,
+  `test_route_retained_object_integration`,
+  `test_route_convention_state_chain`, `test_route_protocol_reference`,
+  `test_route_operation_precondition_diagnostic`): **208 passed, 0
+  failed** (188 carried + 20 new).
+- Full slice (`reaserch_agent/` + `chem_agent_contracts/`, minus
+  llm_connectivity): **1278 ran, 30 failed** — 29 in reaserch_agent +
+  1 in chem_agent_contracts, every one on
+  `../baseline-research-fails.log` / `../baseline-contracts-fails.log`
+  after `sed -E 's/\((reaserch_agent|chem_agent_contracts)\./(/'`
+  normalization; the one baseline failure not reproduced is the
+  environment-state-dependent
+  `test_b1_bootstrap_generates_initial_outputs`, which passes. **Zero
+  new failures.**
+- The r7/r8/r9/r10/r11 runners re-run with all acceptance items PASS
+  and **byte-identical** JSONs (`git status --short` /
+  `git diff` on the tracked runner artifacts is empty).
+- The r12 runner is deterministic: two runs produce byte-identical
+  replay and audit JSONs.
+
+## Deliberately NOT done (scope exclusions)
+
+- No proof-class creation (the gate is UNMET — see above).
+- No token minting of any kind (verified or diagnostic-assumption
+  channel).
+- No `chem_agent_contracts/` changes, no v1 schema changes, no engine
+  changes.
+- No r7–r11 runner or JSON edits (verdicts byte-quoted, never
+  rewritten).
+- ms7a.out is not presupposed to PASS and is not closed; no attempt to
+  make the conclusion stronger than the evidence supports.
+- No cross-group inference: the Etching counter-example keeps
+  group/stage/invocation explicit and refuses the export of Control's
+  conditional constraint.

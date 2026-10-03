@@ -1,0 +1,474 @@
+{
+  "audit_rows": 7,
+  "group_identity": {
+    "paper_id": "doi_10_1021_acsami_3c11651",
+    "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+    "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "block_count": 23,
+    "caption_count": 0
+  },
+  "proposal_reuse": {
+    "path": "result/operation-structure-20260928/local-revision-r10-proposal.json",
+    "modified": false,
+    "read_only": true,
+    "sha256": "sha256_cb6b1ff7f6cffad29539a2ef560bc0f079cdad0d8953a1a09292d65a6b0dc2e7",
+    "derived_from": "result/operation-structure-20260928/local-revision-r8-proposal.json",
+    "derived_from_sha256": "sha256_58832fa0c660f7dcc5776eadb411d8d5f34da11251a3660791028c149b326811",
+    "r11_replay_byte_quote_source": "result/operation-structure-20260928/local-revision-r11-replay.json",
+    "r11_replay_sha256": "sha256_b0ce74f68dca20deef6dbaf147264a2970c71cd34c7de2446346bff4ee884b20"
+  },
+  "round3e_feasibility": {
+    "status": "PASS",
+    "a01_diagnosis": {
+      "status": "PASS",
+      "data_basis": "REAL signed NiFe Control group on the unchanged r10 proposal (read-only): 23 signed blocks, 87 route facts; r11 protocol_reference node ids byte-quoted from the committed r11 replay",
+      "target": {
+        "state_path": "material_graph[7].material_outputs[0].state",
+        "node": "ms7a.out (graph[7].out)",
+        "candidate_state_under_diagnosis": "retained_wet_solid",
+        "experimental_group": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+        "stage": "ms7a (second centrifugation segment, graph[7])",
+        "invocation": "second"
+      },
+      "diagnostic_record": {
+        "schema_version": "operation-precondition-diagnostic/v1",
+        "source": {
+          "paper_id": "doi_10_1021_acsami_3c11651",
+          "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+          "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+          "figure_snapshot_digest": ""
+        },
+        "scope": {
+          "paper_id": "doi_10_1021_acsami_3c11651",
+          "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+          "stage": "ms7a",
+          "invocation": "second"
+        },
+        "target_state_path": "material_graph[7].material_outputs[0].state",
+        "candidate_state": "retained_wet_solid",
+        "propositions": [
+          {
+            "proposition": "necessary_input_condition",
+            "evidence": [
+              {
+                "content": "Finally, after a second centrifugation−redispersion protocol one time",
+                "content_digest": "sha256_17d031968d1a3063c13622bb4401d699d9d3970a02868a1a77235a8a820caaf0",
+                "source_identity": "paper_explicit",
+                "inference_nature": "direct_evidence",
+                "provenance": "fact:f_g7a_op",
+                "subject": "operation_occurrence",
+                "scope": {
+                  "paper_id": "doi_10_1021_acsami_3c11651",
+                  "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+                  "stage": "ms7a",
+                  "invocation": "second"
+                },
+                "material_instance_id": "",
+                "state_path": "",
+                "presented_as_necessity_basis": false
+              },
+              {
+                "content": "REDISPERSION_V1 1.1.0 allowed_input_states = [\"retained_wet_solid\", \"washed_wet_solid\"], output_states = [\"suspension\"], liquid_participation.required = true",
+                "content_digest": "sha256_8e163d323d5a4de4916a5cb64bd96f68e4a904813187fd11d1deb555c3698f1b",
+                "source_identity": "",
+                "inference_nature": "rule_compatible_states",
+                "provenance": "chem_resources/chemistry_conventions/conventions.json L72-95",
+                "subject": "rule_applicability",
+                "scope": null,
+                "material_instance_id": "",
+                "state_path": "",
+                "presented_as_necessity_basis": false
+              }
+            ],
+            "assumptions": [
+              "SI = D: the three targeted evidence classes were not detected — the SI neither supplies the retained phase nor provides positive basis for reverse inference",
+              "the paper names the operation only ('second centrifugation−redispersion protocol'); no retained-phase statement for the second centrifugation exists in paper or SI"
+            ],
+            "verdict": "unproven",
+            "asserted_verdict": "unproven",
+            "qualifying_evidence": []
+          },
+          {
+            "proposition": "this_material_flow",
+            "evidence": [
+              {
+                "content": "material_graph[8].material_inputs[0].parent_output_refs = [{\"macro_step_id\": \"ms7a\", \"material_instance_id\": \"inst_ldh_wet_2\"}]",
+                "content_digest": "sha256_b53ab7fddedcae63bd1cc8090b776fddc972b6e537c9252f890b8abe1c2d557e",
+                "source_identity": "",
+                "inference_nature": "proposal_assertion",
+                "provenance": "proposal:parent_output_refs",
+                "subject": "proposal_drawn_edge",
+                "scope": null,
+                "material_instance_id": "inst_ldh_wet_2",
+                "state_path": "",
+                "presented_as_necessity_basis": false
+              },
+              {
+                "content": "protocol_reference nodes proof_node_1e3047294567ed7b6b467dde (graph[7].operation) and proof_node_181d2b69af719f90c74cf2c5 (graph[8].operation) inherit operation_sequence [centrifugation, redispersion] and liquid_medium deionized water from the SAME-group definition (evidence route_fact_7931591ece6209db307915ee = f_g5_op); the 3D charter forbids inter_segment_material_flow as a slot, so the nodes say NOTHING about material flow",
+                "content_digest": "sha256_4778fac763867591cf2f8964133d3234afcf4841d0a8c8a744034ef29a16f1ad",
+                "source_identity": "paper_explicit",
+                "inference_nature": "direct_evidence",
+                "provenance": "r11:protocol_reference_nodes",
+                "subject": "operation_sequence_order",
+                "scope": {
+                  "paper_id": "doi_10_1021_acsami_3c11651",
+                  "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+                  "stage": "ms7a",
+                  "invocation": "second"
+                },
+                "material_instance_id": "",
+                "state_path": "",
+                "presented_as_necessity_basis": false
+              }
+            ],
+            "assumptions": [
+              "flow assumption: the proposal-drawn edge is taken as the material flow"
+            ],
+            "verdict": "unproven",
+            "asserted_verdict": "unproven",
+            "qualifying_evidence": []
+          },
+          {
+            "proposition": "material_instance_binding",
+            "evidence": [
+              {
+                "content": "after a second centrifugation−redispersion protocol one time, all the samples are collected",
+                "content_digest": "sha256_bbe120b40275c092f3d3110951ea918497ced2d6d6a8fadaf83fcd918ab9334a",
+                "source_identity": "paper_explicit",
+                "inference_nature": "direct_evidence",
+                "provenance": "fact:f_g8_in0_state",
+                "subject": "collective_collection_statement",
+                "scope": {
+                  "paper_id": "doi_10_1021_acsami_3c11651",
+                  "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+                  "stage": "ms8",
+                  "invocation": ""
+                },
+                "material_instance_id": "",
+                "state_path": "",
+                "presented_as_necessity_basis": false
+              }
+            ],
+            "assumptions": [
+              "continuity assumption: the collective 'all the samples' statement is taken to cover the instance under proof"
+            ],
+            "verdict": "unproven",
+            "asserted_verdict": "unproven",
+            "qualifying_evidence": []
+          }
+        ],
+        "alternative_explanations": [
+          "supernatant-retained-instead reading: the text does not constrain which phase the second centrifugation kept — the retained phase could be the supernatant rather than the solid",
+          "aliquot/portion flow: the suspension was divided into 8 parts, so the ms7b input could be an aliquot or a recombination rather than the whole ms7a output",
+          "whitelist ambiguity: washed_wet_solid is as compatible with REDISPERSION_V1 as retained_wet_solid — the candidate state is not singled out",
+          "'all the samples are collected' may refer to the post-redispersion suspensions directly, bypassing any retained-solid intermediate"
+        ],
+        "dependency_relations": [
+          {
+            "dependent": "material_graph[8].material_inputs[0].state",
+            "depends_on": "material_graph[7].material_outputs[0].state",
+            "kind": "dependency_cascade",
+            "note": "ms7b.in <- ms7a.out (the cascade under diagnosis)"
+          },
+          {
+            "dependent": "material_graph[8].material_outputs[0].state",
+            "depends_on": "material_graph[8].material_inputs[0].state",
+            "kind": "dependency_cascade",
+            "note": "ms7b.out <- ms7b.in (within-step)"
+          },
+          {
+            "dependent": "material_graph[9].material_inputs[0].state",
+            "depends_on": "material_graph[8].material_outputs[0].state",
+            "kind": "dependency_cascade",
+            "note": "graph[9].in <- ms7b.out"
+          },
+          {
+            "dependent": "(this diagnosis)",
+            "depends_on": "(downstream state)",
+            "kind": "cycle_guard",
+            "note": "the diagnosis cites NO downstream state as support — the evaluator's own dependency view confirms ms7b.in/ms7b.out/graph[9].in/graph[9].out all sit in the downstream closure of ms7a.out and any citation of them would be circular_dependency_rejected"
+          }
+        ],
+        "open_items": [
+          {
+            "proposition": "necessary_input_condition",
+            "needed_evidence": "a paper/SI statement of the second centrifugation's retained phase (the independent necessity basis)"
+          },
+          {
+            "proposition": "this_material_flow",
+            "needed_evidence": "an explicit inter-segment material-flow statement binding ms7b.in to THIS ms7a.out"
+          },
+          {
+            "proposition": "material_instance_binding",
+            "needed_evidence": "instance-individuating language naming the instance under proof (not a collective 'all the samples' statement)"
+          }
+        ],
+        "constraints": {
+          "diagnostics_only": true,
+          "feeds_verdict": false
+        },
+        "conclusion": "insufficient",
+        "assumption_only_model": {
+          "ceiling": "conditional_constraint",
+          "basis": "recorded assumptions only — no proposition is proven on direct evidence",
+          "compatible_states": [
+            "retained_wet_solid",
+            "washed_wet_solid"
+          ],
+          "non_unique": true,
+          "non_unique_note": "the compatible-state set has more than one member; even under the (rejected) inversion the model cannot single out 'retained_wet_solid'",
+          "rule_compatible_states_note": "the REDISPERSION_V1 allowed_input_states whitelist defines rule applicability only: it may be recorded as rule_compatible_states and proves neither that the actual input belongs to the set nor WHICH member it is; inverting it into a necessity basis is rejected as inversion_rejected",
+          "recorded_assumptions": [
+            "flow assumption: ms7b.in is assumed to come from THIS ms7a.out (the text contains no explicit inter-segment material-flow statement)",
+            "continuity assumption: the material instance under proof is assumed to be the same LDH-seeds batch across the second protocol invocation"
+          ]
+        },
+        "rejections": [],
+        "invalidated_items": [],
+        "node_verdict_unchanged": "BLOCKED",
+        "record_digest": "sha256_75a501a63fae9ccbe9b786ca184b30d6d47e329e4df64a4f8c8e10bc6d97065f"
+      },
+      "dependency_view": {
+        "parents_of_ms7b_in": [
+          "material_graph[7].material_outputs[0].state"
+        ],
+        "downstream_closure_of_ms7a_out": [
+          "material_graph[8].material_inputs[0].state",
+          "material_graph[8].material_outputs[0].state",
+          "material_graph[9].material_inputs[0].state",
+          "material_graph[9].material_outputs[0].state"
+        ],
+        "cycle_guard": "the evaluator builds its own dependency view from the proposal graph; the diagnosis cites no downstream state"
+      },
+      "r10_r11_verdicts_byte_quoted_unchanged": {
+        "material_graph[7].material_outputs[0].state": {
+          "node": "ms7a.out (graph[7].out)",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "evidence_gap"
+        },
+        "material_graph[8].material_inputs[0].state": {
+          "node": "ms7b.in (graph[8].in)",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade"
+        },
+        "material_graph[8].material_outputs[0].state": {
+          "node": "ms7b.out (graph[8].out)",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade"
+        }
+      },
+      "conclusion": {
+        "value": "insufficient",
+        "assumption_only_ceiling": "conditional_constraint",
+        "non_unique": true,
+        "note": "the study completes with insufficient — that is the EXPECTED calibration, a complete research outcome, not a failure; ms7a.out stays BLOCKED"
+      }
+    },
+    "necessity_rule_basis": {
+      "status": "PASS",
+      "source": "chem_resources/chemistry_conventions/conventions.json L72-95",
+      "extract": {
+        "rule_id": "REDISPERSION_V1",
+        "version": "1.1.0",
+        "allowed_input_states": [
+          "retained_wet_solid",
+          "washed_wet_solid"
+        ],
+        "output_states": [
+          "suspension"
+        ],
+        "liquid_participation": {
+          "required": true,
+          "liquid_states": [
+            "solution"
+          ],
+          "excerpt_tokens": [
+            "water",
+            "solvent",
+            "aqua",
+            "水",
+            "溶剂"
+          ]
+        }
+      },
+      "quoted_lines_L72_95": [
+        "      \"rule_id\": \"REDISPERSION_V1\",",
+        "      \"version\": \"1.1.0\",",
+        "      \"operation\": \"redispersion\",",
+        "      \"event_kind\": \"state_change\",",
+        "      \"preconditions\": {",
+        "        \"operation_patterns\": [\"redisperse\", \"re-disperse\", \"disperse\", \"redispersion\", \"re-dispersion\", \"重分散\", \"重新分散\", \"分散\"],",
+        "        \"intent_patterns\": [\"redisperse\", \"re-disperse\", \"disperse\", \"redispersion\", \"re-dispersion\", \"重分散\", \"重新分散\", \"分散\"],",
+        "        \"input_states\": [\"retained_wet_solid\", \"washed_wet_solid\"]",
+        "      },",
+        "      \"allowed_input_states\": [\"retained_wet_solid\", \"washed_wet_solid\"],",
+        "      \"output_states\": [\"suspension\"],",
+        "      \"retained_output\": \"suspension\",",
+        "      \"discard_outputs\": [],",
+        "      \"liquid_participation\": {",
+        "        \"required\": true,",
+        "        \"liquid_states\": [\"solution\"],",
+        "        \"excerpt_tokens\": [\"water\", \"solvent\", \"aqua\", \"水\", \"溶剂\"]",
+        "      },",
+        "      \"lineage_effect\": {",
+        "        \"relation_type\": \"state_change_of\",",
+        "        \"lineage_preserved\": true,",
+        "        \"parent_role\": \"input\",",
+        "        \"child_role\": \"retained_output\"",
+        "      },"
+      ],
+      "non_inversion_analysis": {
+        "what_the_whitelist_can_ground": [
+          "rule_compatible_states: the set of input states the REDISPERSION_V1 forward rule is defined for — rule applicability"
+        ],
+        "what_it_cannot_ground": [
+          "necessity: that the paper's second centrifugation output IS a necessary input of the downstream redispersion (that needs an independent basis)",
+          "membership: that whatever the paper calls redispersion actually had an input in the set",
+          "uniqueness: that the input was uniquely retained_wet_solid rather than washed_wet_solid"
+        ],
+        "inversion_note": "the REDISPERSION_V1 allowed_input_states whitelist defines rule applicability only: it may be recorded as rule_compatible_states and proves neither that the actual input belongs to the set nor WHICH member it is; inverting it into a necessity basis is rejected as inversion_rejected"
+      }
+    },
+    "counter_example_matrix": {
+      "status": "PASS",
+      "case_count": 8,
+      "cases": [
+        {
+          "scenario": "real Control group, candidate ms7a.out = retained_wet_solid, honest evidence labelling (section A restated)",
+          "expected": "insufficient",
+          "actual": "insufficient",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "a model treating rule_compatible_states as the necessity basis (forward-rule inversion)",
+          "expected": "inversion_rejected; the model's output classified non-authoritative; conclusion stays insufficient",
+          "actual": "rejections=['inversion_rejected']; conclusion=insufficient",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "two compatible states: even under inversion the candidate set is {retained_wet_solid, washed_wet_solid}",
+          "expected": "non_unique — the model cannot single out retained_wet_solid",
+          "actual": "non_unique=True; compatible_states=['retained_wet_solid', 'washed_wet_solid']",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "instance/branch swap: evidence individuating inst_ldh_aged (the ms7a INPUT, a different instance) cited for the instance under proof inst_ldh_wet_2",
+          "expected": "binding_mismatch_rejected",
+          "actual": "rejections=['binding_mismatch_rejected']",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "first-invocation retained-object evidence ('The precipitates were labeled as LDH seeds', real signed fact f_g5_out0_name, invocation 'first') applied to the SECOND invocation",
+          "expected": "invocation_swap_rejected — result inheritance is forbidden by 3D; recorded as a swap, NOT as evidence",
+          "actual": "rejections=['invocation_swap_rejected']",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "cross-group/cross-stage E10: the REAL signed Etching group (10 blocks: 'the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample') and the SI S5 Figure S1 caption (E10: 'clear salt solution without precipitates', supplement_explicit) — the same protocol language coexists with a no-precipitate outcome at another group/stage",
+          "expected": "scope_mismatch_rejected — Control's conditional constraint is NOT exported into the Etching scope; group/stage/invocation stay explicit",
+          "actual": "rejections=['scope_mismatch_rejected']; diagnosis scope='Synthesis of the LDHs by an Etching Method of NiFe; Ey (y = 1−10).'/etching_second_wash/second; conclusion=insufficient",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "circular dependency: a candidate model citing ms7b.in state (which already depends on ms7a.out) as support for ms7a.out",
+          "expected": "circular_dependency_rejected",
+          "actual": "rejections=['circular_dependency_rejected']",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "source mutation: the 'LDH seeds' naming evidence (real signed fact f_g5_out0_name) is mutated to 'NiFe hydroxide seeds'",
+          "expected": "every diagnostic item citing it recomputes or invalidates honestly — no stale citation survives; the untouched record still verifies under the untouched source",
+          "actual": "untouched verdict=proven; mutated: invalidated_items=1, p3 verdict=unproven, conclusion=insufficient; recomputed item digest moved and validates; untouched record byte-identical on rerun",
+          "verdict": "PASS"
+        }
+      ]
+    },
+    "fixed_constraints_audit": {
+      "status": "PASS",
+      "diagnostics_only_feeds_verdict": {
+        "ok": true,
+        "fixed_values": {
+          "diagnostics_only": true,
+          "feeds_verdict": false
+        },
+        "records": [
+          {
+            "record": "a01_diagnosis",
+            "diagnostics_only": true,
+            "feeds_verdict": false,
+            "ok": true
+          }
+        ]
+      },
+      "zero_token_mint": {
+        "ok": true,
+        "runtime_guard": {
+          "armed_around_whole_study": true,
+          "channels_sealed": [
+            "chem_agent_contracts.route_convention_basis._VerifiedParentStateEvidence",
+            "chem_agent_contracts.route_convention_basis._VerifiedLiquidMedium",
+            "chem_agent_contracts.route_convention_basis._DiagnosticParentStateAssumption",
+            "chem_agent_contracts.route_convention_basis._DiagnosticLiquidMediumAssumption",
+            "chem_agent_contracts.route_convention_basis._mint_diagnostic_parent_state_assumption",
+            "chem_agent_contracts.route_convention_basis._mint_diagnostic_liquid_medium_assumption",
+            "chem_agent_contracts.route_proof_dag._mint_verified_parent_token",
+            "chem_agent_contracts.route_proof_dag._mint_verified_liquid_token"
+          ],
+          "self_test": "each sealed channel was probed before the study and raised SystemExit; the study then ran to completion under the guard — no verified token and no diagnostic-assumption token was minted"
+        },
+        "source_level_check": {
+          "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
+          "module_sha256": "sha256_c6d0ba3f4aaec974607ac4c4698c90713391b0c379b57df373295ea06f822418",
+          "forbidden_strings_found": [],
+          "note": "the diagnostic prototype references no token constructor and imports nothing from chem_agent_contracts"
+        }
+      },
+      "v1_untouched": {
+        "ok": true,
+        "module": "chem_agent_contracts/route_protocol_reference.py",
+        "module_sha256": "sha256_6109b007e823d9758228d8ef71ec5a1d18b4da5dede3867067b2a3347617805b",
+        "protocol_definition_schema": "protocol-definition/v1",
+        "rule_id": "PROTOCOL_REFERENCE_V1",
+        "rule_version": "1.0.0",
+        "closed_slot_probe": {
+          "forbidden_slot": "inter_segment_material_flow",
+          "validation_issue": "protocol_definition_unknown_key",
+          "expected": "protocol_definition_unknown_key"
+        },
+        "note": "no v1 expansion: protocol-definition/v1 keeps its closed slot set; chem_agent_contracts/ is not modified by this round"
+      },
+      "r11_verdicts_byte_quoted": {
+        "ok": true,
+        "source": "local-revision-r11-replay.json round3c_acceptance_carryover.final_state_table.nodes (committed, historical record)",
+        "rows": {
+          "material_graph[7].material_outputs[0].state": {
+            "node": "ms7a.out (graph[7].out)",
+            "verdict": "BLOCKED",
+            "issue": "retained_object_mention_precedes_operation",
+            "attribution": "evidence_gap"
+          },
+          "material_graph[8].material_inputs[0].state": {
+            "node": "ms7b.in (graph[8].in)",
+            "verdict": "BLOCKED",
+            "issue": "retained_object_mention_precedes_operation",
+            "attribution": "dependency_cascade"
+          },
+          "material_graph[8].material_outputs[0].state": {
+            "node": "ms7b.out (graph[8].out)",
+            "verdict": "BLOCKED",
+            "issue": "retained_object_mention_precedes_operation",
+            "attribution": "dependency_cascade"
+          }
+        },
+        "note": "ms7a.out / ms7b.in / ms7b.out stay BLOCKED with the r10/r11 issues, byte-quoted and unchanged — the feasibility study changes no node verdict"
+      }
+    }
+  },
+  "excerpt_binding_issue_counts": {
+    "": 82,
+    "fact_excerpt_span_too_long": 5
+  }
+}
