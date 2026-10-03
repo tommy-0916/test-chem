@@ -6,7 +6,7 @@
     {
       "kind": "round3e_diagnostic_contract",
       "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
-      "module_sha256": "sha256_fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de",
+      "module_sha256": "sha256_81a2d8a099d897981bc5eaecf4983a2b8041890dcf926e977728ae62f534e317",
       "schema_version": "operation-precondition-diagnostic/v1",
       "charter": "docs/field_semantic_gate_3e_design_20261003.md",
       "propositions": [
@@ -25,6 +25,7 @@
         "invocation_swap_rejected",
         "scope_mismatch_rejected",
         "stage_mismatch_rejected",
+        "invocation_unbound_rejected",
         "evidence_identity_missing_rejected",
         "circular_dependency_rejected",
         "stale_source_invalidated",
@@ -34,6 +35,7 @@
         "source identity (paper_explicit / supplement_explicit / external_primary) is recorded separately from the inference nature (direct_evidence / rule_compatible_states / proposal_assertion / assumption)",
         "a direct_evidence submission must carry a checkable identity — non-empty content, a real source identity, its own scope (paper/group/stage), and a provenance — or it is evidence_identity_missing_rejected before any other check; rule whitelists, proposal assertions, and assumptions carry no source identity by design and are exempt",
         "scope is explicit everywhere: cross-paper/cross-group evidence is scope_mismatch_rejected; same-group cross-stage evidence is stage_mismatch_rejected",
+        "the scope under diagnosis must itself be COMPLETE: evaluate_candidate_model raises ValueError unless the model scope binds paper / group / stage / invocation (blank or pure-whitespace counts as missing) — an unknown scope is never a matching scope; symmetrically, direct evidence binding NO protocol invocation is invocation_unbound_rejected (checked AFTER the stage check, so a true cross-stage observation record keeps stage_mismatch_rejected and no invocation is fabricated for it)",
         "the evaluator builds its OWN dependency view from the proposal graph (parent_output_refs + within-step input->output edges) and rejects any candidate model whose support includes a downstream node it feeds",
         "an operation name or a proposal-drawn edge can never answer any of the three propositions",
         "evidence items are content-addressed; a mutated live source invalidates every citing item honestly; the citation check is opt-in via live_sources — when an item's provenance is not among the supplied live sources, no source-content verification is claimed for it, and the citation-check status stays distinct from the proposition-support relation (the submitter's annotation until actually checked)",
@@ -868,7 +870,7 @@
             "open_items": [
               {
                 "proposition": "necessary_input_condition",
-                "needed_evidence": "an independent necessity basis for the second centrifugation's input state (a paper/SI retained-phase statement supplies upstream state evidence but does not by itself prove the state is a NECESSARY input of the redispersion)"
+                "needed_evidence": "an independent necessity basis for the ms7b redispersion's necessary input — i.e. the ms7a output state under proof (a paper/SI retained-phase statement supplies upstream state evidence but does not by itself prove the state is a NECESSARY input of the redispersion)"
               },
               {
                 "proposition": "this_material_flow",
@@ -909,7 +911,7 @@
             ],
             "invalidated_items": [],
             "node_verdict_unchanged": "BLOCKED",
-            "record_digest": "sha256_f0c7fc8134c56e7eecba4d59dcf8ce5c76846bf829fdcddf42187a43e063bbba"
+            "record_digest": "sha256_4039205d1c45e762f68e216c2f40276852f029470e0b1ea72ef7b003ffc62fdf"
           },
           "dependency_view": {
             "parents_of_ms7b_in": [
@@ -1116,7 +1118,7 @@
             },
             "source_level_check": {
               "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
-              "module_sha256": "sha256_fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de",
+              "module_sha256": "sha256_81a2d8a099d897981bc5eaecf4983a2b8041890dcf926e977728ae62f534e317",
               "forbidden_strings_found": [],
               "note": "the diagnostic prototype references no token constructor and imports nothing from chem_agent_contracts"
             }

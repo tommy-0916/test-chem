@@ -35,13 +35,28 @@ centrifugation).  The answer is a diagnostic record, never a proof:
   and a provenance — or it is rejected
   (``evidence_identity_missing_rejected``) before any other check; rule
   whitelists, proposal assertions, and assumptions carry no source
-  identity by design and are exempt from this gate;
+  identity by design and are exempt from this gate.  The gate
+  deliberately does NOT require the evidence invocation: an observation
+  record may legitimately bind no invocation — that case is handled by
+  ``invocation_unbound_rejected`` below, never by fabricating one;
 - scope is explicit everywhere: cross-paper/cross-group evidence is
   rejected (``scope_mismatch_rejected``), same-group cross-stage
   evidence is rejected (``stage_mismatch_rejected``), first-invocation
   results applied to a second invocation are rejected
   (``invocation_swap_rejected``), and evidence individuating a different
   material instance is rejected (``binding_mismatch_rejected``);
+- the scope under diagnosis must itself be COMPLETE:
+  ``evaluate_candidate_model`` raises ``ValueError`` unless the model
+  scope binds all four fields (paper_id / experimental_group_id / stage
+  / invocation — pure whitespace counts as missing); the diagnostic
+  target of this study always binds the protocol-invocation ordinal
+  (``"second"``), and an unknown scope is never a matching scope.
+  Symmetrically, a ``direct_evidence`` item that binds NO protocol
+  invocation (blank ``scope.invocation``) is rejected
+  (``invocation_unbound_rejected``) — an unbound invocation cannot
+  support an invocation-bound target; the check fires AFTER the stage
+  check, so a true cross-stage observation record (whose empty
+  invocation is a real attribute) keeps ``stage_mismatch_rejected``;
 - sources are content-addressed: when a live source is mutated, every
   diagnostic item citing it is recomputed or invalidated honestly — no
   stale citation survives.  The citation check is OPT-IN via
@@ -139,6 +154,7 @@ BINDING_MISMATCH_REJECTED = "binding_mismatch_rejected"
 INVOCATION_SWAP_REJECTED = "invocation_swap_rejected"
 SCOPE_MISMATCH_REJECTED = "scope_mismatch_rejected"
 STAGE_MISMATCH_REJECTED = "stage_mismatch_rejected"
+INVOCATION_UNBOUND_REJECTED = "invocation_unbound_rejected"
 EVIDENCE_IDENTITY_MISSING_REJECTED = "evidence_identity_missing_rejected"
 CIRCULAR_DEPENDENCY_REJECTED = "circular_dependency_rejected"
 STALE_SOURCE_INVALIDATED = "stale_source_invalidated"
@@ -150,6 +166,7 @@ REJECTION_CODES = (
     INVOCATION_SWAP_REJECTED,
     SCOPE_MISMATCH_REJECTED,
     STAGE_MISMATCH_REJECTED,
+    INVOCATION_UNBOUND_REJECTED,
     EVIDENCE_IDENTITY_MISSING_REJECTED,
     CIRCULAR_DEPENDENCY_REJECTED,
     STALE_SOURCE_INVALIDATED,
@@ -437,9 +454,35 @@ def build_dependency_view(
 
 # ---------------------------------------------------------------------------
 # Item checks (order matters: the direct-evidence identity gate first,
-# then staleness, then scope/invocation/stage, then instance, then
-# circularity, then inversion).
+# then staleness, then paper/group scope, invocation swap, stage, the
+# invocation-binding check, then instance, then circularity, then
+# inversion).
 # ---------------------------------------------------------------------------
+
+
+def _target_scope_missing_fields(scope: ScopeBindingV1 | None
+                                 ) -> tuple[str, ...]:
+    """The target-scope fields the model under diagnosis leaves blank.
+
+    The scope under diagnosis must be COMPLETE — paper_id /
+    experimental_group_id / stage / invocation all non-blank (pure
+    whitespace counts as missing).  The diagnostic target of this study
+    always binds the protocol-invocation ordinal (``"second"``): an
+    unknown scope is not a matching scope, so an incomplete target scope
+    is a ``ValueError``, never a silent pass of the scoped comparisons.
+    """
+    if scope is None:
+        return ("scope",)
+    missing: list[str] = []
+    if not scope.paper_id.strip():
+        missing.append("scope.paper_id")
+    if not scope.experimental_group_id.strip():
+        missing.append("scope.experimental_group_id")
+    if not scope.stage.strip():
+        missing.append("scope.stage")
+    if not scope.invocation.strip():
+        missing.append("scope.invocation")
+    return tuple(missing)
 
 
 def _identity_missing_fields(item: EvidenceItemV1) -> tuple[str, ...]:
@@ -500,6 +543,13 @@ def _check_item(item: EvidenceItemV1, proposition: str,
         if scope.stage and model.scope.stage \
                 and scope.stage != model.scope.stage:
             return STAGE_MISMATCH_REJECTED
+        # AFTER the stage check: a cross-stage observation record whose
+        # empty invocation is a REAL attribute (e.g. the E10 caption)
+        # must keep stage_mismatch_rejected and never reaches here.
+        if item.inference_nature == DIRECT_EVIDENCE \
+                and model.scope.invocation \
+                and not scope.invocation.strip():
+            return INVOCATION_UNBOUND_REJECTED
     if item.material_instance_id and model.target_material_instance_id \
             and item.material_instance_id \
             != model.target_material_instance_id:
@@ -538,11 +588,13 @@ def _qualifies(item: EvidenceItemV1, proposition: str,
 #: Deterministic per-proposition wording for the derived open items.
 _OPEN_ITEM_DEFAULTS = {
     P1_NECESSARY_INPUT_CONDITION: (
-        "an independent necessity basis for this invocation's input "
-        "state (a paper/SI statement of this invocation's retained "
-        "phase supplies upstream state evidence, but does not by itself "
-        "prove the state is a NECESSARY input of the redispersion) — "
-        "not the operation name, not the forward whitelist"),
+        "an independent necessity basis for the redispersion segment's "
+        "necessary input — i.e. the upstream centrifugation output "
+        "state under proof (a paper/SI statement of this invocation's "
+        "retained phase supplies upstream state evidence, but does not "
+        "by itself prove the state is a NECESSARY input of the "
+        "redispersion) — not the operation name, not the forward "
+        "whitelist"),
     P2_THIS_MATERIAL_FLOW: (
         "an explicit inter-segment material-flow statement binding this "
         "downstream input to THIS upstream output"),
@@ -572,7 +624,21 @@ def evaluate_candidate_model(
     ``non_unique`` while the compatible-state set has more than one
     member).  The evaluated node's verdict is copied through unchanged —
     the diagnostic never changes it.
+
+    Entry gate: the scope under diagnosis must be COMPLETE — paper_id /
+    experimental_group_id / stage / invocation all non-blank (pure
+    whitespace counts as missing) — or this raises ``ValueError``
+    listing the missing fields, before any evidence is checked: an
+    unknown scope is never a matching scope, and the diagnostic target
+    of this study always binds the protocol-invocation ordinal.
     """
+    missing_scope = _target_scope_missing_fields(model.scope)
+    if missing_scope:
+        raise ValueError(
+            "candidate model scope is incomplete — the scope under "
+            "diagnosis must bind paper_id / experimental_group_id / "
+            "stage / invocation explicitly (an unknown scope is never a "
+            "matching scope); missing: " + ", ".join(missing_scope))
     live = live_sources or {}
     overrides = dict(open_item_overrides or {})
     rejections: list[RejectionV1] = []
@@ -715,6 +781,12 @@ def _rejection_detail(code: str, item: EvidenceItemV1,
                 f"{model.scope.invocation!r} — result inheritance across "
                 "invocations is forbidden; recorded as a swap, NOT as "
                 "evidence" if scope else "invocation swap")
+    if code == INVOCATION_UNBOUND_REJECTED:
+        return ("evidence does not bind any protocol invocation; an "
+                "unbound invocation cannot support an invocation-bound "
+                f"target ({model.scope.invocation}) — the item is "
+                "rejected, never silently re-scoped onto the invocation "
+                "under diagnosis")
     if code == BINDING_MISMATCH_REJECTED:
         return (f"evidence individuates instance "
                 f"{item.material_instance_id!r}, not the instance under "

@@ -432,10 +432,11 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
         ),
         open_item_overrides={
             P1_NECESSARY_INPUT_CONDITION: (
-                "an independent necessity basis for the second "
-                "centrifugation's input state (a paper/SI retained-phase "
-                "statement supplies upstream state evidence but does not "
-                "by itself prove the state is a NECESSARY input of the "
+                "an independent necessity basis for the ms7b "
+                "redispersion's necessary input — i.e. the ms7a output "
+                "state under proof (a paper/SI retained-phase statement "
+                "supplies upstream state evidence but does not by itself "
+                "prove the state is a NECESSARY input of the "
                 "redispersion)"),
             P2_THIS_MATERIAL_FLOW: (
                 "an explicit inter-segment material-flow statement "
@@ -1324,6 +1325,7 @@ def main() -> None:
              "inversion_rejected", "non_unique",
              "binding_mismatch_rejected", "invocation_swap_rejected",
              "scope_mismatch_rejected", "stage_mismatch_rejected",
+             "invocation_unbound_rejected",
              "evidence_identity_missing_rejected",
              "circular_dependency_rejected",
              "stale_source_invalidated", "over_claim_rejected"],
@@ -1342,6 +1344,16 @@ def main() -> None:
              "scope is explicit everywhere: cross-paper/cross-group "
              "evidence is scope_mismatch_rejected; same-group "
              "cross-stage evidence is stage_mismatch_rejected",
+             "the scope under diagnosis must itself be COMPLETE: "
+             "evaluate_candidate_model raises ValueError unless the "
+             "model scope binds paper / group / stage / invocation "
+             "(blank or pure-whitespace counts as missing) — an unknown "
+             "scope is never a matching scope; symmetrically, direct "
+             "evidence binding NO protocol invocation is "
+             "invocation_unbound_rejected (checked AFTER the stage "
+             "check, so a true cross-stage observation record keeps "
+             "stage_mismatch_rejected and no invocation is fabricated "
+             "for it)",
              "the evaluator builds its OWN dependency view from the "
              "proposal graph (parent_output_refs + within-step "
              "input->output edges) and rejects any candidate model whose "

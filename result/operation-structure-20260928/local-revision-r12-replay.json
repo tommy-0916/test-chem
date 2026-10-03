@@ -174,7 +174,7 @@
         "open_items": [
           {
             "proposition": "necessary_input_condition",
-            "needed_evidence": "an independent necessity basis for the second centrifugation's input state (a paper/SI retained-phase statement supplies upstream state evidence but does not by itself prove the state is a NECESSARY input of the redispersion)"
+            "needed_evidence": "an independent necessity basis for the ms7b redispersion's necessary input — i.e. the ms7a output state under proof (a paper/SI retained-phase statement supplies upstream state evidence but does not by itself prove the state is a NECESSARY input of the redispersion)"
           },
           {
             "proposition": "this_material_flow",
@@ -215,7 +215,7 @@
         ],
         "invalidated_items": [],
         "node_verdict_unchanged": "BLOCKED",
-        "record_digest": "sha256_f0c7fc8134c56e7eecba4d59dcf8ce5c76846bf829fdcddf42187a43e063bbba"
+        "record_digest": "sha256_4039205d1c45e762f68e216c2f40276852f029470e0b1ea72ef7b003ffc62fdf"
       },
       "dependency_view": {
         "parents_of_ms7b_in": [
@@ -422,7 +422,7 @@
         },
         "source_level_check": {
           "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
-          "module_sha256": "sha256_fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de",
+          "module_sha256": "sha256_81a2d8a099d897981bc5eaecf4983a2b8041890dcf926e977728ae62f534e317",
           "forbidden_strings_found": [],
           "note": "the diagnostic prototype references no token constructor and imports nothing from chem_agent_contracts"
         }

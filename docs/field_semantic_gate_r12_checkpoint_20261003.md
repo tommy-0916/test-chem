@@ -18,7 +18,7 @@ Control group must be allowed to conclude `insufficient`").
 Artifacts: `reaserch_agent/route_operation_precondition_diagnostic.py`
 (diagnostic evaluator, `operation-precondition-diagnostic/v1` — pure
 functions + frozen data classes, no engine derives, no tokens),
-`reaserch_agent/test_route_operation_precondition_diagnostic.py` (30
+`reaserch_agent/test_route_operation_precondition_diagnostic.py` (40
 tests), `result/operation-structure-20260928/local-revision-r12.py`
 (runner), `local-revision-r12-replay.json` (replay),
 `local-revision-r12-audit.json` (audit, schema
@@ -70,6 +70,44 @@ from the proposition-support relation, which remains the submitter's
 annotation until the citation is actually checked (module docstring,
 audit `design_rules`).
 
+**Acceptance-probe revision 2 (same day):** two further
+scope-completeness holes found by acceptance probing are fixed and
+covered by new tests:
+
+1. **Evidence with no invocation binding was accepted.** The invocation
+   comparison in `_check_item` was gated on BOTH sides non-empty, so a
+   `direct_evidence` item with a blank `scope.invocation` skipped the
+   comparison, stood, and qualified. New rejection code
+   **`invocation_unbound_rejected`**: direct evidence that binds no
+   protocol invocation cannot support an invocation-bound target
+   (`second`) — an unbound invocation is not a matching invocation. The
+   check fires AFTER the stage check, so a true cross-stage observation
+   record (the E10 caption: its empty invocation is a real attribute,
+   and its stage `etching` ≠ `etching_second_wash`) keeps
+   `stage_mismatch_rejected` — no invocation is fabricated for it.
+2. **An incomplete target scope was accepted.**
+   `evaluate_candidate_model` performed no completeness check on the
+   scope under diagnosis, so a model scope with a blank `stage` (or any
+   other blank field) silently disabled the corresponding comparison.
+   The entry now raises `ValueError` (listing the missing fields)
+   unless the model scope binds all four fields — paper_id /
+   experimental_group_id / stage / invocation, pure whitespace counting
+   as missing: an unknown scope is never a matching scope, and the
+   diagnostic target of this study always binds the invocation ordinal.
+
+Two narrow wording corrections are folded in at the same time: (vi) the
+P1 open item no longer says "the second centrifugation's input state" —
+it now names the ms7b redispersion's necessary input, i.e. the ms7a
+output state under proof (the runner override, the module
+`_OPEN_ITEM_DEFAULTS`, and this file are synced); (vii) the exclusion
+burden for alternative (2) (aliquot/portion flow) is narrowed: only a
+conflict from a DIFFERENT source or branch must be excluded — a
+confirmed-compatible same-output aliquot is not an exclusion target.
+The 10-case counter-example matrix is unchanged (Case 6 still records
+BOTH `scope_mismatch_rejected` and `stage_mismatch_rejected`; Case 9/10
+unaffected); the new behavior is covered by 10 new unit tests (40
+total in the diagnostic suite).
+
 ## The A01 diagnosis (the real Control case)
 
 Candidate under diagnosis: `ms7a.out =
@@ -102,9 +140,10 @@ exclusive alternative and excluding it is not a promotion precondition
 — the quote merely fails to individuate the instance under proof.
 
 Open items (what would close each proposition): P1 — an independent
-necessity basis for the second centrifugation's input state (a paper/SI
-retained-phase statement supplies upstream state evidence but does not
-by itself prove the state is a NECESSARY input of the redispersion);
+necessity basis for the ms7b redispersion's necessary input — i.e. the
+ms7a output state under proof (a paper/SI retained-phase statement
+supplies upstream state evidence but does not by itself prove the state
+is a NECESSARY input of the redispersion);
 P2 — an explicit inter-segment material-flow statement binding ms7b.in
 to THIS ms7a.out; P3 — instance-individuating language naming the
 instance under proof.
@@ -167,7 +206,10 @@ The charter's four gate items, assessed against this study:
    on a collective, non-individuating statement.
 3. **Alternative explanations excluded — ✗ FAIL.** Four readings are
    recorded and none of the genuinely competing alternatives ((1)–(3))
-   is excluded by evidence; reading (4) (the post-redispersion
+   is excluded by evidence — for (2) (aliquot/portion flow) the
+   exclusion burden is limited to material from a DIFFERENT source or
+   branch; an aliquot confirmed compatible with THIS ms7a output is not
+   an exclusion target; reading (4) (the post-redispersion
    suspension reading) is COMPATIBLE with a retained wet-solid
    intermediate — it is not a mutually exclusive alternative, and
    excluding it is not a promotion precondition.
@@ -181,14 +223,17 @@ Therefore ms7a.out stays BLOCKED and the study counts as a COMPLETE
 research outcome (`insufficient`), exactly the chartered calibration.
 
 **What evidence would change the verdict:** an independent necessity
-basis for the second centrifugation's input state (closes P1 — a
+basis for the ms7b redispersion's necessary input — i.e. the ms7a
+output state under proof (closes P1 — a
 paper/SI retained-phase statement would supply upstream state evidence
 but does not by itself prove NECESSITY); an explicit
 inter-segment material-flow statement binding ms7b.in to this ms7a.out
 (closes P2); instance-individuating language naming the instance under
 proof (closes P3); plus exclusion of the genuinely competing recorded
-alternatives ((1)–(3) — the compatible suspension reading (4) is not
-an exclusion target).
+alternatives — for (2) only a different-source/branch conflict must be
+excluded (a confirmed-compatible same-output aliquot is not an
+exclusion target), and the compatible suspension reading (4) is not an
+exclusion target either.
 
 ## Fixed-constraints audit (all PASS)
 
@@ -206,6 +251,8 @@ an exclusion target).
   to completion under the guard). Source-level half: the diagnostic
   module references no token constructor and imports nothing from the
   contracts package (module sha256
+  `81a2d8a099d897981bc5eaecf4983a2b8041890dcf926e977728ae62f534e317` — recomputed at
+  acceptance-probe revision 2; the revision-1 digest was
   `fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de`).
 - **v1 untouched**: `protocol-definition/v1` module digest
   `sha256_6109b007e823d9758228d8ef71ec5a1d18b4da5dede3867067b2a3347617805b`;
@@ -223,24 +270,25 @@ an exclusion target).
 - Target set (`test_route_proof_dag`, `test_route_retained_object`,
   `test_route_retained_object_integration`,
   `test_route_convention_state_chain`, `test_route_protocol_reference`,
-  `test_route_operation_precondition_diagnostic`): **218 passed, 0
-  failed** (188 carried + 30 in the diagnostic evaluator suite — the
-  original 20 plus 10 added by the acceptance-probe revision).
+  `test_route_operation_precondition_diagnostic`): **228 passed, 0
+  failed** (188 carried + 40 in the diagnostic evaluator suite — the
+  original 20, plus 10 added by the acceptance-probe revision, plus 10
+  added by acceptance-probe revision 2).
 - Full slice (`reaserch_agent/` + `chem_agent_contracts/`, minus
-  llm_connectivity): **1288 ran, 30 failed** — 29 in reaserch_agent +
+  llm_connectivity): **1298 ran, 30 failed** — 29 in reaserch_agent +
   1 in chem_agent_contracts, every one on
   `../baseline-research-fails.log` / `../baseline-contracts-fails.log`
   after `sed -E 's/\((reaserch_agent|chem_agent_contracts)\./(/'`
   normalization; the one baseline failure not reproduced is the
   environment-state-dependent
   `test_b1_bootstrap_generates_initial_outputs`, which passes. **Zero
-  new failures.**
+  new failures.** (Re-verified after acceptance-probe revision 2.)
 - The r7/r8/r9/r10/r11 runners re-run with all acceptance items PASS
   and **byte-identical** JSONs (`git status --short` /
   `git diff` on the tracked runner artifacts is empty).
 - The r12 runner is deterministic: two runs produce byte-identical
   replay and audit JSONs (re-verified after the acceptance-probe
-  revision).
+  revision, and again after revision 2).
 
 ## Deliberately NOT done (scope exclusions)
 
