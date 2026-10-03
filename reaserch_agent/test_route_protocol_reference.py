@@ -852,13 +852,17 @@ class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
 
     def _verified_parent(self):
         _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
-        return _mint_verified_parent_token(
-            builder, self._root_premise_node(dag, "parent_state"))
+        # Post-build minting goes through the white-box test window:
+        # production minting exists only while build()/build_node() runs.
+        with builder._mint_window_for_test():
+            return _mint_verified_parent_token(
+                builder, self._root_premise_node(dag, "parent_state"))
 
     def _verified_liquid(self):
         _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
-        return _mint_verified_liquid_token(
-            builder, self._root_premise_node(dag, "liquid_medium"))
+        with builder._mint_window_for_test():
+            return _mint_verified_liquid_token(
+                builder, self._root_premise_node(dag, "liquid_medium"))
 
     def _four_instances(self):
         return [
@@ -967,8 +971,9 @@ class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
         # (the forged/mismatched fail-closed paths stay covered by
         # EngineTokenTest above, now through the diagnostic channel).
         proposal, _blocks_unused, _span, builder, dag = self._builder_and_dag()
-        token = _mint_verified_liquid_token(
-            builder, self._root_premise_node(dag, "liquid_medium"))
+        with builder._mint_window_for_test():
+            token = _mint_verified_liquid_token(
+                builder, self._root_premise_node(dag, "liquid_medium"))
         proof, issue = derive_unreviewed_output_state(
             proposal["material_graph"], proposal["route_facts"],
             REF_OUT_STATE, verified_liquid_medium=token,
@@ -1002,16 +1007,20 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
     def test_builder_mint_rejects_unregistered_or_tampered_nodes(self) -> None:
         _p, _b, _s, builder, dag = self._builder_and_dag()
         parent_node = self._root_premise_node(dag, "parent_state")
-        # A foreign node id was never added to this builder's node table.
-        foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
-        with self.assertRaises(ValueError):
-            _mint_verified_parent_token(builder, foreign)
-        # The registered id with tampered content is not identical to the
-        # builder's own node.
-        tampered = deepcopy(parent_node)
-        tampered["claim"] = dict(tampered["claim"], target_state="solution")
-        with self.assertRaises(ValueError):
-            _mint_verified_parent_token(builder, tampered)
+        # Open the white-box window so each refusal below comes from the
+        # registration/integrity checks themselves, not the closed window.
+        with builder._mint_window_for_test():
+            # A foreign node id was never added to this builder's node
+            # table.
+            foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(builder, foreign)
+            # The registered id with tampered content no longer matches
+            # the builder's recorded content address for that id.
+            tampered = deepcopy(parent_node)
+            tampered["claim"] = dict(tampered["claim"], target_state="solution")
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(builder, tampered)
         # Not a node mapping at all.
         with self.assertRaises(ValueError):
             _mint_verified_parent_token(builder, {"claim": {}})
@@ -1036,30 +1045,40 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
         )
         with self.assertRaises(ValueError):
             _mint_verified_parent_token(verifier, parent_node)
-        # A successful verification records every node clean; the mint
-        # then binds the node to this verification.
+        # A successful verification records every node clean — and its
+        # minting context is REVOKED the moment verify() returns: the
+        # post-window mint attempt below fails even for an untouched node.
         self.assertEqual(verifier.verify(dag), "")
-        token = _mint_verified_parent_token(verifier, parent_node)
-        self.assertIs(type(token), _VerifiedParentStateEvidence)
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
         node_id = parent_node["node_id"]
-        # A node in the DAG whose memo entry is not clean is refused.
-        verifier._active_memo[node_id] = "proof_dag_node_mismatch"
+        # Inside a white-box installed context (exactly what verify()
+        # installs), the mint binds the node to this verification.
+        with verifier._install_mint_context_for_test(dag["nodes"]):
+            token = _mint_verified_parent_token(verifier, parent_node)
+            self.assertIs(type(token), _VerifiedParentStateEvidence)
+            # A node in the DAG whose memo entry is not clean is refused.
+            verifier._active_memo[node_id] = "proof_dag_node_mismatch"
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(verifier, parent_node)
+            # A node with no memo entry at all never verified clean.
+            del verifier._active_memo[node_id]
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(verifier, parent_node)
+            verifier._active_memo[node_id] = ""
+            # A node outside the DAG under verification is refused.
+            foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(verifier, foreign)
+            # Same id, tampered content no longer matches the recorded
+            # snapshot digest.
+            tampered = deepcopy(parent_node)
+            tampered["claim"] = dict(tampered["claim"], target_state="solution")
+            with self.assertRaises(ValueError):
+                _mint_verified_parent_token(verifier, tampered)
+        # The test hook's context is revoked on exit too.
         with self.assertRaises(ValueError):
             _mint_verified_parent_token(verifier, parent_node)
-        # A node with no memo entry at all never verified clean.
-        del verifier._active_memo[node_id]
-        with self.assertRaises(ValueError):
-            _mint_verified_parent_token(verifier, parent_node)
-        verifier._active_memo[node_id] = ""
-        # A node outside the DAG under verification is refused.
-        foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
-        with self.assertRaises(ValueError):
-            _mint_verified_parent_token(verifier, foreign)
-        # Same id, tampered content is not the node under verification.
-        tampered = deepcopy(parent_node)
-        tampered["claim"] = dict(tampered["claim"], target_state="solution")
-        with self.assertRaises(ValueError):
-            _mint_verified_parent_token(verifier, tampered)
 
     def test_builder_and_verifier_minted_triples_agree(self) -> None:
         proposal, _b, span_of, builder, dag = self._builder_and_dag()
@@ -1067,8 +1086,14 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
         self.assertEqual(verifier.verify(dag), "")
         parent_node = self._root_premise_node(dag, "parent_state")
         liquid_node = self._root_premise_node(dag, "liquid_medium")
-        built_parent = _mint_verified_parent_token(builder, parent_node)
-        verified_parent = _mint_verified_parent_token(verifier, parent_node)
+        # Both mints happen inside their respective (white-box) windows:
+        # production windows live inside build()/verify() only.
+        with builder._mint_window_for_test():
+            built_parent = _mint_verified_parent_token(builder, parent_node)
+            built_liquid = _mint_verified_liquid_token(builder, liquid_node)
+        with verifier._install_mint_context_for_test(dag["nodes"]):
+            verified_parent = _mint_verified_parent_token(verifier, parent_node)
+            verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
         self.assertIs(type(built_parent), _VerifiedParentStateEvidence)
         self.assertIs(type(verified_parent), _VerifiedParentStateEvidence)
         self.assertEqual(
@@ -1082,8 +1107,6 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
              built_parent.material_instance_id),
             (REF_INPUT_STATE, "washed_wet_solid", "inst_w"),
         )
-        built_liquid = _mint_verified_liquid_token(builder, liquid_node)
-        verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
         self.assertIs(type(built_liquid), _VerifiedLiquidMedium)
         self.assertIs(type(verified_liquid), _VerifiedLiquidMedium)
         self.assertEqual(
@@ -1095,6 +1118,151 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
         self.assertEqual(
             (built_liquid.operation_value, built_liquid.medium),
             (REF_VALUE, "deionized water"),
+        )
+
+
+class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
+    """Round 3D safety closure 3 (acceptance): verified minting is bound
+    to host-held, verified node-and-dependency snapshots that caller-side
+    edits cannot move — the owner's invariant, in three layers:
+
+    1. no shared mutable references (builder returns deep copies; the
+       verifier installs a deep-copied snapshot plus recorded digests);
+    2. a minting window (verifier: only while verify() runs; builder:
+       only while build()/build_node() runs);
+    3. extraction from the snapshot, never from the caller's object,
+       with the transitive premise closure digest-checked on both sides.
+    """
+
+    def _definition_evidence_node(self, dag: dict, target: dict) -> dict:
+        dep_id = next(
+            premise["node_id"] for premise in target["premises"]
+            if premise["role"] == "definition_evidence"
+        )
+        return dag["nodes"][dep_id]
+
+    def test_post_verification_target_mutation_never_mints(self) -> None:
+        # Acceptance 1: after successful build+verify, in-place mutation
+        # of the target node -> mint REJECTS at both layers.
+        proposal, _b, span_of, builder, dag = self._builder_and_dag()
+        verifier = self._verifier_for(proposal, span_of)
+        self.assertEqual(verifier.verify(dag), "")
+        target = self._root_premise_node(dag, "liquid_medium")
+        pristine_nodes = deepcopy(dag["nodes"])
+        # Layer 2 — window revoked after build()/verify() returned: mint
+        # attempts fail even for the UNTOUCHED node (the owner's
+        # reproduction minted via the builder after build returned).
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(builder, target)
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(verifier, target)
+        # Caller mutates liquid_medium / definition_digest IN PLACE on
+        # the caller-held DAG node; node_id stays untouched.
+        target["liquid_medium"] = "liquid nitrogen"
+        target["definition_digest"] = "sha256_" + "f" * 64
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(builder, target)
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(verifier, target)
+        # Layer 3, white-box in-window: the passed node's recomputed
+        # content address no longer equals the digest recorded at
+        # verification time -> ValueError, on BOTH hosts.
+        with builder._mint_window_for_test():
+            with self.assertRaises(ValueError):
+                _mint_verified_liquid_token(builder, target)
+        with verifier._install_mint_context_for_test(pristine_nodes):
+            with self.assertRaises(ValueError):
+                _mint_verified_liquid_token(verifier, target)
+        # A full re-verify of the mutated DAG names the tampering.
+        self.assertEqual(
+            self._verifier_for(proposal, span_of).verify(dag),
+            "proof_dag_node_id_mismatch",
+        )
+
+    def test_dependency_mutation_never_mints(self) -> None:
+        # Acceptance 2: target untouched, its definition-evidence
+        # DEPENDENCY mutated -> the old verification record must not
+        # authorize the mint.
+        proposal, _b, span_of, builder, dag = self._builder_and_dag()
+        verifier = self._verifier_for(proposal, span_of)
+        self.assertEqual(verifier.verify(dag), "")
+        nodes = dag["nodes"]
+        target = self._root_premise_node(dag, "liquid_medium")
+        dependency = self._definition_evidence_node(dag, target)
+        self.assertEqual(dependency["node_type"], "paper_literal")
+        # White-box in-window with digests recorded from the pristine
+        # table; mutate ONLY the dependency afterwards.  The target
+        # itself still digest-matches; the transitive-premise-closure
+        # check catches the moved caller-side ancestor.
+        with verifier._install_mint_context_for_test(nodes):
+            dependency["leaf"]["fact_digest"] = "sha256_" + "0" * 64
+            with self.assertRaises(ValueError):
+                _mint_verified_liquid_token(verifier, target)
+        # The builder extracts from its own registry snapshot: an
+        # in-window mint of the UNTOUCHED target still carries the
+        # ORIGINAL verified triple, never caller-mutated content.
+        with builder._mint_window_for_test():
+            token = _mint_verified_liquid_token(builder, target)
+        self.assertEqual(token.medium, "deionized water")
+        self.assertNotEqual(token.definition_digest, "sha256_" + "f" * 64)
+        # A full re-verify of the mutated DAG names the tampering.
+        self.assertEqual(
+            self._verifier_for(proposal, span_of).verify(dag),
+            "proof_dag_node_id_mismatch",
+        )
+
+    def test_unmodified_proof_mints_normally_in_window(self) -> None:
+        # Acceptance 3: a fully unmodified proof still mints normally.
+        proposal, _b, span_of, builder, dag = self._builder_and_dag()
+        # Layer 1: build() returned a deep copy — equal content, no
+        # aliasing of the builder's registry.
+        self.assertIsNot(dag["nodes"], builder.nodes)
+        self.assertEqual(dag["nodes"], builder.nodes)
+        self.assertIsNot(
+            dag["nodes"][dag["root_id"]], builder.nodes[dag["root_id"]],
+        )
+        verifier = self._verifier_for(proposal, span_of)
+        # The production in-window mints: verification itself mints
+        # capability tokens for premises mid-verification and passes.
+        self.assertEqual(verifier.verify(dag), "")
+        parent_node = self._root_premise_node(dag, "parent_state")
+        liquid_node = self._root_premise_node(dag, "liquid_medium")
+        # Builder mints through the white-box window extract the verified
+        # triples from the registry snapshot.
+        with builder._mint_window_for_test():
+            parent = _mint_verified_parent_token(builder, parent_node)
+            liquid = _mint_verified_liquid_token(builder, liquid_node)
+        self.assertEqual(
+            (parent.field_path, parent.state_value,
+             parent.material_instance_id),
+            (REF_INPUT_STATE, "washed_wet_solid", "inst_w"),
+        )
+        self.assertEqual(
+            (liquid.operation_value, liquid.medium),
+            (REF_VALUE, "deionized water"),
+        )
+        self.assertTrue(liquid.definition_digest)
+        # Verifier mints through a white-box installed context agree.
+        with verifier._install_mint_context_for_test(dag["nodes"]):
+            verified_parent = _mint_verified_parent_token(verifier, parent_node)
+            verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
+        self.assertEqual(
+            (verified_parent.field_path, verified_parent.state_value,
+             verified_parent.material_instance_id),
+            (parent.field_path, parent.state_value,
+             parent.material_instance_id),
+        )
+        self.assertEqual(
+            (verified_liquid.operation_value, verified_liquid.medium,
+             verified_liquid.definition_digest),
+            (liquid.operation_value, liquid.medium,
+             liquid.definition_digest),
+        )
+        # Caller-side edits of the returned DAG cannot reach the
+        # registry the builder mints from.
+        dag["nodes"][dag["root_id"]]["segment_id"] = "caller-tampered"
+        self.assertNotEqual(
+            builder.nodes[dag["root_id"]]["segment_id"], "caller-tampered",
         )
 
 
@@ -1212,10 +1380,11 @@ class DiagnosticChannelTest(ProtocolReferenceFixtureMixin):
         self.assertIsNone(_assert_verified_parent_token(None))
         self.assertIsNone(_assert_verified_liquid_token(None))
         _p, _b, _s, builder, dag = self._builder_and_dag()
-        parent_token = _mint_verified_parent_token(
-            builder, self._root_premise_node(dag, "parent_state"))
-        liquid_token = _mint_verified_liquid_token(
-            builder, self._root_premise_node(dag, "liquid_medium"))
+        with builder._mint_window_for_test():
+            parent_token = _mint_verified_parent_token(
+                builder, self._root_premise_node(dag, "parent_state"))
+            liquid_token = _mint_verified_liquid_token(
+                builder, self._root_premise_node(dag, "liquid_medium"))
         self.assertIs(
             _assert_verified_parent_token(parent_token), parent_token)
         self.assertIs(

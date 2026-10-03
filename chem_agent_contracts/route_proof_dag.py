@@ -51,14 +51,38 @@ discharges only the liquid-participation gate for that exact operation
 binding.  The ``retained_object`` role stays exclusively bound to
 ``source_relation`` nodes
 (``proof_dag_retained_object_binding_mismatch`` otherwise).
+
+Verified minting is bound to a HOST-HELD, verified snapshot that cannot
+move with caller-side edits (Round 3D safety closure 3), in three layers:
+(1) no shared mutable references — ``_DagBuilder.build()`` returns a deep
+copy of the node table so the builder's registry is never aliased to a
+caller-held DAG, and ``StateProofDagVerifier.verify()`` deep-copies the
+incoming node table into ``self._active_nodes`` at install time and
+records ``self._active_digests`` (per-node recomputed content addresses)
+from the original passed nodes; (2) a minting window — the verifier's
+minting context lives only while ``verify()`` executes and is cleared in
+a ``finally`` on exit, and the builder mints only while
+``build()``/``build_node()`` executes (a depth counter set at entry,
+cleared in a ``finally``), so any post-window mint attempt raises; (3)
+extraction from the snapshot, never from the caller's object — the
+structural mint uses the passed node only to identify the node by
+``node_id`` and to integrity-check it (its recomputed content address
+must equal the recorded snapshot digest), additionally requiring every
+node in the passed node's transitive premise closure to be present in the
+snapshot and digest-equal on the caller side where that side is reachable
+(the verifier retains the caller's table as ``_active_source`` for the
+window duration only), and the minted triple is extracted from the
+host-held snapshot copy.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from copy import deepcopy
 from hashlib import sha256
 import json
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from . import route_convention_basis as _basis
 from .route_convention_basis import (
@@ -200,27 +224,83 @@ def _parent_state_binding_issue(
     return ""
 
 
+def _mint_closure(snapshot: Mapping[str, Any], node_id: str) -> list[str]:
+    """The transitive premise closure of ``node_id`` inside a snapshot.
+
+    Every premise id referenced anywhere upstream of the node, the node's
+    own id first.  A premise id missing from the snapshot raises: the
+    mint must never stand on a dependency the host has not verified.
+    Cycles cannot occur in a verified DAG; ``seen`` keeps the walk total
+    regardless.
+    """
+    closure: list[str] = []
+    seen: set[str] = set()
+    stack = [node_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        node = snapshot.get(current)
+        if node is None:
+            raise ValueError(
+                "verified mint refused: a premise in the node's transitive "
+                "closure is not part of the host's verified node snapshot"
+            )
+        seen.add(current)
+        closure.append(current)
+        premises = node.get("premises")
+        if isinstance(premises, list):
+            for premise in premises:
+                if (isinstance(premise, Mapping)
+                        and isinstance(premise.get("node_id"), str)):
+                    stack.append(premise["node_id"])
+    return closure
+
+
 def _structural_mint_binding(host: Any, node: Any) -> Mapping[str, Any]:
-    """Bind a verified mint to its host; raise unless the node is owned.
+    """Bind a verified mint to its host's verified node SNAPSHOT.
 
     Verified capability tokens may be minted ONLY by the proof-DAG layer's
-    two hosts, and only for a node that host has actually registered and
-    verified:
+    two hosts, only inside the host's minting window, and only for a node
+    whose verified snapshot record cannot have moved with caller-side
+    edits (Round 3D safety closure 3):
 
-    - ``_DagBuilder``: ``node["node_id"]`` must be in the builder's own
-      node table with identical content (the builder added it via
-      ``_add_node`` after honest recomputation of its content address).
-    - ``StateProofDagVerifier``: the node must be in the DAG currently
-      under verification (``host._active_nodes``, set by ``verify()``)
-      with identical content, AND must already have verified clean — the
-      verification memo entry for ``node["node_id"]`` must be ``""``
-      (premises verify before the nodes standing on them, so this holds
-      for every premise at mint time inside ``verify()``).
+    - Window: a ``_DagBuilder`` mints only while ``build()`` /
+      ``build_node()`` is executing (``_mint_depth > 0``); a
+      ``StateProofDagVerifier`` mints only while ``verify()`` is running
+      (its ``_active_nodes`` / ``_active_memo`` / ``_active_digests`` /
+      ``_active_source`` context is installed at verification start and
+      cleared in a ``finally`` on exit).  Any mint attempt outside the
+      window raises ``ValueError``.
+    - Identification + integrity: the passed node is used ONLY to
+      identify the node by its ``node_id`` field and to integrity-check
+      it — its recomputed content address must equal the digest recorded
+      for that id at verification time (the verifier's
+      ``_active_digests``; for the builder the registry key itself, which
+      IS the honestly recomputed content address).
+    - Dependency closure: every node in the passed node's transitive
+      premise closure must be present in the host's snapshot, the
+      snapshot copy's own recomputed digest must match the recorded one,
+      and — where the caller's side of the table is reachable (the
+      verifier retains it as ``_active_source`` for the window duration
+      only) — the caller-side ancestor's recomputed digest must equal the
+      snapshot digest.  An old verification record therefore never
+      authorizes new content anywhere upstream of the node (the
+      "target unchanged, dependency mutated" case).
+    - Memo: on the verifier, the target node's memo entry must be ``""``
+      (verified clean in this run; premises verify before the nodes
+      standing on them, so this holds for every premise at mint time
+      inside ``verify()``).
+    - Extraction: the returned node — the object the minted triple is
+      extracted from — is the HOST-HELD SNAPSHOT copy (the verifier's
+      ``_active_nodes`` deep copy, the builder's registry), never the
+      passed object.
 
-    Any other host raises ``TypeError``; an unregistered, substituted, or
-    not-yet-clean node raises ``ValueError``.  This is what makes the
-    mint structural: there is no way to mint a verified token for a
-    proposition the DAG layer has not itself proven.
+    Any other host raises ``TypeError``; a closed window, an
+    unregistered, substituted, mutated, or not-yet-clean node, and any
+    dependency-closure mismatch raise ``ValueError``.  This is what makes
+    the mint structural: there is no way to mint a verified token for a
+    proposition the DAG layer has not itself proven AS VERIFIED.
     """
     if not isinstance(node, Mapping) or not isinstance(node.get("node_id"), str):
         raise ValueError(
@@ -228,32 +308,67 @@ def _structural_mint_binding(host: Any, node: Any) -> Mapping[str, Any]:
         )
     node_id = node["node_id"]
     if isinstance(host, _DagBuilder):
-        registered = host.nodes.get(node_id)
-        if registered is None or dict(registered) != dict(node):
+        if host._mint_depth < 1:
             raise ValueError(
-                "verified mint refused: the node is not registered in "
-                "this builder's own node table with identical content"
+                "verified mint refused: the builder's minting window is "
+                "closed — minting is valid only while build()/build_node() "
+                "is executing"
             )
-        return node
-    if isinstance(host, StateProofDagVerifier):
-        active = host._active_nodes
+        snapshot: Mapping[str, Any] = host.nodes
+        digests: Mapping[str, str] | None = None  # keys ARE the digests
+        caller_table: Mapping[str, Any] | None = None
+        memo: dict[str, str] | None = None
+    elif isinstance(host, StateProofDagVerifier):
+        if (host._active_nodes is None or host._active_memo is None
+                or host._active_digests is None):
+            raise ValueError(
+                "verified mint refused: no verification is in progress — "
+                "the minting window is open only while verify() executes"
+            )
+        snapshot = host._active_nodes
+        digests = host._active_digests
+        caller_table = host._active_source
         memo = host._active_memo
-        if (active is None or memo is None or node_id not in active
-                or dict(active[node_id]) != dict(node)):
+    else:
+        raise TypeError(
+            "verified mint refused: the host must be a _DagBuilder or a "
+            "StateProofDagVerifier"
+        )
+    if node_id not in snapshot:
+        raise ValueError(
+            "verified mint refused: the node is not part of the host's "
+            "verified node snapshot"
+        )
+    expected = digests[node_id] if digests is not None else node_id
+    if node_id_for(node) != expected:
+        raise ValueError(
+            "verified mint refused: the passed node's content does not "
+            "match the verified snapshot digest recorded for its node_id"
+        )
+    if memo is not None and memo.get(node_id) != "":
+        raise ValueError(
+            "verified mint refused: the node has not verified clean "
+            "in the current verification"
+        )
+    for ancestor_id in _mint_closure(snapshot, node_id):
+        ancestor_expected = (
+            digests[ancestor_id] if digests is not None else ancestor_id
+        )
+        if node_id_for(snapshot[ancestor_id]) != ancestor_expected:
             raise ValueError(
-                "verified mint refused: the node is not part of the DAG "
-                "currently under verification with identical content"
+                "verified mint refused: the host's verified node snapshot "
+                "no longer matches its recorded digests inside the node's "
+                "dependency closure"
             )
-        if memo.get(node_id) != "":
-            raise ValueError(
-                "verified mint refused: the node has not verified clean "
-                "in the current verification"
-            )
-        return node
-    raise TypeError(
-        "verified mint refused: the host must be a _DagBuilder or a "
-        "StateProofDagVerifier"
-    )
+        if caller_table is not None:
+            caller_ancestor = caller_table.get(ancestor_id)
+            if (caller_ancestor is None
+                    or node_id_for(caller_ancestor) != ancestor_expected):
+                raise ValueError(
+                    "verified mint refused: a dependency in the node's "
+                    "transitive premise closure changed since verification"
+                )
+    return snapshot[node_id]
 
 
 def _mint_verified_parent_token(host: Any, node: Any) -> Any:
@@ -514,6 +629,26 @@ class _DagBuilder:
         self.memo: dict[str, str] = {}
         self.visiting: set[str] = set()
         self.resolver = self._resolver_from_span()
+        # Minting window depth: > 0 only while build()/build_node() (or
+        # the white-box test hook below) is executing.  The structural
+        # mint refuses any attempt outside that window.
+        self._mint_depth = 0
+
+    @contextmanager
+    def _mint_window_for_test(self) -> Iterator[Any]:
+        """White-box TEST hook: open the minting window by hand.
+
+        Production minting happens only inside ``build()`` /
+        ``build_node()``; tests that need a builder-minted token after
+        the build returned (token immutability, triple agreement, engine
+        discharge) open the window explicitly here instead of relying on
+        a post-build implicit window, which no longer exists.
+        """
+        self._mint_depth += 1
+        try:
+            yield self
+        finally:
+            self._mint_depth -= 1
 
     def _resolver_from_span(self) -> Callable[[str], tuple[Any, str]] | None:
         """A retained-object resolver recomputing records live from span_of."""
@@ -544,45 +679,56 @@ class _DagBuilder:
         return resolve
 
     def build(self, field_path: str) -> tuple[dict | None, str]:
-        node_id, issue = self.build_node(field_path)
-        if node_id is None:
-            return None, issue
-        _rules, resource_digest = _basis._rule_resource()
-        dag = {
-            "schema_version": STATE_PROOF_DAG_SCHEMA,
-            "nodes": self.nodes,
-            "root_id": node_id,
-            "context": {
-                "graph_digest": _digest_text(_canonical(self.graph)),
-                "paper_id": self.paper_id,
-                "experimental_group_id": self.experimental_group_id,
-                "source_digest": self.source_digest,
-                "rule_resource_digest": resource_digest,
-            },
-        }
-        return dag, ""
+        self._mint_depth += 1
+        try:
+            node_id, issue = self.build_node(field_path)
+            if node_id is None:
+                return None, issue
+            _rules, resource_digest = _basis._rule_resource()
+            dag = {
+                "schema_version": STATE_PROOF_DAG_SCHEMA,
+                # A deep copy: the caller-held DAG must never alias the
+                # builder's registry, so mutating the returned DAG cannot
+                # move what a later in-window mint would extract.
+                "nodes": deepcopy(self.nodes),
+                "root_id": node_id,
+                "context": {
+                    "graph_digest": _digest_text(_canonical(self.graph)),
+                    "paper_id": self.paper_id,
+                    "experimental_group_id": self.experimental_group_id,
+                    "source_digest": self.source_digest,
+                    "rule_resource_digest": resource_digest,
+                },
+            }
+            return dag, ""
+        finally:
+            self._mint_depth -= 1
 
     def build_node(self, field_path: str) -> tuple[str | None, str]:
-        if field_path in self.memo:
-            return self.memo[field_path], ""
-        if field_path in self.visiting:
-            return None, "proof_dag_cycle"
-        self.visiting.add(field_path)
+        self._mint_depth += 1
         try:
-            if _OUTPUT_STATE.fullmatch(field_path) is not None:
-                node_id, issue = self._build_output_state(field_path)
-            elif _INPUT_STATE.fullmatch(field_path) is not None:
-                node_id, issue = self._build_input_state(field_path)
-            elif (_OPERATION_PATH.fullmatch(field_path) is not None
-                  or field_path.endswith(".name")):
-                node_id, issue = self._build_non_state_fact(field_path)
-            else:
-                return None, "semantic_binding_pending"
-            if node_id is not None:
-                self.memo[field_path] = node_id
-            return node_id, issue
+            if field_path in self.memo:
+                return self.memo[field_path], ""
+            if field_path in self.visiting:
+                return None, "proof_dag_cycle"
+            self.visiting.add(field_path)
+            try:
+                if _OUTPUT_STATE.fullmatch(field_path) is not None:
+                    node_id, issue = self._build_output_state(field_path)
+                elif _INPUT_STATE.fullmatch(field_path) is not None:
+                    node_id, issue = self._build_input_state(field_path)
+                elif (_OPERATION_PATH.fullmatch(field_path) is not None
+                      or field_path.endswith(".name")):
+                    node_id, issue = self._build_non_state_fact(field_path)
+                else:
+                    return None, "semantic_binding_pending"
+                if node_id is not None:
+                    self.memo[field_path] = node_id
+                return node_id, issue
+            finally:
+                self.visiting.discard(field_path)
         finally:
-            self.visiting.discard(field_path)
+            self._mint_depth -= 1
 
     # -- node constructors -------------------------------------------------
 
@@ -1180,14 +1326,25 @@ class StateProofDagVerifier:
         )
         self.resolver = self._resolver_from_span()
         self._projection: str | None = None
-        # Verification context binding the structural mints: the node
-        # table of the DAG currently under verification plus the per-node
-        # issue memo ("" means verified clean).  verify() resets both at
-        # entry and installs them once the structural checks pass; a
-        # verified capability token can be minted only for a node whose
-        # memo entry is "" in this context.
+        # Verification context binding the structural mints, installed
+        # ONLY while verify() (or the white-box test hook) runs and
+        # cleared in a finally on exit — the minting window:
+        # ``_active_nodes`` is a DEEP COPY of the node table under
+        # verification (caller-side edits after install cannot move it),
+        # ``_active_digests`` records each node's content address
+        # recomputed from the ORIGINAL passed nodes at install time,
+        # ``_active_memo`` is the per-node issue memo ("" means verified
+        # clean), and ``_active_source`` retains the caller's node table
+        # by reference for the window duration ONLY, so the structural
+        # mint can re-check the caller side's transitive premise closure
+        # against the recorded digests.  A verified capability token can
+        # be minted only in-window, for a node whose memo entry is "",
+        # whose passed content still matches the recorded digest, and
+        # whose dependency closure is intact on both sides.
         self._active_nodes: Mapping[str, Any] | None = None
         self._active_memo: dict[str, str] | None = None
+        self._active_digests: Mapping[str, str] | None = None
+        self._active_source: Mapping[str, Any] | None = None
         _rules, resource_digest = _basis._rule_resource()
         self.context = {
             "graph_digest": _digest_text(_canonical(self.graph)),
@@ -1226,10 +1383,42 @@ class StateProofDagVerifier:
 
     # -- top level -----------------------------------------------------------
 
-    def verify(self, dag: Any) -> str:
-        # A new verification supersedes any previous minting context.
+    def _clear_mint_context(self) -> None:
         self._active_nodes = None
         self._active_memo = None
+        self._active_digests = None
+        self._active_source = None
+
+    @contextmanager
+    def _install_mint_context_for_test(
+        self, nodes: Mapping[str, Any], memo: dict[str, str] | None = None,
+    ) -> Iterator[Any]:
+        """White-box TEST hook: install the minting context by hand.
+
+        Mirrors exactly what ``verify()`` installs at verification start —
+        a deep-copied snapshot of ``nodes``, per-node digests recomputed
+        from ``nodes``, an all-clean memo (unless given), and a window-
+        scoped reference to the caller's ``nodes`` table — so tests can
+        exercise the structural mint outside a live verification (memo
+        tampering, post-verification caller-side mutation).  The context
+        is cleared on exit, like ``verify()``'s ``finally``.
+        """
+        self._active_nodes = deepcopy(dict(nodes))
+        self._active_digests = {
+            node_id: node_id_for(node) for node_id, node in nodes.items()
+        }
+        self._active_memo = (
+            memo if memo is not None else {node_id: "" for node_id in nodes}
+        )
+        self._active_source = nodes
+        try:
+            yield self
+        finally:
+            self._clear_mint_context()
+
+    def verify(self, dag: Any) -> str:
+        # A new verification supersedes any previous minting context.
+        self._clear_mint_context()
         if not isinstance(dag, Mapping) or (
             dag.get("schema_version") != STATE_PROOF_DAG_SCHEMA
         ):
@@ -1263,17 +1452,32 @@ class StateProofDagVerifier:
         if issue:
             return issue
         memo: dict[str, str] = {}
-        # Install the minting context: premises verify before the nodes
-        # standing on them, so when a convention/inheritance node mints a
-        # capability token for a premise mid-verification, the premise's
-        # memo entry is already "" (verified clean).
-        self._active_nodes = nodes
+        # Install the minting context FOR THE DURATION of the content
+        # pass: premises verify before the nodes standing on them, so
+        # when a convention/inheritance node mints a capability token for
+        # a premise mid-verification, the premise's memo entry is already
+        # "" (verified clean).  The node table is deep-copied into the
+        # snapshot and per-node digests are recorded from the ORIGINAL
+        # passed nodes now, so caller-side edits after this point can
+        # neither move the snapshot nor re-use the recorded digests; the
+        # caller's table is retained by reference for the window only so
+        # the mint can re-check the caller side's dependency closure.
+        # The finally revokes the whole context: no mint is possible once
+        # verify() has returned.
+        self._active_nodes = deepcopy(dict(nodes))
+        self._active_digests = {
+            node_id: node_id_for(node) for node_id, node in nodes.items()
+        }
         self._active_memo = memo
-        for node_id in nodes:
-            issue = self._verify_node(node_id, nodes, memo, set(), 1)
-            if issue:
-                return issue
-        return ""
+        self._active_source = nodes
+        try:
+            for node_id in nodes:
+                issue = self._verify_node(node_id, nodes, memo, set(), 1)
+                if issue:
+                    return issue
+            return ""
+        finally:
+            self._clear_mint_context()
 
     def _structure_check(self, nodes: Mapping[str, Any]) -> str:
         color: dict[str, int] = {}
