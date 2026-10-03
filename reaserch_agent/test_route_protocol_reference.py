@@ -29,6 +29,9 @@ import unittest
 
 from chem_agent_contracts.route_convention_basis import (
     _VerifiedLiquidMedium,
+    _VerifiedParentStateEvidence,
+    _mint_verified_liquid_medium,
+    _mint_verified_parent_state,
     derive_unreviewed_output_state,
 )
 from chem_agent_contracts.route_proof_dag import (
@@ -584,7 +587,7 @@ class EngineTokenTest(ProtocolReferenceFixtureMixin):
 
     def _token(self, operation_value=REF_VALUE, medium="deionized water",
                definition_digest="sha256_" + "a" * 64):
-        return _VerifiedLiquidMedium(
+        return _mint_verified_liquid_medium(
             operation_value=operation_value, medium=medium,
             definition_digest=definition_digest,
         )
@@ -788,6 +791,60 @@ class ProtocolReferenceDagTest(ProtocolReferenceFixtureMixin):
             "proof_dag_retained_object_binding_mismatch",
         )
         self.assertEqual(self._verify(proposal, merged, span_of), "")
+
+
+class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
+    """Round 3D safety closure: verifier-only minting + immutable fields."""
+
+    def test_direct_construction_without_key_raises(self) -> None:
+        with self.assertRaises(TypeError):
+            _VerifiedParentStateEvidence("fp", "sv", "mid")
+        with self.assertRaises(TypeError):
+            _VerifiedLiquidMedium("op", "medium", "digest")
+
+    def test_direct_construction_with_wrong_key_raises(self) -> None:
+        for bad_key in (None, object(), "_MINT_KEY", 0):
+            with self.assertRaises(TypeError):
+                _VerifiedParentStateEvidence("fp", "sv", "mid", _key=bad_key)
+            with self.assertRaises(TypeError):
+                _VerifiedLiquidMedium("op", "medium", "digest", _key=bad_key)
+
+    def test_minted_parent_token_fields_are_immutable(self) -> None:
+        token = _mint_verified_parent_state("fp", "sv", "mid")
+        self.assertEqual(
+            (token.field_path, token.state_value, token.material_instance_id),
+            ("fp", "sv", "mid"),
+        )
+        for field in ("field_path", "state_value", "material_instance_id",
+                      "_sealed"):
+            with self.assertRaises(AttributeError):
+                setattr(token, field, "tampered")
+
+    def test_minted_liquid_token_fields_are_immutable(self) -> None:
+        token = _mint_verified_liquid_medium("op", "medium", "digest")
+        self.assertEqual(
+            (token.operation_value, token.medium, token.definition_digest),
+            ("op", "medium", "digest"),
+        )
+        for field in ("operation_value", "medium", "definition_digest",
+                      "_sealed"):
+            with self.assertRaises(AttributeError):
+                setattr(token, field, "tampered")
+
+    def test_mint_functions_return_working_tokens(self) -> None:
+        # A correctly-minted liquid token discharges the gate; the sealing
+        # changes nothing about engine content checks (the forged/mismatched
+        # fail-closed paths stay covered by EngineTokenTest above).
+        proposal, _blocks_unused, _span = self._chain()
+        proof, issue = derive_unreviewed_output_state(
+            proposal["material_graph"], proposal["route_facts"],
+            REF_OUT_STATE,
+            verified_liquid_medium=_mint_verified_liquid_medium(
+                REF_VALUE, "deionized water", "sha256_" + "a" * 64),
+            **self._kwargs(),
+        )
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
 
 
 if __name__ == "__main__":

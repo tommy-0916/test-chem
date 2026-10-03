@@ -64,9 +64,9 @@ if str(root) not in sys.path:
 from chem_agent_contracts import route_convention_basis
 from chem_agent_contracts.route_convention_basis import (
     _LIQUID_EXCERPT_TOKENS,
-    _VerifiedParentStateEvidence,
     _affirmative_pattern_match,
     _literal_in_quote,
+    _mint_verified_parent_state,
     _resolve_fact_provenance,
     _rule_liquid_participation,
     _rule_resource,
@@ -1334,7 +1334,7 @@ def _accept_ms7b(graph, facts, scope, span_of, resolver, blocked):
     operation_excerpt = by_path["material_graph[8].operation"]["excerpt"]
     step = graph[8]
     inputs = step.get("material_inputs") or []
-    what_if_token = _VerifiedParentStateEvidence(
+    what_if_token = _mint_verified_parent_state(
         field_path=G8_IN_STATE,
         state_value="retained_wet_solid",
         material_instance_id="inst_ldh_wet_2",

@@ -70,6 +70,12 @@ def _items(value: Any) -> list[Mapping[str, Any]]:
     return [_mapping(item) for item in value] if isinstance(value, (list, tuple)) else []
 
 
+# Module-private mint key: the ONLY way to construct either capability
+# token below.  Held at module scope, never exported, and matched by
+# identity — a caller outside this module cannot mint a token directly.
+_MINT_KEY = object()
+
+
 class _VerifiedParentStateEvidence:
     """Capability token discharging the flat literal parent gate for exactly
     one parent-state proposition.
@@ -82,19 +88,39 @@ class _VerifiedParentStateEvidence:
     engine re-computes its own parent binding for the field path under
     proof: the literal parent gate is skipped only when the triple equals
     the engine's binding exactly, and any mismatch fails closed with
-    ``convention_parent_state_unverified``.  Underscore-private and absent
-    from ``__all__``: code outside the proof-DAG layer has no business
-    minting one.
+    ``convention_parent_state_unverified``.  Construction is sealed to this
+    module: ``__init__`` requires the module-private ``_MINT_KEY`` (held by
+    the ``_mint_verified_parent_state`` mint function below) and every
+    field is frozen at construction, so no importer can mint or mutate a
+    token.  Underscore-private and absent from ``__all__``: code outside
+    the proof-DAG verifier/builder layer has no business minting one.
     """
 
-    __slots__ = ("field_path", "state_value", "material_instance_id")
+    __slots__ = ("field_path", "state_value", "material_instance_id",
+                 "_sealed")
 
     def __init__(
         self, field_path: str, state_value: str, material_instance_id: str,
+        *, _key: Any = None,
     ) -> None:
+        if _key is not _MINT_KEY:
+            raise TypeError(
+                "_VerifiedParentStateEvidence is sealed: mint it via "
+                "route_convention_basis._mint_verified_parent_state "
+                "(proof-DAG verifier/builder layer only)"
+            )
         self.field_path = field_path
         self.state_value = state_value
         self.material_instance_id = material_instance_id
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError(
+                "_VerifiedParentStateEvidence is immutable: the binding "
+                "triple is fixed at minting"
+            )
+        object.__setattr__(self, name, value)
 
 
 class _VerifiedLiquidMedium:
@@ -117,18 +143,66 @@ class _VerifiedLiquidMedium:
     affirmed ``operation_value`` exactly and the medium and definition
     digest are non-empty; anything else fails closed to
     ``convention_liquid_participation_missing``.  The token is never wired
-    into retained-object or object-pattern premises.  Underscore-private
-    and absent from ``__all__``.
+    into retained-object or object-pattern premises.  Construction is
+    sealed to this module: ``__init__`` requires the module-private
+    ``_MINT_KEY`` (held by the ``_mint_verified_liquid_medium`` mint
+    function below) and every field is frozen at construction.
+    Underscore-private and absent from ``__all__``.
     """
 
-    __slots__ = ("operation_value", "medium", "definition_digest")
+    __slots__ = ("operation_value", "medium", "definition_digest",
+                 "_sealed")
 
     def __init__(
         self, operation_value: str, medium: str, definition_digest: str,
+        *, _key: Any = None,
     ) -> None:
+        if _key is not _MINT_KEY:
+            raise TypeError(
+                "_VerifiedLiquidMedium is sealed: mint it via "
+                "route_convention_basis._mint_verified_liquid_medium "
+                "(proof-DAG verifier/builder layer only)"
+            )
         self.operation_value = operation_value
         self.medium = medium
         self.definition_digest = definition_digest
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError(
+                "_VerifiedLiquidMedium is immutable: the certifying "
+                "triple is fixed at minting"
+            )
+        object.__setattr__(self, name, value)
+
+
+def _mint_verified_parent_state(
+    field_path: str, state_value: str, material_instance_id: str,
+) -> _VerifiedParentStateEvidence:
+    """Mint a parent-state capability token.  proof-DAG verifier/builder
+    layer only: the caller must already have verified the premise node and
+    its binding triple; the engine still re-checks the triple against its
+    own computed parent binding and fails closed on any mismatch.
+    Underscore-private and absent from ``__all__``.
+    """
+    return _VerifiedParentStateEvidence(
+        field_path, state_value, material_instance_id, _key=_MINT_KEY,
+    )
+
+
+def _mint_verified_liquid_medium(
+    operation_value: str, medium: str, definition_digest: str,
+) -> _VerifiedLiquidMedium:
+    """Mint a liquid-medium capability token.  proof-DAG verifier/builder
+    layer only: the caller must already have built/verified the
+    ``protocol_reference`` node and its operation binding; the engine still
+    re-checks the certifying triple and fails closed on any mismatch.
+    Underscore-private and absent from ``__all__``.
+    """
+    return _VerifiedLiquidMedium(
+        operation_value, medium, definition_digest, _key=_MINT_KEY,
+    )
 
 
 def is_concentration_unit(unit: Any) -> bool:

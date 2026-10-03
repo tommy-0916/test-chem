@@ -199,7 +199,7 @@ def _verified_parent_token(premise_node: Mapping[str, Any]) -> Any:
     mismatch, so the token never widens what the premise proves.
     """
     claim = _mapping(premise_node.get("claim"))
-    return _basis._VerifiedParentStateEvidence(
+    return _basis._mint_verified_parent_state(
         field_path=_text(claim.get("field_path")),
         state_value=_text(claim.get("target_state")),
         material_instance_id=_text(claim.get("material_instance_id")),
@@ -241,7 +241,7 @@ def _verified_liquid_token(premise_node: Mapping[str, Any]) -> Any:
     mismatch, so the token never widens what the premise proves — and it
     discharges nothing except the liquid-participation gate.
     """
-    return _basis._VerifiedLiquidMedium(
+    return _basis._mint_verified_liquid_medium(
         operation_value=_text(premise_node.get("operation_value")),
         medium=_text(premise_node.get("liquid_medium")),
         definition_digest=_text(premise_node.get("definition_digest")),
