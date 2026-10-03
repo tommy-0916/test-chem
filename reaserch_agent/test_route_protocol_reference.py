@@ -22,20 +22,31 @@ from __future__ import annotations
 
 from copy import deepcopy
 from hashlib import sha256
+import inspect
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
+from chem_agent_contracts import route_convention_basis
+from chem_agent_contracts import route_proof_dag
 from chem_agent_contracts.route_convention_basis import (
+    _DiagnosticLiquidMediumAssumption,
+    _DiagnosticParentStateAssumption,
     _VerifiedLiquidMedium,
     _VerifiedParentStateEvidence,
-    _mint_verified_liquid_medium,
-    _mint_verified_parent_state,
+    _mint_diagnostic_liquid_medium_assumption,
+    _mint_diagnostic_parent_state_assumption,
     derive_unreviewed_output_state,
 )
 from chem_agent_contracts.route_proof_dag import (
     PROTOCOL_REFERENCE_PROOF_SCHEMA,
+    StateProofDagVerifier,
+    _assert_verified_liquid_token,
+    _assert_verified_parent_token,
+    _DagBuilder,
+    _mint_verified_liquid_token,
+    _mint_verified_parent_token,
     build_state_proof_dag,
     node_id_for,
     verify_state_proof_dag,
@@ -575,9 +586,45 @@ class ProtocolReferenceFixtureMixin(unittest.TestCase):
             if node["node_type"] == "protocol_reference"
         )
 
+    def _builder_and_dag(self):
+        """A built reference DAG plus the builder that produced it."""
+        proposal, blocks, span_of = self._chain()
+        builder = _DagBuilder(
+            proposal["material_graph"], proposal["route_facts"],
+            span_of=span_of, **self._kwargs(),
+        )
+        dag, issue = builder.build(REF_OUT_STATE)
+        self.assertEqual(issue, "")
+        self.assertIsNotNone(dag)
+        return proposal, blocks, span_of, builder, dag
+
+    def _verifier_for(self, proposal, span_of) -> StateProofDagVerifier:
+        return StateProofDagVerifier(
+            proposal["material_graph"], proposal["route_facts"],
+            span_of=span_of, **self._kwargs(),
+        )
+
+    def _root_premise_node(self, dag: dict, role: str) -> dict:
+        root = dag["nodes"][dag["root_id"]]
+        node_id = next(
+            premise["node_id"] for premise in root["premises"]
+            if premise["role"] == role
+        )
+        return dag["nodes"][node_id]
+
 
 class EngineTokenTest(ProtocolReferenceFixtureMixin):
-    """The _VerifiedLiquidMedium capability token at the liquid gate."""
+    """The engine's liquid-gate content checks, exercised through the
+    labeled diagnostic assumption channel.
+
+    Since the Round 3D safety closure 2 there is NO bare-string
+    verified-mint API: verified tokens are minted structurally from
+    verified DAG nodes only (covered by ``StructuralMintingTest`` and the
+    DAG build/verify tests).  What-if triples posed directly at the
+    engine are diagnostic assumptions; the gate's content checks are
+    identical for both accepted types, so these tests pin the fail-closed
+    behavior for arbitrary triples exactly as before.
+    """
 
     def _derive(self, proposal, token=None):
         return derive_unreviewed_output_state(
@@ -587,7 +634,7 @@ class EngineTokenTest(ProtocolReferenceFixtureMixin):
 
     def _token(self, operation_value=REF_VALUE, medium="deionized water",
                definition_digest="sha256_" + "a" * 64):
-        return _mint_verified_liquid_medium(
+        return _mint_diagnostic_liquid_medium_assumption(
             operation_value=operation_value, medium=medium,
             definition_digest=definition_digest,
         )
@@ -794,13 +841,43 @@ class ProtocolReferenceDagTest(ProtocolReferenceFixtureMixin):
 
 
 class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
-    """Round 3D safety closure: verifier-only minting + immutable fields."""
+    """Round 3D safety closure: sealed construction + immutable fields.
+
+    Closure 2 hardens both axes: immutability now covers DELETION (no
+    token field may ever be deleted, including ``_sealed``), and verified
+    tokens are minted only structurally from verified DAG nodes — the
+    bare-string verified mints are gone.  Verified tokens in these tests
+    are minted from a real builder via the structural helpers.
+    """
+
+    def _verified_parent(self):
+        _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
+        return _mint_verified_parent_token(
+            builder, self._root_premise_node(dag, "parent_state"))
+
+    def _verified_liquid(self):
+        _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
+        return _mint_verified_liquid_token(
+            builder, self._root_premise_node(dag, "liquid_medium"))
+
+    def _four_instances(self):
+        return [
+            self._verified_parent(),
+            self._verified_liquid(),
+            _mint_diagnostic_parent_state_assumption("fp", "sv", "mid"),
+            _mint_diagnostic_liquid_medium_assumption("op", "medium",
+                                                      "digest"),
+        ]
 
     def test_direct_construction_without_key_raises(self) -> None:
         with self.assertRaises(TypeError):
             _VerifiedParentStateEvidence("fp", "sv", "mid")
         with self.assertRaises(TypeError):
             _VerifiedLiquidMedium("op", "medium", "digest")
+        with self.assertRaises(TypeError):
+            _DiagnosticParentStateAssumption("fp", "sv", "mid")
+        with self.assertRaises(TypeError):
+            _DiagnosticLiquidMediumAssumption("op", "medium", "digest")
 
     def test_direct_construction_with_wrong_key_raises(self) -> None:
         for bad_key in (None, object(), "_MINT_KEY", 0):
@@ -808,43 +885,353 @@ class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
                 _VerifiedParentStateEvidence("fp", "sv", "mid", _key=bad_key)
             with self.assertRaises(TypeError):
                 _VerifiedLiquidMedium("op", "medium", "digest", _key=bad_key)
+            with self.assertRaises(TypeError):
+                _DiagnosticParentStateAssumption("fp", "sv", "mid",
+                                                 _key=bad_key)
+            with self.assertRaises(TypeError):
+                _DiagnosticLiquidMediumAssumption("op", "medium", "digest",
+                                                  _key=bad_key)
 
     def test_minted_parent_token_fields_are_immutable(self) -> None:
-        token = _mint_verified_parent_state("fp", "sv", "mid")
+        token = self._verified_parent()
+        # The structural mint extracts the triple FROM the premise node.
         self.assertEqual(
             (token.field_path, token.state_value, token.material_instance_id),
-            ("fp", "sv", "mid"),
+            (REF_INPUT_STATE, "washed_wet_solid", "inst_w"),
         )
         for field in ("field_path", "state_value", "material_instance_id",
                       "_sealed"):
             with self.assertRaises(AttributeError):
                 setattr(token, field, "tampered")
+        assumption = _mint_diagnostic_parent_state_assumption(
+            "fp", "sv", "mid")
+        for field in ("field_path", "state_value", "material_instance_id",
+                      "_sealed"):
+            with self.assertRaises(AttributeError):
+                setattr(assumption, field, "tampered")
 
     def test_minted_liquid_token_fields_are_immutable(self) -> None:
-        token = _mint_verified_liquid_medium("op", "medium", "digest")
+        token = self._verified_liquid()
         self.assertEqual(
             (token.operation_value, token.medium, token.definition_digest),
-            ("op", "medium", "digest"),
+            (REF_VALUE, "deionized water", token.definition_digest),
         )
+        self.assertTrue(token.definition_digest)
         for field in ("operation_value", "medium", "definition_digest",
                       "_sealed"):
             with self.assertRaises(AttributeError):
                 setattr(token, field, "tampered")
+        assumption = _mint_diagnostic_liquid_medium_assumption(
+            "op", "medium", "digest")
+        for field in ("operation_value", "medium", "definition_digest",
+                      "_sealed"):
+            with self.assertRaises(AttributeError):
+                setattr(assumption, field, "tampered")
 
-    def test_mint_functions_return_working_tokens(self) -> None:
-        # A correctly-minted liquid token discharges the gate; the sealing
-        # changes nothing about engine content checks (the forged/mismatched
-        # fail-closed paths stay covered by EngineTokenTest above).
-        proposal, _blocks_unused, _span = self._chain()
+    def test_token_fields_cannot_be_deleted(self) -> None:
+        # Acceptance behavior 1: ``del`` on every field — including
+        # ``_sealed`` — raises ``AttributeError`` on all four classes; a
+        # mutation attempt after a failed deletion still raises, and the
+        # field values are unchanged throughout.
+        fields = {
+            "_VerifiedParentStateEvidence": (
+                "field_path", "state_value", "material_instance_id",
+                "_sealed"),
+            "_VerifiedLiquidMedium": (
+                "operation_value", "medium", "definition_digest",
+                "_sealed"),
+            "_DiagnosticParentStateAssumption": (
+                "field_path", "state_value", "material_instance_id",
+                "_sealed"),
+            "_DiagnosticLiquidMediumAssumption": (
+                "operation_value", "medium", "definition_digest",
+                "_sealed"),
+        }
+        for token in self._four_instances():
+            names = fields[type(token).__name__]
+            before = {name: getattr(token, name) for name in names}
+            with self.subTest(token=type(token).__name__):
+                for name in names:
+                    with self.assertRaises(AttributeError):
+                        delattr(token, name)
+                    # A mutation attempt after a failed del still raises.
+                    with self.assertRaises(AttributeError):
+                        setattr(token, name, "tampered")
+                self.assertEqual(
+                    {name: getattr(token, name) for name in names}, before,
+                )
+
+    def test_structurally_minted_tokens_discharge_gates_end_to_end(self) -> None:
+        # A builder-minted verified liquid token discharges the gate; the
+        # closure-2 hardening changes nothing about engine content checks
+        # (the forged/mismatched fail-closed paths stay covered by
+        # EngineTokenTest above, now through the diagnostic channel).
+        proposal, _blocks_unused, _span, builder, dag = self._builder_and_dag()
+        token = _mint_verified_liquid_token(
+            builder, self._root_premise_node(dag, "liquid_medium"))
         proof, issue = derive_unreviewed_output_state(
             proposal["material_graph"], proposal["route_facts"],
-            REF_OUT_STATE,
-            verified_liquid_medium=_mint_verified_liquid_medium(
-                REF_VALUE, "deionized water", "sha256_" + "a" * 64),
+            REF_OUT_STATE, verified_liquid_medium=token,
             **self._kwargs(),
         )
         self.assertEqual(issue, "")
         self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+
+
+class StructuralMintingTest(ProtocolReferenceFixtureMixin):
+    """Acceptance behavior 2: verified minting is structural — bound to
+    nodes the minting host itself registered and verified."""
+
+    def test_bare_string_verified_mint_api_is_gone(self) -> None:
+        self.assertFalse(
+            hasattr(route_convention_basis, "_mint_verified_parent_state"))
+        self.assertFalse(
+            hasattr(route_convention_basis, "_mint_verified_liquid_medium"))
+
+    def test_structural_mints_reject_a_non_host(self) -> None:
+        _p, _b, _s, _builder, dag = self._builder_and_dag()
+        parent_node = self._root_premise_node(dag, "parent_state")
+        liquid_node = self._root_premise_node(dag, "liquid_medium")
+        for non_host in (None, object(), "host", {"nodes": {}}):
+            with self.subTest(non_host=repr(non_host)):
+                with self.assertRaises(TypeError):
+                    _mint_verified_parent_token(non_host, parent_node)
+                with self.assertRaises(TypeError):
+                    _mint_verified_liquid_token(non_host, liquid_node)
+
+    def test_builder_mint_rejects_unregistered_or_tampered_nodes(self) -> None:
+        _p, _b, _s, builder, dag = self._builder_and_dag()
+        parent_node = self._root_premise_node(dag, "parent_state")
+        # A foreign node id was never added to this builder's node table.
+        foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(builder, foreign)
+        # The registered id with tampered content is not identical to the
+        # builder's own node.
+        tampered = deepcopy(parent_node)
+        tampered["claim"] = dict(tampered["claim"], target_state="solution")
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(builder, tampered)
+        # Not a node mapping at all.
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(builder, {"claim": {}})
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(builder, None)
+
+    def test_verifier_mint_requires_a_clean_memo_entry(self) -> None:
+        proposal, _b, span_of, _builder, dag = self._builder_and_dag()
+        verifier = self._verifier_for(proposal, span_of)
+        parent_node = self._root_premise_node(dag, "parent_state")
+        # Before any verify() there is no minting context at all.
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
+        # A failed verification (context mismatch) installs no context.
+        self.assertEqual(
+            verifier.verify({
+                "schema_version": "state-proof-dag/v1",
+                "nodes": dag["nodes"], "root_id": dag["root_id"],
+                "context": {},
+            }),
+            "proof_dag_context_mismatch",
+        )
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
+        # A successful verification records every node clean; the mint
+        # then binds the node to this verification.
+        self.assertEqual(verifier.verify(dag), "")
+        token = _mint_verified_parent_token(verifier, parent_node)
+        self.assertIs(type(token), _VerifiedParentStateEvidence)
+        node_id = parent_node["node_id"]
+        # A node in the DAG whose memo entry is not clean is refused.
+        verifier._active_memo[node_id] = "proof_dag_node_mismatch"
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
+        # A node with no memo entry at all never verified clean.
+        del verifier._active_memo[node_id]
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
+        verifier._active_memo[node_id] = ""
+        # A node outside the DAG under verification is refused.
+        foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, foreign)
+        # Same id, tampered content is not the node under verification.
+        tampered = deepcopy(parent_node)
+        tampered["claim"] = dict(tampered["claim"], target_state="solution")
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, tampered)
+
+    def test_builder_and_verifier_minted_triples_agree(self) -> None:
+        proposal, _b, span_of, builder, dag = self._builder_and_dag()
+        verifier = self._verifier_for(proposal, span_of)
+        self.assertEqual(verifier.verify(dag), "")
+        parent_node = self._root_premise_node(dag, "parent_state")
+        liquid_node = self._root_premise_node(dag, "liquid_medium")
+        built_parent = _mint_verified_parent_token(builder, parent_node)
+        verified_parent = _mint_verified_parent_token(verifier, parent_node)
+        self.assertIs(type(built_parent), _VerifiedParentStateEvidence)
+        self.assertIs(type(verified_parent), _VerifiedParentStateEvidence)
+        self.assertEqual(
+            (built_parent.field_path, built_parent.state_value,
+             built_parent.material_instance_id),
+            (verified_parent.field_path, verified_parent.state_value,
+             verified_parent.material_instance_id),
+        )
+        self.assertEqual(
+            (built_parent.field_path, built_parent.state_value,
+             built_parent.material_instance_id),
+            (REF_INPUT_STATE, "washed_wet_solid", "inst_w"),
+        )
+        built_liquid = _mint_verified_liquid_token(builder, liquid_node)
+        verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
+        self.assertIs(type(built_liquid), _VerifiedLiquidMedium)
+        self.assertIs(type(verified_liquid), _VerifiedLiquidMedium)
+        self.assertEqual(
+            (built_liquid.operation_value, built_liquid.medium,
+             built_liquid.definition_digest),
+            (verified_liquid.operation_value, verified_liquid.medium,
+             verified_liquid.definition_digest),
+        )
+        self.assertEqual(
+            (built_liquid.operation_value, built_liquid.medium),
+            (REF_VALUE, "deionized water"),
+        )
+
+
+class DiagnosticChannelTest(ProtocolReferenceFixtureMixin):
+    """Acceptance behavior 3: the owner's two hole-2 experiments,
+    reproduced through the honest diagnostic channel, plus the proof
+    layer's refusal to consume diagnostic artifacts."""
+
+    def _stripped_parent_proposal(self):
+        """The reference fixture with the valid parent citation stripped."""
+        proposal, _blocks, _span = self._chain()
+        for fact in proposal["route_facts"]:
+            if fact["fact_id"] == "ref_in_state":
+                fact["excerpt"] = "The solid was carried forward."
+        return proposal
+
+    def _derive_ref(self, proposal, **tokens):
+        return derive_unreviewed_output_state(
+            proposal["material_graph"], proposal["route_facts"],
+            REF_OUT_STATE, **tokens, **self._kwargs(),
+        )
+
+    def test_liquid_assumption_channel_is_honestly_typed(self) -> None:
+        # Hole 2, liquid half: no DAG build or verify at all; an
+        # arbitrary medium and a fake non-empty digest make the flat
+        # derive pass — but ONLY through the labeled assumption type,
+        # never a _VerifiedLiquidMedium, and only because the engine's
+        # unchanged content checks (operation binding equal, medium and
+        # digest non-empty) pass.
+        proposal, _blocks, _span = self._chain()
+        proof, issue = self._derive_ref(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+        assumption = _mint_diagnostic_liquid_medium_assumption(
+            operation_value=REF_VALUE,
+            medium="liquid nitrogen",
+            definition_digest="sha256_" + "f" * 64,
+        )
+        self.assertIs(type(assumption), _DiagnosticLiquidMediumAssumption)
+        self.assertNotIsInstance(assumption, _VerifiedLiquidMedium)
+        proof, issue = self._derive_ref(
+            proposal, verified_liquid_medium=assumption)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+        self.assertEqual(proof["target_state"], "suspension")
+        # A wrong operation binding fails closed, exactly like a forged
+        # verified token: the content checks are the soundness guard.
+        wrong = _mint_diagnostic_liquid_medium_assumption(
+            operation_value="redispersion protocol",
+            medium="deionized water",
+            definition_digest="sha256_" + "a" * 64,
+        )
+        proof, issue = self._derive_ref(
+            proposal, verified_liquid_medium=wrong)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+
+    def test_parent_assumption_channel_with_stripped_citation(self) -> None:
+        # Hole 2, parent half: the fixture with the valid parent citation
+        # stripped fails the literal parent gate; only a matching
+        # assumption triple discharges it — honestly typed, never a
+        # _VerifiedParentStateEvidence.
+        proposal = self._stripped_parent_proposal()
+        proof, issue = self._derive_ref(proposal)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_parent_state_unverified")
+        liquid = _mint_diagnostic_liquid_medium_assumption(
+            REF_VALUE, "deionized water", "sha256_" + "a" * 64)
+        # A liquid assumption alone never touches the parent gate.
+        proof, issue = self._derive_ref(
+            proposal, verified_liquid_medium=liquid)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_parent_state_unverified")
+        parent = _mint_diagnostic_parent_state_assumption(
+            REF_INPUT_STATE, "washed_wet_solid", "inst_w")
+        self.assertIs(type(parent), _DiagnosticParentStateAssumption)
+        self.assertNotIsInstance(parent, _VerifiedParentStateEvidence)
+        # The parent assumption discharges exactly the parent gate: the
+        # liquid gate still fails closed without its own assumption.
+        proof, issue = self._derive_ref(
+            proposal, verified_parent_state=parent)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_liquid_participation_missing")
+        # The owner's what-if: both assumptions make the flat derive pass.
+        proof, issue = self._derive_ref(
+            proposal, verified_parent_state=parent,
+            verified_liquid_medium=liquid)
+        self.assertEqual(issue, "")
+        self.assertEqual(proof["rule_id"], "REDISPERSION_V1")
+        # A mismatched parent triple fails closed.
+        mismatched = _mint_diagnostic_parent_state_assumption(
+            REF_INPUT_STATE, "suspension", "inst_w")
+        proof, issue = self._derive_ref(
+            proposal, verified_parent_state=mismatched,
+            verified_liquid_medium=liquid)
+        self.assertIsNone(proof)
+        self.assertEqual(issue, "convention_parent_state_unverified")
+
+    def test_proof_layer_exact_type_guards_reject_assumptions(self) -> None:
+        parent_assumption = _mint_diagnostic_parent_state_assumption(
+            REF_INPUT_STATE, "washed_wet_solid", "inst_w")
+        liquid_assumption = _mint_diagnostic_liquid_medium_assumption(
+            REF_VALUE, "deionized water", "sha256_" + "a" * 64)
+        with self.assertRaises(TypeError):
+            _assert_verified_parent_token(parent_assumption)
+        with self.assertRaises(TypeError):
+            _assert_verified_liquid_token(liquid_assumption)
+        # Cross-wired assumptions are rejected too.
+        with self.assertRaises(TypeError):
+            _assert_verified_liquid_token(parent_assumption)
+        with self.assertRaises(TypeError):
+            _assert_verified_parent_token(liquid_assumption)
+        # None (the legacy literal-gate default) and genuine verified
+        # tokens pass the guards unchanged.
+        self.assertIsNone(_assert_verified_parent_token(None))
+        self.assertIsNone(_assert_verified_liquid_token(None))
+        _p, _b, _s, builder, dag = self._builder_and_dag()
+        parent_token = _mint_verified_parent_token(
+            builder, self._root_premise_node(dag, "parent_state"))
+        liquid_token = _mint_verified_liquid_token(
+            builder, self._root_premise_node(dag, "liquid_medium"))
+        self.assertIs(
+            _assert_verified_parent_token(parent_token), parent_token)
+        self.assertIs(
+            _assert_verified_liquid_token(liquid_token), liquid_token)
+
+    def test_public_entrypoints_expose_no_token_parameters(self) -> None:
+        for entrypoint in (
+            build_state_proof_dag, verify_state_proof_dag,
+            StateProofDagVerifier.verify,
+        ):
+            names = set(inspect.signature(entrypoint).parameters)
+            self.assertFalse(
+                any("token" in name or "verified" in name
+                    or "assumption" in name for name in names),
+                f"{entrypoint.__qualname__} exposes {sorted(names)}",
+            )
 
 
 if __name__ == "__main__":

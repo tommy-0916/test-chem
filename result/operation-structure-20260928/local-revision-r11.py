@@ -79,8 +79,8 @@ from chem_agent_contracts.route_convention_basis import (
     _LIQUID_EXCERPT_TOKENS,
     _affirmative_pattern_match,
     _literal_in_quote,
-    _mint_verified_liquid_medium,
-    _mint_verified_parent_state,
+    _mint_diagnostic_liquid_medium_assumption,
+    _mint_diagnostic_parent_state_assumption,
     _resolve_fact_provenance,
     _rule_liquid_participation,
     _rule_resource,
@@ -1361,7 +1361,7 @@ def _accept_ms7b(graph, facts, scope, span_of, resolver, blocked):
     operation_excerpt = by_path["material_graph[8].operation"]["excerpt"]
     step = graph[8]
     inputs = step.get("material_inputs") or []
-    what_if_token = _mint_verified_parent_state(
+    what_if_token = _mint_diagnostic_parent_state_assumption(
         field_path=G8_IN_STATE,
         state_value="retained_wet_solid",
         material_instance_id="inst_ldh_wet_2",
@@ -2108,7 +2108,7 @@ def _accept_ms7a_no_leak(graph, facts, scope, span_of, resolver, blocked):
     token7 = None
     if dag7 is not None:
         node7 = dag7["nodes"][dag7["root_id"]]
-        token7 = _mint_verified_liquid_medium(
+        token7 = _mint_diagnostic_liquid_medium_assumption(
             operation_value=node7["operation_value"],
             medium=node7["liquid_medium"],
             definition_digest=node7["definition_digest"])
@@ -2200,7 +2200,7 @@ def _accept_ms7b_dual_3d(graph, facts, scope, span_of, resolver, blocked,
     operation_excerpt = by_path["material_graph[8].operation"]["excerpt"]
     step = graph[8]
     inputs = step.get("material_inputs") or []
-    parent_token = _mint_verified_parent_state(
+    parent_token = _mint_diagnostic_parent_state_assumption(
         field_path=G8_IN_STATE,
         state_value="retained_wet_solid",
         material_instance_id="inst_ldh_wet_2",
@@ -2209,7 +2209,7 @@ def _accept_ms7b_dual_3d(graph, facts, scope, span_of, resolver, blocked,
         graph, facts, scope, span_of, 8)
     node8 = dag8["nodes"][dag8["root_id"]] if dag8 is not None else None
     liquid_token = (
-        _mint_verified_liquid_medium(
+        _mint_diagnostic_liquid_medium_assumption(
             operation_value=node8["operation_value"],
             medium=node8["liquid_medium"],
             definition_digest=node8["definition_digest"])

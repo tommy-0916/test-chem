@@ -17,15 +17,25 @@ recomputation or leaves a dangling premise reference.
 
 The engine is reused, never reimplemented: convention nodes lift their typed
 fields from a freshly recomputed flat proof, with a
-``_VerifiedParentStateEvidence`` capability token minted only after the
-parent premise node has its own verified node in the DAG and the premise
-claim's binding triple (field path, material instance id, target state) has
-been checked against the dependent node's typed fields — the exact
-parent-state proposition the flat proof references
-(``proof_dag_parent_state_binding_mismatch`` otherwise).  The parent premise
-of a convention node is the canonical chain node for THIS step's own input
-state path (a paper literal when literal gates prove it, an inheritance node
-otherwise), never the upstream step's output node directly.
+``_VerifiedParentStateEvidence`` capability token minted STRUCTURALLY —
+``_mint_verified_parent_token(host, node)`` requires the minting host (a
+``_DagBuilder`` or ``StateProofDagVerifier``) to own the premise node (a
+builder: registered in its own node table with identical content; a
+verifier: part of the DAG currently under verification and already
+verified clean) and extracts the triple FROM THE NODE's claim — only
+after the premise claim's binding triple (field path, material instance
+id, target state) has been checked against the dependent node's typed
+fields — the exact parent-state proposition the flat proof references
+(``proof_dag_parent_state_binding_mismatch`` otherwise).  No bare-string
+verified-mint API exists anywhere.  Every internal derive call site
+additionally guards the token's exact type
+(``_assert_verified_parent_token`` / ``_assert_verified_liquid_token``),
+so a diagnostic what-if assumption — accepted by the flat engine as the
+labeled what-if channel — can never enter the proof layer's consumption
+path.  The parent premise of a convention node is the canonical chain
+node for THIS step's own input state path (a paper literal when literal
+gates prove it, an inheritance node otherwise), never the upstream
+step's output node directly.
 
 A second, narrowly-scoped proof class composes through the optional
 ``liquid_medium`` premise role: a ``protocol_reference`` node
@@ -190,20 +200,100 @@ def _parent_state_binding_issue(
     return ""
 
 
-def _verified_parent_token(premise_node: Mapping[str, Any]) -> Any:
-    """Mint the capability token carrying the premise claim's binding triple.
+def _structural_mint_binding(host: Any, node: Any) -> Mapping[str, Any]:
+    """Bind a verified mint to its host; raise unless the node is owned.
 
-    Minted only after the premise node is built/verified and
-    ``_parent_state_binding_issue`` passed for it; the engine re-checks the
-    triple against its own computed parent binding and fails closed on any
-    mismatch, so the token never widens what the premise proves.
+    Verified capability tokens may be minted ONLY by the proof-DAG layer's
+    two hosts, and only for a node that host has actually registered and
+    verified:
+
+    - ``_DagBuilder``: ``node["node_id"]`` must be in the builder's own
+      node table with identical content (the builder added it via
+      ``_add_node`` after honest recomputation of its content address).
+    - ``StateProofDagVerifier``: the node must be in the DAG currently
+      under verification (``host._active_nodes``, set by ``verify()``)
+      with identical content, AND must already have verified clean — the
+      verification memo entry for ``node["node_id"]`` must be ``""``
+      (premises verify before the nodes standing on them, so this holds
+      for every premise at mint time inside ``verify()``).
+
+    Any other host raises ``TypeError``; an unregistered, substituted, or
+    not-yet-clean node raises ``ValueError``.  This is what makes the
+    mint structural: there is no way to mint a verified token for a
+    proposition the DAG layer has not itself proven.
     """
-    claim = _mapping(premise_node.get("claim"))
-    return _basis._mint_verified_parent_state(
-        field_path=_text(claim.get("field_path")),
-        state_value=_text(claim.get("target_state")),
-        material_instance_id=_text(claim.get("material_instance_id")),
+    if not isinstance(node, Mapping) or not isinstance(node.get("node_id"), str):
+        raise ValueError(
+            "verified mint requires a proof node mapping with a node_id"
+        )
+    node_id = node["node_id"]
+    if isinstance(host, _DagBuilder):
+        registered = host.nodes.get(node_id)
+        if registered is None or dict(registered) != dict(node):
+            raise ValueError(
+                "verified mint refused: the node is not registered in "
+                "this builder's own node table with identical content"
+            )
+        return node
+    if isinstance(host, StateProofDagVerifier):
+        active = host._active_nodes
+        memo = host._active_memo
+        if (active is None or memo is None or node_id not in active
+                or dict(active[node_id]) != dict(node)):
+            raise ValueError(
+                "verified mint refused: the node is not part of the DAG "
+                "currently under verification with identical content"
+            )
+        if memo.get(node_id) != "":
+            raise ValueError(
+                "verified mint refused: the node has not verified clean "
+                "in the current verification"
+            )
+        return node
+    raise TypeError(
+        "verified mint refused: the host must be a _DagBuilder or a "
+        "StateProofDagVerifier"
     )
+
+
+def _mint_verified_parent_token(host: Any, node: Any) -> Any:
+    """Mint the parent-state capability token FROM a verified premise node.
+
+    The binding triple (``claim.field_path`` / ``claim.target_state`` /
+    ``claim.material_instance_id``) is extracted from the node itself —
+    the helper takes no caller-supplied value strings.  Minted only after
+    the host-ownership check passed (and, at the call sites, after
+    ``_parent_state_binding_issue`` passed for the node); the engine
+    re-checks the triple against its own computed parent binding and
+    fails closed on any mismatch, so the token never widens what the
+    premise proves.
+    """
+    node = _structural_mint_binding(host, node)
+    claim = _mapping(node.get("claim"))
+    return _basis._VerifiedParentStateEvidence(
+        _text(claim.get("field_path")),
+        _text(claim.get("target_state")),
+        _text(claim.get("material_instance_id")),
+        _key=_basis._MINT_KEY,
+    )
+
+
+def _assert_verified_parent_token(token: Any) -> Any:
+    """Exact-type guard at the proof layer's internal derive boundary.
+
+    The structural mint only ever produces ``_VerifiedParentStateEvidence``,
+    so this guard fires only on tampering — e.g. a diagnostic what-if
+    assumption (accepted by the flat engine as the labeled assumption
+    channel) smuggled into the proof-DAG consumption path.  ``None``
+    passes: it is the legacy literal-gate default, not a token.
+    """
+    if token is not None and type(token) is not _basis._VerifiedParentStateEvidence:
+        raise TypeError(
+            "proof-DAG derive boundary requires exactly "
+            "_VerifiedParentStateEvidence (diagnostic assumptions are "
+            "never proof artifacts)"
+        )
+    return token
 
 
 def _liquid_medium_binding_issue(
@@ -231,21 +321,44 @@ def _liquid_medium_binding_issue(
     return ""
 
 
-def _verified_liquid_token(premise_node: Mapping[str, Any]) -> Any:
-    """Mint the liquid-medium capability token from a verified premise.
+def _mint_verified_liquid_token(host: Any, node: Any) -> Any:
+    """Mint the liquid-medium capability token FROM a verified premise.
 
-    Minted only after the premise node is built/verified and
-    ``_liquid_medium_binding_issue`` passed for it; the engine re-checks
-    the certifying triple (operation value, medium, definition digest)
-    against its own computed operation binding and fails closed on any
-    mismatch, so the token never widens what the premise proves — and it
-    discharges nothing except the liquid-participation gate.
+    The certifying triple (``operation_value`` / ``liquid_medium`` /
+    ``definition_digest``) is extracted from the ``protocol_reference``
+    node itself — the helper takes no caller-supplied value strings.
+    Minted only after the host-ownership check passed (and, at the call
+    sites, after ``_liquid_medium_binding_issue`` passed for the node);
+    the engine re-checks the triple against its own computed operation
+    binding and fails closed on any mismatch, so the token never widens
+    what the premise proves — and it discharges nothing except the
+    liquid-participation gate.
     """
-    return _basis._mint_verified_liquid_medium(
-        operation_value=_text(premise_node.get("operation_value")),
-        medium=_text(premise_node.get("liquid_medium")),
-        definition_digest=_text(premise_node.get("definition_digest")),
+    node = _structural_mint_binding(host, node)
+    return _basis._VerifiedLiquidMedium(
+        _text(node.get("operation_value")),
+        _text(node.get("liquid_medium")),
+        _text(node.get("definition_digest")),
+        _key=_basis._MINT_KEY,
     )
+
+
+def _assert_verified_liquid_token(token: Any) -> Any:
+    """Exact-type guard at the proof layer's internal derive boundary.
+
+    The structural mint only ever produces ``_VerifiedLiquidMedium``, so
+    this guard fires only on tampering — e.g. a diagnostic what-if
+    assumption (accepted by the flat engine as the labeled assumption
+    channel) smuggled into the proof-DAG consumption path.  ``None``
+    passes: it is the legacy literal-gate default, not a token.
+    """
+    if token is not None and type(token) is not _basis._VerifiedLiquidMedium:
+        raise TypeError(
+            "proof-DAG derive boundary requires exactly "
+            "_VerifiedLiquidMedium (diagnostic assumptions are never "
+            "proof artifacts)"
+        )
+    return token
 
 
 def _protocol_reference_candidates(
@@ -766,7 +879,8 @@ class _DagBuilder:
                         return None, issue
                     # The token is minted only after the premise claim's
                     # binding triple is checked against this step's own
-                    # computed parent binding.
+                    # computed parent binding, and only from the node
+                    # registered in this builder (structural mint).
                     binding_issue = _parent_state_binding_issue(
                         self.nodes[parent_node_id],
                         field_path=parent_state_path,
@@ -775,8 +889,8 @@ class _DagBuilder:
                     )
                     if binding_issue:
                         return None, binding_issue
-                    verified_parent = _verified_parent_token(
-                        self.nodes[parent_node_id])
+                    verified_parent = _mint_verified_parent_token(
+                        self, self.nodes[parent_node_id])
         if parent_node_id is None:
             # The engine's honest issue for this exact configuration.
             _proof, honest = derive_unreviewed_output_state(
@@ -794,7 +908,8 @@ class _DagBuilder:
             experimental_group_id=self.experimental_group_id,
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
-            verified_parent_state=verified_parent,
+            verified_parent_state=_assert_verified_parent_token(
+                verified_parent),
         )
         medium_node_id: str | None = None
         if proof is None and issue == "convention_liquid_participation_missing":
@@ -824,9 +939,11 @@ class _DagBuilder:
                     experimental_group_id=self.experimental_group_id,
                     source_digest=self.source_digest,
                     retained_object_resolver=self.resolver,
-                    verified_parent_state=verified_parent,
-                    verified_liquid_medium=_verified_liquid_token(
-                        self.nodes[medium_node_id]),
+                    verified_parent_state=_assert_verified_parent_token(
+                        verified_parent),
+                    verified_liquid_medium=_assert_verified_liquid_token(
+                        _mint_verified_liquid_token(
+                            self, self.nodes[medium_node_id])),
                 )
                 if proof is None:
                     medium_node_id = None
@@ -938,8 +1055,10 @@ class _DagBuilder:
         # parent output node's own parent_state premise claim — so the
         # re-derived parent proof needs no literal gate for a non-literal
         # grandparent state already proven in this DAG (arbitrary chains of
-        # non-literal hops compose through this recursion).
-        verified_grandparent = _verified_parent_token(
+        # non-literal hops compose through this recursion).  Minted
+        # structurally from the premise node registered in this builder.
+        verified_grandparent = _mint_verified_parent_token(
+            self,
             self.nodes[_role_premise(parent_node, "parent_state")["node_id"]])
         grandparent_fact = self.evidence.get(
             _text(parent_node.get("parent_evidence_id")))
@@ -959,7 +1078,8 @@ class _DagBuilder:
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
             facts=self.facts,
-            verified_parent_state=verified_grandparent,
+            verified_parent_state=_assert_verified_parent_token(
+                verified_grandparent),
         )
         if record is None:
             return None, issue
@@ -1060,6 +1180,14 @@ class StateProofDagVerifier:
         )
         self.resolver = self._resolver_from_span()
         self._projection: str | None = None
+        # Verification context binding the structural mints: the node
+        # table of the DAG currently under verification plus the per-node
+        # issue memo ("" means verified clean).  verify() resets both at
+        # entry and installs them once the structural checks pass; a
+        # verified capability token can be minted only for a node whose
+        # memo entry is "" in this context.
+        self._active_nodes: Mapping[str, Any] | None = None
+        self._active_memo: dict[str, str] | None = None
         _rules, resource_digest = _basis._rule_resource()
         self.context = {
             "graph_digest": _digest_text(_canonical(self.graph)),
@@ -1099,6 +1227,9 @@ class StateProofDagVerifier:
     # -- top level -----------------------------------------------------------
 
     def verify(self, dag: Any) -> str:
+        # A new verification supersedes any previous minting context.
+        self._active_nodes = None
+        self._active_memo = None
         if not isinstance(dag, Mapping) or (
             dag.get("schema_version") != STATE_PROOF_DAG_SCHEMA
         ):
@@ -1132,6 +1263,12 @@ class StateProofDagVerifier:
         if issue:
             return issue
         memo: dict[str, str] = {}
+        # Install the minting context: premises verify before the nodes
+        # standing on them, so when a convention/inheritance node mints a
+        # capability token for a premise mid-verification, the premise's
+        # memo entry is already "" (verified clean).
+        self._active_nodes = nodes
+        self._active_memo = memo
         for node_id in nodes:
             issue = self._verify_node(node_id, nodes, memo, set(), 1)
             if issue:
@@ -1519,21 +1656,24 @@ class StateProofDagVerifier:
             )
             if binding_issue:
                 return binding_issue
-            liquid_token = _verified_liquid_token(medium_premise)
+            liquid_token = _mint_verified_liquid_token(self, medium_premise)
         # The flat engine's literal parent gate is discharged by the DAG
-        # through a capability token carrying the verified premise claim's
-        # binding triple; the engine re-checks it against its own computed
-        # parent binding and fails closed on any mismatch.  The liquid
-        # token discharges only the liquid-participation gate, and only for
-        # this step's exact operation binding.
+        # through a capability token minted STRUCTURALLY from the verified
+        # premise node (this verifier owns it: the node verified clean by
+        # recursion above); the engine re-checks the triple against its
+        # own computed parent binding and fails closed on any mismatch.
+        # The liquid token discharges only the liquid-participation gate,
+        # and only for this step's exact operation binding.  Both tokens
+        # pass the exact-type guard at this derive boundary.
         proof, issue = derive_unreviewed_output_state(
             self.graph, self.facts, field_path,
             paper_id=self.paper_id,
             experimental_group_id=self.experimental_group_id,
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
-            verified_parent_state=_verified_parent_token(premise_node),
-            verified_liquid_medium=liquid_token,
+            verified_parent_state=_assert_verified_parent_token(
+                _mint_verified_parent_token(self, premise_node)),
+            verified_liquid_medium=_assert_verified_liquid_token(liquid_token),
         )
         if proof is None:
             return issue or "proof_dag_node_mismatch"
@@ -1652,9 +1792,10 @@ class StateProofDagVerifier:
         # verified by recursion — so a non-literal grandparent state needs
         # no literal gate in the re-derived parent proof; chains of more
         # than two consecutive non-literal hops re-derive through this
-        # recursion alone.
-        verified_grandparent = _verified_parent_token(
-            nodes[_role_premise(parent_node, "parent_state")["node_id"]])
+        # recursion alone.  Minted structurally: this verifier owns the
+        # premise node, which verified clean by recursion above.
+        verified_grandparent = _mint_verified_parent_token(
+            self, nodes[_role_premise(parent_node, "parent_state")["node_id"]])
         grandparent_fact = self.evidence.get(
             _text(parent_node.get("parent_evidence_id")))
         operation_fact = self.evidence.get(
@@ -1673,7 +1814,8 @@ class StateProofDagVerifier:
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
             facts=self.facts,
-            verified_parent_state=verified_grandparent,
+            verified_parent_state=_assert_verified_parent_token(
+                verified_grandparent),
         )
         if record is None:
             return issue or "proof_dag_node_mismatch"

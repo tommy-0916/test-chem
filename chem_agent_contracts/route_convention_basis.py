@@ -70,9 +70,10 @@ def _items(value: Any) -> list[Mapping[str, Any]]:
     return [_mapping(item) for item in value] if isinstance(value, (list, tuple)) else []
 
 
-# Module-private mint key: the ONLY way to construct either capability
-# token below.  Held at module scope, never exported, and matched by
-# identity — a caller outside this module cannot mint a token directly.
+# Module-private mint key: the ONLY way to construct any of the four
+# capability/assumption classes below.  Held at module scope, never
+# exported, and matched by identity — a caller outside this module cannot
+# construct a token or assumption directly.
 _MINT_KEY = object()
 
 
@@ -88,12 +89,17 @@ class _VerifiedParentStateEvidence:
     engine re-computes its own parent binding for the field path under
     proof: the literal parent gate is skipped only when the triple equals
     the engine's binding exactly, and any mismatch fails closed with
-    ``convention_parent_state_unverified``.  Construction is sealed to this
-    module: ``__init__`` requires the module-private ``_MINT_KEY`` (held by
-    the ``_mint_verified_parent_state`` mint function below) and every
-    field is frozen at construction, so no importer can mint or mutate a
-    token.  Underscore-private and absent from ``__all__``: code outside
-    the proof-DAG verifier/builder layer has no business minting one.
+    ``convention_parent_state_unverified``.  Construction is sealed to
+    this module: ``__init__`` requires the module-private ``_MINT_KEY``,
+    and the ONLY construction site is the proof-DAG layer's structural
+    mint (``route_proof_dag._mint_verified_parent_token``), which
+    extracts the triple from a premise node registered with and verified
+    by the minting host — no bare-string verified-mint API exists.
+    Every field is frozen at construction: ``__setattr__`` raises once
+    sealed and ``__delattr__`` raises unconditionally, so no importer
+    can mint, mutate, or delete a token field.  Underscore-private and
+    absent from ``__all__``: code outside the proof-DAG verifier/builder
+    layer has no business minting one.
     """
 
     __slots__ = ("field_path", "state_value", "material_instance_id",
@@ -105,9 +111,9 @@ class _VerifiedParentStateEvidence:
     ) -> None:
         if _key is not _MINT_KEY:
             raise TypeError(
-                "_VerifiedParentStateEvidence is sealed: mint it via "
-                "route_convention_basis._mint_verified_parent_state "
-                "(proof-DAG verifier/builder layer only)"
+                "_VerifiedParentStateEvidence is sealed: only the "
+                "structural mint route_proof_dag._mint_verified_parent_token "
+                "may construct one, from a verified premise node"
             )
         self.field_path = field_path
         self.state_value = state_value
@@ -121,6 +127,14 @@ class _VerifiedParentStateEvidence:
                 "triple is fixed at minting"
             )
         object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        # Immutable means immutable: no token field may ever be deleted
+        # (deleting ``_sealed`` must not reopen mutation either).
+        raise AttributeError(
+            "_VerifiedParentStateEvidence is immutable: no field may be "
+            "deleted"
+        )
 
 
 class _VerifiedLiquidMedium:
@@ -145,8 +159,13 @@ class _VerifiedLiquidMedium:
     ``convention_liquid_participation_missing``.  The token is never wired
     into retained-object or object-pattern premises.  Construction is
     sealed to this module: ``__init__`` requires the module-private
-    ``_MINT_KEY`` (held by the ``_mint_verified_liquid_medium`` mint
-    function below) and every field is frozen at construction.
+    ``_MINT_KEY``, and the ONLY construction site is the proof-DAG
+    layer's structural mint
+    (``route_proof_dag._mint_verified_liquid_token``), which extracts
+    the triple from a ``protocol_reference`` premise node registered
+    with and verified by the minting host — no bare-string verified-mint
+    API exists.  Every field is frozen at construction: ``__setattr__``
+    raises once sealed and ``__delattr__`` raises unconditionally.
     Underscore-private and absent from ``__all__``.
     """
 
@@ -159,9 +178,9 @@ class _VerifiedLiquidMedium:
     ) -> None:
         if _key is not _MINT_KEY:
             raise TypeError(
-                "_VerifiedLiquidMedium is sealed: mint it via "
-                "route_convention_basis._mint_verified_liquid_medium "
-                "(proof-DAG verifier/builder layer only)"
+                "_VerifiedLiquidMedium is sealed: only the structural "
+                "mint route_proof_dag._mint_verified_liquid_token may "
+                "construct one, from a verified protocol_reference node"
             )
         self.operation_value = operation_value
         self.medium = medium
@@ -176,31 +195,144 @@ class _VerifiedLiquidMedium:
             )
         object.__setattr__(self, name, value)
 
+    def __delattr__(self, name: str) -> None:
+        # Immutable means immutable: no token field may ever be deleted
+        # (deleting ``_sealed`` must not reopen mutation either).
+        raise AttributeError(
+            "_VerifiedLiquidMedium is immutable: no field may be deleted"
+        )
 
-def _mint_verified_parent_state(
-    field_path: str, state_value: str, material_instance_id: str,
-) -> _VerifiedParentStateEvidence:
-    """Mint a parent-state capability token.  proof-DAG verifier/builder
-    layer only: the caller must already have verified the premise node and
-    its binding triple; the engine still re-checks the triple against its
-    own computed parent binding and fails closed on any mismatch.
-    Underscore-private and absent from ``__all__``.
+
+class _DiagnosticParentStateAssumption:
+    """Diagnostic what-if assumption; never a proof artifact; never
+    produced or consumed by the proof-DAG layer.
+
+    The r10/r11 what-if diagnostic harnesses legitimately pose parent-state
+    assumptions WITHOUT verification — that is what a what-if is.  This
+    class is the honest, labeled channel for that: it carries the same
+    binding triple as ``_VerifiedParentStateEvidence`` and the flat
+    engine's parent gate applies the SAME content checks to it (triple
+    must equal the engine's own computed binding exactly, else fail
+    closed), but it is a distinct type, so the proof-DAG layer's
+    exact-type guards reject it anywhere a verified token is required.
+    Fields are frozen at construction (``__setattr__`` raises once
+    sealed, ``__delattr__`` raises unconditionally).  Underscore-private
+    and absent from ``__all__``.
     """
-    return _VerifiedParentStateEvidence(
+
+    __slots__ = ("field_path", "state_value", "material_instance_id",
+                 "_sealed")
+
+    def __init__(
+        self, field_path: str, state_value: str, material_instance_id: str,
+        *, _key: Any = None,
+    ) -> None:
+        if _key is not _MINT_KEY:
+            raise TypeError(
+                "_DiagnosticParentStateAssumption is sealed: mint it via "
+                "route_convention_basis._mint_diagnostic_parent_state_assumption "
+                "(diagnostic what-if harnesses only)"
+            )
+        self.field_path = field_path
+        self.state_value = state_value
+        self.material_instance_id = material_instance_id
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError(
+                "_DiagnosticParentStateAssumption is immutable: the "
+                "assumed triple is fixed at minting"
+            )
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(
+            "_DiagnosticParentStateAssumption is immutable: no field may "
+            "be deleted"
+        )
+
+
+class _DiagnosticLiquidMediumAssumption:
+    """Diagnostic what-if assumption; never a proof artifact; never
+    produced or consumed by the proof-DAG layer.
+
+    The liquid-twin of ``_DiagnosticParentStateAssumption``: an honestly
+    typed what-if channel carrying the same certifying triple as
+    ``_VerifiedLiquidMedium``.  The flat engine's liquid gate applies the
+    SAME content checks to it (operation binding equal, medium and
+    definition digest non-empty, else fail closed); the proof-DAG layer's
+    exact-type guards reject it anywhere a verified token is required.
+    Fields are frozen at construction (``__setattr__`` raises once
+    sealed, ``__delattr__`` raises unconditionally).  Underscore-private
+    and absent from ``__all__``.
+    """
+
+    __slots__ = ("operation_value", "medium", "definition_digest",
+                 "_sealed")
+
+    def __init__(
+        self, operation_value: str, medium: str, definition_digest: str,
+        *, _key: Any = None,
+    ) -> None:
+        if _key is not _MINT_KEY:
+            raise TypeError(
+                "_DiagnosticLiquidMediumAssumption is sealed: mint it via "
+                "route_convention_basis._mint_diagnostic_liquid_medium_assumption "
+                "(diagnostic what-if harnesses only)"
+            )
+        self.operation_value = operation_value
+        self.medium = medium
+        self.definition_digest = definition_digest
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError(
+                "_DiagnosticLiquidMediumAssumption is immutable: the "
+                "assumed triple is fixed at minting"
+            )
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(
+            "_DiagnosticLiquidMediumAssumption is immutable: no field "
+            "may be deleted"
+        )
+
+
+def _mint_diagnostic_parent_state_assumption(
+    field_path: str, state_value: str, material_instance_id: str,
+) -> _DiagnosticParentStateAssumption:
+    """Mint a diagnostic parent-state what-if assumption.
+
+    Takes bare strings BY DESIGN: this is the labeled assumption channel
+    for diagnostic what-if harnesses, which pose unverified propositions
+    on purpose.  The result is NOT a proof artifact — it is a distinct
+    type from ``_VerifiedParentStateEvidence`` and the proof-DAG layer's
+    exact-type guards refuse it.  The flat engine still re-checks the
+    triple against its own computed parent binding and fails closed on
+    any mismatch.  Underscore-private and absent from ``__all__``.
+    """
+    return _DiagnosticParentStateAssumption(
         field_path, state_value, material_instance_id, _key=_MINT_KEY,
     )
 
 
-def _mint_verified_liquid_medium(
+def _mint_diagnostic_liquid_medium_assumption(
     operation_value: str, medium: str, definition_digest: str,
-) -> _VerifiedLiquidMedium:
-    """Mint a liquid-medium capability token.  proof-DAG verifier/builder
-    layer only: the caller must already have built/verified the
-    ``protocol_reference`` node and its operation binding; the engine still
-    re-checks the certifying triple and fails closed on any mismatch.
+) -> _DiagnosticLiquidMediumAssumption:
+    """Mint a diagnostic liquid-medium what-if assumption.
+
+    Takes bare strings BY DESIGN: this is the labeled assumption channel
+    for diagnostic what-if harnesses, which pose unverified propositions
+    on purpose.  The result is NOT a proof artifact — it is a distinct
+    type from ``_VerifiedLiquidMedium`` and the proof-DAG layer's
+    exact-type guards refuse it.  The flat engine still re-checks the
+    certifying triple and fails closed on any mismatch.
     Underscore-private and absent from ``__all__``.
     """
-    return _VerifiedLiquidMedium(
+    return _DiagnosticLiquidMediumAssumption(
         operation_value, medium, definition_digest, _key=_MINT_KEY,
     )
 
@@ -679,19 +811,23 @@ def _proof_for_evidence(
     proof graph passes a ``_VerifiedParentStateEvidence`` token only after
     the parent state premise carries its own verified node, so the flat
     literal parent gate is skipped — and only when the token's binding
-    triple equals the engine's own computed parent binding exactly.
+    triple equals the engine's own computed parent binding exactly.  The
+    gate also accepts the honestly-typed ``_DiagnosticParentStateAssumption``
+    (the labeled what-if channel) under the SAME content checks; both types
+    fail closed identically on any mismatch.
 
     ``verified_liquid_medium`` is the second proof-DAG capability hook: a
     ``_VerifiedLiquidMedium`` token minted only after a protocol-reference
-    premise node is verified.  It is consulted ONLY when a rule's literal
-    liquid-participation check fails, and discharges that premise only when
-    the token's operation binding equals this step's affirmed
-    ``operation_value`` exactly (the same value already checked with
-    ``_literal_in_quote`` and ``step.operation`` equality) and the medium
-    and definition digest are non-empty; any mismatch fails closed to
-    ``convention_liquid_participation_missing``.  It never touches
-    retained-object or object-pattern premises.  The defaults keep legacy
-    behavior byte-identical.
+    premise node is verified (or the honestly-typed
+    ``_DiagnosticLiquidMediumAssumption`` what-if channel).  It is
+    consulted ONLY when a rule's literal liquid-participation check fails,
+    and discharges that premise only when the token's operation binding
+    equals this step's affirmed ``operation_value`` exactly (the same value
+    already checked with ``_literal_in_quote`` and ``step.operation``
+    equality) and the medium and definition digest are non-empty; any
+    mismatch fails closed to ``convention_liquid_participation_missing``.
+    It never touches retained-object or object-pattern premises.  The
+    defaults keep legacy behavior byte-identical.
     """
     match = _OUTPUT_STATE.fullmatch(field_path)
     if match is None:
@@ -764,14 +900,17 @@ def _proof_for_evidence(
         ):
             return None, "convention_parent_state_unverified"
     elif not (
-        isinstance(verified_parent_state, _VerifiedParentStateEvidence)
+        isinstance(verified_parent_state, (_VerifiedParentStateEvidence,
+                                           _DiagnosticParentStateAssumption))
         and verified_parent_state.field_path == parent_state_path
         and verified_parent_state.state_value == parent_state
         and verified_parent_state.material_instance_id == parent_id
     ):
-        # A capability token discharges the literal parent gate only for the
-        # exact parent-state proposition this engine instance computed on
-        # its own; anything else fails closed, never bypasses.
+        # A capability token (or a labeled diagnostic assumption) discharges
+        # the literal parent gate only for the exact parent-state
+        # proposition this engine instance computed on its own; anything
+        # else fails closed, never bypasses.  The content checks are
+        # identical for both accepted types.
         return None, "convention_parent_state_unverified"
 
     relation_id = _text(relation.get("relation_id"))
@@ -918,12 +1057,17 @@ def _proof_for_evidence(
                     inputs, operation_excerpt, liquid_states, tokens,
                     operation_patterns=patterns,
                 ) and not (
-                    # The proof-DAG capability token discharges this rule's
-                    # liquid premise only for the exact operation binding
-                    # this engine instance verified literally; a forged or
+                    # The proof-DAG capability token (or a labeled
+                    # diagnostic assumption) discharges this rule's liquid
+                    # premise only for the exact operation binding this
+                    # engine instance verified literally; a forged or
                     # mismatched token behaves as if absent (fail closed).
-                    # The token never discharges any other premise.
-                    isinstance(verified_liquid_medium, _VerifiedLiquidMedium)
+                    # The content checks are identical for both accepted
+                    # types, and the token never discharges any other
+                    # premise.
+                    isinstance(verified_liquid_medium,
+                               (_VerifiedLiquidMedium,
+                                _DiagnosticLiquidMediumAssumption))
                     and verified_liquid_medium.operation_value == operation_value
                     and _text(verified_liquid_medium.medium)
                     and _text(verified_liquid_medium.definition_digest)
@@ -1085,7 +1229,12 @@ def derive_unreviewed_output_state(
     ``_VerifiedLiquidMedium`` capability token minted only after a
     protocol-reference premise node is verified; it is consulted only when
     a rule's literal liquid-participation check fails, and the default is
-    the legacy literal liquid gate.
+    the legacy literal liquid gate.  Both parameters also accept the
+    honestly-typed diagnostic what-if assumptions
+    (``_DiagnosticParentStateAssumption`` /
+    ``_DiagnosticLiquidMediumAssumption``); the content checks are
+    identical for both accepted types, and the proof-DAG layer never
+    passes the diagnostic types (its exact-type guards refuse them).
     """
     by_path: dict[str, Mapping[str, Any]] = {}
     for raw in facts:
