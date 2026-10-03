@@ -130,25 +130,7 @@
           },
           {
             "proposition": "material_instance_binding",
-            "evidence": [
-              {
-                "content": "after a second centrifugation−redispersion protocol one time, all the samples are collected",
-                "content_digest": "sha256_bbe120b40275c092f3d3110951ea918497ced2d6d6a8fadaf83fcd918ab9334a",
-                "source_identity": "paper_explicit",
-                "inference_nature": "direct_evidence",
-                "provenance": "fact:f_g8_in0_state",
-                "subject": "collective_collection_statement",
-                "scope": {
-                  "paper_id": "doi_10_1021_acsami_3c11651",
-                  "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
-                  "stage": "ms8",
-                  "invocation": ""
-                },
-                "material_instance_id": "",
-                "state_path": "",
-                "presented_as_necessity_basis": false
-              }
-            ],
+            "evidence": [],
             "assumptions": [
               "continuity assumption: the collective 'all the samples' statement is taken to cover the instance under proof"
             ],
@@ -161,7 +143,7 @@
           "supernatant-retained-instead reading: the text does not constrain which phase the second centrifugation kept — the retained phase could be the supernatant rather than the solid",
           "aliquot/portion flow: the suspension was divided into 8 parts, so the ms7b input could be an aliquot or a recombination rather than the whole ms7a output",
           "whitelist ambiguity: washed_wet_solid is as compatible with REDISPERSION_V1 as retained_wet_solid — the candidate state is not singled out",
-          "'all the samples are collected' may refer to the post-redispersion suspensions directly, bypassing any retained-solid intermediate"
+          "'all the samples are collected' may describe the post-redispersion suspensions — this reading is COMPATIBLE with a retained wet-solid intermediate (the collection follows the redispersion), so the two readings can hold at the same time; it is not a mutually exclusive alternative and excluding the suspension reading is not a promotion precondition — the quote merely fails to individuate the instance under proof"
         ],
         "dependency_relations": [
           {
@@ -192,7 +174,7 @@
         "open_items": [
           {
             "proposition": "necessary_input_condition",
-            "needed_evidence": "a paper/SI statement of the second centrifugation's retained phase (the independent necessity basis)"
+            "needed_evidence": "an independent necessity basis for the second centrifugation's input state (a paper/SI retained-phase statement supplies upstream state evidence but does not by itself prove the state is a NECESSARY input of the redispersion)"
           },
           {
             "proposition": "this_material_flow",
@@ -223,10 +205,17 @@
             "continuity assumption: the material instance under proof is assumed to be the same LDH-seeds batch across the second protocol invocation"
           ]
         },
-        "rejections": [],
+        "rejections": [
+          {
+            "code": "stage_mismatch_rejected",
+            "proposition": "material_instance_binding",
+            "detail": "evidence scope stage 'ms8' differs from the stage under diagnosis 'ms7a' within the SAME paper/group (doi_10_1021_acsami_3c11651 / Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).) — same-group cross-stage evidence is rejected, never silently re-staged (a cross-paper/cross-group disagreement is scope_mismatch_rejected)",
+            "provenance": "fact:f_g8_in0_state"
+          }
+        ],
         "invalidated_items": [],
         "node_verdict_unchanged": "BLOCKED",
-        "record_digest": "sha256_75a501a63fae9ccbe9b786ca184b30d6d47e329e4df64a4f8c8e10bc6d97065f"
+        "record_digest": "sha256_61e0e23163e08bf0d19f80c4d67985e66c05c41f72f27198fd10dfdad838352c"
       },
       "dependency_view": {
         "parents_of_ms7b_in": [
@@ -334,7 +323,7 @@
     },
     "counter_example_matrix": {
       "status": "PASS",
-      "case_count": 8,
+      "case_count": 10,
       "cases": [
         {
           "scenario": "real Control group, candidate ms7a.out = retained_wet_solid, honest evidence labelling (section A restated)",
@@ -367,9 +356,9 @@
           "verdict": "PASS"
         },
         {
-          "scenario": "cross-group/cross-stage E10: the REAL signed Etching group (10 blocks: 'the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample') and the SI S5 Figure S1 caption (E10: 'clear salt solution without precipitates', supplement_explicit) — the same protocol language coexists with a no-precipitate outcome at another group/stage",
-          "expected": "scope_mismatch_rejected — Control's conditional constraint is NOT exported into the Etching scope; group/stage/invocation stay explicit",
-          "actual": "rejections=['scope_mismatch_rejected']; diagnosis scope='Synthesis of the LDHs by an Etching Method of NiFe; Ey (y = 1−10).'/etching_second_wash/second; conclusion=insufficient",
+          "scenario": "cross-group E10 export: the REAL signed Etching group (10 blocks: 'the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample') and the SI S5 Figure S1 caption (E10: 'clear salt solution without precipitates', supplement_explicit, keeping its TRUE post-etching stage 'etching') — the same protocol language coexists with a no-precipitate outcome in another group",
+          "expected": "scope_mismatch_rejected — Control's conditional constraint is NOT exported into the Etching scope (the Control-scoped operation-name item); stage_mismatch_rejected — the caption's true post-etching stage is not the second-wash stage under diagnosis; group/stage/invocation stay explicit",
+          "actual": "rejections=['scope_mismatch_rejected', 'stage_mismatch_rejected']; diagnosis scope='Synthesis of the LDHs by an Etching Method of NiFe; Ey (y = 1−10).'/etching_second_wash/second; caption item stage='etching'; conclusion=insufficient",
           "verdict": "PASS"
         },
         {
@@ -380,8 +369,20 @@
         },
         {
           "scenario": "source mutation: the 'LDH seeds' naming evidence (real signed fact f_g5_out0_name) is mutated to 'NiFe hydroxide seeds'",
-          "expected": "every diagnostic item citing it recomputes or invalidates honestly — no stale citation survives; the untouched record still verifies under the untouched source",
-          "actual": "untouched verdict=proven; mutated: invalidated_items=1, p3 verdict=unproven, conclusion=insufficient; recomputed item digest moved and validates; untouched record byte-identical on rerun",
+          "expected": "every diagnostic item citing it recomputes or invalidates honestly — no stale citation survives; the untouched record still verifies under the untouched source.  In this construction P1/P2 are unproven BY CONSTRUCTION (no evidence is submitted for them), so the mutation moves ONLY P3 (proven → unproven); the overall conclusion is insufficient BEFORE and AFTER — it never flips",
+          "actual": "untouched: p3 verdict=proven, conclusion=insufficient (P1/P2 unproven by construction); mutated: invalidated_items=1, p3 verdict=unproven, conclusion=insufficient — the mutation moves P3 proven→unproven only, no conclusion flip; recomputed item digest moved and validates; untouched record byte-identical on rerun",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "same-group cross-stage: the ms8 final-collection statement (real signed fact f_g8_in0_state) presented as instance-binding evidence for the ms7a diagnosis — same paper, same group, same invocation 'second', DIFFERENT stage (ms8 vs ms7a)",
+          "expected": "stage_mismatch_rejected (distinguishable from the cross-group scope_mismatch_rejected); P3 unproven",
+          "actual": "rejections=['stage_mismatch_rejected']; p3 verdict=unproven",
+          "verdict": "PASS"
+        },
+        {
+          "scenario": "blank sourceless direct evidence: empty content, no source identity, no scope, no provenance, submitted as direct_evidence for all three propositions",
+          "expected": "evidence_identity_missing_rejected on each proposition; P1/P2/P3 all unproven; conclusion insufficient",
+          "actual": "rejections=['evidence_identity_missing_rejected', 'evidence_identity_missing_rejected', 'evidence_identity_missing_rejected']; verdicts={'necessary_input_condition': 'unproven', 'this_material_flow': 'unproven', 'material_instance_binding': 'unproven'}; conclusion=insufficient",
           "verdict": "PASS"
         }
       ]
@@ -421,7 +422,7 @@
         },
         "source_level_check": {
           "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
-          "module_sha256": "sha256_c6d0ba3f4aaec974607ac4c4698c90713391b0c379b57df373295ea06f822418",
+          "module_sha256": "sha256_606af6ce9bfa07c149729c1379b44c4289871683da4c01a1f1530d933c1a38c1",
           "forbidden_strings_found": [],
           "note": "the diagnostic prototype references no token constructor and imports nothing from chem_agent_contracts"
         }

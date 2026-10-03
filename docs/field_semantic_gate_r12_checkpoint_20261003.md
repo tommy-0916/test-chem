@@ -18,12 +18,44 @@ Control group must be allowed to conclude `insufficient`").
 Artifacts: `reaserch_agent/route_operation_precondition_diagnostic.py`
 (diagnostic evaluator, `operation-precondition-diagnostic/v1` — pure
 functions + frozen data classes, no engine derives, no tokens),
-`reaserch_agent/test_route_operation_precondition_diagnostic.py` (20
+`reaserch_agent/test_route_operation_precondition_diagnostic.py` (30
 tests), `result/operation-structure-20260928/local-revision-r12.py`
 (runner), `local-revision-r12-replay.json` (replay),
 `local-revision-r12-audit.json` (audit, schema
 `bounded_local_revision/v12`). No `chem_agent_contracts/` changes, no
 v1 schema changes, no engine/gate changes, no r7–r11 edits.
+
+**Acceptance-probe revision (same day):** two reproducible holes found
+by acceptance probing are fixed and covered by new cases/tests:
+
+1. **Same-group cross-stage evidence was accepted.** `_check_item`
+   compared paper/group/invocation but never `ScopeBindingV1.stage`, so
+   same-group evidence from a different stage stood and qualified. New
+   rejection code **`stage_mismatch_rejected`** (both stages non-empty
+   and different, same paper/group) — distinct from the
+   cross-paper/cross-group `scope_mismatch_rejected`.
+2. **Blank, sourceless items were provable.** A `direct_evidence` item
+   with empty content, no source identity, `scope=None`, and no
+   provenance qualified on subject/instance match alone. New rejection
+   code **`evidence_identity_missing_rejected`**: a `direct_evidence`
+   submission must carry a checkable identity (non-empty content;
+   `source_identity ∈ {paper_explicit, supplement_explicit,
+   external_primary}`; scope with paper/group/stage filled; non-empty
+   provenance), checked BEFORE staleness and scope comparison. Rule
+   whitelists, proposal assertions, and assumptions carry no source
+   identity by design and are exempt.
+
+Three narrative corrections are folded in at the same time: (i) a
+retained-phase statement supplies upstream state evidence but does NOT
+by itself prove the state is a NECESSARY input of the redispersion —
+P1 needs an independent necessity basis; (ii) the post-redispersion
+suspension reading of "all the samples are collected" is COMPATIBLE
+with a retained wet-solid intermediate (collection follows
+redispersion) — the two readings are not mutually exclusive and
+excluding the suspension reading is not a promotion precondition;
+(iii) Case 8's source mutation moves only P3 (proven → unproven) —
+P1/P2 are unproven by construction in that case, so the overall
+conclusion is `insufficient` before and after; it never flips.
 
 ## The A01 diagnosis (the real Control case)
 
@@ -40,20 +72,26 @@ The three propositions are answered **separately**:
 |---|---|---|
 | **P1 necessary_input_condition** | the operation NAME "Finally, after a second centrifugation−redispersion protocol one time" (`paper_explicit`, `direct_evidence` of the operation's **occurrence** only — fact `f_g7a_op`); SI = D (the three targeted evidence classes were not detected); the REDISPERSION_V1 whitelist enters ONLY as `rule_compatible_states` (conventions.json L72-95) with the non-inversion note | **unproven** — no independent necessity basis |
 | **P2 this_material_flow** | the proposal's own `parent_output_refs` = `[{macro_step_id: ms7a, material_instance_id: inst_ldh_wet_2}]` (`proposal_assertion` — an edge the proposal drew itself); the verified 3D protocol_reference nodes `proof_node_1e3047294567ed7b6b467dde` (graph[7].operation) and `proof_node_181d2b69af719f90c74cf2c5` (graph[8].operation) (`paper_explicit`, subject `operation_sequence_order` — they prove operation ORDER only; `inter_segment_material_flow` is a forbidden slot, so they are constitutionally silent on material flow) | **unproven** — flow assumption recorded |
-| **P3 material_instance_binding** | "after a second centrifugation−redispersion protocol one time, all the samples are collected" (`paper_explicit`, `direct_evidence`, fact `f_g8_in0_state`) — collective and non-individuating (no per-instance identity) | **unproven** — continuity assumption recorded |
+| **P3 material_instance_binding** | "after a second centrifugation−redispersion protocol one time, all the samples are collected" (`paper_explicit`, `direct_evidence`, fact `f_g8_in0_state`) — collective and non-individuating (no per-instance identity), AND cross-stage: it is the ms8 (final collection) step's input statement cited in the ms7a diagnosis, so it is rejected `stage_mismatch_rejected` (the only rejection the honest Control diagnosis records) | **unproven** — continuity assumption recorded |
 
 Alternative explanations recorded: (1) the supernatant-retained-instead
 reading (the text does not constrain which phase the second
 centrifugation kept); (2) aliquot/portion flow among the 8 divided
 parts; (3) `washed_wet_solid` vs `retained_wet_solid` whitelist
-ambiguity; (4) "all the samples are collected" referring to the
-post-redispersion suspensions directly.
+ambiguity; (4) "all the samples are collected" may describe the
+post-redispersion suspensions — a reading COMPATIBLE with a retained
+wet-solid intermediate (the collection follows the redispersion), so
+the two readings can hold at the same time; (4) is not a mutually
+exclusive alternative and excluding it is not a promotion precondition
+— the quote merely fails to individuate the instance under proof.
 
-Open items (what would close each proposition): P1 — a paper/SI
-statement of the second centrifugation's retained phase; P2 — an
-explicit inter-segment material-flow statement binding ms7b.in to THIS
-ms7a.out; P3 — instance-individuating language naming the instance
-under proof.
+Open items (what would close each proposition): P1 — an independent
+necessity basis for the second centrifugation's input state (a paper/SI
+retained-phase statement supplies upstream state evidence but does not
+by itself prove the state is a NECESSARY input of the redispersion);
+P2 — an explicit inter-segment material-flow statement binding ms7b.in
+to THIS ms7a.out; P3 — instance-individuating language naming the
+instance under proof.
 
 **Conclusion: `insufficient`** (default — at least one proposition
 unproven; here all three). The assumption-only model ceiling is
@@ -86,7 +124,7 @@ input — that needs an independent basis), **membership** (that the
 paper's redispersion actually had an input in the set), or
 **uniqueness** (that the input was uniquely `retained_wet_solid`).
 
-## Counter-example matrix (8 cases, all PASS)
+## Counter-example matrix (10 cases, all PASS)
 
 | # | scenario | expected | actual |
 |---|---|---|---|
@@ -95,9 +133,11 @@ paper's redispersion actually had an input in the set), or
 | 3 | two compatible states even under inversion | `non_unique`, cannot single out retained_wet_solid | `non_unique=true`, set `{retained_wet_solid, washed_wet_solid}` |
 | 4 | instance/branch swap (evidence individuating `inst_ldh_aged` cited for `inst_ldh_wet_2`) | binding mismatch rejected | `binding_mismatch_rejected` |
 | 5 | first/second invocation swap (real `f_g5_out0_name` "The precipitates were labeled as LDH seeds", invocation `first`, applied to the second) | `invocation_swap_rejected` — recorded as swap, NOT evidence | `invocation_swap_rejected`; item excluded from evidence |
-| 6 | cross-group/cross-stage E10 (real signed Etching group, 10 blocks: "the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample." + SI S5 Figure S1 caption "clear salt solution without precipitates", `supplement_explicit`) | `scope_mismatch_rejected` — Control's conditional constraint is NOT exported into the Etching scope; group/stage/invocation explicit | `scope_mismatch_rejected`; diagnosis scope stays the Etching group / etching_second_wash / second |
+| 6 | cross-group E10 export (real signed Etching group, 10 blocks: "the second centrifugation−redispersion/washing protocol was performed three times to neutralize the sample." + SI S5 Figure S1 caption "clear salt solution without precipitates", `supplement_explicit`, the caption keeping its TRUE post-etching stage `etching`) | `scope_mismatch_rejected` — Control's conditional constraint is NOT exported into the Etching scope (the Control-scoped operation-name item); `stage_mismatch_rejected` — the caption's true post-etching stage is not the `etching_second_wash` stage under diagnosis | `scope_mismatch_rejected` + `stage_mismatch_rejected`; diagnosis scope stays the Etching group / etching_second_wash / second; caption item stage `etching` |
 | 7 | circular dependency (ms7b.in state cited as support for ms7a.out) | `circular_dependency_rejected` | `circular_dependency_rejected` |
-| 8 | source mutation (`f_g5_out0_name` excerpt mutated to "NiFe hydroxide seeds") | every citing item recomputes/invalidates honestly — no stale citation | `stale_source_invalidated`; P3 flips proven → unproven; conclusion flips to `insufficient`; a recomputed item validates under the mutated source with a moved digest; the untouched record is byte-identical on rerun |
+| 8 | source mutation (`f_g5_out0_name` excerpt mutated to "NiFe hydroxide seeds") | every citing item recomputes/invalidates honestly — no stale citation; P1/P2 unproven by construction, so only P3 moves (proven → unproven) and the conclusion stays `insufficient` — no flip | `stale_source_invalidated`; P3 proven → unproven; conclusion `insufficient` before and after; a recomputed item validates under the mutated source with a moved digest; the untouched record is byte-identical on rerun |
+| 9 | same-group cross-stage citation (the ms8 final-collection statement, real `f_g8_in0_state`, presented as instance-binding evidence for the ms7a diagnosis — same paper/group/invocation, different stage) | `stage_mismatch_rejected` (distinguishable from `scope_mismatch_rejected`) | `stage_mismatch_rejected`; P3 unproven |
+| 10 | blank sourceless direct evidence (empty content, no source identity, `scope=None`, no provenance) submitted for all three propositions | `evidence_identity_missing_rejected` on each proposition; P1/P2/P3 unproven; conclusion `insufficient` | 3 × `evidence_identity_missing_rejected`; all unproven; `insufficient` |
 
 ## Gate to a formal proof class — UNMET
 
@@ -109,22 +149,30 @@ The charter's four gate items, assessed against this study:
 2. **Invocation and material binding hold — ✗ FAIL.** P2 rests on a
    proposal-drawn edge plus an order-only protocol reference; P3 rests
    on a collective, non-individuating statement.
-3. **Alternative explanations excluded — ✗ FAIL.** Four live
-   alternatives are recorded and none is excluded by evidence.
+3. **Alternative explanations excluded — ✗ FAIL.** Four readings are
+   recorded and none of the genuinely competing alternatives ((1)–(3))
+   is excluded by evidence; reading (4) (the post-redispersion
+   suspension reading) is COMPATIBLE with a retained wet-solid
+   intermediate — it is not a mutually exclusive alternative, and
+   excluding it is not a promotion precondition.
 4. **Counter-example tests pass — ✗ as a gate item (n-a for
-   promotion).** The counter-example matrix itself passes all 8 cases
+   promotion).** The counter-example matrix itself passes all 10 cases
    as diagnostics, but the E10 case shows the same protocol language
-   coexisting with a no-precipitate outcome at another group/stage —
+   coexisting with a no-precipitate outcome in another group —
    so no cross-group support exists for promotion either.
 
 Therefore ms7a.out stays BLOCKED and the study counts as a COMPLETE
 research outcome (`insufficient`), exactly the chartered calibration.
 
-**What evidence would change the verdict:** a paper/SI statement of
-the second centrifugation's retained phase (closes P1); an explicit
+**What evidence would change the verdict:** an independent necessity
+basis for the second centrifugation's input state (closes P1 — a
+paper/SI retained-phase statement would supply upstream state evidence
+but does not by itself prove NECESSITY); an explicit
 inter-segment material-flow statement binding ms7b.in to this ms7a.out
 (closes P2); instance-individuating language naming the instance under
-proof (closes P3); plus exclusion of the four recorded alternatives.
+proof (closes P3); plus exclusion of the genuinely competing recorded
+alternatives ((1)–(3) — the compatible suspension reading (4) is not
+an exclusion target).
 
 ## Fixed-constraints audit (all PASS)
 
@@ -142,7 +190,7 @@ proof (closes P3); plus exclusion of the four recorded alternatives.
   to completion under the guard). Source-level half: the diagnostic
   module references no token constructor and imports nothing from the
   contracts package (module sha256
-  `c6d0ba3f4aaec974607ac4c4698c90713391b0c379b57df373295ea06f822418`).
+  `606af6ce9bfa07c149729c1379b44c4289871683da4c01a1f1530d933c1a38c1`).
 - **v1 untouched**: `protocol-definition/v1` module digest
   `sha256_6109b007e823d9758228d8ef71ec5a1d18b4da5dede3867067b2a3347617805b`;
   `PROTOCOL_REFERENCE_V1 1.0.0`; the closed-slot probe
@@ -159,10 +207,11 @@ proof (closes P3); plus exclusion of the four recorded alternatives.
 - Target set (`test_route_proof_dag`, `test_route_retained_object`,
   `test_route_retained_object_integration`,
   `test_route_convention_state_chain`, `test_route_protocol_reference`,
-  `test_route_operation_precondition_diagnostic`): **208 passed, 0
-  failed** (188 carried + 20 new).
+  `test_route_operation_precondition_diagnostic`): **218 passed, 0
+  failed** (188 carried + 30 in the diagnostic evaluator suite — the
+  original 20 plus 10 added by the acceptance-probe revision).
 - Full slice (`reaserch_agent/` + `chem_agent_contracts/`, minus
-  llm_connectivity): **1278 ran, 30 failed** — 29 in reaserch_agent +
+  llm_connectivity): **1288 ran, 30 failed** — 29 in reaserch_agent +
   1 in chem_agent_contracts, every one on
   `../baseline-research-fails.log` / `../baseline-contracts-fails.log`
   after `sed -E 's/\((reaserch_agent|chem_agent_contracts)\./(/'`
@@ -174,7 +223,8 @@ proof (closes P3); plus exclusion of the four recorded alternatives.
   and **byte-identical** JSONs (`git status --short` /
   `git diff` on the tracked runner artifacts is empty).
 - The r12 runner is deterministic: two runs produce byte-identical
-  replay and audit JSONs.
+  replay and audit JSONs (re-verified after the acceptance-probe
+  revision).
 
 ## Deliberately NOT done (scope exclusions)
 

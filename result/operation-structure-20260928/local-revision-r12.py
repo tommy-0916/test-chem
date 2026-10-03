@@ -15,7 +15,9 @@ the feasibility study and nothing else:
   ``parent_output_refs`` is a ``proposal_assertion``, the 3D
   protocol_reference nodes prove operation ORDER only and are
   constitutionally silent on material flow, and "all the samples are
-  collected" is collective and non-individuating.  Conclusion:
+  collected" is collective, non-individuating, AND cross-stage (an ms8
+  collection statement cited in the ms7a diagnosis —
+  ``stage_mismatch_rejected``).  Conclusion:
   ``insufficient``; the assumption-only model ceiling is
   ``conditional_constraint`` and STILL non-unique (two compatible
   states).  ms7a.out stays BLOCKED (r10/r11 verdicts byte-quoted,
@@ -24,11 +26,13 @@ the feasibility study and nothing else:
   REDISPERSION_V1 extract plus the non-inversion analysis (what the
   whitelist can ground: rule applicability; what it cannot: necessity,
   membership, uniqueness).
-- C. the counter-example matrix (8 cases): real Control (calibration
+- C. the counter-example matrix (10 cases): real Control (calibration
   anchor), whitelist inversion, two compatible states, instance/branch
-  swap, first/second invocation swap, cross-group/cross-stage E10 (real
-  signed Etching group + SI S5 caption), circular dependency, source
-  mutation.
+  swap, first/second invocation swap, cross-group E10 export (real
+  signed Etching group; the SI S5 caption keeps its TRUE post-etching
+  stage), circular dependency, source mutation, same-group cross-stage
+  citation (``stage_mismatch_rejected``), and blank sourceless direct
+  evidence (``evidence_identity_missing_rejected``).
 - D. the fixed-constraints audit: ``diagnostics_only=true`` /
   ``feeds_verdict=false`` on every record; the ZERO-token-mint assertion
   (the whole study runs inside a guard that fails the run on any call to
@@ -83,6 +87,7 @@ from reaserch_agent.route_operation_precondition_diagnostic import (
     CIRCULAR_DEPENDENCY_REJECTED,
     CONDITIONAL_CONSTRAINT,
     DIRECT_EVIDENCE,
+    EVIDENCE_IDENTITY_MISSING_REJECTED,
     INSUFFICIENT,
     INVERSION_REJECTED,
     INVOCATION_SWAP_REJECTED,
@@ -91,8 +96,10 @@ from reaserch_agent.route_operation_precondition_diagnostic import (
     P3_MATERIAL_INSTANCE_BINDING,
     PAPER_EXPLICIT,
     PROPOSAL_ASSERTION,
+    PROPOSITION_SUBJECTS,
     RULE_COMPATIBLE_STATES,
     SCOPE_MISMATCH_REJECTED,
+    STAGE_MISMATCH_REJECTED,
     STALE_SOURCE_INVALIDATED,
     SUPPLEMENT_EXPLICIT,
     CandidateModelV1,
@@ -314,7 +321,10 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
             scope=control_scope),
     )
     # --- P3 evidence: "all the samples are collected" — paper_explicit
-    # but collective and non-individuating.
+    # but collective and non-individuating, AND cross-stage: the quote
+    # is the ms8 (final collection) step's input statement, cited here
+    # in the ms7a diagnosis, so the evaluator rejects it
+    # (stage_mismatch_rejected) rather than letting it stand.
     p3_evidence = (
         EvidenceItemV1(
             content=by_id["f_g8_in0_state"]["excerpt"],
@@ -384,9 +394,14 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
             "whitelist ambiguity: washed_wet_solid is as compatible with "
             "REDISPERSION_V1 as retained_wet_solid — the candidate state "
             "is not singled out",
-            "'all the samples are collected' may refer to the "
-            "post-redispersion suspensions directly, bypassing any "
-            "retained-solid intermediate",
+            "'all the samples are collected' may describe the "
+            "post-redispersion suspensions — this reading is COMPATIBLE "
+            "with a retained wet-solid intermediate (the collection "
+            "follows the redispersion), so the two readings can hold at "
+            "the same time; it is not a mutually exclusive alternative "
+            "and excluding the suspension reading is not a promotion "
+            "precondition — the quote merely fails to individuate the "
+            "instance under proof",
         ),
         dependency_relations=(
             DependencyRelationV1(
@@ -413,8 +428,11 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
         ),
         open_item_overrides={
             P1_NECESSARY_INPUT_CONDITION: (
-                "a paper/SI statement of the second centrifugation's "
-                "retained phase (the independent necessity basis)"),
+                "an independent necessity basis for the second "
+                "centrifugation's input state (a paper/SI retained-phase "
+                "statement supplies upstream state evidence but does not "
+                "by itself prove the state is a NECESSARY input of the "
+                "redispersion)"),
             P2_THIS_MATERIAL_FLOW: (
                 "an explicit inter-segment material-flow statement "
                 "binding ms7b.in to THIS ms7a.out"),
@@ -437,13 +455,20 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
     }
 
     record_payload = record_to_dict(record)
+    # The ONLY rejection the honest Control diagnosis records: the ms8
+    # collective collection statement is cross-stage evidence in the
+    # ms7a diagnosis (same paper/group, different stage).
     ok = (
         record.conclusion == INSUFFICIENT
         and {d.proposition: d.verdict for d in record.propositions} == {
             P1_NECESSARY_INPUT_CONDITION: "unproven",
             P2_THIS_MATERIAL_FLOW: "unproven",
             P3_MATERIAL_INSTANCE_BINDING: "unproven"}
-        and record.rejections == ()
+        and [r.code for r in record.rejections] == [
+            STAGE_MISMATCH_REJECTED]
+        and record.rejections[0].proposition \
+            == P3_MATERIAL_INSTANCE_BINDING
+        and record.rejections[0].provenance == "fact:f_g8_in0_state"
         and record.assumption_only_model["ceiling"] == CONDITIONAL_CONSTRAINT
         and record.assumption_only_model["non_unique"] is True
         and record.assumption_only_model["compatible_states"] == [
@@ -545,7 +570,7 @@ def _necessity_rule_basis() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Section C: the counter-example matrix (8 cases).
+# Section C: the counter-example matrix (10 cases).
 # ---------------------------------------------------------------------------
 
 
@@ -713,11 +738,19 @@ def _counter_example_matrix(proposal: dict, group, inventory,
         ok=(INVOCATION_SWAP_REJECTED in invocation_codes
             and "NOT as evidence" in invocation_detail)))
 
-    # Case 6: cross-group/cross-stage E10 (REAL signed Etching group +
-    # SI S5 caption): the same protocol language coexists with a
-    # no-precipitate outcome at another group/stage; the evaluator
-    # refuses to export Control's conditional constraint into the
-    # Etching scope and keeps group/stage/invocation explicit.
+    # Case 6: cross-group E10 export (REAL signed Etching group + SI S5
+    # caption): the same protocol language coexists with a
+    # no-precipitate outcome in another group; the evaluator refuses to
+    # export Control's conditional constraint into the Etching scope and
+    # keeps group/stage/invocation explicit.  The SI caption keeps its
+    # TRUE stage: "obtained after etching with 10 mL nitric acid ...
+    # without precipitates" documents the post-ETCHING outcome of E10 —
+    # the etching step (signature-KB etching protocol blocks
+    # pdf:p2:b85/b86; SI S5 Figure S1 caption context), NOT the
+    # second-wash stage under diagnosis, and it is tied to no
+    # centrifugation−redispersion invocation (invocation stays empty) —
+    # so the caption is rejected stage_mismatch_rejected inside the
+    # second-wash diagnosis.
     matches = [g for g in inventory.groups
                if "Etching Method" in g.source_scope.experimental_group_id]
     if len(matches) != 1:
@@ -732,6 +765,10 @@ def _counter_example_matrix(proposal: dict, group, inventory,
         paper_id=etching.source_scope.paper_id,
         experimental_group_id=etching.source_scope.experimental_group_id,
         stage="etching_second_wash", invocation="second")
+    e10_caption_scope = ScopeBindingV1(
+        paper_id=etching.source_scope.paper_id,
+        experimental_group_id=etching.source_scope.experimental_group_id,
+        stage="etching", invocation="")
     # The export attempt: a Control-scoped conditional-constraint input
     # (the operation-name item, scope Control) is cited inside an
     # Etching-scoped diagnosis.
@@ -765,7 +802,7 @@ def _counter_example_matrix(proposal: dict, group, inventory,
                         inference_nature=DIRECT_EVIDENCE,
                         provenance=E10_SI_PROVENANCE,
                         subject="post_etching_outcome",
-                        scope=etching_scope),),
+                        scope=e10_caption_scope),),
                 asserted_verdict="unproven"),))
     export_record = evaluate_candidate_model(
         export_model, dependency_view=view,
@@ -779,10 +816,16 @@ def _counter_example_matrix(proposal: dict, group, inventory,
     export_detail = next(
         (r.detail for r in export_record.rejections
          if r.code == SCOPE_MISMATCH_REJECTED), "")
+    caption_detail = next(
+        (r.detail for r in export_record.rejections
+         if r.code == STAGE_MISMATCH_REJECTED), "")
     e10_ok = (
         SCOPE_MISMATCH_REJECTED in export_codes
+        and STAGE_MISMATCH_REJECTED in export_codes
         and "NiFe Control" in export_detail
         and "Etching Method" in export_detail
+        and "etching" in caption_detail
+        and "etching_second_wash" in caption_detail
         and export_record.scope.experimental_group_id
         == etching.source_scope.experimental_group_id
         and export_record.scope.invocation == "second"
@@ -792,21 +835,27 @@ def _counter_example_matrix(proposal: dict, group, inventory,
         in etching_protocol_text
         and "to neutralize the sample" in etching_protocol_text)
     cases.append(_case(
-        scenario=("cross-group/cross-stage E10: the REAL signed Etching "
+        scenario=("cross-group E10 export: the REAL signed Etching "
                   "group (10 blocks: 'the second "
                   "centrifugation−redispersion/washing protocol was "
                   "performed three times to neutralize the sample') and "
                   "the SI S5 Figure S1 caption (E10: 'clear salt "
-                  "solution without precipitates', supplement_explicit) "
-                  "— the same protocol language coexists with a "
-                  "no-precipitate outcome at another group/stage"),
+                  "solution without precipitates', supplement_explicit, "
+                  "keeping its TRUE post-etching stage 'etching') — the "
+                  "same protocol language coexists with a "
+                  "no-precipitate outcome in another group"),
         expected=("scope_mismatch_rejected — Control's conditional "
-                  "constraint is NOT exported into the Etching scope; "
-                  "group/stage/invocation stay explicit"),
+                  "constraint is NOT exported into the Etching scope "
+                  "(the Control-scoped operation-name item); "
+                  "stage_mismatch_rejected — the caption's true "
+                  "post-etching stage is not the second-wash stage "
+                  "under diagnosis; group/stage/invocation stay "
+                  "explicit"),
         actual=(f"rejections={export_codes}; diagnosis scope="
                 f"{export_record.scope.experimental_group_id!r}/"
                 f"{export_record.scope.stage}/"
-                f"{export_record.scope.invocation}; conclusion="
+                f"{export_record.scope.invocation}; caption item stage="
+                f"{e10_caption_scope.stage!r}; conclusion="
                 f"{export_record.conclusion}"),
         ok=e10_ok))
 
@@ -909,6 +958,7 @@ def _counter_example_matrix(proposal: dict, group, inventory,
         next(d for d in record_untouched.propositions
              if d.proposition == P3_MATERIAL_INSTANCE_BINDING).verdict
         == "proven"
+        and record_untouched.conclusion == INSUFFICIENT
         and any(r.code == STALE_SOURCE_INVALIDATED
                 for r in record_mutated.rejections)
         and p3_mutated.verdict == "unproven"
@@ -927,14 +977,112 @@ def _counter_example_matrix(proposal: dict, group, inventory,
         expected=("every diagnostic item citing it recomputes or "
                   "invalidates honestly — no stale citation survives; "
                   "the untouched record still verifies under the "
-                  "untouched source"),
-        actual=(f"untouched verdict=proven; mutated: invalidated_items="
+                  "untouched source.  In this construction P1/P2 are "
+                  "unproven BY CONSTRUCTION (no evidence is submitted "
+                  "for them), so the mutation moves ONLY P3 "
+                  "(proven → unproven); the overall conclusion is "
+                  "insufficient BEFORE and AFTER — it never flips"),
+        actual=(f"untouched: p3 verdict=proven, conclusion="
+                f"{record_untouched.conclusion} (P1/P2 unproven by "
+                f"construction); mutated: invalidated_items="
                 f"{len(record_mutated.invalidated_items)}, p3 verdict="
                 f"{p3_mutated.verdict}, conclusion="
-                f"{record_mutated.conclusion}; recomputed item digest "
-                f"moved and validates; untouched record byte-identical "
-                f"on rerun"),
+                f"{record_mutated.conclusion} — the mutation moves P3 "
+                f"proven→unproven only, no conclusion flip; recomputed "
+                f"item digest moved and validates; untouched record "
+                f"byte-identical on rerun"),
         ok=case8_ok))
+
+    # Case 9: same-group cross-stage citation (acceptance hole 1) — the
+    # REAL collective collection quote (f_g8_in0_state, an ms8-stage
+    # statement) presented as instance-binding evidence for the ms7a
+    # diagnosis with the SAME paper/group/invocation but a DIFFERENT
+    # stage -> stage_mismatch_rejected (distinct from the cross-group
+    # scope_mismatch_rejected of Case 6).
+    cross_stage_model = CandidateModelV1(
+        target_state_path=MS7A_OUT,
+        candidate_state="retained_wet_solid",
+        scope=control_scope,
+        target_material_instance_id="inst_ldh_wet_2",
+        propositions=(
+            PropositionClaimV1(
+                P3_MATERIAL_INSTANCE_BINDING,
+                evidence=(
+                    EvidenceItemV1(
+                        content=by_id["f_g8_in0_state"]["excerpt"],
+                        source_identity=PAPER_EXPLICIT,
+                        inference_nature=DIRECT_EVIDENCE,
+                        provenance="fact:f_g8_in0_state",
+                        subject="material_instance_identity",
+                        scope=ScopeBindingV1(
+                            paper_id=ref["paper_id"],
+                            experimental_group_id=
+                            ref["experimental_group_id"],
+                            stage="ms8", invocation="second"),
+                        material_instance_id="inst_ldh_wet_2"),),
+                asserted_verdict="proven"),))
+    cross_stage_record = evaluate_candidate_model(
+        cross_stage_model, dependency_view=view, source=source)
+    cross_stage_codes = [r.code for r in cross_stage_record.rejections]
+    cross_stage_p3 = next(
+        d for d in cross_stage_record.propositions
+        if d.proposition == P3_MATERIAL_INSTANCE_BINDING)
+    cases.append(_case(
+        scenario=("same-group cross-stage: the ms8 final-collection "
+                  "statement (real signed fact f_g8_in0_state) presented "
+                  "as instance-binding evidence for the ms7a diagnosis "
+                  "— same paper, same group, same invocation 'second', "
+                  "DIFFERENT stage (ms8 vs ms7a)"),
+        expected=("stage_mismatch_rejected (distinguishable from the "
+                  "cross-group scope_mismatch_rejected); P3 unproven"),
+        actual=(f"rejections={cross_stage_codes}; p3 verdict="
+                f"{cross_stage_p3.verdict}"),
+        ok=(STAGE_MISMATCH_REJECTED in cross_stage_codes
+            and SCOPE_MISMATCH_REJECTED not in cross_stage_codes
+            and cross_stage_p3.verdict == "unproven"
+            and cross_stage_p3.evidence == ())))
+
+    # Case 10: blank, sourceless direct evidence (acceptance hole 2) —
+    # empty content, no source identity, scope None, empty provenance,
+    # submitted as direct_evidence with matching subject/instance for
+    # all three propositions -> evidence_identity_missing_rejected on
+    # each; all three unproven; conclusion insufficient.
+    def _blank_item(proposition: str) -> EvidenceItemV1:
+        return EvidenceItemV1(
+            content="", source_identity="",
+            inference_nature=DIRECT_EVIDENCE, provenance="",
+            subject=PROPOSITION_SUBJECTS[proposition], scope=None,
+            material_instance_id="inst_ldh_wet_2")
+
+    blank_model = CandidateModelV1(
+        target_state_path=MS7A_OUT,
+        candidate_state="retained_wet_solid",
+        scope=control_scope,
+        target_material_instance_id="inst_ldh_wet_2",
+        propositions=tuple(
+            PropositionClaimV1(p, evidence=(_blank_item(p),))
+            for p in (P1_NECESSARY_INPUT_CONDITION,
+                      P2_THIS_MATERIAL_FLOW,
+                      P3_MATERIAL_INSTANCE_BINDING)))
+    blank_record = evaluate_candidate_model(
+        blank_model, dependency_view=view, source=source)
+    blank_codes = [r.code for r in blank_record.rejections]
+    blank_verdicts = {d.proposition: d.verdict
+                      for d in blank_record.propositions}
+    cases.append(_case(
+        scenario=("blank sourceless direct evidence: empty content, no "
+                  "source identity, no scope, no provenance, submitted "
+                  "as direct_evidence for all three propositions"),
+        expected=("evidence_identity_missing_rejected on each "
+                  "proposition; P1/P2/P3 all unproven; conclusion "
+                  "insufficient"),
+        actual=(f"rejections={blank_codes}; verdicts={blank_verdicts}; "
+                f"conclusion={blank_record.conclusion}"),
+        ok=(blank_codes == [EVIDENCE_IDENTITY_MISSING_REJECTED] * 3
+            and all(v == "unproven" for v in blank_verdicts.values())
+            and all(d.evidence == () and d.qualifying_evidence == ()
+                    for d in blank_record.propositions)
+            and blank_record.conclusion == INSUFFICIENT)))
 
     status = "PASS" if all(case["verdict"] == "PASS" for case in cases) \
         else "FAIL"
@@ -1171,13 +1319,25 @@ def main() -> None:
          "rejection_codes": [
              "inversion_rejected", "non_unique",
              "binding_mismatch_rejected", "invocation_swap_rejected",
-             "scope_mismatch_rejected", "circular_dependency_rejected",
+             "scope_mismatch_rejected", "stage_mismatch_rejected",
+             "evidence_identity_missing_rejected",
+             "circular_dependency_rejected",
              "stale_source_invalidated", "over_claim_rejected"],
          "design_rules": [
              "source identity (paper_explicit / supplement_explicit / "
              "external_primary) is recorded separately from the "
              "inference nature (direct_evidence / "
              "rule_compatible_states / proposal_assertion / assumption)",
+             "a direct_evidence submission must carry a checkable "
+             "identity — non-empty content, a real source identity, its "
+             "own scope (paper/group/stage), and a provenance — or it "
+             "is evidence_identity_missing_rejected before any other "
+             "check; rule whitelists, proposal assertions, and "
+             "assumptions carry no source identity by design and are "
+             "exempt",
+             "scope is explicit everywhere: cross-paper/cross-group "
+             "evidence is scope_mismatch_rejected; same-group "
+             "cross-stage evidence is stage_mismatch_rejected",
              "the evaluator builds its OWN dependency view from the "
              "proposal graph (parent_output_refs + within-step "
              "input->output edges) and rejects any candidate model whose "
@@ -1283,11 +1443,13 @@ def main() -> None:
                       "ceiling conditional_constraint, still non-unique), "
                       "the necessity-rule basis (conventions.json L72-95 "
                       "REDISPERSION_V1 + non-inversion analysis), the "
-                      "8-case counter-example matrix (real Control, "
+                      "10-case counter-example matrix (real Control, "
                       "whitelist inversion, two compatible states, "
                       "instance/branch swap, invocation swap, "
-                      "cross-group E10, circular dependency, source "
-                      "mutation), and the fixed-constraints audit "
+                      "cross-group E10 export, circular dependency, "
+                      "source mutation, same-group cross-stage "
+                      "citation, blank sourceless direct evidence), "
+                      "and the fixed-constraints audit "
                       "(diagnostics_only/feeds_verdict, zero-token-mint "
                       "guard, v1-untouched, r11 verdicts byte-quoted "
                       "unchanged). ms7a.out stays BLOCKED — a complete "

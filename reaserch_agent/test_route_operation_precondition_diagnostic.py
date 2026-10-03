@@ -4,8 +4,10 @@ Synthetic fixtures carrying the counter-example matrix semantics of the
 chartered feasibility study
 (``docs/field_semantic_gate_3e_design_20261003.md``): real Control
 (calibration anchor), whitelist inversion, two compatible states,
-instance/branch swap, first/second invocation swap, cross-group/
-cross-stage export, circular dependency, and source mutation — plus
+instance/branch swap, first/second invocation swap, cross-group
+export, same-group cross-stage export (``stage_mismatch_rejected``),
+blank/sourceless direct evidence (``evidence_identity_missing_rejected``),
+circular dependency, and source mutation — plus
 record-schema completeness and the owner-locked fixed-constraints block.
 
 Every fixture uses the real A01 quotes verbatim where the quote itself is
@@ -27,6 +29,7 @@ from reaserch_agent.route_operation_precondition_diagnostic import (
     CIRCULAR_DEPENDENCY_REJECTED,
     CONDITIONAL_CONSTRAINT,
     DIRECT_EVIDENCE,
+    EVIDENCE_IDENTITY_MISSING_REJECTED,
     INSUFFICIENT,
     INVERSION_REJECTED,
     INVOCATION_SWAP_REJECTED,
@@ -43,6 +46,7 @@ from reaserch_agent.route_operation_precondition_diagnostic import (
     RULE_COMPATIBLE_STATES,
     SCHEMA_VERSION,
     SCOPE_MISMATCH_REJECTED,
+    STAGE_MISMATCH_REJECTED,
     STALE_SOURCE_INVALIDATED,
     SUPPLEMENT_EXPLICIT,
     UNPROVEN,
@@ -472,6 +476,248 @@ class CrossGroupScopeTest(unittest.TestCase):
         self.assertIn(SCOPE_MISMATCH_REJECTED, codes)
 
 
+class SameGroupCrossStageTest(unittest.TestCase):
+    """Acceptance hole 1: same paper/group/invocation but a DIFFERENT
+    stage -> stage_mismatch_rejected (distinct from the cross-group
+    scope_mismatch_rejected)."""
+
+    def _p3_model(self, evidence: tuple) -> CandidateModelV1:
+        return CandidateModelV1(
+            target_state_path=FIXTURE_PATHS["ms7a.out"],
+            candidate_state="retained_wet_solid",
+            scope=_control_scope(),  # stage ms7a, invocation second
+            target_material_instance_id="inst_ldh_wet_2",
+            propositions=(
+                PropositionClaimV1(
+                    P3_MATERIAL_INSTANCE_BINDING, evidence=evidence,
+                    asserted_verdict=PROVEN),))
+
+    def test_same_group_cross_stage_rejected(self):
+        """The probe-1 construct: direct evidence individuating the right
+        instance with the right subject, but scoped at stage ms8 while
+        the diagnosis stage is ms7a (same group, same invocation)."""
+        item = EvidenceItemV1(
+            content=COLLECTIVE_QUOTE,
+            source_identity=PAPER_EXPLICIT,
+            inference_nature=DIRECT_EVIDENCE,
+            provenance="fact:f_g8_in0_state",
+            subject="material_instance_identity",
+            scope=ScopeBindingV1(PAPER_ID, CONTROL_GROUP, "ms8", "second"),
+            material_instance_id="inst_ldh_wet_2")
+        record = _evaluate(self._p3_model((item,)))
+        codes = [r.code for r in record.rejections]
+        self.assertIn(STAGE_MISMATCH_REJECTED, codes)
+        self.assertNotIn(SCOPE_MISMATCH_REJECTED, codes)
+        p3 = next(d for d in record.propositions
+                  if d.proposition == P3_MATERIAL_INSTANCE_BINDING)
+        self.assertEqual(p3.verdict, UNPROVEN)
+        self.assertEqual(p3.evidence, ())  # rejected, never standing
+        detail = next(r.detail for r in record.rejections
+                      if r.code == STAGE_MISMATCH_REJECTED)
+        self.assertIn("ms8", detail)
+        self.assertIn("ms7a", detail)
+        self.assertIn("SAME paper/group", detail)
+
+    def test_cross_group_stays_scope_mismatch(self):
+        """Regression: a cross-GROUP citation (stage equal) still takes
+        the scope_mismatch_rejected code — the two codes stay
+        distinguishable in the rejection record."""
+        item = EvidenceItemV1(
+            content=E10_SI_CAPTION,
+            source_identity=SUPPLEMENT_EXPLICIT,
+            inference_nature=DIRECT_EVIDENCE,
+            provenance="si-search:SI S5 Figure S1 caption",
+            subject="material_instance_identity",
+            scope=ScopeBindingV1(PAPER_ID, ETCHING_GROUP, "ms7a",
+                                 "second"),
+            material_instance_id="inst_ldh_wet_2")
+        record = _evaluate(self._p3_model((item,)))
+        codes = [r.code for r in record.rejections]
+        self.assertIn(SCOPE_MISMATCH_REJECTED, codes)
+        self.assertNotIn(STAGE_MISMATCH_REJECTED, codes)
+        p3 = next(d for d in record.propositions
+                  if d.proposition == P3_MATERIAL_INSTANCE_BINDING)
+        self.assertEqual(p3.verdict, UNPROVEN)
+
+
+class EvidenceIdentityGateTest(unittest.TestCase):
+    """Acceptance hole 2: a blank/sourceless ``direct_evidence`` item is
+    rejected (``evidence_identity_missing_rejected``) before any other
+    check and never enters the qualifying set.  The gate applies to
+    ``direct_evidence`` ONLY — rule whitelists, proposal assertions, and
+    assumptions carry no source identity by design."""
+
+    def _three_proposition_model(self, make_item) -> CandidateModelV1:
+        return CandidateModelV1(
+            target_state_path=FIXTURE_PATHS["ms7a.out"],
+            candidate_state="retained_wet_solid",
+            scope=_control_scope(),
+            target_material_instance_id="inst_ldh_wet_2",
+            propositions=tuple(
+                PropositionClaimV1(p, evidence=(make_item(p),))
+                for p in PROPOSITIONS))
+
+    def _assert_identity_rejected(self, make_item, missing_field: str):
+        record = _evaluate(self._three_proposition_model(make_item))
+        identity_rejections = [r for r in record.rejections
+                               if r.code == EVIDENCE_IDENTITY_MISSING_REJECTED]
+        # One identity rejection per proposition; no other code fires.
+        self.assertEqual(len(identity_rejections), 3)
+        self.assertEqual(
+            {r.code for r in record.rejections},
+            {EVIDENCE_IDENTITY_MISSING_REJECTED})
+        for entry in identity_rejections:
+            self.assertIn(missing_field, entry.detail)
+        verdicts = {d.proposition: d.verdict for d in record.propositions}
+        self.assertEqual(verdicts, {p: UNPROVEN for p in PROPOSITIONS})
+        for d in record.propositions:
+            self.assertEqual(d.qualifying_evidence, ())
+            self.assertEqual(d.evidence, ())  # rejected, never standing
+        self.assertEqual(record.conclusion, INSUFFICIENT)
+
+    def test_missing_content_rejected(self):
+        def make(prop):
+            return EvidenceItemV1(
+                content="   ",
+                source_identity=PAPER_EXPLICIT,
+                inference_nature=DIRECT_EVIDENCE,
+                provenance="synthetic:blank_content",
+                subject=PROPOSITION_SUBJECTS[prop],
+                scope=_control_scope(),
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "content")
+
+    def test_missing_source_identity_rejected(self):
+        def make(prop):
+            return EvidenceItemV1(
+                content="the retained wet solid was redispersed",
+                source_identity="",  # NO_SOURCE is for rules/proposals
+                inference_nature=DIRECT_EVIDENCE,
+                provenance="synthetic:no_source_identity",
+                subject=PROPOSITION_SUBJECTS[prop],
+                scope=_control_scope(),
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "source_identity")
+
+    def test_missing_scope_rejected(self):
+        def make(prop):
+            return EvidenceItemV1(
+                content="the retained wet solid was redispersed",
+                source_identity=PAPER_EXPLICIT,
+                inference_nature=DIRECT_EVIDENCE,
+                provenance="synthetic:no_scope",
+                subject=PROPOSITION_SUBJECTS[prop],
+                scope=None,
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "scope")
+
+    def test_missing_scope_stage_rejected(self):
+        def make(prop):
+            return EvidenceItemV1(
+                content="the retained wet solid was redispersed",
+                source_identity=PAPER_EXPLICIT,
+                inference_nature=DIRECT_EVIDENCE,
+                provenance="synthetic:no_stage",
+                subject=PROPOSITION_SUBJECTS[prop],
+                scope=ScopeBindingV1(PAPER_ID, CONTROL_GROUP, "",
+                                     "second"),
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "scope.stage")
+
+    def test_missing_provenance_rejected(self):
+        def make(prop):
+            return EvidenceItemV1(
+                content="the retained wet solid was redispersed",
+                source_identity=PAPER_EXPLICIT,
+                inference_nature=DIRECT_EVIDENCE,
+                provenance="",
+                subject=PROPOSITION_SUBJECTS[prop],
+                scope=_control_scope(),
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "provenance")
+
+    def test_blank_sourceless_probe_construct_rejected(self):
+        """The exact probe-2 construct: everything blank at once."""
+        def make(prop):
+            return EvidenceItemV1(
+                content="", source_identity="",
+                inference_nature=DIRECT_EVIDENCE, provenance="",
+                subject=PROPOSITION_SUBJECTS[prop], scope=None,
+                material_instance_id="inst_ldh_wet_2")
+        self._assert_identity_rejected(make, "content")
+
+    def test_sourceless_natures_exempt(self):
+        """Regression protection: rule_compatible_states and
+        proposal_assertion items carry NO_SOURCE / scope=None by design —
+        they must NOT trigger the identity gate and keep their original
+        classification (standing, never qualifying)."""
+        proposal_item = EvidenceItemV1(
+            content=("material_graph[2].material_inputs[0]."
+                     "parent_output_refs = [{macro_step_id: ms7a, "
+                     "material_instance_id: inst_ldh_wet_2}]"),
+            source_identity="",
+            inference_nature=PROPOSAL_ASSERTION,
+            provenance="proposal:parent_output_refs",
+            subject="proposal_drawn_edge",
+            material_instance_id="inst_ldh_wet_2")
+        model = CandidateModelV1(
+            target_state_path=FIXTURE_PATHS["ms7a.out"],
+            candidate_state="retained_wet_solid",
+            scope=_control_scope(),
+            target_material_instance_id="inst_ldh_wet_2",
+            propositions=(
+                PropositionClaimV1(
+                    P1_NECESSARY_INPUT_CONDITION,
+                    evidence=(_whitelist_item(),)),
+                PropositionClaimV1(
+                    P2_THIS_MATERIAL_FLOW,
+                    evidence=(proposal_item,)),
+            ))
+        record = _evaluate(model)
+        self.assertEqual(record.rejections, ())
+        p1 = next(d for d in record.propositions
+                  if d.proposition == P1_NECESSARY_INPUT_CONDITION)
+        self.assertEqual(len(p1.evidence), 1)
+        self.assertEqual(p1.evidence[0].inference_nature,
+                         RULE_COMPATIBLE_STATES)
+        self.assertEqual(p1.qualifying_evidence, ())
+        self.assertEqual(p1.verdict, UNPROVEN)
+        p2 = next(d for d in record.propositions
+                  if d.proposition == P2_THIS_MATERIAL_FLOW)
+        self.assertEqual(len(p2.evidence), 1)
+        self.assertEqual(p2.evidence[0].inference_nature, PROPOSAL_ASSERTION)
+        self.assertEqual(p2.qualifying_evidence, ())
+        self.assertEqual(p2.verdict, UNPROVEN)
+        self.assertEqual(record.conclusion, INSUFFICIENT)
+
+    def test_full_identity_direct_evidence_still_proves(self):
+        """Positive control: a direct_evidence item with a complete
+        checkable identity still qualifies and proves its proposition."""
+        item = EvidenceItemV1(
+            content=("the second redispersion takes the wet solid "
+                     "retained by the second centrifugation"),
+            source_identity=PAPER_EXPLICIT,
+            inference_nature=DIRECT_EVIDENCE,
+            provenance="synthetic:full_identity",
+            subject=PROPOSITION_SUBJECTS[P2_THIS_MATERIAL_FLOW],
+            scope=_control_scope(),
+            material_instance_id="inst_ldh_wet_2")
+        model = CandidateModelV1(
+            target_state_path=FIXTURE_PATHS["ms7a.out"],
+            candidate_state="retained_wet_solid",
+            scope=_control_scope(),
+            target_material_instance_id="inst_ldh_wet_2",
+            propositions=(
+                PropositionClaimV1(
+                    P2_THIS_MATERIAL_FLOW, evidence=(item,)),))
+        record = _evaluate(model)
+        self.assertEqual(record.rejections, ())
+        p2 = next(d for d in record.propositions
+                  if d.proposition == P2_THIS_MATERIAL_FLOW)
+        self.assertEqual(p2.verdict, PROVEN)
+        self.assertEqual(p2.qualifying_evidence, (item,))
+
+
 class CircularDependencyTest(unittest.TestCase):
     """Matrix case 7: support citing downstream state is rejected."""
 
@@ -709,6 +955,7 @@ class RecordSchemaTest(unittest.TestCase):
                             content="an irrelevant paper sentence",
                             source_identity=PAPER_EXPLICIT,
                             inference_nature=DIRECT_EVIDENCE,
+                            provenance="synthetic:irrelevant_sentence",
                             subject="operation_occurrence",
                             scope=_control_scope()),),
                     asserted_verdict=PROVEN),))

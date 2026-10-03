@@ -9,9 +9,12 @@ can diagnose ``ms7a.out`` (the retained phase of the second
 centrifugation).  The answer is a diagnostic record, never a proof:
 
 - three propositions are answered SEPARATELY — P1 (necessary input
-  condition), P2 (this material flow), P3 (material instance binding) —
-  and an operation name or an edge the proposal drew itself can never
-  answer any of them;
+  condition: an INDEPENDENT necessity basis is required; a
+  retained-phase statement supplies upstream state evidence but does
+  not by itself prove the state is a NECESSARY input of the
+  redispersion), P2 (this material flow), P3 (material instance
+  binding) — and an operation name or an edge the proposal drew itself
+  can never answer any of them;
 - source identity (``paper_explicit`` / ``supplement_explicit`` /
   ``external_primary``) is recorded separately from the inference nature
   (``direct_evidence`` / ``rule_compatible_states`` /
@@ -26,9 +29,17 @@ centrifugation).  The answer is a diagnostic record, never a proof:
   node it feeds (``circular_dependency_rejected``) — ``ms7b.in`` already
   depends on ``ms7a.out``, so downstream state may never be assumed in
   order to prove the upstream;
-- scope is explicit everywhere: cross-group/cross-stage evidence is
-  rejected (``scope_mismatch_rejected``), first-invocation results
-  applied to a second invocation are rejected
+- an item submitted as ``direct_evidence`` must carry a checkable
+  identity — non-empty content, a real source identity
+  (paper/supplement/external), its own scope (paper / group / stage),
+  and a provenance — or it is rejected
+  (``evidence_identity_missing_rejected``) before any other check; rule
+  whitelists, proposal assertions, and assumptions carry no source
+  identity by design and are exempt from this gate;
+- scope is explicit everywhere: cross-paper/cross-group evidence is
+  rejected (``scope_mismatch_rejected``), same-group cross-stage
+  evidence is rejected (``stage_mismatch_rejected``), first-invocation
+  results applied to a second invocation are rejected
   (``invocation_swap_rejected``), and evidence individuating a different
   material instance is rejected (``binding_mismatch_rejected``);
 - sources are content-addressed: when a live source is mutated, every
@@ -122,6 +133,8 @@ NON_UNIQUE = "non_unique"
 BINDING_MISMATCH_REJECTED = "binding_mismatch_rejected"
 INVOCATION_SWAP_REJECTED = "invocation_swap_rejected"
 SCOPE_MISMATCH_REJECTED = "scope_mismatch_rejected"
+STAGE_MISMATCH_REJECTED = "stage_mismatch_rejected"
+EVIDENCE_IDENTITY_MISSING_REJECTED = "evidence_identity_missing_rejected"
 CIRCULAR_DEPENDENCY_REJECTED = "circular_dependency_rejected"
 STALE_SOURCE_INVALIDATED = "stale_source_invalidated"
 OVER_CLAIM_REJECTED = "over_claim_rejected"
@@ -131,6 +144,8 @@ REJECTION_CODES = (
     BINDING_MISMATCH_REJECTED,
     INVOCATION_SWAP_REJECTED,
     SCOPE_MISMATCH_REJECTED,
+    STAGE_MISMATCH_REJECTED,
+    EVIDENCE_IDENTITY_MISSING_REJECTED,
     CIRCULAR_DEPENDENCY_REJECTED,
     STALE_SOURCE_INVALIDATED,
     OVER_CLAIM_REJECTED,
@@ -416,9 +431,40 @@ def build_dependency_view(
 
 
 # ---------------------------------------------------------------------------
-# Item checks (order matters: staleness first, then scope/invocation/
-# instance, then circularity, then inversion).
+# Item checks (order matters: the direct-evidence identity gate first,
+# then staleness, then scope/invocation/stage, then instance, then
+# circularity, then inversion).
 # ---------------------------------------------------------------------------
+
+
+def _identity_missing_fields(item: EvidenceItemV1) -> tuple[str, ...]:
+    """The checkable-identity fields a ``direct_evidence`` item lacks.
+
+    A direct-evidence submission must carry non-empty content, a real
+    source identity (paper/supplement/external — never ``NO_SOURCE``),
+    its own scope with paper / group / stage filled, and a provenance.
+    Rule whitelists, proposal assertions, and assumptions carry no
+    source identity by design; this gate applies to ``direct_evidence``
+    only.
+    """
+    missing: list[str] = []
+    if not item.content.strip():
+        missing.append("content")
+    if item.source_identity not in SOURCE_IDENTITIES:
+        missing.append("source_identity")
+    scope = item.scope
+    if scope is None:
+        missing.append("scope")
+    else:
+        if not scope.paper_id:
+            missing.append("scope.paper_id")
+        if not scope.experimental_group_id:
+            missing.append("scope.experimental_group_id")
+        if not scope.stage:
+            missing.append("scope.stage")
+    if not item.provenance.strip():
+        missing.append("provenance")
+    return tuple(missing)
 
 
 def _check_item(item: EvidenceItemV1, proposition: str,
@@ -430,6 +476,9 @@ def _check_item(item: EvidenceItemV1, proposition: str,
         raise ValueError(f"unknown source_identity {item.source_identity!r}")
     if item.inference_nature not in INFERENCE_NATURES:
         raise ValueError(f"unknown inference_nature {item.inference_nature!r}")
+    if item.inference_nature == DIRECT_EVIDENCE \
+            and _identity_missing_fields(item):
+        return EVIDENCE_IDENTITY_MISSING_REJECTED
     if item.provenance and item.provenance in live_sources:
         live = live_sources[item.provenance]
         if evidence_content_digest(live) != item.content_digest:
@@ -443,6 +492,9 @@ def _check_item(item: EvidenceItemV1, proposition: str,
         if scope.invocation and model.scope.invocation \
                 and scope.invocation != model.scope.invocation:
             return INVOCATION_SWAP_REJECTED
+        if scope.stage and model.scope.stage \
+                and scope.stage != model.scope.stage:
+            return STAGE_MISMATCH_REJECTED
     if item.material_instance_id and model.target_material_instance_id \
             and item.material_instance_id \
             != model.target_material_instance_id:
@@ -481,9 +533,11 @@ def _qualifies(item: EvidenceItemV1, proposition: str,
 #: Deterministic per-proposition wording for the derived open items.
 _OPEN_ITEM_DEFAULTS = {
     P1_NECESSARY_INPUT_CONDITION: (
-        "a paper/SI statement of this invocation's retained phase (the "
-        "independent necessity basis) — not the operation name, not the "
-        "forward whitelist"),
+        "an independent necessity basis for this invocation's input "
+        "state (a paper/SI statement of this invocation's retained "
+        "phase supplies upstream state evidence, but does not by itself "
+        "prove the state is a NECESSARY input of the redispersion) — "
+        "not the operation name, not the forward whitelist"),
     P2_THIS_MATERIAL_FLOW: (
         "an explicit inter-segment material-flow statement binding this "
         "downstream input to THIS upstream output"),
@@ -624,9 +678,31 @@ def _rejection_detail(code: str, item: EvidenceItemV1,
                 f"under diagnosis ({model.scope.paper_id} / "
                 f"{model.scope.experimental_group_id} / stage "
                 f"{model.scope.stage} / invocation "
-                f"{model.scope.invocation}) — group/stage/invocation "
-                "must stay explicit" if scope else
+                f"{model.scope.invocation}) — cross-paper/cross-group "
+                "evidence is rejected; paper/group must stay explicit "
+                "(a same-group stage disagreement is "
+                "stage_mismatch_rejected)" if scope else
                 "evidence item fails the scope check")
+    if code == STAGE_MISMATCH_REJECTED:
+        scope = item.scope
+        return (f"evidence scope stage {scope.stage!r} differs from the "
+                f"stage under diagnosis {model.scope.stage!r} within the "
+                f"SAME paper/group ({scope.paper_id} / "
+                f"{scope.experimental_group_id}) — same-group "
+                "cross-stage evidence is rejected, never silently "
+                "re-staged (a cross-paper/cross-group disagreement is "
+                "scope_mismatch_rejected)" if scope else "stage mismatch")
+    if code == EVIDENCE_IDENTITY_MISSING_REJECTED:
+        missing = ", ".join(_identity_missing_fields(item))
+        return (f"a direct_evidence submission must carry a checkable "
+                f"identity — non-empty content, a real source identity "
+                f"(paper_explicit / supplement_explicit / "
+                f"external_primary), its own scope (paper / group / "
+                f"stage), and a provenance — missing: {missing}; the "
+                f"item is rejected before any other check and never "
+                f"enters the qualifying set (rule whitelists, proposal "
+                f"assertions, and assumptions carry no source identity "
+                f"by design and are exempt)")
     if code == INVOCATION_SWAP_REJECTED:
         scope = item.scope
         return (f"evidence belongs to invocation {scope.invocation!r} "
