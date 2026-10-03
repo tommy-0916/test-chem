@@ -77,12 +77,11 @@ host-held snapshot copy.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from copy import deepcopy
 from hashlib import sha256
 import json
 import re
-from typing import Any, Callable, Iterator, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import route_convention_basis as _basis
 from .route_convention_basis import (
@@ -629,26 +628,10 @@ class _DagBuilder:
         self.memo: dict[str, str] = {}
         self.visiting: set[str] = set()
         self.resolver = self._resolver_from_span()
-        # Minting window depth: > 0 only while build()/build_node() (or
-        # the white-box test hook below) is executing.  The structural
-        # mint refuses any attempt outside that window.
+        # Minting window depth: > 0 only while build()/build_node() is
+        # executing.  The structural mint refuses any attempt outside
+        # that window.
         self._mint_depth = 0
-
-    @contextmanager
-    def _mint_window_for_test(self) -> Iterator[Any]:
-        """White-box TEST hook: open the minting window by hand.
-
-        Production minting happens only inside ``build()`` /
-        ``build_node()``; tests that need a builder-minted token after
-        the build returned (token immutability, triple agreement, engine
-        discharge) open the window explicitly here instead of relying on
-        a post-build implicit window, which no longer exists.
-        """
-        self._mint_depth += 1
-        try:
-            yield self
-        finally:
-            self._mint_depth -= 1
 
     def _resolver_from_span(self) -> Callable[[str], tuple[Any, str]] | None:
         """A retained-object resolver recomputing records live from span_of."""
@@ -1327,8 +1310,8 @@ class StateProofDagVerifier:
         self.resolver = self._resolver_from_span()
         self._projection: str | None = None
         # Verification context binding the structural mints, installed
-        # ONLY while verify() (or the white-box test hook) runs and
-        # cleared in a finally on exit — the minting window:
+        # ONLY while verify() runs and cleared in a finally on exit —
+        # the minting window:
         # ``_active_nodes`` is a DEEP COPY of the node table under
         # verification (caller-side edits after install cannot move it),
         # ``_active_digests`` records each node's content address
@@ -1388,33 +1371,6 @@ class StateProofDagVerifier:
         self._active_memo = None
         self._active_digests = None
         self._active_source = None
-
-    @contextmanager
-    def _install_mint_context_for_test(
-        self, nodes: Mapping[str, Any], memo: dict[str, str] | None = None,
-    ) -> Iterator[Any]:
-        """White-box TEST hook: install the minting context by hand.
-
-        Mirrors exactly what ``verify()`` installs at verification start —
-        a deep-copied snapshot of ``nodes``, per-node digests recomputed
-        from ``nodes``, an all-clean memo (unless given), and a window-
-        scoped reference to the caller's ``nodes`` table — so tests can
-        exercise the structural mint outside a live verification (memo
-        tampering, post-verification caller-side mutation).  The context
-        is cleared on exit, like ``verify()``'s ``finally``.
-        """
-        self._active_nodes = deepcopy(dict(nodes))
-        self._active_digests = {
-            node_id: node_id_for(node) for node_id, node in nodes.items()
-        }
-        self._active_memo = (
-            memo if memo is not None else {node_id: "" for node_id in nodes}
-        )
-        self._active_source = nodes
-        try:
-            yield self
-        finally:
-            self._clear_mint_context()
 
     def verify(self, dag: Any) -> str:
         # A new verification supersedes any previous minting context.

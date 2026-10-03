@@ -20,11 +20,13 @@ tests use the real NiFe compound phrases verbatim.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from hashlib import sha256
 import inspect
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -604,6 +606,13 @@ class ProtocolReferenceFixtureMixin(unittest.TestCase):
             span_of=span_of, **self._kwargs(),
         )
 
+    def _keeper_for(self, proposal, span_of) -> "_KeepContextVerifier":
+        """A test-only verifier whose REAL verify() context stays open."""
+        return _KeepContextVerifier(
+            proposal["material_graph"], proposal["route_facts"],
+            span_of=span_of, **self._kwargs(),
+        )
+
     def _root_premise_node(self, dag: dict, role: str) -> dict:
         root = dag["nodes"][dag["root_id"]]
         node_id = next(
@@ -840,6 +849,57 @@ class ProtocolReferenceDagTest(ProtocolReferenceFixtureMixin):
         self.assertEqual(self._verify(proposal, merged, span_of), "")
 
 
+# -------------------------------------------------------------------------
+# TEST-SIDE mint-window fixtures (Round 3D safety closure 4).
+#
+# The production module ships NO test hooks: a builder's minting window
+# exists only while build()/build_node() executes, and a verifier's
+# minting context is installed only by a real verify() run and revoked in
+# its finally.  Tests that must exercise the structural mint OUTSIDE
+# those flows open the window from HERE — test-module-local helpers that
+# poke the hosts' private state from test code, never production code.
+# -------------------------------------------------------------------------
+
+
+@contextmanager
+def _builder_mint_window(builder):
+    """TEST-ONLY: hold a builder's minting window open by poking its
+    private depth counter.
+
+    Production opens this window only inside ``build()``/``build_node()``;
+    tests that need a builder-minted token after the build returned (token
+    immutability, triple agreement, engine discharge) open it explicitly
+    here — the test-side stand-in for the window production no longer
+    exposes to anyone.
+    """
+    builder._mint_depth += 1
+    try:
+        yield builder
+    finally:
+        builder._mint_depth -= 1
+
+
+class _KeepContextVerifier(StateProofDagVerifier):
+    """TEST-ONLY verifier that KEEPS the context a real verify() installed.
+
+    ``_clear_mint_context`` is neutralized, so the minting context a
+    GENUINE verification run installs — the deep-copied node snapshot, the
+    per-node digests recorded from the passed nodes, the real per-node
+    memo, and the window-scoped reference to the caller's node table —
+    survives ``verify()``'s return, letting tests mint from a context that
+    is verification-produced end to end (no synthetic install anywhere).
+    ``release_mint_context()`` performs the real clear, i.e. the
+    revocation ``verify()``'s ``finally`` normally guarantees.  Use one
+    instance per verification.
+    """
+
+    def _clear_mint_context(self) -> None:
+        pass
+
+    def release_mint_context(self) -> None:
+        StateProofDagVerifier._clear_mint_context(self)
+
+
 class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
     """Round 3D safety closure: sealed construction + immutable fields.
 
@@ -852,15 +912,16 @@ class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
 
     def _verified_parent(self):
         _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
-        # Post-build minting goes through the white-box test window:
-        # production minting exists only while build()/build_node() runs.
-        with builder._mint_window_for_test():
+        # Post-build minting opens the window through the TEST-side
+        # helper: production minting exists only while
+        # build()/build_node() runs.
+        with _builder_mint_window(builder):
             return _mint_verified_parent_token(
                 builder, self._root_premise_node(dag, "parent_state"))
 
     def _verified_liquid(self):
         _proposal, _blocks, _span, builder, dag = self._builder_and_dag()
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             return _mint_verified_liquid_token(
                 builder, self._root_premise_node(dag, "liquid_medium"))
 
@@ -971,7 +1032,7 @@ class CapabilityTokenSealingTest(ProtocolReferenceFixtureMixin):
         # (the forged/mismatched fail-closed paths stay covered by
         # EngineTokenTest above, now through the diagnostic channel).
         proposal, _blocks_unused, _span, builder, dag = self._builder_and_dag()
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             token = _mint_verified_liquid_token(
                 builder, self._root_premise_node(dag, "liquid_medium"))
         proof, issue = derive_unreviewed_output_state(
@@ -1007,9 +1068,9 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
     def test_builder_mint_rejects_unregistered_or_tampered_nodes(self) -> None:
         _p, _b, _s, builder, dag = self._builder_and_dag()
         parent_node = self._root_premise_node(dag, "parent_state")
-        # Open the white-box window so each refusal below comes from the
+        # Open the test-side window so each refusal below comes from the
         # registration/integrity checks themselves, not the closed window.
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             # A foreign node id was never added to this builder's node
             # table.
             foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
@@ -1052,48 +1113,54 @@ class StructuralMintingTest(ProtocolReferenceFixtureMixin):
         with self.assertRaises(ValueError):
             _mint_verified_parent_token(verifier, parent_node)
         node_id = parent_node["node_id"]
-        # Inside a white-box installed context (exactly what verify()
-        # installs), the mint binds the node to this verification.
-        with verifier._install_mint_context_for_test(dag["nodes"]):
-            token = _mint_verified_parent_token(verifier, parent_node)
-            self.assertIs(type(token), _VerifiedParentStateEvidence)
-            # A node in the DAG whose memo entry is not clean is refused.
-            verifier._active_memo[node_id] = "proof_dag_node_mismatch"
-            with self.assertRaises(ValueError):
-                _mint_verified_parent_token(verifier, parent_node)
-            # A node with no memo entry at all never verified clean.
-            del verifier._active_memo[node_id]
-            with self.assertRaises(ValueError):
-                _mint_verified_parent_token(verifier, parent_node)
-            verifier._active_memo[node_id] = ""
-            # A node outside the DAG under verification is refused.
-            foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
-            with self.assertRaises(ValueError):
-                _mint_verified_parent_token(verifier, foreign)
-            # Same id, tampered content no longer matches the recorded
-            # snapshot digest.
-            tampered = deepcopy(parent_node)
-            tampered["claim"] = dict(tampered["claim"], target_state="solution")
-            with self.assertRaises(ValueError):
-                _mint_verified_parent_token(verifier, tampered)
-        # The test hook's context is revoked on exit too.
+        # Inside the context a REAL verify() installed (held open by the
+        # test-only keeper subclass — the context is genuinely
+        # verification-produced, exactly what verify() installs), the mint
+        # binds the node to this verification.
+        keeper = self._keeper_for(proposal, span_of)
+        self.assertEqual(keeper.verify(dag), "")
+        token = _mint_verified_parent_token(keeper, parent_node)
+        self.assertIs(type(token), _VerifiedParentStateEvidence)
+        # A node in the DAG whose memo entry is not clean is refused.
+        keeper._active_memo[node_id] = "proof_dag_node_mismatch"
         with self.assertRaises(ValueError):
-            _mint_verified_parent_token(verifier, parent_node)
+            _mint_verified_parent_token(keeper, parent_node)
+        # A node with no memo entry at all never verified clean.
+        del keeper._active_memo[node_id]
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(keeper, parent_node)
+        keeper._active_memo[node_id] = ""
+        # A node outside the DAG under verification is refused.
+        foreign = dict(parent_node, node_id="proof_node_" + "0" * 24)
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(keeper, foreign)
+        # Same id, tampered content no longer matches the recorded
+        # snapshot digest.
+        tampered = deepcopy(parent_node)
+        tampered["claim"] = dict(tampered["claim"], target_state="solution")
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(keeper, tampered)
+        # Releasing the kept context revokes minting, like verify()'s
+        # finally does in production.
+        keeper.release_mint_context()
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(keeper, parent_node)
 
     def test_builder_and_verifier_minted_triples_agree(self) -> None:
         proposal, _b, span_of, builder, dag = self._builder_and_dag()
-        verifier = self._verifier_for(proposal, span_of)
+        verifier = self._keeper_for(proposal, span_of)
         self.assertEqual(verifier.verify(dag), "")
         parent_node = self._root_premise_node(dag, "parent_state")
         liquid_node = self._root_premise_node(dag, "liquid_medium")
-        # Both mints happen inside their respective (white-box) windows:
-        # production windows live inside build()/verify() only.
-        with builder._mint_window_for_test():
+        # The builder mints through the TEST-side window; the verifier
+        # mints from the context its own verify() installed, held open by
+        # the keeper subclass.  Production windows live inside
+        # build()/verify() only.
+        with _builder_mint_window(builder):
             built_parent = _mint_verified_parent_token(builder, parent_node)
             built_liquid = _mint_verified_liquid_token(builder, liquid_node)
-        with verifier._install_mint_context_for_test(dag["nodes"]):
-            verified_parent = _mint_verified_parent_token(verifier, parent_node)
-            verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
+        verified_parent = _mint_verified_parent_token(verifier, parent_node)
+        verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
         self.assertIs(type(built_parent), _VerifiedParentStateEvidence)
         self.assertIs(type(verified_parent), _VerifiedParentStateEvidence)
         self.assertEqual(
@@ -1148,7 +1215,6 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
         verifier = self._verifier_for(proposal, span_of)
         self.assertEqual(verifier.verify(dag), "")
         target = self._root_premise_node(dag, "liquid_medium")
-        pristine_nodes = deepcopy(dag["nodes"])
         # Layer 2 — window revoked after build()/verify() returned: mint
         # attempts fail even for the UNTOUCHED node (the owner's
         # reproduction minted via the builder after build returned).
@@ -1156,6 +1222,11 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
             _mint_verified_liquid_token(builder, target)
         with self.assertRaises(ValueError):
             _mint_verified_liquid_token(verifier, target)
+        # Layer 3 setup: a test-only keeper verifier records the verified
+        # snapshot through a REAL verify() of the still-pristine DAG — the
+        # in-window context below is genuinely verification-produced.
+        keeper = self._keeper_for(proposal, span_of)
+        self.assertEqual(keeper.verify(dag), "")
         # Caller mutates liquid_medium / definition_digest IN PLACE on
         # the caller-held DAG node; node_id stays untouched.
         target["liquid_medium"] = "liquid nitrogen"
@@ -1164,15 +1235,14 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
             _mint_verified_liquid_token(builder, target)
         with self.assertRaises(ValueError):
             _mint_verified_liquid_token(verifier, target)
-        # Layer 3, white-box in-window: the passed node's recomputed
-        # content address no longer equals the digest recorded at
-        # verification time -> ValueError, on BOTH hosts.
-        with builder._mint_window_for_test():
+        # Layer 3, in-window: the passed node's recomputed content
+        # address no longer equals the digest recorded at verification
+        # time -> ValueError, on BOTH hosts.
+        with _builder_mint_window(builder):
             with self.assertRaises(ValueError):
                 _mint_verified_liquid_token(builder, target)
-        with verifier._install_mint_context_for_test(pristine_nodes):
-            with self.assertRaises(ValueError):
-                _mint_verified_liquid_token(verifier, target)
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(keeper, target)
         # A full re-verify of the mutated DAG names the tampering.
         self.assertEqual(
             self._verifier_for(proposal, span_of).verify(dag),
@@ -1184,24 +1254,23 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
         # DEPENDENCY mutated -> the old verification record must not
         # authorize the mint.
         proposal, _b, span_of, builder, dag = self._builder_and_dag()
-        verifier = self._verifier_for(proposal, span_of)
+        verifier = self._keeper_for(proposal, span_of)
+        # A REAL verify() records the verified snapshot (digests from the
+        # pristine table); the keeper holds that context open.
         self.assertEqual(verifier.verify(dag), "")
-        nodes = dag["nodes"]
         target = self._root_premise_node(dag, "liquid_medium")
         dependency = self._definition_evidence_node(dag, target)
         self.assertEqual(dependency["node_type"], "paper_literal")
-        # White-box in-window with digests recorded from the pristine
-        # table; mutate ONLY the dependency afterwards.  The target
-        # itself still digest-matches; the transitive-premise-closure
-        # check catches the moved caller-side ancestor.
-        with verifier._install_mint_context_for_test(nodes):
-            dependency["leaf"]["fact_digest"] = "sha256_" + "0" * 64
-            with self.assertRaises(ValueError):
-                _mint_verified_liquid_token(verifier, target)
+        # Mutate ONLY the dependency afterwards.  The target itself still
+        # digest-matches; the transitive-premise-closure check catches the
+        # moved caller-side ancestor.
+        dependency["leaf"]["fact_digest"] = "sha256_" + "0" * 64
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(verifier, target)
         # The builder extracts from its own registry snapshot: an
         # in-window mint of the UNTOUCHED target still carries the
         # ORIGINAL verified triple, never caller-mutated content.
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             token = _mint_verified_liquid_token(builder, target)
         self.assertEqual(token.medium, "deionized water")
         self.assertNotEqual(token.definition_digest, "sha256_" + "f" * 64)
@@ -1221,15 +1290,17 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
         self.assertIsNot(
             dag["nodes"][dag["root_id"]], builder.nodes[dag["root_id"]],
         )
-        verifier = self._verifier_for(proposal, span_of)
+        verifier = self._keeper_for(proposal, span_of)
         # The production in-window mints: verification itself mints
-        # capability tokens for premises mid-verification and passes.
+        # capability tokens for premises mid-verification and passes; the
+        # keeper holds that genuinely verification-produced context open
+        # for the assertions below.
         self.assertEqual(verifier.verify(dag), "")
         parent_node = self._root_premise_node(dag, "parent_state")
         liquid_node = self._root_premise_node(dag, "liquid_medium")
-        # Builder mints through the white-box window extract the verified
+        # Builder mints through the TEST-side window extract the verified
         # triples from the registry snapshot.
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             parent = _mint_verified_parent_token(builder, parent_node)
             liquid = _mint_verified_liquid_token(builder, liquid_node)
         self.assertEqual(
@@ -1242,10 +1313,9 @@ class VerifiedSnapshotMintingTest(ProtocolReferenceFixtureMixin):
             (REF_VALUE, "deionized water"),
         )
         self.assertTrue(liquid.definition_digest)
-        # Verifier mints through a white-box installed context agree.
-        with verifier._install_mint_context_for_test(dag["nodes"]):
-            verified_parent = _mint_verified_parent_token(verifier, parent_node)
-            verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
+        # Verifier mints from the kept verification context agree.
+        verified_parent = _mint_verified_parent_token(verifier, parent_node)
+        verified_liquid = _mint_verified_liquid_token(verifier, liquid_node)
         self.assertEqual(
             (verified_parent.field_path, verified_parent.state_value,
              verified_parent.material_instance_id),
@@ -1380,7 +1450,7 @@ class DiagnosticChannelTest(ProtocolReferenceFixtureMixin):
         self.assertIsNone(_assert_verified_parent_token(None))
         self.assertIsNone(_assert_verified_liquid_token(None))
         _p, _b, _s, builder, dag = self._builder_and_dag()
-        with builder._mint_window_for_test():
+        with _builder_mint_window(builder):
             parent_token = _mint_verified_parent_token(
                 builder, self._root_premise_node(dag, "parent_state"))
             liquid_token = _mint_verified_liquid_token(
@@ -1401,6 +1471,101 @@ class DiagnosticChannelTest(ProtocolReferenceFixtureMixin):
                     or "assumption" in name for name in names),
                 f"{entrypoint.__qualname__} exposes {sorted(names)}",
             )
+
+
+class ShippedTestHookAuditTest(ProtocolReferenceFixtureMixin):
+    """Round 3D safety closure 4 (acceptance): the shipped modules expose
+    NO verification-free mint path — the white-box test hooks themselves
+    were a verification-free context installer and are gone; a minting
+    window/context now comes only from a real build()/verify() flow.
+    """
+
+    def test_removed_test_hooks_are_gone_from_the_shipped_api(self) -> None:
+        self.assertFalse(
+            hasattr(StateProofDagVerifier, "_install_mint_context_for_test"),
+        )
+        self.assertFalse(
+            hasattr(_DagBuilder, "_mint_window_for_test"),
+        )
+
+    def test_no_for_test_or_context_installer_names_shipped(self) -> None:
+        # Inspect-level audit of the two sealing modules: no attribute
+        # name — public or private, on the module itself or on any class
+        # the module defines — may match the test-hook patterns
+        # (*for_test* / *_test_only* / *install*context*).
+        pattern = re.compile(
+            r"for_test|_test_only|install.*context", re.IGNORECASE,
+        )
+        offenders = []
+        for module in (route_proof_dag, route_convention_basis):
+            names = set(vars(module))
+            for obj in vars(module).values():
+                if (inspect.isclass(obj)
+                        and obj.__module__ == module.__name__):
+                    names.update(vars(obj))
+            offenders.extend(
+                f"{module.__name__}.{name}" for name in sorted(names)
+                if pattern.search(name)
+            )
+        self.assertEqual(offenders, [])
+
+    def test_no_test_hook_defs_shipped_anywhere_in_the_package(self) -> None:
+        # Source-level audit across chem_agent_contracts/: no function
+        # definition whose name marks a test-only entry point may ship in
+        # any non-test module of the package.
+        package_dir = Path(route_proof_dag.__file__).resolve().parent
+        definition = re.compile(r"^\s*def\s+\w*(?:for_test|_test_only)\w*")
+        offenders = []
+        for source in sorted(package_dir.glob("*.py")):
+            if source.name.startswith("test_"):
+                continue
+            for lineno, line in enumerate(
+                    source.read_text(encoding="utf-8").splitlines(), 1):
+                if definition.match(line):
+                    offenders.append(f"{source.name}:{lineno}:{line.strip()}")
+        self.assertEqual(offenders, [])
+
+    def test_a_verifier_that_never_verified_cannot_mint(self) -> None:
+        # The owner's scenario, closed: no build, no verify — and now no
+        # shipped hook to fake either — so every mint attempt is refused
+        # and no _VerifiedLiquidMedium can ever reach the flat derive from
+        # an unverified context.
+        proposal, _b, span_of, builder, dag = self._builder_and_dag()
+        verifier = self._verifier_for(proposal, span_of)
+        parent_node = self._root_premise_node(dag, "parent_state")
+        liquid_node = self._root_premise_node(dag, "liquid_medium")
+        # Window closed: the verifier never ran verify().
+        self.assertIsNone(verifier._active_nodes)
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(verifier, parent_node)
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(verifier, liquid_node)
+        # Window closed: the builder's build() already returned.
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(builder, parent_node)
+        with self.assertRaises(ValueError):
+            _mint_verified_liquid_token(builder, liquid_node)
+        # The closure-3 attack entries no longer exist at all.
+        with self.assertRaises(AttributeError):
+            verifier._install_mint_context_for_test(dag["nodes"])
+        with self.assertRaises(AttributeError):
+            builder._mint_window_for_test()
+        # The ONLY route to a verified token is a real verify() run (its
+        # context held open here by the test-only keeper subclass); once
+        # that context is released, minting is refused again.
+        keeper = self._keeper_for(proposal, span_of)
+        self.assertEqual(keeper.verify(dag), "")
+        self.assertIs(
+            type(_mint_verified_parent_token(keeper, parent_node)),
+            _VerifiedParentStateEvidence,
+        )
+        self.assertIs(
+            type(_mint_verified_liquid_token(keeper, liquid_node)),
+            _VerifiedLiquidMedium,
+        )
+        keeper.release_mint_context()
+        with self.assertRaises(ValueError):
+            _mint_verified_parent_token(keeper, parent_node)
 
 
 if __name__ == "__main__":
