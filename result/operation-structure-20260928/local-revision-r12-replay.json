@@ -141,7 +141,7 @@
         ],
         "alternative_explanations": [
           "supernatant-retained-instead reading: the text does not constrain which phase the second centrifugation kept — the retained phase could be the supernatant rather than the solid",
-          "aliquot/portion flow: the suspension was divided into 8 parts, so the ms7b input could be an aliquot or a recombination rather than the whole ms7a output",
+          "aliquot/portion flow: the suspension was divided into 8 parts, so WHICH portion fed ms7b is unresolved — an aliquot of THIS ms7a output would still be this output's material (an open portion detail, NOT a violation of 'from this output'); a genuine conflict would be material from a different source or branch, which the record keeps distinct",
           "whitelist ambiguity: washed_wet_solid is as compatible with REDISPERSION_V1 as retained_wet_solid — the candidate state is not singled out",
           "'all the samples are collected' may describe the post-redispersion suspensions — this reading is COMPATIBLE with a retained wet-solid intermediate (the collection follows the redispersion), so the two readings can hold at the same time; it is not a mutually exclusive alternative and excluding the suspension reading is not a promotion precondition — the quote merely fails to individuate the instance under proof"
         ],
@@ -215,7 +215,7 @@
         ],
         "invalidated_items": [],
         "node_verdict_unchanged": "BLOCKED",
-        "record_digest": "sha256_61e0e23163e08bf0d19f80c4d67985e66c05c41f72f27198fd10dfdad838352c"
+        "record_digest": "sha256_f0c7fc8134c56e7eecba4d59dcf8ce5c76846bf829fdcddf42187a43e063bbba"
       },
       "dependency_view": {
         "parents_of_ms7b_in": [
@@ -422,7 +422,7 @@
         },
         "source_level_check": {
           "module": "reaserch_agent/route_operation_precondition_diagnostic.py",
-          "module_sha256": "sha256_606af6ce9bfa07c149729c1379b44c4289871683da4c01a1f1530d933c1a38c1",
+          "module_sha256": "sha256_fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de",
           "forbidden_strings_found": [],
           "note": "the diagnostic prototype references no token constructor and imports nothing from chem_agent_contracts"
         }

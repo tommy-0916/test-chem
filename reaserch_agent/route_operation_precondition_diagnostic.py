@@ -44,7 +44,12 @@ centrifugation).  The answer is a diagnostic record, never a proof:
   material instance is rejected (``binding_mismatch_rejected``);
 - sources are content-addressed: when a live source is mutated, every
   diagnostic item citing it is recomputed or invalidated honestly — no
-  stale citation survives.
+  stale citation survives.  The citation check is OPT-IN via
+  ``live_sources``: when an item's provenance is not among the supplied
+  live sources, no source-content verification is claimed for that item
+  — its citation-check status (checked / not checkable / stale) stays
+  distinct from the proposition-support relation, which remains the
+  submitter's annotation until the citation is actually checked.
 
 Fixed constraints (owner-locked): every record carries
 ``diagnostics_only=True`` and ``feeds_verdict=False``; this module mints

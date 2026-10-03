@@ -57,6 +57,19 @@ excluding the suspension reading is not a promotion precondition;
 P1/P2 are unproven by construction in that case, so the overall
 conclusion is `insufficient` before and after; it never flips.
 
+Two reviewer-checklist refinements folded in on the same pass: (iv) the
+aliquot/portion alternative is an OPEN DETAIL, not a conflict — an
+aliquot of THIS ms7a output is still this output's material and does
+not violate "from this output"; only material from a different source
+or branch would be a genuine conflict (runner alternative [1], this
+file's alternatives list); (v) the citation check is opt-in via
+`live_sources` — when an item's provenance is not among the supplied
+live sources, NO source-content verification is claimed for it, and the
+citation-check status (checked / not checkable / stale) stays distinct
+from the proposition-support relation, which remains the submitter's
+annotation until the citation is actually checked (module docstring,
+audit `design_rules`).
+
 ## The A01 diagnosis (the real Control case)
 
 Candidate under diagnosis: `ms7a.out =
@@ -77,7 +90,10 @@ The three propositions are answered **separately**:
 Alternative explanations recorded: (1) the supernatant-retained-instead
 reading (the text does not constrain which phase the second
 centrifugation kept); (2) aliquot/portion flow among the 8 divided
-parts; (3) `washed_wet_solid` vs `retained_wet_solid` whitelist
+parts — WHICH portion fed ms7b is unresolved, but an aliquot of THIS
+ms7a output would still be this output's material (an open portion
+detail, NOT a violation of "from this output"); a genuine conflict
+would be material from a different source or branch, kept distinct; (3) `washed_wet_solid` vs `retained_wet_solid` whitelist
 ambiguity; (4) "all the samples are collected" may describe the
 post-redispersion suspensions — a reading COMPATIBLE with a retained
 wet-solid intermediate (the collection follows the redispersion), so
@@ -190,7 +206,7 @@ an exclusion target).
   to completion under the guard). Source-level half: the diagnostic
   module references no token constructor and imports nothing from the
   contracts package (module sha256
-  `606af6ce9bfa07c149729c1379b44c4289871683da4c01a1f1530d933c1a38c1`).
+  `fd0320457967f2ffa954a7edb8259f3f90d446546dcd387245107cb0243721de`).
 - **v1 untouched**: `protocol-definition/v1` module digest
   `sha256_6109b007e823d9758228d8ef71ec5a1d18b4da5dede3867067b2a3347617805b`;
   `PROTOCOL_REFERENCE_V1 1.0.0`; the closed-slot probe

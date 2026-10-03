@@ -389,8 +389,12 @@ def _a01_diagnosis(proposal: dict, group, r11_replay: dict) -> dict:
             "retained phase could be the supernatant rather than the "
             "solid",
             "aliquot/portion flow: the suspension was divided into 8 "
-            "parts, so the ms7b input could be an aliquot or a "
-            "recombination rather than the whole ms7a output",
+            "parts, so WHICH portion fed ms7b is unresolved — an aliquot "
+            "of THIS ms7a output would still be this output's material "
+            "(an open portion detail, NOT a violation of 'from this "
+            "output'); a genuine conflict would be material from a "
+            "different source or branch, which the record keeps "
+            "distinct",
             "whitelist ambiguity: washed_wet_solid is as compatible with "
             "REDISPERSION_V1 as retained_wet_solid — the candidate state "
             "is not singled out",
@@ -1345,7 +1349,13 @@ def main() -> None:
              "an operation name or a proposal-drawn edge can never "
              "answer any of the three propositions",
              "evidence items are content-addressed; a mutated live "
-             "source invalidates every citing item honestly",
+             "source invalidates every citing item honestly; the "
+             "citation check is opt-in via live_sources — when an item's "
+             "provenance is not among the supplied live sources, no "
+             "source-content verification is claimed for it, and the "
+             "citation-check status stays distinct from the "
+             "proposition-support relation (the submitter's annotation "
+             "until actually checked)",
              "pure functions + frozen data classes; no engine derives; "
              "no token of any kind is minted",
          ]},
