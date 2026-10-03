@@ -97,6 +97,40 @@ class _VerifiedParentStateEvidence:
         self.material_instance_id = material_instance_id
 
 
+class _VerifiedLiquidMedium:
+    """Capability token discharging the literal liquid-participation check
+    for exactly one affirmed operation mention.
+
+    The typed proof-DAG layer (``route_proof_dag``) mints this token only
+    after a ``protocol_reference`` node is built/verified and the node's
+    operation binding has been checked against the dependent node's typed
+    fields.  The certifying triple is ``operation_value`` (the step's
+    affirmed operation string — the same value the engine already checked
+    with ``_literal_in_quote`` and ``step.operation`` equality), ``medium``
+    (the non-empty liquid medium inherited from the resolved protocol
+    definition), and ``definition_digest`` (the content digest of the
+    ``protocol-definition/v1`` record the medium descends from — a token
+    without definition provenance certifies nothing).  The engine consults
+    the token ONLY when the literal ``_step_has_liquid_participation``
+    check fails for a rule's liquid premise: participation is treated as
+    satisfied only when the token's operation binding equals this step's
+    affirmed ``operation_value`` exactly and the medium and definition
+    digest are non-empty; anything else fails closed to
+    ``convention_liquid_participation_missing``.  The token is never wired
+    into retained-object or object-pattern premises.  Underscore-private
+    and absent from ``__all__``.
+    """
+
+    __slots__ = ("operation_value", "medium", "definition_digest")
+
+    def __init__(
+        self, operation_value: str, medium: str, definition_digest: str,
+    ) -> None:
+        self.operation_value = operation_value
+        self.medium = medium
+        self.definition_digest = definition_digest
+
+
 def is_concentration_unit(unit: Any) -> bool:
     """Whether a unit string denotes a concentration in the controlled set."""
     return isinstance(unit, str) and unit.strip() in _CONCENTRATION_UNITS
@@ -563,6 +597,7 @@ def _proof_for_evidence(
     retained_object_record: Mapping[str, Any] | None = None,
     retained_object_issue: str = "",
     verified_parent_state: Any = None,
+    verified_liquid_medium: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Recompute one exact proof; no candidate-provided rule identifier is used.
 
@@ -570,8 +605,19 @@ def _proof_for_evidence(
     proof graph passes a ``_VerifiedParentStateEvidence`` token only after
     the parent state premise carries its own verified node, so the flat
     literal parent gate is skipped — and only when the token's binding
-    triple equals the engine's own computed parent binding exactly.  The
-    default keeps legacy behavior byte-identical.
+    triple equals the engine's own computed parent binding exactly.
+
+    ``verified_liquid_medium`` is the second proof-DAG capability hook: a
+    ``_VerifiedLiquidMedium`` token minted only after a protocol-reference
+    premise node is verified.  It is consulted ONLY when a rule's literal
+    liquid-participation check fails, and discharges that premise only when
+    the token's operation binding equals this step's affirmed
+    ``operation_value`` exactly (the same value already checked with
+    ``_literal_in_quote`` and ``step.operation`` equality) and the medium
+    and definition digest are non-empty; any mismatch fails closed to
+    ``convention_liquid_participation_missing``.  It never touches
+    retained-object or object-pattern premises.  The defaults keep legacy
+    behavior byte-identical.
     """
     match = _OUTPUT_STATE.fullmatch(field_path)
     if match is None:
@@ -797,6 +843,16 @@ def _proof_for_evidence(
                 if not _step_has_liquid_participation(
                     inputs, operation_excerpt, liquid_states, tokens,
                     operation_patterns=patterns,
+                ) and not (
+                    # The proof-DAG capability token discharges this rule's
+                    # liquid premise only for the exact operation binding
+                    # this engine instance verified literally; a forged or
+                    # mismatched token behaves as if absent (fail closed).
+                    # The token never discharges any other premise.
+                    isinstance(verified_liquid_medium, _VerifiedLiquidMedium)
+                    and verified_liquid_medium.operation_value == operation_value
+                    and _text(verified_liquid_medium.medium)
+                    and _text(verified_liquid_medium.definition_digest)
                 ):
                     liquid_denied = True
                     continue
@@ -944,13 +1000,18 @@ def derive_unreviewed_output_state(
     paper_id: str, experimental_group_id: str, source_digest: str,
     retained_object_resolver: Any = None,
     verified_parent_state: Any = None,
+    verified_liquid_medium: Any = None,
 ) -> tuple[dict[str, str] | None, str]:
     """Produce a proof only from existing graph edges and proposed source facts.
 
     ``verified_parent_state`` is a ``_VerifiedParentStateEvidence``
     capability token minted only by the typed proof-DAG layer after the
     parent premise carries its own verified node; the default is the legacy
-    literal parent gate.
+    literal parent gate.  ``verified_liquid_medium`` is a
+    ``_VerifiedLiquidMedium`` capability token minted only after a
+    protocol-reference premise node is verified; it is consulted only when
+    a rule's literal liquid-participation check fails, and the default is
+    the legacy literal liquid gate.
     """
     by_path: dict[str, Mapping[str, Any]] = {}
     for raw in facts:
@@ -1059,6 +1120,7 @@ def derive_unreviewed_output_state(
         retained_object_record=retained_object_record,
         retained_object_issue=retained_object_issue,
         verified_parent_state=verified_parent_state,
+        verified_liquid_medium=verified_liquid_medium,
     )
 
 

@@ -26,6 +26,21 @@ parent-state proposition the flat proof references
 of a convention node is the canonical chain node for THIS step's own input
 state path (a paper literal when literal gates prove it, an inheritance node
 otherwise), never the upstream step's output node directly.
+
+A second, narrowly-scoped proof class composes through the optional
+``liquid_medium`` premise role: a ``protocol_reference`` node
+(``protocol-reference-proof/v1``) certifies that a step's affirmed operation
+references a protocol defined earlier in the SAME experimental group and
+inherits exactly the definition's ``operation_sequence`` and
+``liquid_medium`` — never execution counts, retained objects, output states,
+or material identities.  The dependent convention node binds the premise to
+its own operation (path, value and operation evidence id,
+``proof_dag_liquid_medium_binding_mismatch`` otherwise) and the flat
+recompute receives a ``_VerifiedLiquidMedium`` capability token that
+discharges only the liquid-participation gate for that exact operation
+binding.  The ``retained_object`` role stays exclusively bound to
+``source_relation`` nodes
+(``proof_dag_retained_object_binding_mismatch`` otherwise).
 """
 
 from __future__ import annotations
@@ -50,6 +65,12 @@ from .route_retained_object import (
     POST_OPERATION_RETAINED_OBJECT_RULE_VERSION,
     derive_post_operation_retained_object,
 )
+from .route_protocol_reference import (
+    PROTOCOL_REFERENCE_PROOF_SCHEMA,
+    PROTOCOL_REFERENCE_RULE_ID,
+    PROTOCOL_REFERENCE_RULE_VERSION,
+    resolve_protocol_reference,
+)
 
 SOURCE_EVIDENCE_LEAF_SCHEMA = "source-evidence-leaf/v1"
 PAPER_LITERAL_PROOF_SCHEMA = "paper-literal-proof/v1"
@@ -65,9 +86,13 @@ _NODE_TYPE_SCHEMAS = {
     "same_state": SAME_STATE_CONVENTION_PROOF_SCHEMA,
     "state_change": STATE_CHANGE_CONVENTION_PROOF_SCHEMA,
     "inheritance": STATE_INHERITANCE_PROOF_SCHEMA,
+    "protocol_reference": PROTOCOL_REFERENCE_PROOF_SCHEMA,
 }
-_CONVENTION_ROLES = frozenset({"parent_state", "operation", "retained_object"})
+_CONVENTION_ROLES = frozenset({
+    "parent_state", "operation", "retained_object", "liquid_medium",
+})
 _SOURCE_RELATION_ROLES = ["naming", "operation", "output_name"]
+_PROTOCOL_REFERENCE_ROLES = ["definition_evidence", "reference_evidence"]
 _OPERATION_PATH = re.compile(r"material_graph\[(0|[1-9][0-9]*)\]\.operation\Z")
 # Binding fields of a route fact: the identity a source leaf stands on.
 _FACT_BINDING_FIELDS = ("fact_id", "field_path", "value", "unit", "excerpt")
@@ -179,6 +204,81 @@ def _verified_parent_token(premise_node: Mapping[str, Any]) -> Any:
         state_value=_text(claim.get("target_state")),
         material_instance_id=_text(claim.get("material_instance_id")),
     )
+
+
+def _liquid_medium_binding_issue(
+    premise_node: Mapping[str, Any], *, operation_path: str,
+    operation_evidence_id: str, operation_value: str,
+) -> str:
+    """The liquid-medium premise binding check, shared by builder and verifier.
+
+    A node hanging on role ``liquid_medium`` certifies this step's liquid
+    participation only when it is a ``protocol_reference`` node whose
+    reference evidence is exactly this step's operation evidence, whose
+    operation binding (claim field path + recorded operation value) equals
+    this step's operation, and whose inherited medium is non-empty.  An
+    otherwise-valid but unrelated node substituted into the role fails here
+    even though every content address is honestly recomputed.
+    """
+    claim = _mapping(premise_node.get("claim"))
+    if (premise_node.get("node_type") != "protocol_reference"
+            or _text(premise_node.get("reference_evidence_id"))
+            != operation_evidence_id
+            or _text(claim.get("field_path")) != operation_path
+            or _text(premise_node.get("operation_value")) != operation_value
+            or not _text(premise_node.get("liquid_medium"))):
+        return "proof_dag_liquid_medium_binding_mismatch"
+    return ""
+
+
+def _verified_liquid_token(premise_node: Mapping[str, Any]) -> Any:
+    """Mint the liquid-medium capability token from a verified premise.
+
+    Minted only after the premise node is built/verified and
+    ``_liquid_medium_binding_issue`` passed for it; the engine re-checks
+    the certifying triple (operation value, medium, definition digest)
+    against its own computed operation binding and fails closed on any
+    mismatch, so the token never widens what the premise proves — and it
+    discharges nothing except the liquid-participation gate.
+    """
+    return _basis._VerifiedLiquidMedium(
+        operation_value=_text(premise_node.get("operation_value")),
+        medium=_text(premise_node.get("liquid_medium")),
+        definition_digest=_text(premise_node.get("definition_digest")),
+    )
+
+
+def _protocol_reference_candidates(
+    facts: Sequence[Any], *, paper_id: str, experimental_group_id: str,
+    source_digest: str, span_of: Any,
+) -> list[dict]:
+    """Every locatable fact excerpt as a raw protocol-resolution candidate.
+
+    Resolution filters these to true definition mentions inside the pinned
+    group scope; a fact whose excerpt does not locate in the signed blocks
+    cannot be a definition mention and is dropped here.
+    """
+    candidates: list[dict] = []
+    locate = getattr(span_of, "locate", None)
+    for fact in facts:
+        excerpt = _text(_mapping(fact).get("excerpt"))
+        fact_id = _text(_mapping(fact).get("fact_id"))
+        if not excerpt or not fact_id or not callable(locate):
+            continue
+        located = locate(excerpt)
+        if located is None:
+            continue
+        candidates.append({
+            "excerpt": excerpt,
+            "evidence_id": _evidence_id(paper_id, experimental_group_id, fact_id),
+            "field_path": _text(_mapping(fact).get("field_path")),
+            "locator": located[1],
+            "char_span": [located[2][0], located[2][1]],
+            "paper_id": paper_id,
+            "experimental_group_id": experimental_group_id,
+            "source_digest": source_digest,
+        })
+    return candidates
 
 
 def _source_evidence_leaf(
@@ -488,6 +588,111 @@ class _DagBuilder:
 
     # -- state paths ---------------------------------------------------------
 
+    def _build_protocol_reference(
+        self, step_index: int,
+    ) -> tuple[str | None, str]:
+        """Build the protocol_reference node certifying a step's liquid medium.
+
+        The reference phrase is the step's own operation fact (value +
+        quote); resolution runs against every locatable fact excerpt in the
+        pinned group scope via ``route_protocol_reference``.  The
+        definition premise is the paper literal of the resolved definition
+        fact; the reference premise is the step's operation paper literal
+        (content-addressed, so it dedupes with the convention node's
+        operation premise).
+        """
+        if self.span_of is None:
+            return None, "proof_dag_resolver_missing"
+        operation_path = f"material_graph[{step_index}].operation"
+        reference_fact = self.by_path.get(operation_path)
+        if reference_fact is None:
+            return None, "convention_operation_fact_missing"
+        reference_evidence_id = _evidence_id(
+            self.paper_id, self.experimental_group_id,
+            _text(reference_fact.get("fact_id")),
+        )
+        locate = getattr(self.span_of, "locate", None)
+        located = (
+            locate(_text(reference_fact.get("excerpt")))
+            if callable(locate) else None
+        )
+        if located is None:
+            return None, "protocol_reference_position_unknown"
+        record, issue = resolve_protocol_reference(
+            _text(reference_fact.get("value")),
+            _text(reference_fact.get("excerpt")),
+            reference_evidence_id=reference_evidence_id,
+            reference_locator=located[1],
+            reference_position=located[2][0],
+            candidates=_protocol_reference_candidates(
+                self.facts, paper_id=self.paper_id,
+                experimental_group_id=self.experimental_group_id,
+                source_digest=self.source_digest, span_of=self.span_of,
+            ),
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+        )
+        if record is None:
+            return None, issue
+        definition_fact = self.evidence.get(
+            _text(record.get("definition_evidence_id")))
+        if definition_fact is None:
+            return None, "proof_dag_protocol_reference_mismatch"
+        value = _text(definition_fact.get("value"))
+        excerpt = _text(definition_fact.get("excerpt"))
+        definition_path = _text(definition_fact.get("field_path"))
+        if _OPERATION_PATH.fullmatch(definition_path) is not None:
+            bound = _literal_in_quote(value, excerpt)
+        else:
+            bound = bool(value) and value.casefold() in excerpt.casefold()
+        if not bound:
+            return None, "convention_operation_fact_unbound"
+        definition_node_id = self._literal_node(
+            definition_fact,
+            claim=_claim(definition_path),
+            gates={"value_literal_in_quote": True},
+        )
+        reference_node_id, issue = self._operation_leaf(step_index)
+        if reference_node_id is None:
+            return None, issue
+        node = {
+            "schema_version": PROTOCOL_REFERENCE_PROOF_SCHEMA,
+            "node_type": "protocol_reference",
+            "claim": _claim(operation_path),
+            "premises": _sorted_premises([
+                {"role": "definition_evidence", "node_id": definition_node_id},
+                {"role": "reference_evidence", "node_id": reference_node_id},
+            ]),
+            "rule_id": PROTOCOL_REFERENCE_RULE_ID,
+            "rule_version": PROTOCOL_REFERENCE_RULE_VERSION,
+            "rule_resource_digest": "",
+            "operation_path": operation_path,
+            "operation_value": _text(
+                _mapping(self.graph[step_index]).get("operation")),
+            "protocol_name": _text(record.get("protocol_name")),
+            "operation_sequence": json.loads(json.dumps(
+                record.get("operation_sequence") or [])),
+            "liquid_medium": _text(record.get("liquid_medium")),
+            "definition_evidence_id": _text(
+                record.get("definition_evidence_id")),
+            "reference_evidence_id": _text(record.get("reference_evidence_id")),
+            "definition_ordinal_anchor": _text(
+                record.get("definition_ordinal_anchor")),
+            "reference_ordinal": _text(record.get("reference_ordinal")),
+            "definition_execution_count": _text(
+                record.get("definition_execution_count")),
+            "reference_execution_count": _text(
+                record.get("reference_execution_count")),
+            "definition_digest": _text(record.get("definition_digest")),
+            "paper_id": self.paper_id,
+            "experimental_group_id": self.experimental_group_id,
+            "source_digest": self.source_digest,
+        }
+        return self._add_node(node), ""
+
+    # -- state paths ---------------------------------------------------------
+
     def _build_output_state(self, field_path: str) -> tuple[str | None, str]:
         match = _OUTPUT_STATE.fullmatch(field_path)
         step_index, output_index = int(match.group(1)), int(match.group(2))
@@ -591,6 +796,40 @@ class _DagBuilder:
             retained_object_resolver=self.resolver,
             verified_parent_state=verified_parent,
         )
+        medium_node_id: str | None = None
+        if proof is None and issue == "convention_liquid_participation_missing":
+            # The step's liquid medium may be inherited from a protocol
+            # definition resolved inside the pinned group scope: build the
+            # protocol_reference node, bind it to THIS step's operation
+            # exactly, and re-derive with the capability token.  Any
+            # failure keeps the engine's honest liquid-participation issue.
+            medium_node_id, _medium_issue = self._build_protocol_reference(
+                step_index)
+            if medium_node_id is not None:
+                operation_fact = self.by_path.get(
+                    f"material_graph[{step_index}].operation")
+                binding_issue = _liquid_medium_binding_issue(
+                    self.nodes[medium_node_id],
+                    operation_path=f"material_graph[{step_index}].operation",
+                    operation_evidence_id=_evidence_id(
+                        self.paper_id, self.experimental_group_id,
+                        _text(_mapping(operation_fact).get("fact_id"))),
+                    operation_value=_text(step.get("operation")),
+                )
+                if binding_issue:
+                    return None, binding_issue
+                proof, issue = derive_unreviewed_output_state(
+                    self.graph, self.facts, field_path,
+                    paper_id=self.paper_id,
+                    experimental_group_id=self.experimental_group_id,
+                    source_digest=self.source_digest,
+                    retained_object_resolver=self.resolver,
+                    verified_parent_state=verified_parent,
+                    verified_liquid_medium=_verified_liquid_token(
+                        self.nodes[medium_node_id]),
+                )
+                if proof is None:
+                    medium_node_id = None
         if proof is None:
             return None, issue
 
@@ -598,6 +837,8 @@ class _DagBuilder:
             {"role": "operation", "node_id": operation_node_id},
             {"role": "parent_state", "node_id": parent_node_id},
         ]
+        if medium_node_id is not None:
+            premises.append({"role": "liquid_medium", "node_id": medium_node_id})
         retained_object_fields = {
             key: proof[key] for key in proof if key.startswith("retained_object")
         }
@@ -956,6 +1197,7 @@ class StateProofDagVerifier:
             "paper_literal": set(),
             "source_relation": set(_SOURCE_RELATION_ROLES),
             "inheritance": {"parent_state"},
+            "protocol_reference": set(_PROTOCOL_REFERENCE_ROLES),
         }.get(node_type)
         if expected is None:
             if node_type in ("state_change", "same_state"):
@@ -977,6 +1219,8 @@ class StateProofDagVerifier:
             return self._verify_paper_literal(node)
         if node_type == "source_relation":
             return self._verify_source_relation(node, nodes)
+        if node_type == "protocol_reference":
+            return self._verify_protocol_reference(node, nodes)
         if node_type in ("state_change", "same_state"):
             return self._verify_convention(node, nodes)
         return self._verify_inheritance(node, nodes)
@@ -1119,6 +1363,109 @@ class StateProofDagVerifier:
                 return "proof_dag_node_mismatch"
         return ""
 
+    def _verify_protocol_reference(
+        self, node: Mapping[str, Any], nodes: Mapping[str, Any],
+    ) -> str:
+        """Recompute a protocol_reference node under the pinned context.
+
+        Both premises must be paper literals whose leaf fact digests match
+        the named definition/reference evidence facts (the same role-fact
+        binding pattern as ``_verify_source_relation``); extraction and
+        resolution are then recomputed from the signed blocks and facts,
+        and every typed node field must equal the recomputed record.
+        """
+        if self.span_of is None:
+            return "proof_dag_resolver_missing"
+        claim = _mapping(node.get("claim"))
+        operation_path = _text(claim.get("field_path"))
+        match = _OPERATION_PATH.fullmatch(operation_path)
+        if match is None or int(match.group(1)) >= len(self.graph):
+            return "proof_dag_protocol_reference_mismatch"
+        # The claim binds the operation this node certifies: no state,
+        # no material identity — never a retained-object proposition.
+        if any(_text(claim.get(key)) for key in (
+            "target_state", "material_id", "material_instance_id",
+        )):
+            return "proof_dag_protocol_reference_mismatch"
+        if (node.get("rule_id") != PROTOCOL_REFERENCE_RULE_ID
+                or _text(node.get("rule_version"))
+                != PROTOCOL_REFERENCE_RULE_VERSION
+                or _text(node.get("rule_resource_digest")) != ""
+                or _text(node.get("operation_path")) != operation_path):
+            return "proof_dag_protocol_reference_mismatch"
+        if any(node.get(key) != self.context[key] for key in (
+            "paper_id", "experimental_group_id", "source_digest",
+        )):
+            return "proof_dag_context_mismatch"
+        reference_fact = self.by_path.get(operation_path)
+        if reference_fact is None:
+            return "proof_dag_protocol_reference_mismatch"
+        reference_evidence_id = _evidence_id(
+            self.paper_id, self.experimental_group_id,
+            _text(reference_fact.get("fact_id")))
+        if (_text(node.get("reference_evidence_id")) != reference_evidence_id
+                or _text(node.get("operation_value"))
+                != _text(reference_fact.get("value"))):
+            return "proof_dag_protocol_reference_mismatch"
+        definition_fact = self.evidence.get(
+            _text(node.get("definition_evidence_id")))
+        if definition_fact is None:
+            return "proof_dag_protocol_reference_mismatch"
+        role_facts = {
+            "definition_evidence": definition_fact,
+            "reference_evidence": reference_fact,
+        }
+        for premise in node["premises"]:
+            premise_node = nodes[premise["node_id"]]
+            if premise_node.get("node_type") != "paper_literal":
+                return "proof_dag_protocol_reference_mismatch"
+            fact = role_facts[premise["role"]]
+            leaf = _mapping(premise_node.get("leaf"))
+            if leaf.get("fact_digest") != _fact_digest(fact):
+                return "proof_dag_protocol_reference_mismatch"
+        locate = getattr(self.span_of, "locate", None)
+        located = (
+            locate(_text(reference_fact.get("excerpt")))
+            if callable(locate) else None
+        )
+        if located is None:
+            return "proof_dag_protocol_reference_mismatch"
+        record, issue = resolve_protocol_reference(
+            _text(reference_fact.get("value")),
+            _text(reference_fact.get("excerpt")),
+            reference_evidence_id=reference_evidence_id,
+            reference_locator=located[1],
+            reference_position=located[2][0],
+            candidates=_protocol_reference_candidates(
+                self.facts, paper_id=self.paper_id,
+                experimental_group_id=self.experimental_group_id,
+                source_digest=self.source_digest, span_of=self.span_of,
+            ),
+            paper_id=self.paper_id,
+            experimental_group_id=self.experimental_group_id,
+            source_digest=self.source_digest,
+        )
+        if record is None:
+            return issue or "proof_dag_protocol_reference_mismatch"
+        comparisons = {
+            "protocol_name": _text(record.get("protocol_name")),
+            "operation_sequence": record.get("operation_sequence"),
+            "liquid_medium": _text(record.get("liquid_medium")),
+            "definition_evidence_id": _text(
+                record.get("definition_evidence_id")),
+            "definition_ordinal_anchor": _text(
+                record.get("definition_ordinal_anchor")),
+            "reference_ordinal": _text(record.get("reference_ordinal")),
+            "definition_execution_count": _text(
+                record.get("definition_execution_count")),
+            "reference_execution_count": _text(
+                record.get("reference_execution_count")),
+            "definition_digest": _text(record.get("definition_digest")),
+        }
+        if any(node.get(key) != value for key, value in comparisons.items()):
+            return "proof_dag_protocol_reference_mismatch"
+        return ""
+
     def _verify_convention(
         self, node: Mapping[str, Any], nodes: Mapping[str, Any],
     ) -> str:
@@ -1139,10 +1486,46 @@ class StateProofDagVerifier:
         )
         if binding_issue:
             return binding_issue
+        roles = {premise["role"] for premise in node["premises"]}
+        if "retained_object" in roles:
+            # Scope guard: the retained_object role is exclusively bound to
+            # source_relation nodes.  A protocol_reference node — or any
+            # other node type — substituted into the role is rejected even
+            # when it verifies on its own.
+            retained_premise = nodes[
+                _role_premise(node, "retained_object")["node_id"]]
+            if retained_premise.get("node_type") != "source_relation":
+                return "proof_dag_retained_object_binding_mismatch"
+        liquid_token: Any = None
+        if "liquid_medium" in roles:
+            # The liquid_medium premise must be a protocol_reference node
+            # bound to THIS step's operation (path, value and evidence id)
+            # with a non-empty inherited medium; the flat recompute then
+            # receives the capability token exactly like the parent-state
+            # token flow, and the engine re-checks the binding.
+            medium_premise = nodes[
+                _role_premise(node, "liquid_medium")["node_id"]]
+            step_match = _OUTPUT_STATE.fullmatch(field_path)
+            step = (
+                _mapping(self.graph[int(step_match.group(1))])
+                if step_match is not None
+                and int(step_match.group(1)) < len(self.graph) else {}
+            )
+            binding_issue = _liquid_medium_binding_issue(
+                medium_premise,
+                operation_path=_text(node.get("operation_path")),
+                operation_evidence_id=_text(node.get("operation_evidence_id")),
+                operation_value=_text(step.get("operation")),
+            )
+            if binding_issue:
+                return binding_issue
+            liquid_token = _verified_liquid_token(medium_premise)
         # The flat engine's literal parent gate is discharged by the DAG
         # through a capability token carrying the verified premise claim's
         # binding triple; the engine re-checks it against its own computed
-        # parent binding and fails closed on any mismatch.
+        # parent binding and fails closed on any mismatch.  The liquid
+        # token discharges only the liquid-participation gate, and only for
+        # this step's exact operation binding.
         proof, issue = derive_unreviewed_output_state(
             self.graph, self.facts, field_path,
             paper_id=self.paper_id,
@@ -1150,6 +1533,7 @@ class StateProofDagVerifier:
             source_digest=self.source_digest,
             retained_object_resolver=self.resolver,
             verified_parent_state=_verified_parent_token(premise_node),
+            verified_liquid_medium=liquid_token,
         )
         if proof is None:
             return issue or "proof_dag_node_mismatch"
@@ -1327,7 +1711,8 @@ def verify_state_proof_dag(
 
 
 __all__ = [
-    "PAPER_LITERAL_PROOF_SCHEMA", "SAME_STATE_CONVENTION_PROOF_SCHEMA",
+    "PAPER_LITERAL_PROOF_SCHEMA", "PROTOCOL_REFERENCE_PROOF_SCHEMA",
+    "SAME_STATE_CONVENTION_PROOF_SCHEMA",
     "SOURCE_EVIDENCE_LEAF_SCHEMA", "SOURCE_RELATION_PROOF_SCHEMA",
     "STATE_CHANGE_CONVENTION_PROOF_SCHEMA", "STATE_INHERITANCE_PROOF_SCHEMA",
     "STATE_PROOF_DAG_SCHEMA", "StateProofDagVerifier",
