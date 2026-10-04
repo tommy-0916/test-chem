@@ -1,0 +1,498 @@
+{
+  "schema_version": "g2a_ingestion_folio/v15",
+  "round": "r15 (G2a): SI folio recognition minimal fix + abstention diagnostics + W1/W2 frozen-rule eligibility pre-screen",
+  "model_generated": false,
+  "model_called": false,
+  "baseline": {
+    "pre_round_head": "c42944306d4cb6c2e6b0a20e909a40c812db6afc",
+    "conventions_json_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "prompt_builder_module": "reaserch_agent/route_pdf_group_extraction.py",
+    "prompt_builder_sha256": "24864d9af522666b15a1690b6c9ba829bebfa3047545d82adc3e3dff331486f7",
+    "a01_source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "wu2025_main_pdf_sha256": "0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+    "wu2025_si_pdf_sha256": "cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+    "changed_source_files": {
+      "reaserch_agent/route_pdf_source.py": "7a919730d8ce031eb3f32ddd46b96e0c667347d2e6514503798824b0a1c0878c",
+      "reaserch_agent/route_pdf_groups.py": "3e21674524b0733c7ab757d22bf61c96a588a82eedd73b804fb96838f0f34156"
+    },
+    "new_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "7c2d6f9bd816ee8d2e15df495ca4e37b9f97920ea2df266eaf3ebe25366bf50d"
+    },
+    "tracked_modifications_subset_of_changed_files": true
+  },
+  "code_changes": {
+    "files": {
+      "reaserch_agent/route_pdf_source.py": "7a919730d8ce031eb3f32ddd46b96e0c667347d2e6514503798824b0a1c0878c",
+      "reaserch_agent/route_pdf_groups.py": "3e21674524b0733c7ab757d22bf61c96a588a82eedd73b804fb96838f0f34156"
+    },
+    "new_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "7c2d6f9bd816ee8d2e15df495ca4e37b9f97920ea2df266eaf3ebe25366bf50d"
+    },
+    "semantics_note": "conventions, protocol schemas, and every rule resource are byte-identical to the frozen baseline; ingestion block semantics changed ONLY for inputs that previously failed closed (no previously parseable document changes: A01 asserted byte-identical), so no existing versioned artifact can be stale; PDF_GROUP_PARSER_VERSION is deliberately not bumped because bumping it would falsify the pinned r13/r13b replay bytes without invalidating any real cache"
+  },
+  "folio_fix": {
+    "design": {
+      "three_factors": [
+        "standalone folio form: fullmatch [A-Za-z]{0,2}\\s*[0-9]{1,4} in the bottom band (y0 > 0.90h)",
+        "cross-page consistency: uniform alphabetic prefix and y0 within 4 pt of the median; at most one candidate per page",
+        "page-order increment: numbers advance exactly with page indices; at least three candidate pages"
+      ],
+      "never_alone": "no deletion by digit count, font size, or a fixed page position; the legacy margin fast path (>0.94h + 3+ digits) is unchanged",
+      "non_goals_kept": [
+        "no page removal",
+        "no PDF byte change",
+        "no stitching across missing regions"
+      ]
+    },
+    "verification": {
+      "a01": {
+        "blocks": 1289,
+        "blocks_sha256": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+        "folios_stripped": 0,
+        "note": "A01 page 4 carries three bottom-band candidates on one page; the at-most-one-per-page guard rejects them, so nothing is stripped and the parse is byte-identical"
+      },
+      "wu_si": {
+        "blocks": 1041,
+        "folios_stripped": 79,
+        "folio_first": {
+          "page": 2,
+          "text": "S 2",
+          "x0": 299.5,
+          "x1": 315.1,
+          "y0": 729.9,
+          "page_width": 612.0
+        },
+        "folio_last": {
+          "page": 80,
+          "text": "S 80",
+          "x0": 297.0,
+          "x1": 317.6,
+          "y0": 729.9,
+          "page_width": 612.0
+        },
+        "w1_sentence_binding": {
+          "needle": "pdf:p14:b9-p14:b10",
+          "full_sentence": "pdf:p14:b9-p14:b11"
+        },
+        "enumeration_endpoint": "experimental_section_missing (0 groups)"
+      },
+      "wu_main": {
+        "issue": "pdf_column_layout_ambiguous",
+        "abstention": {
+          "reason": "pdf_column_layout_ambiguous",
+          "culprits": [
+            {
+              "page": 10,
+              "text": "36",
+              "x0": 294.6,
+              "x1": 299.9,
+              "y0": 648.0,
+              "page_width": 595.3
+            }
+          ]
+        },
+        "note": "the p10 chart tick '36' sits at 0.819h, outside the 0.90h folio band, and never becomes a candidate; the two-column chart layout keeps abstaining, as intended"
+      }
+    }
+  },
+  "abstention_diagnostics": {
+    "reason_code_stability": "reason_code strings are unchanged; the structured culprit record rides the new detail field (JSON) on PdfGroupEnumerationDiagnosticV1",
+    "example_wu_main": {
+      "reason": "pdf_column_layout_ambiguous",
+      "culprits": [
+        {
+          "page": 10,
+          "text": "36",
+          "x0": 294.6,
+          "x1": 299.9,
+          "y0": 648.0,
+          "page_width": 595.3
+        }
+      ]
+    }
+  },
+  "layer_results": {
+    "attestation": {
+      "status": "verified",
+      "documents": 2
+    },
+    "group_enumeration": {
+      "status": "reached_section_gate",
+      "groups": 0,
+      "diagnostic_reasons": [
+        "experimental_section_missing",
+        "pdf_column_layout_ambiguous"
+      ],
+      "meaning": "the SI now parses (1041 blocks) and stops at experimental_section_missing -- the honest next layer, and this round's allowed endpoint; the main paper still abstains at ingestion"
+    },
+    "proposal_extraction": {
+      "status": "not_reached"
+    },
+    "local_revision": {
+      "status": "not_reached"
+    },
+    "association": {
+      "status": "not_reached"
+    },
+    "receipt": {
+      "status": "not_reached"
+    },
+    "pool_census": {
+      "rows": [
+        {
+          "candidate": "wu2025-main",
+          "file": "backend/data/reference_sources/B01/B01-Wu-2025-NatCommun-main.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "wu2025-si",
+          "file": "backend/data/reference_sources/B01/B01-Wu-2025-NatCommun-SI.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "zhang2017-main",
+          "file": "backend/data/reference_sources/B01/B01-Zhang-2017-NatCommun-main.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "zhang2017-si",
+          "file": "backend/data/reference_sources/B01/B01-Zhang-2017-NatCommun-SI.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "experimental_section_missing"
+          ],
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "chemkb-kion",
+          "file": "reaserch_agent/chem_kb/High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "chemkb-pba-hosts",
+          "file": "reaserch_agent/chem_kb/High-Entropy Prussian Blue Analogues and Their Oxide Family as Sulfur Hosts for Lithium-Sulfur Batteries.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_source_too_large"
+          ],
+          "reasons": [
+            "pdf_source_too_large"
+          ]
+        },
+        {
+          "candidate": "chemkb-nife-pba",
+          "file": "reaserch_agent/chem_kb/Operando Spectroscopic Identification of Active Sites in NiFe Prussian Blue Analogues as Electrocatalysts- Activation of Oxygen Atoms for Oxygen Evolution Reaction.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "upload-upl_1e79",
+          "file": "backend/data/uploads/upl_1e796859a263c3e5c502c488.pdf",
+          "groups": 0,
+          "reasons_before_r15": [
+            "pdf_column_layout_ambiguous"
+          ],
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        }
+      ],
+      "framing_corrected": {
+        "before_r15": "6 layout + 1 missing-section + 1 oversize",
+        "after_r15": "5 layout + 2 missing-section + 1 oversize",
+        "counts_after": {
+          "layout_ambiguous": 5,
+          "missing_section": 2,
+          "oversize": 1
+        }
+      }
+    }
+  },
+  "rule_eligibility": {
+    "conventions_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "rule_count": 11,
+    "phrase_match_semantics": "casefolded substring over operation/intent blobs (workflow.py); hit = operation + intent + proven input state jointly",
+    "claims_verified": {
+      "w1_collection_method_unstated": true,
+      "drying_v1_requires_proven_wet_solid_input": true,
+      "dried_unrecognized_by_drying_v1": true,
+      "no_reduction_rule": true
+    },
+    "w1": {
+      "source": "Wu-2025 SI page S14, Supplementary Fig. S13 caption paragraph",
+      "chain": "hydrothermal -> collect -> dry -> reduce (500 °C, H2/N2, 6 h)",
+      "steps": [
+        {
+          "step": "collect",
+          "source_slice_verbatim": "the precipitated Ni-Mo-O powder was collected",
+          "state_to_prove": "retained_wet_solid (collected precipitate)",
+          "candidate_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "absent: 'precipitated' implies a solid/liquid mixture but no suspension state is asserted, and no operation word exists",
+          "material_continuity": "would parent the drying step; unprovable here",
+          "verdict": "ineligible",
+          "note": "operation patterns require 'centrifug'; FILTRATION variant requires 'filtrat'; the bare word 'collected' matches no intent phrase either (no contiguous 'collect precipitate')"
+        },
+        {
+          "step": "dry",
+          "source_slice_verbatim": "dried",
+          "state_to_prove": "dry_solid",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "requires a PROVEN retained_wet_solid/washed_wet_solid input; the collection step above is unprovable, so the input gate fails too",
+          "material_continuity": "parent state missing -> lineage broken at the first step",
+          "verdict": "ineligible",
+          "note": "double failure: 'dried' contains neither 'dry' nor 'drying' as a substring (phrase miss), and the wet-solid input is unproven"
+        },
+        {
+          "step": "reduce",
+          "source_slice_verbatim": "reduced at 500 °C for 6 h under a mixed hydrogen-nitrogen flow",
+          "state_to_prove": "phase change to Ni-Mo alloy nanoparticles",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "placeholder rule column: NO reduction/thermal rule exists in the frozen table (no 'reduc'/'hydrogen'/'还原' pattern anywhere); operation and intent both miss on every rule"
+        }
+      ]
+    },
+    "w2": {
+      "source": "Wu-2025 SI page S15, Supplementary Fig. S14 caption paragraph (powdered MoO2 nanorods)",
+      "chain": "precipitate -> heat 50 °C 3 h -> filtration/washing collection -> hydrogen reduction 500 °C 2 h",
+      "steps": [
+        {
+          "step": "precipitate",
+          "source_slice_verbatim": "1 M HCl was added dropwise into the solution until a white precipitate was formed.",
+          "state_to_prove": "suspension/precipitate formation",
+          "candidate_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "the post-precipitation mixture is literally called 'solution' in the next slice; no 'suspension' wording",
+          "material_continuity": "would parent filtration; not rule-provable",
+          "verdict": "ineligible",
+          "note": "no precipitation rule exists; placeholder rule's operation misses (no 'centrifug'); precipitation is a reaction outcome, not a covered unit operation"
+        },
+        {
+          "step": "heat",
+          "source_slice_verbatim": "the solution was heated at 50 °C for 3 h",
+          "state_to_prove": "heated mixture (no state token)",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "no heating/aging rule exists; every operation pattern misses on 'heated' (placeholder column only)"
+        },
+        {
+          "step": "filter_wash_collect",
+          "source_slice_verbatim": "the Mo-O precursor was collected by filtration and washing",
+          "state_to_prove": "retained_wet_solid -> washed_wet_solid",
+          "candidate_rule": "WASHING_V1",
+          "operation_phrase_hit": true,
+          "intent_phrase_hit": true,
+          "input_state_evidence": "requires a proven wet-solid input; filtration cannot supply it because FILTRATION_COLLECT_RETAINED_V1's intent phrases miss ('collected by filtration' is not 'collect the solid'/'collect retained'), and the suspension input is itself unproven",
+          "material_continuity": "filtration intent miss breaks the chain before washing",
+          "verdict": "ineligible",
+          "note": "phrase-level partial: 'wash'/'washing' hit operation+intent on WASHING_V1 (the only phrase-level hit in either chain), but the input-state gate fails; filtration hits operation ('filtrat') yet misses intent"
+        },
+        {
+          "step": "reduce",
+          "source_slice_verbatim": "MoO2 nanorods were obtained through hydrogen reduction of the Mo-O precursor at 500 °C for 2 h.",
+          "state_to_prove": "phase change to MoO2 nanorods",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "no reduction rule exists; operation and intent miss on every rule (placeholder column only)"
+        }
+      ]
+    },
+    "overall_verdict": "W1 and W2 are both ineligible under the frozen v1 rule table; they are retained as ingestion samples and a rule-compatible source must be found separately (不补造离心/过滤, 不改写源摘录, 不扩规则保正例)"
+  },
+  "boundary_design": {
+    "s14_region_blocks_observed": [
+      {
+        "locator": "p14:b1",
+        "bold": true,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "Supplementary Fig."
+      },
+      {
+        "locator": "p14:b2",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "S13. SEM images of (a-b) the Ni-Mo-O precursor and (c-d) Ni-Mo"
+      },
+      {
+        "locator": "p14:b3",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "alloy nanoparticles. Insets to (b) and (d): photographs of the Ni-Mo-O p"
+      },
+      {
+        "locator": "p14:b4",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "Mo alloy nanoparticles, respectively."
+      },
+      {
+        "locator": "p14:b5",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "To prepare powdered Ni-Mo nanoparticles, a Ni-Mo-O precursor was first p"
+      },
+      {
+        "locator": "p14:b6",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "through a hydrothermal reaction. In detail, 6 mmol Ni(NO3)2·6H2O, 0.75 m"
+      },
+      {
+        "locator": "p14:b7",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "(NH4)6Mo7O24·4H2O, and 9 mmol CO(NH2)2 were homogeneously dissolved in 6"
+      },
+      {
+        "locator": "p14:b8",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "water in a 100 mL Teflon-lined stainless steel autoclave, which was then"
+      },
+      {
+        "locator": "p14:b9",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "oven maintained at 120 °C for 12 h. After the hydrothermal reaction, the"
+      },
+      {
+        "locator": "p14:b10",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "Mo-O powder was collected, dried, and then reduced at 500 °C for 6 h und"
+      },
+      {
+        "locator": "p14:b11",
+        "bold": false,
+        "caption_flag": false,
+        "font_size": 12.0,
+        "text_head": "hydrogen-nitrogen flow to obtain Ni-Mo nanoparticles."
+      }
+    ],
+    "three_block_kinds": {
+      "figure_label": "bold 'Supplementary Fig.' block -- a bold-prefix split artifact carrying no number",
+      "caption_prose": "'S13. SEM images of ...' blocks -- the actual caption sentences",
+      "synthesis_paragraph": "'To prepare powdered Ni-Mo nanoparticles, ...' -- standalone experimental prose embedded between captions"
+    },
+    "current_boundary_gap": "the parser-owned caption predicate _caption_text matches ^(figure|fig|table|scheme)\\s*s?\\d+; the SI split form ('Supplementary Fig.' + 'S13. ...') matches neither, so SI captions are currently indistinguishable from prose (observed: caption_flag False on all S14-region blocks)",
+    "consistent_boundary_design": [
+      "single predicate: extend _caption_text in route_pdf_source.py so the three consumers -- enumeration grouping (_caption/_group_boundary), quote binding (caption_block_locators from _quote_caption_locators), and source re-verification (_group_range) -- keep sharing one parser-owned definition; no proposal-supplied caption metadata is ever accepted",
+      "recognition rule (designed): a bold block fullmatching 'Supplementary (Fig|Figure|Table|Scheme)\\.?' followed by a body block starting 'S\\d+.' marks both blocks, plus their same-original-block continuations, as captions",
+      "grouping consequence (designed): caption blocks never open or close a group; a synthesis paragraph between captions is the groupable unit -- the caption-boundary grouping mode deferred from r14 remains required before W1-class enumeration",
+      "quote-binding consequence (designed): caption blocks stay non-quotable anchors and the at-most-one-skipped-caption rule is unchanged; newly flagged SI captions simply become skippable furniture inside a span"
+    ],
+    "stays_closed_this_round": [
+      "no caption-recognition change is implemented (it would alter block semantics on caption-flagged regions)",
+      "caption quotation is NOT opened",
+      "the workflow interception of incomplete sources is unchanged"
+    ]
+  },
+  "dag_consumption": {
+    "observed": false,
+    "note": "still unobservable (0 groups), and W1 is no longer presupposed a multi-hop positive: the frozen-rule eligibility table scores both W1 and W2 ineligible; nothing here is claimed as a pass"
+  },
+  "terminology_corrections": [
+    {
+      "item": "pool census framing",
+      "r14_wording": "every local cross-paper candidate abstains at ingestion (framed as 8/8 layout problems)",
+      "corrected": "6 layout (pdf_column_layout_ambiguous) + 1 missing experimental section (zhang2017-si) + 1 oversize (chemkb-pba-hosts); after the folio fix: 5 layout + 2 missing-section + 1 oversize"
+    },
+    {
+      "item": "element overlap",
+      "r14_wording": "zero element overlap between Ni-Mo and Ni-Fe",
+      "corrected": "withdrawn: Ni-Mo and Ni-Fe are different material systems SHARING the Ni element"
+    },
+    {
+      "item": "W1 presupposition",
+      "r14_wording": "W1 treated as the prospective multi-hop positive",
+      "corrected": "W1 is not presupposed anything; the frozen-rule eligibility table (rule_eligibility) scores W1 and W2 ineligible, so neither can be a positive under v1 rules"
+    }
+  ],
+  "separate_counters": {
+    "field_proofs_succeeded": 0,
+    "group_receipt_pass": 0,
+    "protocol_admitted": 0,
+    "published": 0
+  },
+  "anchors": {
+    "a01_regression": {
+      "mechanism": "r13b runner re-executed as a subprocess",
+      "double_run_byte_identical": true,
+      "replay_matches_r13_archive": true,
+      "ms7a_out": "BLOCKED (retained_object_mention_precedes_operation)"
+    },
+    "diagnostics_module_zero_proof_dependency": true,
+    "folio_test_module_ok": true,
+    "target_set_277_ok": true
+  },
+  "fixed_constraints": {
+    "r7_to_r14_archives_untouched": true,
+    "contracts_tree_untouched": true,
+    "diagnostics_module_semantics_untouched": true,
+    "conventions_no_v1_expansion": true,
+    "tokens_consumed_by_this_runner": 0,
+    "model_not_called": true,
+    "device_not_run": true,
+    "eight_question_rerun": false,
+    "ms7a_cascade_still_blocked": true,
+    "tracked_modifications_limited_to_two_ingestion_files": true
+  }
+}

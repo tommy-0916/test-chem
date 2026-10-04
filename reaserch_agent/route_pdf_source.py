@@ -139,8 +139,84 @@ def _two_column_page(lines: list[_PdfLine], width: float) -> bool:
     return left >= 8 and right >= 8
 
 
+# A folio (printed page number such as "S 75") is recognized by three factors
+# combined, never by one alone: (1) a standalone folio-shaped short line in
+# the bottom band of the page, (2) a consistent vertical position across
+# pages, (3) a number that advances in lockstep with the page order.  Nothing
+# is deleted by digit count, font size, or a fixed page position; a single
+# lookalike line (a chart tick, a table total) never qualifies, because the
+# cross-page factors cannot hold for it.
+_FOLIO_FORM = re.compile(r"([A-Za-z]{0,2})\s*([0-9]{1,4})\Z")
+_FOLIO_BAND = 0.90
+_FOLIO_MIN_PAGES = 3
+_FOLIO_Y_TOLERANCE = 4.0
+
+
+def _validated_folio_lines(
+    pages: list[tuple[float, list[_PdfLine]]],
+) -> set[tuple[int, int, int]]:
+    """Return (page, original_block, original_line) keys of validated folios.
+
+    A page contributes a candidate only when it carries exactly one
+    folio-shaped line in the bottom band; pages with zero or several
+    candidates contribute none.  The candidate set is accepted only when
+    every candidate shares one alphabetic prefix form, the numbers advance
+    exactly with the page order, and the vertical positions agree within
+    tolerance -- otherwise the set is empty and nothing is stripped.
+    """
+    candidates: dict[int, tuple[str, int, float, _PdfLine]] = {}
+    for _width, lines in pages:
+        found = []
+        for line in lines:
+            if line.y0 <= line.page_height * _FOLIO_BAND:
+                continue
+            match = _FOLIO_FORM.fullmatch(line.text)
+            if match is not None:
+                found.append((
+                    match.group(1).casefold(), int(match.group(2)),
+                    line.y0, line,
+                ))
+        if len(found) == 1:
+            prefix, number, y0, line = found[0]
+            candidates[line.page] = (prefix, number, y0, line)
+    if len(candidates) < _FOLIO_MIN_PAGES:
+        return set()
+    ordered_pages = sorted(candidates)
+    if len({candidates[page][0] for page in ordered_pages}) != 1:
+        return set()
+    numbered = [(page, candidates[page][1]) for page in ordered_pages]
+    if any(
+        later_number - number != later_page - page
+        for (page, number), (later_page, later_number)
+        in zip(numbered, numbered[1:])
+    ):
+        return set()
+    anchor = median(candidates[page][2] for page in ordered_pages)
+    if any(
+        abs(candidates[page][2] - anchor) > _FOLIO_Y_TOLERANCE
+        for page in ordered_pages
+    ):
+        return set()
+    return {
+        (line.page, line.original_block, line.original_line)
+        for line in (candidates[page][3] for page in ordered_pages)
+    }
+
+
+def _line_debug(line: _PdfLine, width: float) -> dict[str, Any]:
+    return {
+        "page": line.page,
+        "text": line.text,
+        "x0": round(line.x0, 1),
+        "x1": round(line.x1, 1),
+        "y0": round(line.y0, 1),
+        "page_width": round(width, 1),
+    }
+
+
 def _ordered_page_lines(
     lines: list[_PdfLine], width: float,
+    culprits: list[_PdfLine] | None = None,
 ) -> tuple[list[_PdfLine] | None, str | None]:
     if not _two_column_page(lines, width):
         return sorted(lines, key=lambda line: (
@@ -158,15 +234,20 @@ def _ordered_page_lines(
             continue
         center = (line.x0 + line.x1) / 2
         if abs(center - middle) <= 2:
+            if culprits is not None:
+                culprits.append(line)
             return None, "pdf_column_layout_ambiguous"
         columns.append((0 if center < middle else 1, line))
 
     barriers = sorted(spanning, key=lambda line: (
         line.y0, line.x0, line.original_block, line.original_line,
     ))
+    for left, right in zip(barriers, barriers[1:]):
+        if right.y0 - left.y0 <= 3:
+            if culprits is not None:
+                culprits.extend((left, right))
+            return None, "pdf_column_layout_ambiguous"
     barrier_y = [line.y0 for line in barriers]
-    if any(right - left <= 3 for left, right in zip(barrier_y, barrier_y[1:])):
-        return None, "pdf_column_layout_ambiguous"
     bands: list[list[tuple[int, _PdfLine]]] = [[] for _ in range(len(barriers) + 1)]
     for column, line in columns:
         # Near-identical top coordinates represent overlapping rows, not a
@@ -176,6 +257,8 @@ def _ordered_page_lines(
         band = bisect_left(barrier_y, line.y0)
         if ((band < len(barrier_y) and abs(barrier_y[band] - line.y0) <= 3)
                 or (band > 0 and abs(barrier_y[band - 1] - line.y0) <= 3)):
+            if culprits is not None:
+                culprits.append(line)
             return None, "pdf_column_layout_ambiguous"
         bands[band].append((column, line))
 
@@ -210,13 +293,19 @@ def _failure(reason: str) -> RouteSourceVerificationV1:
     return RouteSourceVerificationV1(reasons=(reason,))
 
 
-def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
+def _empty_parse_report() -> dict[str, Any]:
+    return {"folios_stripped": [], "abstention": None}
+
+
+def _read_pdf_blocks_with_report(
+    raw: bytes,
+) -> tuple[list[_PdfBlock] | None, str | None, dict[str, Any]]:
     try:
         import fitz
     except ImportError:
-        return None, "pdf_parser_unavailable"
+        return None, "pdf_parser_unavailable", _empty_parse_report()
     if not raw.startswith(b"%PDF-"):
-        return None, "source_not_pdf"
+        return None, "source_not_pdf", _empty_parse_report()
     blocks: list[_PdfBlock] = []
     pages: list[tuple[float, list[_PdfLine]]] = []
     chars = 0
@@ -224,9 +313,9 @@ def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
     try:
         with fitz.open(stream=raw, filetype="pdf") as document:
             if document.needs_pass:
-                return None, "pdf_requires_password"
+                return None, "pdf_requires_password", _empty_parse_report()
             if len(document) > _MAX_PAGES:
-                return None, "pdf_too_many_pages"
+                return None, "pdf_too_many_pages", _empty_parse_report()
             for page_number, page in enumerate(document, start=1):
                 lines_on_page: list[_PdfLine] = []
                 for original_block, item in enumerate(page.get_text("dict", sort=True).get("blocks", [])):
@@ -242,7 +331,7 @@ def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
                         chars += len(text)
                         line_count += 1
                         if line_count > _MAX_BLOCKS or chars > _MAX_TEXT_CHARS:
-                            return None, "pdf_extracted_text_too_large"
+                            return None, "pdf_extracted_text_too_large", _empty_parse_report()
                         heading, body, heading_size, body_size = _line_parts(spans)
                         x0, y0, x1, _ = line.get("bbox", (0, 0, 0, 0))
                         lines_on_page.append(_PdfLine(
@@ -258,9 +347,13 @@ def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
     except Exception:
         # PDF parsers have several backend-specific errors; none may turn into
         # an affirmative source receipt.
-        return None, "pdf_unreadable"
+        return None, "pdf_unreadable", _empty_parse_report()
     if not any(lines for _, lines in pages):
-        return None, "pdf_no_extractable_text"
+        return None, "pdf_no_extractable_text", _empty_parse_report()
+    report = _empty_parse_report()
+    # Validated folios are page furniture below the historical margin zone;
+    # the three-factor check accepts only whole-document patterns.
+    folio_keys = _validated_folio_lines(pages)
     # Repeated margin text is page furniture, not an experimental boundary.
     margin_pages: dict[str, set[int]] = {}
     for _, lines in pages:
@@ -272,15 +365,24 @@ def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
         previous: _PdfLine | None = None
         content_lines: list[_PdfLine] = []
         for line in lines:
+            if (line.page, line.original_block, line.original_line) in folio_keys:
+                report["folios_stripped"].append(_line_debug(line, width))
+                continue
             margin = line.y0 < line.page_height * 0.07 or line.y0 > line.page_height * 0.94
             repeated = len(margin_pages.get(" ".join(line.text.casefold().split()), set())) >= 2
             folio = line.y0 > line.page_height * 0.94 and bool(re.fullmatch(r"\d{3,}", line.text))
             if margin and (repeated or folio):
                 continue
             content_lines.append(line)
-        ordered, order_issue = _ordered_page_lines(content_lines, width)
+        culprits: list[_PdfLine] = []
+        ordered, order_issue = _ordered_page_lines(content_lines, width, culprits)
         if ordered is None:
-            return None, order_issue or "pdf_column_layout_ambiguous"
+            reason = order_issue or "pdf_column_layout_ambiguous"
+            report["abstention"] = {
+                "reason": reason,
+                "culprits": [_line_debug(line, width) for line in culprits],
+            }
+            return None, reason, report
         for line in ordered:
             if previous is not None and _continues_heading(previous, line):
                 last = blocks[-1]
@@ -311,11 +413,16 @@ def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
                     or continued_caption,
                 ))
             if len(blocks) > _MAX_BLOCKS:
-                return None, "pdf_extracted_text_too_large"
+                return None, "pdf_extracted_text_too_large", report
             previous = line
     if not blocks:
-        return None, "pdf_no_extractable_text"
-    return blocks, None
+        return None, "pdf_no_extractable_text", report
+    return blocks, None, report
+
+
+def _read_pdf_blocks(raw: bytes) -> tuple[list[_PdfBlock] | None, str | None]:
+    blocks, issue, _report = _read_pdf_blocks_with_report(raw)
+    return blocks, issue
 
 
 def _locator_range(locator: str, blocks: list[_PdfBlock]) -> tuple[int, int] | None:

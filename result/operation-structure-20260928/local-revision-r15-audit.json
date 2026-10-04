@@ -1,0 +1,30 @@
+{
+  "schema_version": "g2a_ingestion_folio/v15",
+  "model_generated": false,
+  "scope": "r15 (G2a): minimal folio-recognition repair in the PDF ingestion layer plus structured abstention diagnostics, with a frozen-rule eligibility pre-screen for W1/W2 and a design-only SI grouping boundary; no model call, no conventions/protocol semantic change",
+  "audit": [
+    {
+      "kind": "changed_files",
+      "items": [
+        "reaserch_agent/route_pdf_source.py (validated folio recognition + _read_pdf_blocks_with_report; _read_pdf_blocks signature preserved)",
+        "reaserch_agent/route_pdf_groups.py (new detail field on the enumeration diagnostic; uses the report variant)",
+        "reaserch_agent/test_route_pdf_folio.py (new, 15 tests)",
+        "result/operation-structure-20260928/local-revision-r15.py",
+        "result/operation-structure-20260928/local-revision-r15-*.json",
+        "docs/field_semantic_gate_r15_checkpoint_20261004.md"
+      ]
+    },
+    {
+      "kind": "reason_code_stability",
+      "detail": "every existing reason_code string is byte-identical; the structured abstention detail is a new optional field, so the existing exact-equality assertion on ['pdf_column_layout_ambiguous'] in test_route_pdf_groups.py keeps passing unchanged"
+    },
+    {
+      "kind": "capability_change",
+      "detail": "the only behavioral change: documents whose sole ambiguity trigger was a validated folio pattern now parse; Wu SI goes from pdf_column_layout_ambiguous to experimental_section_missing (0 groups).  A01 and every other previously parseable input are asserted byte-identical; every other abstaining input keeps its r14 reason"
+    },
+    {
+      "kind": "honest_endpoints",
+      "detail": "W1/W2 ineligible under the frozen v1 rules; SI caption-boundary grouping stays a recorded design; dag_consumption remains unobserved and unclaimed"
+    }
+  ]
+}

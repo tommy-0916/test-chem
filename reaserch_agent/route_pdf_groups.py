@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -28,7 +29,7 @@ from .route_pdf_source import (
     _group_boundary,
     _group_range,
     _heading,
-    _read_pdf_blocks,
+    _read_pdf_blocks_with_report,
     _section_body_size,
 )
 
@@ -72,6 +73,10 @@ class PdfGroupEnumerationDiagnosticV1:
     reason_code: str
     section: str = ""
     experimental_group_id: str = ""
+    # Structured detail for parser abstentions (JSON object string with the
+    # triggering page/text/coordinates); empty when no detail exists.  The
+    # reason_code itself is unchanged by this field.
+    detail: str = ""
 
 
 @dataclass
@@ -249,11 +254,16 @@ def enumerate_pdf_experimental_groups(
                 continue
 
             digest = "sha256_" + sha256(raw).hexdigest()
-            blocks, parse_issue = _read_pdf_blocks(raw)
+            blocks, parse_issue, parse_report = _read_pdf_blocks_with_report(raw)
             if blocks is None:
+                abstention = parse_report.get("abstention")
                 result.diagnostics.append(PdfGroupEnumerationDiagnosticV1(
                     paper_id=paper_id, source_document=str(path),
                     reason_code=parse_issue or "pdf_unreadable",
+                    detail=(
+                        json.dumps(abstention, ensure_ascii=False, sort_keys=True)
+                        if abstention else ""
+                    ),
                 ))
                 continue
             section_indexes = [

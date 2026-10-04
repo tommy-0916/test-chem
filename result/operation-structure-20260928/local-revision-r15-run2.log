@@ -1,0 +1,15 @@
+{
+ "si_blocks": 1041,
+ "si_folios_stripped": 79,
+ "w1_sentence_binding": {
+  "needle": "pdf:p14:b9-p14:b10",
+  "full_sentence": "pdf:p14:b9-p14:b11"
+ },
+ "main_still_abstains": true,
+ "a01_parse_unchanged": true,
+ "w1_eligible": false,
+ "w2_eligible": false,
+ "anchors_ok": true,
+ "double_run_byte_identical": true,
+ "replay_sha256": "sha256_655e24ae335b0b7a42e151ea0725943c2d5b4931ac49bbe06078845e53f8b2a6"
+}
