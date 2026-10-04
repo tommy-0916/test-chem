@@ -1,0 +1,28 @@
+{
+  "schema_version": "cross_paper_capability_probe/v14",
+  "model_generated": false,
+  "scope": "r14 capability probe: sign Wu-2025 (main + SI via native parent_doi binding), run attested enumeration, and record the honest first blocker (pdf_column_layout_ambiguous) plus the model-layer quota exhaustion; no semantics changed, no PASS claimed",
+  "audit": [
+    {
+      "kind": "new_files_only",
+      "items": [
+        "result/wu2025-real-input-20261004/ (kb, trust config, evidence, connectivity, inventory, build_kb.py)",
+        "result/operation-structure-20260928/local-revision-r14.py",
+        "result/operation-structure-20260928/local-revision-r14-*.json",
+        "docs/field_semantic_gate_r14_checkpoint_20261004.md"
+      ]
+    },
+    {
+      "kind": "si_binding_verdict",
+      "detail": "the attestation schema natively supports supporting_information with a required parent_doi and publisher_si_link/reviewed_identity evidence; the docstring's exclusion concerns text/markdown derivatives, not SI PDFs; the Wu SI verifies under this binding"
+    },
+    {
+      "kind": "capability_gap",
+      "detail": "the PDF block extractor abstains on every local cross-paper candidate (two-column layouts, one oversize review, one SI without a Methods-style section); the G1 machinery below ingestion was not exercised on new input this round"
+    },
+    {
+      "kind": "model_layer",
+      "detail": "both configured channels returned HTTP 403 weekly quota exhaustion; no proposal was generated, replayed, or hand-built"
+    }
+  ]
+}

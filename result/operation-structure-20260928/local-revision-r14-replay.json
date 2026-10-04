@@ -1,0 +1,230 @@
+{
+  "schema_version": "cross_paper_capability_probe/v14",
+  "round": "r14: cross-paper real-input capability probe (Wu-2025 NatCommun)",
+  "model_generated": false,
+  "semantics_changed": false,
+  "baseline": {
+    "frozen_head": "44a39d9b70b65f4daab462aa98fd588a2ff01a74",
+    "conventions_json_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "prompt_builder_module": "reaserch_agent/route_pdf_group_extraction.py",
+    "prompt_builder_sha256": "24864d9af522666b15a1690b6c9ba829bebfa3047545d82adc3e3dff331486f7",
+    "a01_source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "wu2025_main_pdf_sha256": "0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+    "wu2025_si_pdf_sha256": "cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+    "model_name": "k3",
+    "model_endpoint": "https://api.kimi.com/coding/v1",
+    "model_key": "not recorded"
+  },
+  "source_evidence": {
+    "group_candidate": "W1 (powdered Ni-Mo nanoparticles)",
+    "document": "B01-Wu-2025-NatCommun-SI.pdf",
+    "page_label": "S14",
+    "page_number": 14,
+    "figure": "Supplementary Fig. S13 caption paragraph",
+    "verbatim": "After the hydrothermal reaction, the precipitated Ni-Mo-O powder was collected, dried, and then reduced at 500 °C for 6 h under a mixed hydrogen-nitrogen flow to obtain Ni-Mo nanoparticles.",
+    "recon_text": "si-search/pdf-recon/text/B01-Wu-2025-NatCommun-SI__cdd842d8.txt lines 162-168",
+    "chain": "hydrothermal dissolve -> autoclave 120 °C 12 h -> collect/dry -> reduce 500 °C 6 h (phase change to Ni-Mo nanoparticles)",
+    "pool_honesty": "no candidate-pool source uses centrifugation; retained-phase wording is collection/filtration",
+    "sufficient_at_text_level": true,
+    "reachable_by_pipeline_extractor": false
+  },
+  "kb_identity": {
+    "paper_id": "doi_10_1038_s41467_025_58320_5",
+    "doi": "10.1038/s41467-025-58320-5",
+    "key_id": "wu2025-r14-source-v1",
+    "issuer": "manual-source-review",
+    "private_key_location": "outside the repo (never committed)",
+    "documents": [
+      {
+        "document_kind": "primary_paper",
+        "document_digest": "sha256_0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+        "doi": "10.1038/s41467-025-58320-5"
+      },
+      {
+        "document_kind": "supporting_information",
+        "document_digest": "sha256_cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+        "doi": "10.1038/s41467-025-58320-5"
+      }
+    ],
+    "si_binding": "supporting_information attestation carries parent_doi=10.1038/s41467-025-58320-5; the registry record DOI must match it or the source is dropped",
+    "provenance": "publisher re-downloads on 2026-10-04 hashed byte-identical to the local PDFs (main nature.com/articles/...pdf; SI static-content MOESM1, 7,684,073 bytes)",
+    "trust_config_sha256": "sha256_cfd6f739b295fecea1e3408f42dcf8b96cea1a61d75b6342c718a0b76b8f6de7"
+  },
+  "model_proposal": {
+    "status": "not_reached",
+    "graph_steps": null,
+    "route_facts": null,
+    "state_facts": null,
+    "covers_collect_dry_reduce_chain": null,
+    "model_layer": {
+      "model_name": "k3",
+      "endpoint": "https://api.kimi.com/coding/v1",
+      "channels_tried": [
+        "chat_wire",
+        "codex_responses_direct"
+      ],
+      "result": "http_403_weekly_quota_exhausted_on_both_channels",
+      "raw_record": "result/wu2025-real-input-20261004/connectivity.json",
+      "real_generation": "not_reached: zero enumerated groups upstream AND model quota exhausted downstream; no replayed or hand-built proposal was substituted"
+    }
+  },
+  "layer_results": {
+    "attestation": {
+      "status": "verified",
+      "documents": 2,
+      "detail": "supporting_information attestation carries parent_doi=10.1038/s41467-025-58320-5; the registry record DOI must match it or the source is dropped"
+    },
+    "group_enumeration": {
+      "status": "abstained",
+      "groups": 0,
+      "diagnostic_reasons": [
+        "pdf_column_layout_ambiguous"
+      ],
+      "documents_flagged": 2,
+      "meaning": "attestation verified and the signed sources reached the parser; the two-column Nature layout abstains before any experimental section is read"
+    },
+    "proposal_extraction": {
+      "status": "not_reached",
+      "reason": "no group to propose from"
+    },
+    "local_revision": {
+      "status": "not_reached"
+    },
+    "association": {
+      "status": "not_reached"
+    },
+    "receipt": {
+      "status": "not_reached"
+    },
+    "pool_census": [
+      {
+        "candidate": "wu2025-main",
+        "file": "backend/data/reference_sources/B01/B01-Wu-2025-NatCommun-main.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "wu2025-si",
+        "file": "backend/data/reference_sources/B01/B01-Wu-2025-NatCommun-SI.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "zhang2017-main",
+        "file": "backend/data/reference_sources/B01/B01-Zhang-2017-NatCommun-main.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "zhang2017-si",
+        "file": "backend/data/reference_sources/B01/B01-Zhang-2017-NatCommun-SI.pdf",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "chemkb-kion",
+        "file": "reaserch_agent/chem_kb/High-Capacity Aqueous Potassium-Ion Batteries for Large-Scale Energy Storage.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "chemkb-pba-hosts",
+        "file": "reaserch_agent/chem_kb/High-Entropy Prussian Blue Analogues and Their Oxide Family as Sulfur Hosts for Lithium-Sulfur Batteries.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_source_too_large"
+        ]
+      },
+      {
+        "candidate": "chemkb-nife-pba",
+        "file": "reaserch_agent/chem_kb/Operando Spectroscopic Identification of Active Sites in NiFe Prussian Blue Analogues as Electrocatalysts- Activation of Oxygen Atoms for Oxygen Evolution Reaction.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "upload-upl_1e79",
+        "file": "backend/data/uploads/upl_1e796859a263c3e5c502c488.pdf",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      }
+    ]
+  },
+  "dag_consumption": {
+    "criterion": "at least one field that flat/literal cannot prove, proven by the multi-hop DAG and accepted by the receipt as dag_proven_state_field_paths",
+    "observed": false,
+    "dag_proven_state_field_paths": [],
+    "note": "the criterion is unobservable this round: no group survives ingestion, so no DAG is ever built; this is NOT claimed as a pass"
+  },
+  "first_blocker": {
+    "layer": "pdf_ingestion",
+    "reason_code": "pdf_column_layout_ambiguous",
+    "where": "reaserch_agent/route_pdf_source.py _ordered_page_lines: one ambiguous page aborts the whole document",
+    "evidence": {
+      "groups": 0,
+      "diagnostic_reasons": [
+        "pdf_column_layout_ambiguous"
+      ],
+      "documents_flagged": 2,
+      "meaning": "attestation verified and the signed sources reached the parser; the two-column Nature layout abstains before any experimental section is read"
+    },
+    "scope": "every local cross-paper candidate abstains at ingestion; see layer_results.pool_census"
+  },
+  "separate_counters": {
+    "field_proofs_succeeded": 0,
+    "group_receipt_pass": 0,
+    "protocol_admitted": 0,
+    "published": 0
+  },
+  "anchors": {
+    "source_mutation": {
+      "control_untampered_verified": true,
+      "tampered_si_reasons": [
+        "source_digest_or_format_mismatch"
+      ]
+    },
+    "wrong_binding": {
+      "wrong_document_digest_reasons": [
+        "source_digest_or_format_mismatch"
+      ],
+      "registry_doi_mismatch_sources": 0
+    },
+    "a01_regression": {
+      "mechanism": "r13b runner re-executed as a subprocess",
+      "double_run_byte_identical": true,
+      "replay_matches_r13_archive": true,
+      "ms7a_out": "BLOCKED (retained_object_mention_precedes_operation)"
+    },
+    "diagnostics_module_zero_proof_dependency": true
+  },
+  "fixed_constraints": {
+    "existing_source_files_modified": false,
+    "r7_to_r13b_archives_untouched": true,
+    "contracts_tree_untouched": true,
+    "diagnostics_module_semantics_untouched": true,
+    "no_v1_expansion": true,
+    "tokens_consumed_by_this_runner": 0,
+    "device_not_run": true,
+    "eight_question_rerun": false,
+    "ms7a_cascade_still_blocked": true
+  },
+  "minimal_fix_suggestions_not_implemented": [
+    "pdf_ingestion: teach _ordered_page_lines to resolve (or skip with a diagnostic row) ambiguous two-column pages instead of aborting the whole document; smallest honest step: per-page abstention that preserves page order so figure-heavy pages do not kill method pages",
+    "si_section_recognition: SI PDFs use figure-caption paragraphs, not Methods-style group headings; a caption-boundary grouping mode would be required before W1-class groups can enumerate",
+    "model_quota: rerun the real generation once the weekly quota window resets (no code change needed)"
+  ],
+  "terminology": "this round is a capability probe on real cross-paper input; nothing here is an A01-style PASS, a new model generation result, or a V2 publication gate"
+}

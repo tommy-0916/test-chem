@@ -1,0 +1,45 @@
+{
+  "schema_version": "route-trust-config/v1",
+  "signed_route_signature_reviews": [],
+  "signed_route_source_events": [
+    {
+      "event": {
+        "attestation_digest": "sha256_b59d5b7154e26c002d1ebb64910e9c6b22347ec7ba168142e5a1e2d32e0c0451",
+        "document_digest": "sha256_0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+        "document_kind": "primary_paper",
+        "identity_verdict": "primary_verified",
+        "issuer": "manual-source-review",
+        "kb_relative_path": "_pdf_sources/wu2025/0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819.pdf",
+        "paper_id": "doi_10_1038_s41467_025_58320_5",
+        "schema_version": "trusted_acquisition_event_v1"
+      },
+      "key_id": "wu2025-r14-source-v1",
+      "schema_version": "signed_trusted_acquisition_event_v1",
+      "signature": "icXj9yfrAf2Ts/hk5AAtgIsspTzZ3U/nwID0YhuFo0ycyArkKs66gk90jN6jUr9CO9ajeN5aRq1GHJC2mvkqDQ=="
+    },
+    {
+      "event": {
+        "attestation_digest": "sha256_98091634ed855de3d24150a437180e64268431e80a82422e61e1eda1de5f9c30",
+        "document_digest": "sha256_cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+        "document_kind": "supporting_information",
+        "identity_verdict": "si_verified",
+        "issuer": "manual-source-review",
+        "kb_relative_path": "_pdf_sources/wu2025/cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4.pdf",
+        "paper_id": "doi_10_1038_s41467_025_58320_5",
+        "schema_version": "trusted_acquisition_event_v1"
+      },
+      "key_id": "wu2025-r14-source-v1",
+      "schema_version": "signed_trusted_acquisition_event_v1",
+      "signature": "3HpnOVMEfd0bw16Eu+oh9jZg9MtiLKBr95NjoeQKmaDzqlTxxHLG5jk1X2zSsDXcFqnBNhqq6peuCToAOqrfAw=="
+    }
+  ],
+  "trusted_route_capabilities_by_group": [],
+  "trusted_route_group_roles_by_group": [],
+  "trusted_route_public_keys": {
+    "wu2025-r14-source-v1": {
+      "allowed_issuer": "manual-source-review",
+      "public_key_base64": "NGKgIvj5l+lXncT1cHCcTI0Th2o5l4fCUOm+msi6JX0="
+    }
+  },
+  "trusted_route_signature_public_keys": {}
+}

@@ -1,0 +1,18 @@
+{
+  "attempts": [
+    {
+      "channel": "chat_wire",
+      "ok": false,
+      "error_type": "PermissionDeniedError",
+      "error": "Error code: 403 - {'error': {'message': \"You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota\", 'type': 'access_terminated_error'}}"
+    },
+    {
+      "channel": "codex_responses_direct",
+      "ok": false,
+      "error_type": "PermissionDeniedError",
+      "error": "Error code: 403 - {'error': {'message': \"You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota\", 'type': 'access_terminated_error'}}"
+    }
+  ],
+  "model_name": "k3",
+  "endpoint": "https://api.kimi.com/coding/v1"
+}

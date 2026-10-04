@@ -1,0 +1,19 @@
+{
+  "groups": [],
+  "diagnostics": [
+    {
+      "paper_id": "doi_10_1038_s41467_025_58320_5",
+      "source_document": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\wu2025-real-input-20261004\\kb\\_pdf_sources\\wu2025\\0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819.pdf",
+      "reason_code": "pdf_column_layout_ambiguous",
+      "section": "",
+      "experimental_group_id": ""
+    },
+    {
+      "paper_id": "doi_10_1038_s41467_025_58320_5",
+      "source_document": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\wu2025-real-input-20261004\\kb\\_pdf_sources\\wu2025\\cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4.pdf",
+      "reason_code": "pdf_column_layout_ambiguous",
+      "section": "",
+      "experimental_group_id": ""
+    }
+  ]
+}

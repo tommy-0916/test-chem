@@ -1,0 +1,9 @@
+{
+ "groups_enumerated": 0,
+ "attested_documents": 2,
+ "first_blocker": "pdf_column_layout_ambiguous",
+ "dag_consumption_observed": false,
+ "anchors_ok": true,
+ "double_run_byte_identical": true,
+ "replay_sha256": "sha256_8431bca4bfd0621b9f265541f6d5493adaa52bda15fae7f7fbb824d2fb179e70"
+}
