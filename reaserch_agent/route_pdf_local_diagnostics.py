@@ -36,6 +36,7 @@ from .route_pdf_locator_production import (
     PdfProposalLocatorProductionV1, produce_pdf_proposal_locators,
 )
 from .route_pdf_proposal_quality import assess_unreviewed_proposal_literal_shape
+from .route_state_proof_dag import build_verified_state_proof_dags
 
 
 @dataclass
@@ -313,6 +314,7 @@ def assess_pdf_group_proposal_fields(
                                   "fact_graph_value_mismatch")
 
     locatable_slots: set[tuple[int, int]] = set()
+    dag_proofs_cache: dict[int, Any] = {}
     for record in located.resolutions:
         if record["status"] != "located_unreviewed":
             continue
@@ -340,11 +342,34 @@ def assess_pdf_group_proposal_fields(
             "locator": record["resolved_span"],
             "source_digest": scope.source_digest,
         }
+        # The diagnostic consumes the same G1 state-proof DAG map as the
+        # receipt: built and dual-verified LIVE from this group's current
+        # signed blocks via the shared adapter (never from a stored
+        # artifact), one build per proposal.  A DAG-provable state is
+        # therefore not re-reported here as semantic_binding_pending, while
+        # honestly unprovable states still are.  The throwaway acceptance
+        # sink mirrors the receipt's rescue-then-verify contract (a rescue
+        # counts only when every later independent check also passes)
+        # without changing this diagnostic artifact's shape.
+        if proposal_index not in dag_proofs_cache:
+            dag_proofs_cache[proposal_index] = build_verified_state_proof_dags(
+                proposal.get("material_graph"), facts,
+                paper_id=scope.paper_id,
+                experimental_group_id=scope.experimental_group_id,
+                source_digest=scope.source_digest,
+                blocks=[(block.locator, block.text) for block in group.blocks],
+                caption_block_locators=[
+                    block.locator for block in group.blocks
+                    if getattr(block, "caption", False)
+                ],
+            )
         reason = _literal_fact_reason(
             diagnostic_fact, group,
             [(block.locator, block.text) for block in group.blocks],
             graph=proposal.get("material_graph"), facts=facts,
             retained_object_resolver=retained_object_resolver_for(proposal),
+            dag_proofs=dag_proofs_cache[proposal_index],
+            acceptance_sink={},
         )
         if reason:
             add_issue(proposal_index, fact_index, reason)

@@ -356,7 +356,7 @@ def _literal_fact_reason(
     field_path = _text(fact.get("field_path"))
     # Flat single-hop derivations first — exactly the pre-G1 order.  The G1
     # multi-hop DAG is consulted ONLY where this function would otherwise
-    # fail a ``.state`` fact (see _dag_fallback below), so a fact the
+    # fail a ``.state`` fact (see _dag_rescued below), so a fact the
     # literal gates accept on their own keeps its literal classification.
     derived = _state_derivation_proof(
         fact, facts, graph, scope,
@@ -365,22 +365,33 @@ def _literal_fact_reason(
     dag_derivation: dict[str, Any] | None = None
     dag_checked = False
 
-    def _dag_fallback(reason: str) -> str:
-        """Rescue a failed ``.state`` fact via its dual-verified proof DAG.
+    def _dag_rescued() -> bool:
+        """Consult the dual-verified proof DAG for a failing ``.state`` gate.
 
         The DAG entry was built and dual-verified from THIS receipt's
         current signed blocks (never from a stored artifact); the
         ``dag_entry_derivation`` guard rejects verdict forgeries, cross-path
-        substitutions, and 3E diagnostic records.  An accepted derivation is
-        marked ``derivation="state_proof_dag_v1"`` and earns exactly the
-        flat-derived gate exemptions (a proven state is not re-demanded as a
-        verbatim quote).  For input/intermediate paths the fact value must
-        equal the DAG root claim's target state, mirroring flat inheritance.
+        substitutions, and 3E diagnostic records.  Consultation is lazy and
+        cached: it happens only when a state-literal gate (or the
+        string-value excerpt requirement below) has actually failed, so a
+        fact the literal gates accept on their own is never relabeled.
+
+        A rescue lifts ONLY the state-literal-evidence requirement — the
+        parent-role/graph-path/controlled-mapping/attribution
+        (semantic_binding_pending) gates and the "value must appear in the
+        excerpt" string check — exactly the flat-derived gate exemptions (a
+        proven state is not re-demanded as a verbatim quote).  The
+        independent value-type and unit checks below still run after a
+        rescue; the acceptance sink is written only at the final successful
+        exit, so a rescued fact that later fails an independent check is
+        reported with that reason and never classified dag_proven.  For
+        input/intermediate paths the fact value must equal the DAG root
+        claim's target state, mirroring flat inheritance.
         """
         nonlocal dag_derivation, dag_checked
         if not field_path.endswith(".state") or not isinstance(
                 dag_proofs, Mapping):
-            return reason
+            return False
         if not dag_checked:
             dag_checked = True
             candidate = _state_derivation_proof(
@@ -392,46 +403,50 @@ def _literal_fact_reason(
                     and candidate.get("derivation")
                     == STATE_PROOF_DAG_DERIVATION):
                 dag_derivation = dict(candidate)
-        if dag_derivation is None:
-            return reason
-        if acceptance_sink is not None:
-            acceptance_sink["state_proof_dag"] = dict(dag_derivation)
-        return ""
+        return dag_derivation is not None
 
     if is_material_port_state_path(field_path):
         if derived is None:
+            state_issue = ""
             if output_state_parent_role_issue(field_path, graph, value, excerpt):
-                return _dag_fallback("parent_state_not_child_evidence")
-            scoped = _scoped_claim(
-                graph if isinstance(graph, list) else [], {}, field_path,
-            )
-            if scoped is None:
-                return _dag_fallback("fact_graph_path_missing")
-            _mapping, mapping_issue = controlled_state_mapping(
-                field_path, value, scoped[0],
-            )
-            if mapping_issue:
-                return _dag_fallback(mapping_issue)
-            owner = scoped[1]
-            context = label_context
-            if context is None:
-                context = build_source_label_context(
-                    graph if isinstance(graph, list) else [], facts,
+                state_issue = "parent_state_not_child_evidence"
+            else:
+                scoped = _scoped_claim(
+                    graph if isinstance(graph, list) else [], {}, field_path,
                 )
-            outcome, binding = state_attribution_outcome(
-                value, excerpt, field_path,
-                graph if isinstance(graph, list) else [], context,
-            )
-            if outcome == "pending":
-                return _dag_fallback("semantic_binding_pending")
-            if outcome == "binding":
-                if binding_sink is not None:
-                    binding_sink["binding"] = binding
-            elif (not isinstance(owner, Mapping)
-                    or not state_source_locally_attributed(
-                        value, excerpt, owner.get("name"),
-                    )):
-                return _dag_fallback("semantic_binding_pending")
+                if scoped is None:
+                    state_issue = "fact_graph_path_missing"
+                else:
+                    _mapping, mapping_issue = controlled_state_mapping(
+                        field_path, value, scoped[0],
+                    )
+                    if mapping_issue:
+                        state_issue = mapping_issue
+                    else:
+                        owner = scoped[1]
+                        context = label_context
+                        if context is None:
+                            context = build_source_label_context(
+                                graph if isinstance(graph, list) else [], facts,
+                            )
+                        outcome, binding = state_attribution_outcome(
+                            value, excerpt, field_path,
+                            graph if isinstance(graph, list) else [], context,
+                        )
+                        if outcome == "pending":
+                            state_issue = "semantic_binding_pending"
+                        elif outcome == "binding":
+                            if binding_sink is not None:
+                                binding_sink["binding"] = binding
+                        elif (not isinstance(owner, Mapping)
+                                or not state_source_locally_attributed(
+                                    value, excerpt, owner.get("name"),
+                                )):
+                            state_issue = "semantic_binding_pending"
+            # A DAG rescue waives only these state-literal gates; execution
+            # continues into the independent value/unit checks below.
+            if state_issue and not _dag_rescued():
+                return state_issue
     if isinstance(value, bool):
         return "fact_value_type_unverifiable"
     if isinstance(value, (int, float)):
@@ -515,14 +530,21 @@ def _literal_fact_reason(
         if derived is None and dag_derivation is None and (not literal or re.search(
             rf"(?<!\w){re.escape(literal)}(?!\w)", normalized_excerpt,
         ) is None):
-            return _dag_fallback(
+            string_issue = (
                 "semantic_binding_pending"
                 if classify_route_field_basis(_text(fact.get("field_path")))
                 == "controlled_mapping"
                 else "fact_value_not_in_excerpt"
             )
+            if not _dag_rescued():
+                return string_issue
     else:
         return "fact_value_type_unverifiable"
+    # Every check passed.  Only now does a DAG rescue become an acceptance:
+    # a rescued fact that failed any independent check above returned its
+    # reason without touching the sink, so it is never classified dag_proven.
+    if dag_derivation is not None and acceptance_sink is not None:
+        acceptance_sink["state_proof_dag"] = dict(dag_derivation)
     return ""
 
 

@@ -1,0 +1,125 @@
+{
+ "paper_id": "doi_10_1021_acsami_3c11651",
+ "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+ "section": "METHODS",
+ "locator": "pdf:p2:b54-p2:b76",
+ "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+ "source_document": "C:\\Users\\tommy\\Downloads\\chem-agent-main\\github-submit-hyt-main\\result\\a01-v5-real-input-20260927\\kb\\_pdf_sources\\a01_v5\\2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8.pdf",
+ "blocks": [
+  {
+   "locator": "pdf:p2:b54-p2:b54",
+   "text": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b55-p2:b55",
+   "text": "The",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b56-p2:b56",
+   "text": "pristine Ni3Fe LDH, labeled as NiFe Control, was synthesized by a",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b57-p2:b57",
+   "text": "classical pH-controlled coprecipitation and centrifugation protocol.",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b58-p2:b58",
+   "text": "Typically, 37.5 mmol Ni(NO3)2·6H2O and 12.5 mmol Fe(NO3)3·",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b59-p2:b59",
+   "text": "9H2O were mixed and dissolved in 50 mL of water, labeled as solution",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b60-p2:b60",
+   "text": "A. Solution B is prepared by dissolving 100 mmol NaOH in 100 mL",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b61-p2:b61",
+   "text": "of water (1 M). Solution C is obtained by dissolving 6.25 mmol",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b62-p2:b62",
+   "text": "Na2CO3 in 50 mL of water. Then, solution A is injected into solution",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b63-p2:b63",
+   "text": "C in a beaker using a syringe pump at a flow speed of 115 mL/h, and",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b64-p2:b64",
+   "text": "the reaction was kept at a stirring speed of 800 rpm. The pH of the",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b65-p2:b65",
+   "text": "solution was monitored using a pH meter (Mettler Toledo) and",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b66-p2:b66",
+   "text": "controlled to be 10 by dropwise adding solution B manually. A",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b67-p2:b67",
+   "text": "yellow-green precipitate of Ni3Fe LDH was observed once the",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b68-p2:b68",
+   "text": "reaction started. After a total reaction time of 1 h, around 200 mL of",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b69-p2:b69",
+   "text": "the suspension (∼500 mg samples) was divided into 8 parts, followed",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b70-p2:b70",
+   "text": "by a centrifugation−redispersion protocol using deionized water three",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b71-p2:b71",
+   "text": "times, which was the first centrifugation−redispersion protocol. The",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b72-p2:b72",
+   "text": "precipitates were labeled as LDH seeds, which were dispersed in 30",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b73-p2:b73",
+   "text": "mL of water and aged for 20 h at room temperature under a stirring",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b74-p2:b74",
+   "text": "speed of 100 rpm. Finally, after a second centrifugation−redispersion",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b75-p2:b75",
+   "text": "protocol one time, all the samples are collected for further",
+   "caption": false
+  },
+  {
+   "locator": "pdf:p2:b76-p2:b76",
+   "text": "characterization.",
+   "caption": false
+  }
+ ]
+}

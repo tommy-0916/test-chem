@@ -511,6 +511,41 @@ class ReceiptConsumptionPointTest(unittest.TestCase):
             results[STEP1_INPUT_STATE]["build_issue"],
             "convention_child_state_value_mismatch")
 
+    def test_dag_rescue_still_runs_independent_unit_check(self) -> None:
+        # Hole fix (unit check bypass): a DAG rescue lifts ONLY the
+        # state-literal-evidence gates; the independent unit check still
+        # applies to the rescued fact.  Three parallel receipts:
+        #   HOLE — unit "kg" on the DAG-exclusive path blocks with
+        #          fact_unit_non_numeric and never enters dag_proven;
+        #   POS  — unit "" (fixture default) keeps the rescue;
+        #   CTRL — the same unit violation on the flat-provable OUT_STATE
+        #          blocks identically and was never DAG-eligible.
+        def _receipt_with_unit(path: str, unit: str):
+            protocol = _protocol()
+            index = next(
+                i for i, item in enumerate(protocol["route_facts"])
+                if item["field_path"] == path)
+            protocol["route_facts"][index]["unit"] = unit
+            receipt = produce_pdf_group_fact_receipt(
+                [_group()], [protocol], signed_inventory_verified=True)
+            return index, receipt.group_results[0]
+
+        index, hole = _receipt_with_unit(STEP1_OUT_STATE, "kg")
+        self.assertEqual(hole.status, "blocked")
+        self.assertIn(f"fact[{index}]:fact_unit_non_numeric", hole.reason_codes)
+        self.assertEqual(hole.dag_proven_state_field_paths, ())
+
+        _index, pos = _receipt_with_unit(STEP1_OUT_STATE, "")
+        self.assertEqual(pos.status, "literal_facts_verified_pending_review")
+        self.assertIn(STEP1_OUT_STATE, pos.dag_proven_state_field_paths)
+
+        ctrl_index, ctrl = _receipt_with_unit(OUT_STATE, "kg")
+        self.assertEqual(ctrl.status, "blocked")
+        self.assertIn(
+            f"fact[{ctrl_index}]:fact_unit_non_numeric", ctrl.reason_codes)
+        # The DAG-exclusive path still rescues cleanly in the same receipt.
+        self.assertIn(STEP1_OUT_STATE, ctrl.dag_proven_state_field_paths)
+
 
 if __name__ == "__main__":
     unittest.main()

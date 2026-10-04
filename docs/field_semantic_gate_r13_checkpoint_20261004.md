@@ -191,3 +191,40 @@ preserved key-for-key.
    the blocks-only mode rejects graph[4].in[0]
    (`proof_dag_leaf_not_relocatable`); the formal entry's tightening resolves
    the quote and the entry PASSes. This asymmetry is intentional.
+
+## r13b: acceptance-wording correction (recorded semantics unchanged)
+
+The r13 runner's header described the Electrode Preparation control as having
+"two DAG-proven input-state fields (flat could not derive them) … DAG-accepted
+at the receipt". That sentence is inaccurate; the recorded replay already
+contradicted it. The corrected wording, archived as
+`result/operation-structure-20260928/local-revision-r13b.py`:
+
+- **EP is an independent literal positive, not a DAG-acceptance positive.**
+  Its two extraction DAG-PASS rows (graph[1].in[1], graph[4].in[1]) are
+  single-node `paper_literal` roots; at the receipt both are
+  `verified_literal` in the baseline and integrated runs alike, so the
+  receipt's DAG acceptance for EP is **zero** by design (`ep_dag_proven: []`).
+  EP proves DAG recognition on an independent group at the extraction point.
+- The DAG-exclusive multi-hop receipt acceptance is demonstrated only on the
+  NiFe Control chain (graph[6].out, ms7a.in). The ER control stays a coverage
+  gap. An **independent multi-hop positive control** (a second signed group
+  whose receipt DAG-accepts a multi-hop-proven field) is still pending
+  acceptance and is not claimed.
+
+r13b regenerates the replay/audit from the same fixed inputs and **pins both
+outputs to the archived r13 digests** (replay LF `sha256_9084ca…2cb5`, audit
+LF `sha256_9919a4…69ee`); a drift fails the runner. The pin is green, which
+also evidences that the concurrent G1 follow-up fixes (receipt unit-check
+rescue ordering, DAG-aware diagnostics producers, final-version DAG rows on
+the locator artifact) are verdict-neutral for this acceptance.
+
+Conventions, stated once explicitly:
+
+- "Two runs byte-identical" compares the two in-memory UTF-8 serializations
+  inside one process. `double_run_byte_identical: true` and `replay_sha256`
+  appear in the **stdout summary only**; the persisted replay JSON does not
+  contain them.
+- Replay/audit files are written with `\n` newlines. On Windows with
+  `core.autocrlf=true` the working tree shows CRLF while the git index stores
+  LF; all pinned digests are computed over the LF bytes.

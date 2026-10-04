@@ -253,11 +253,14 @@ class RetainedObjectG1IntegrationTest(unittest.TestCase):
         flagged = {
             (item["fact_id"], item["reason_code"]) for item in final_issues
         }
-        # The derived facts are no longer pending; the honestly unresolved
-        # downstream output stays flagged.
+        # The derived facts are not pending, and the redispersion output the
+        # flat engine could not prove is no longer flagged either: the local
+        # diagnostics now consume the same live dual-verified DAG map as the
+        # receipt (REDISPERSION_V1 over the proven S1 chain), matching the
+        # receipt-side dag_proven classification of this same path.
         self.assertNotIn(("f_out_state", "semantic_binding_pending"), flagged)
         self.assertNotIn(("f_in1_state", "semantic_binding_pending"), flagged)
-        self.assertIn(("f_out1_state", "semantic_binding_pending"), flagged)
+        self.assertNotIn(("f_out1_state", "semantic_binding_pending"), flagged)
 
     def test_g1_smuggled_fabricated_record_is_ignored(self) -> None:
         proposal = _proposal(naming_excerpt=B4)

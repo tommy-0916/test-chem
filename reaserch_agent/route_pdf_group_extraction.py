@@ -507,7 +507,6 @@ def _invoke_bounded_proposals(
         qualitative_unit_rows: list[dict[str, Any]] = []
         controlled_state_rows: list[dict[str, Any]] = []
         convention_state_rows: list[dict[str, Any]] = []
-        convention_state_proof_dag_rows: list[dict[str, Any]] = []
         canonicalized: list[Any] = []
         for proposal_index, proposal in enumerate(proposals):
             if isinstance(proposal, Mapping):
@@ -575,9 +574,6 @@ def _invoke_bounded_proposals(
                 convention_state_rows.extend({
                     "proposal_index": proposal_index, **row,
                 } for row in normalizations["convention_state_candidates"])
-                convention_state_proof_dag_rows.extend({
-                    "proposal_index": proposal_index, **row,
-                } for row in normalizations["convention_state_proof_dags"])
             else:
                 canonicalized.append(proposal)
         proposals = canonicalized
@@ -695,8 +691,46 @@ def _invoke_bounded_proposals(
         locator_artifact["qualitative_unit_normalizations"] = qualitative_unit_rows
         locator_artifact["controlled_state_normalizations"] = controlled_state_rows
         locator_artifact["convention_state_candidates"] = convention_state_rows
+        # G1 version consistency: the audit DAG rows are (re)built and
+        # dual-verified against the FINAL, post-revision proposals — the
+        # rows seen during the pre-revision normalization pass describe the
+        # pre-repair version and are deliberately NOT carried here.  The
+        # artifact's DAG rows, the final proposals, and the receipt's own
+        # live rebuild therefore all describe one and the same version.
+        final_state_proof_dag_rows: list[dict[str, Any]] = []
+        for proposal_index, proposal in enumerate(proposals):
+            if not isinstance(proposal, Mapping):
+                continue
+            group = _source_group_for(proposal)
+            if group is None:
+                continue
+            source_ref = proposal.get("source_group_ref")
+            source_ref = source_ref if isinstance(source_ref, Mapping) else {}
+            group_blocks = getattr(group, "blocks", None)
+            graph = proposal.get("material_graph")
+            facts = proposal.get("route_facts")
+            if (not group_blocks or not isinstance(graph, list)
+                    or not isinstance(facts, list)):
+                continue
+            final_dag_entries = build_verified_state_proof_dags(
+                graph, facts,
+                paper_id=str(source_ref.get("paper_id") or ""),
+                experimental_group_id=str(
+                    source_ref.get("experimental_group_id") or ""),
+                source_digest=str(source_ref.get("source_digest") or ""),
+                blocks=[(block.locator, block.text) for block in group_blocks],
+                caption_block_locators=[
+                    block.locator for block in group_blocks
+                    if getattr(block, "caption", False)
+                ],
+            )
+            final_state_proof_dag_rows.extend({
+                "proposal_index": proposal_index,
+                "status": "unreviewed_prerequisites_only",
+                **dag_entry,
+            } for dag_entry in final_dag_entries.values())
         locator_artifact["convention_state_proof_dags"] = (
-            convention_state_proof_dag_rows
+            final_state_proof_dag_rows
         )
         locator_artifact["local_revision"] = local_revision
         if located.diagnostics:

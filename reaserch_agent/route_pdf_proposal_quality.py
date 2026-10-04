@@ -29,6 +29,13 @@ from .route_group_compiler import (
     literal_quantity_present, output_quantity_role_issue,
 )
 from .route_pdf_quote_binding import normalize_pdf_quote_whitespace
+from .route_state_proof_dag import (
+    build_verified_state_proof_dags, dag_entry_derivation, is_input_state_path,
+)
+
+
+def _state_text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def assess_unreviewed_proposal_literal_shape(
@@ -46,8 +53,14 @@ def assess_unreviewed_proposal_literal_shape(
     resolver is rebuilt LIVE from each proposal's signed group blocks and
     threaded into the convention derivations (output state first, then
     parent-output input-state inheritance), so a convention-derived state
-    is no longer reported ``semantic_binding_pending`` here.  Without
-    ``groups`` the behavior is byte-identical to before.
+    is no longer reported ``semantic_binding_pending`` here.  The same live
+    blocks also feed the shared G1 adapter: each proposal's
+    state-proof-DAG map is built and dual-verified on the spot, and a
+    DAG-proven state (guard-checked via ``dag_entry_derivation``, with the
+    input-path value match mirroring the receipt) likewise lifts only the
+    state-literal-evidence diagnostics — the independent unit and
+    value-type checks below still fire.  Without ``groups`` the behavior is
+    byte-identical to before.
     """
 
     group_by_key: dict[tuple[str, str, str], Any] = {}
@@ -63,6 +76,18 @@ def assess_unreviewed_proposal_literal_shape(
             group_by_key.setdefault(key, group)
     resolvers: dict[int, Any] = {}
 
+    def _signed_group_for(proposal: Mapping[str, Any]) -> Any:
+        if not group_by_key:
+            return None
+        ref = proposal.get("source_group_ref")
+        if not isinstance(ref, Mapping):
+            return None
+        return group_by_key.get(tuple(
+            ref.get(name) for name in (
+                "paper_id", "experimental_group_id", "source_digest",
+            )
+        ))
+
     def retained_object_resolver_for(
         proposal_index: int, proposal: Mapping[str, Any],
     ) -> Any:
@@ -70,25 +95,51 @@ def assess_unreviewed_proposal_literal_shape(
             return None
         if proposal_index not in resolvers:
             resolver = None
-            ref = proposal.get("source_group_ref")
+            group = _signed_group_for(proposal)
             graph = proposal.get("material_graph")
             facts = proposal.get("route_facts")
-            if isinstance(ref, Mapping):
-                group = group_by_key.get(tuple(
-                    ref.get(name) for name in (
-                        "paper_id", "experimental_group_id", "source_digest",
-                    )
-                ))
-                if (group is not None and isinstance(graph, list)
-                        and isinstance(facts, list)):
-                    resolver = build_retained_object_resolver(
-                        graph, facts,
-                        [(block.locator, block.text) for block in group.blocks],
-                        [block.locator for block in group.blocks
-                         if getattr(block, "caption", False)],
-                    )
+            if (group is not None and isinstance(graph, list)
+                    and isinstance(facts, list)):
+                resolver = build_retained_object_resolver(
+                    graph, facts,
+                    [(block.locator, block.text) for block in group.blocks],
+                    [block.locator for block in group.blocks
+                     if getattr(block, "caption", False)],
+                )
             resolvers[proposal_index] = resolver
         return resolvers[proposal_index]
+
+    dag_maps: dict[int, Any] = {}
+
+    def dag_proofs_for(proposal_index: int, proposal: Mapping[str, Any]) -> Any:
+        """Per-proposal LIVE G1 state-proof-DAG map from the signed blocks.
+
+        Same construction the receipt and the locator diagnostics consume:
+        built and dual-verified here from the group's current signed blocks,
+        never from a stored artifact.  ``None`` when no signed group is
+        available (byte-identical pre-G1 behavior in that case).
+        """
+        if proposal_index not in dag_maps:
+            dag_proof_map = None
+            group = _signed_group_for(proposal)
+            graph = proposal.get("material_graph")
+            facts = proposal.get("route_facts")
+            if (group is not None and isinstance(graph, list)
+                    and isinstance(facts, list)):
+                scope = group.source_scope
+                dag_proof_map = build_verified_state_proof_dags(
+                    graph, facts,
+                    paper_id=scope.paper_id,
+                    experimental_group_id=scope.experimental_group_id,
+                    source_digest=scope.source_digest,
+                    blocks=[(block.locator, block.text) for block in group.blocks],
+                    caption_block_locators=[
+                        block.locator for block in group.blocks
+                        if getattr(block, "caption", False)
+                    ],
+                )
+            dag_maps[proposal_index] = dag_proof_map
+        return dag_maps[proposal_index]
 
     diagnostics: list[dict[str, Any]] = []
     for proposal_index, proposal in enumerate(proposals):
@@ -151,8 +202,26 @@ def assess_unreviewed_proposal_literal_shape(
                     record["field_path"], scope_dict,
                     retained_object_resolver=resolver,
                 )
+            dag_derivation = None
+            if derived is None and record["field_path"].endswith(".state"):
+                # G1 multi-hop rescue, consulted only after BOTH flat
+                # derivations failed.  The guarded derivation lifts only the
+                # state-literal-evidence diagnostics below; the independent
+                # unit and value-type checks still fire.  Input paths
+                # additionally require the fact value to equal the DAG root
+                # claim's target state, mirroring the receipt.
+                dag_map = dag_proofs_for(proposal_index, proposal)
+                if isinstance(dag_map, Mapping):
+                    candidate = dag_entry_derivation(
+                        dag_map.get(record["field_path"]))
+                    if (candidate is not None
+                            and is_input_state_path(record["field_path"])
+                            and _state_text(value)
+                            != _state_text(candidate.get("target_state"))):
+                        candidate = None
+                    dag_derivation = candidate
             if is_material_port_state_path(record["field_path"]):
-                if derived is None:
+                if derived is None and dag_derivation is None:
                     graph = proposal.get("material_graph")
                     if output_state_parent_role_issue(
                         record["field_path"], graph, value, excerpt,
@@ -211,9 +280,11 @@ def assess_unreviewed_proposal_literal_shape(
                     normalize_pdf_quote_whitespace(excerpt)
                     if isinstance(excerpt, str) else ""
                 )
-                if derived is None and (not literal or re.search(
-                    rf"(?<!\w){re.escape(literal)}(?!\w)", quote,
-                ) is None):
+                if derived is None and dag_derivation is None and (
+                    not literal or re.search(
+                        rf"(?<!\w){re.escape(literal)}(?!\w)", quote,
+                    ) is None
+                ):
                     diagnostics.append({
                         **record,
                         "reason_code": (
