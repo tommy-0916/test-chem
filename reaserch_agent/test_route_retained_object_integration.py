@@ -292,7 +292,16 @@ class RetainedObjectG1IntegrationTest(unittest.TestCase):
             "material_graph[0].material_inputs[0].state",
             result.verified_field_paths,
         )
-        self.assertIn("fact[8]:semantic_binding_pending", result.reason_codes)
+        # G1 (state-proof-dag/v1 at the receipt): the redispersion output
+        # that the flat engine honestly could not prove is now DAG-proven —
+        # REDISPERSION_V1 composed over the proven S1 chain, rebuilt and
+        # dual-verified from the live signed blocks — so nothing stays
+        # pending.  Pre-G1 this asserted fact[8]:semantic_binding_pending.
+        self.assertEqual(
+            result.dag_proven_state_field_paths,
+            ("material_graph[1].material_outputs[0].state",),
+        )
+        self.assertEqual(result.reason_codes, ())
 
     def test_receipt_ignores_smuggled_fabricated_record(self) -> None:
         proposal = _proposal(naming_excerpt=B4)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import unittest
+from unittest import mock
 
 from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
 from reaserch_agent.route_pdf_group_extraction import (
@@ -212,6 +213,54 @@ class PdfGroupExtractionTest(unittest.TestCase):
             "/trusted/paper.pdf",
         )
         self.assertEqual(result.protocols[0]["role_hint"], "synthesis")
+
+    def test_g1_dag_key_present_and_flat_candidates_unchanged(self) -> None:
+        # G1 integration regression: the parallel convention_state_proof_dags
+        # key rides the locator artifact and every pre-G1 artifact key is
+        # untouched.  One .state fact makes the key non-empty so the diff
+        # below proves the DAG key is the ONLY key the G1 wiring adds.
+        def _with_state_fact() -> dict:
+            proposal = self._proposal(0)
+            proposal["material_graph"][0]["material_inputs"] = [{
+                "name": "salt", "state": "solution",
+                "quantity": {"value": 2, "unit": "mmol"},
+            }]
+            proposal["route_facts"].append({
+                "fact_id": "in-state",
+                "field_path": "material_graph[0].material_inputs[0].state",
+                "value": "solution", "unit": "",
+                "excerpt": "mix 2 mmol salt solution",
+                "block_locator": "pdf:p1:b3-p1:b3", "required": True,
+            })
+            return proposal
+
+        invoke = lambda _prompt: {  # noqa: E731
+            "proposals": [self._proposal(1), _with_state_fact()]
+        }
+        result = propose_pdf_group_unreviewed(self.groups, invoke)
+        artifact = result.locator_production
+        self.assertIn("convention_state_proof_dags", artifact)
+        self.assertEqual(
+            [row["field_path"] for row in artifact["convention_state_proof_dags"]],
+            ["material_graph[0].material_inputs[0].state"],
+        )
+        self.assertIn("convention_state_candidates", artifact)
+        with mock.patch(
+            "reaserch_agent.route_pdf_group_extraction."
+            "build_verified_state_proof_dags", lambda *args, **kwargs: {},
+        ):
+            baseline = propose_pdf_group_unreviewed(self.groups, invoke)
+        baseline_artifact = baseline.locator_production
+        # The DAG wiring adds no diagnostics; any pre-G1 diagnostics (e.g. a
+        # pending semantic binding for the injected .state fact) are
+        # identical across both runs.
+        self.assertEqual(result.diagnostics, baseline.diagnostics)
+        self.assertEqual(baseline_artifact["convention_state_proof_dags"], [])
+        changed = {
+            key for key in set(artifact) | set(baseline_artifact)
+            if artifact.get(key) != baseline_artifact.get(key)
+        }
+        self.assertEqual(changed, {"convention_state_proof_dags"})
 
     def test_unreviewed_producer_relocates_wrong_model_anchor_without_mutating_raw(self) -> None:
         proposal = self._proposal(0)

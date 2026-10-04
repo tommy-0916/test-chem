@@ -39,6 +39,10 @@ from .route_group_compiler import (
     output_quantity_role_issue,
     quantity_has_local_attribution,
 )
+from .route_state_proof_dag import (
+    STATE_PROOF_DAG_DERIVATION, build_verified_state_proof_dags,
+    dag_entry_derivation, is_input_state_path,
+)
 from .route_pdf_group_proposals import PdfGroupProposalAssociationResultV1
 from .route_pdf_groups import PdfExperimentalGroupV1
 from .route_pdf_quote_binding import (
@@ -91,6 +95,9 @@ class PdfGroupLiteralStatusV1:
     verified_field_paths: tuple[str, ...]
     reason_codes: tuple[str, ...]
     derived_state_field_paths: tuple[str, ...] = ()
+    # G1: state paths accepted on a dual-verified state-proof-dag/v1
+    # multi-hop proof, kept distinct from flat single-hop derivations.
+    dag_proven_state_field_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -220,12 +227,25 @@ def _state_derivation_proof(
     fact: Mapping[str, Any], facts: Sequence[Mapping[str, Any]],
     graph: Any, scope: Any, *,
     retained_object_resolver: Any = None,
+    dag_proofs: Any = None,
 ) -> dict[str, Any] | None:
     """Output derivation first, then verified input-state inheritance.
 
     An inherited state is accepted only when the recomputed proof verifies via
     ``verify_bound_output_state`` and the fact value equals the proof target;
     anything else returns ``None`` so the existing literal gates stay in charge.
+
+    Only after BOTH flat single-hop derivations fail, a G1 multi-hop proof is
+    consulted: ``dag_proofs`` is the per-group output of
+    ``build_verified_state_proof_dags`` (built and dual-verified from THIS
+    receipt's current signed blocks).  An entry is accepted only through the
+    ``dag_entry_derivation`` guard — dual-empty verify issues, genuine
+    state-proof-dag/v1 schema, verdict consistency — and the returned record
+    is marked ``derivation="state_proof_dag_v1"``, never disguised as a
+    paper-literal or flat derivation.  For input/intermediate state paths the
+    fact value must equal the DAG root claim's target state, mirroring the
+    flat inheritance acceptance.  Diagnostic (3E) records are rejected by the
+    guard; no capability token is minted or forwarded on this path.
     """
     field_path = _text(fact.get("field_path"))
     if not field_path.endswith(".state"):
@@ -244,21 +264,31 @@ def _state_derivation_proof(
         graph_list, facts, field_path, fact.get("source"),
         retained_object_resolver=retained_object_resolver,
     )
-    if (inherited is None
-            or _text(fact.get("value")) != _text(inherited.get("target_state"))):
-        return None
-    if verify_bound_output_state(
-        inherited, graph_list,
-        convention_fact_evidence_by_id(
-            facts, paper_id=scope.paper_id,
-            experimental_group_id=scope.experimental_group_id),
-        paper_id=scope.paper_id,
-        experimental_group_id=scope.experimental_group_id,
-        source_digest=scope.source_digest,
-        retained_object_resolver=retained_object_resolver,
-    ):
-        return None
-    return inherited
+    if (inherited is not None
+            and _text(fact.get("value")) == _text(inherited.get("target_state"))
+            and not verify_bound_output_state(
+                inherited, graph_list,
+                convention_fact_evidence_by_id(
+                    facts, paper_id=scope.paper_id,
+                    experimental_group_id=scope.experimental_group_id),
+                paper_id=scope.paper_id,
+                experimental_group_id=scope.experimental_group_id,
+                source_digest=scope.source_digest,
+                retained_object_resolver=retained_object_resolver,
+            )):
+        return inherited
+    # Both flat single-hop derivations failed: consult the G1 multi-hop
+    # state-proof DAG (built and dual-verified from the current signed
+    # blocks at the receipt layer, never from a stored artifact).
+    if isinstance(dag_proofs, Mapping):
+        derivation = dag_entry_derivation(dag_proofs.get(field_path))
+        if derivation is not None:
+            if (is_input_state_path(field_path)
+                    and _text(fact.get("value"))
+                    != _text(derivation.get("target_state"))):
+                return None
+            return derivation
+    return None
 
 
 def _literal_fact_reason(
@@ -268,6 +298,8 @@ def _literal_fact_reason(
     label_context: SourceLabelContext | None = None,
     binding_sink: dict[str, Any] | None = None,
     retained_object_resolver: Any = None,
+    dag_proofs: Any = None,
+    acceptance_sink: dict[str, Any] | None = None,
 ) -> str:
     if set(fact) - _FACT_KEYS:
         return "fact_authority_field_forbidden"
@@ -322,24 +354,64 @@ def _literal_fact_reason(
     if not isinstance(unit, str):
         return "fact_unit_invalid"
     field_path = _text(fact.get("field_path"))
+    # Flat single-hop derivations first — exactly the pre-G1 order.  The G1
+    # multi-hop DAG is consulted ONLY where this function would otherwise
+    # fail a ``.state`` fact (see _dag_fallback below), so a fact the
+    # literal gates accept on their own keeps its literal classification.
     derived = _state_derivation_proof(
         fact, facts, graph, scope,
         retained_object_resolver=retained_object_resolver,
     )
+    dag_derivation: dict[str, Any] | None = None
+    dag_checked = False
+
+    def _dag_fallback(reason: str) -> str:
+        """Rescue a failed ``.state`` fact via its dual-verified proof DAG.
+
+        The DAG entry was built and dual-verified from THIS receipt's
+        current signed blocks (never from a stored artifact); the
+        ``dag_entry_derivation`` guard rejects verdict forgeries, cross-path
+        substitutions, and 3E diagnostic records.  An accepted derivation is
+        marked ``derivation="state_proof_dag_v1"`` and earns exactly the
+        flat-derived gate exemptions (a proven state is not re-demanded as a
+        verbatim quote).  For input/intermediate paths the fact value must
+        equal the DAG root claim's target state, mirroring flat inheritance.
+        """
+        nonlocal dag_derivation, dag_checked
+        if not field_path.endswith(".state") or not isinstance(
+                dag_proofs, Mapping):
+            return reason
+        if not dag_checked:
+            dag_checked = True
+            candidate = _state_derivation_proof(
+                fact, facts, graph, scope,
+                retained_object_resolver=retained_object_resolver,
+                dag_proofs=dag_proofs,
+            )
+            if (candidate is not None and isinstance(candidate, Mapping)
+                    and candidate.get("derivation")
+                    == STATE_PROOF_DAG_DERIVATION):
+                dag_derivation = dict(candidate)
+        if dag_derivation is None:
+            return reason
+        if acceptance_sink is not None:
+            acceptance_sink["state_proof_dag"] = dict(dag_derivation)
+        return ""
+
     if is_material_port_state_path(field_path):
         if derived is None:
             if output_state_parent_role_issue(field_path, graph, value, excerpt):
-                return "parent_state_not_child_evidence"
+                return _dag_fallback("parent_state_not_child_evidence")
             scoped = _scoped_claim(
                 graph if isinstance(graph, list) else [], {}, field_path,
             )
             if scoped is None:
-                return "fact_graph_path_missing"
+                return _dag_fallback("fact_graph_path_missing")
             _mapping, mapping_issue = controlled_state_mapping(
                 field_path, value, scoped[0],
             )
             if mapping_issue:
-                return mapping_issue
+                return _dag_fallback(mapping_issue)
             owner = scoped[1]
             context = label_context
             if context is None:
@@ -351,7 +423,7 @@ def _literal_fact_reason(
                 graph if isinstance(graph, list) else [], context,
             )
             if outcome == "pending":
-                return "semantic_binding_pending"
+                return _dag_fallback("semantic_binding_pending")
             if outcome == "binding":
                 if binding_sink is not None:
                     binding_sink["binding"] = binding
@@ -359,7 +431,7 @@ def _literal_fact_reason(
                     or not state_source_locally_attributed(
                         value, excerpt, owner.get("name"),
                     )):
-                return "semantic_binding_pending"
+                return _dag_fallback("semantic_binding_pending")
     if isinstance(value, bool):
         return "fact_value_type_unverifiable"
     if isinstance(value, (int, float)):
@@ -440,10 +512,10 @@ def _literal_fact_reason(
             return "fact_unit_non_numeric"
         literal = normalize_pdf_quote_whitespace(value)
         normalized_excerpt = normalize_pdf_quote_whitespace(excerpt)
-        if derived is None and (not literal or re.search(
+        if derived is None and dag_derivation is None and (not literal or re.search(
             rf"(?<!\w){re.escape(literal)}(?!\w)", normalized_excerpt,
         ) is None):
-            return (
+            return _dag_fallback(
                 "semantic_binding_pending"
                 if classify_route_field_basis(_text(fact.get("field_path")))
                 == "controlled_mapping"
@@ -559,6 +631,23 @@ def produce_pdf_group_fact_receipt(
             graph if isinstance(graph, list) else [],
             facts if isinstance(facts, list) else [],
         )
+        # G1: multi-hop state-proof DAGs are built and dual-verified ONCE per
+        # group from THIS receipt's current signed blocks (never from a
+        # stored artifact or an extraction-stage carry-over), then consulted
+        # per fact only after both flat single-hop derivations fail.
+        dag_proofs = (
+            build_verified_state_proof_dags(
+                graph, facts,
+                paper_id=scope.paper_id,
+                experimental_group_id=scope.experimental_group_id,
+                source_digest=scope.source_digest,
+                blocks=blocks,
+                caption_block_locators=[
+                    block.locator for block in group.blocks if block.caption
+                ],
+            )
+            if isinstance(graph, list) and isinstance(facts, list) else None
+        )
         # One quoted evidence item may support several distinct field paths.
         # Reusing its ID is valid only when both its literal quote and source
         # scope are unchanged, matching the route compiler's binding rule.
@@ -566,6 +655,7 @@ def produce_pdf_group_fact_receipt(
         field_paths: set[str] = set()
         verified_paths: list[str] = []
         derived_paths: list[str] = []
+        dag_proven_paths: list[str] = []
         for index, fact in enumerate(facts):
             if not isinstance(fact, Mapping):
                 reasons.append(f"fact[{index}]:fact_invalid")
@@ -581,13 +671,21 @@ def produce_pdf_group_fact_receipt(
                 continue
             fact_ids[fact_id] = identity
             field_paths.add(field_path)
+            acceptance: dict[str, Any] = {}
             reason = _literal_fact_reason(
                 fact, group, blocks, graph=protocol.get("material_graph"),
                 facts=facts, label_context=label_context,
                 retained_object_resolver=retained_object_resolver,
+                dag_proofs=dag_proofs,
+                acceptance_sink=acceptance,
             )
             if reason:
                 reasons.append(f"fact[{index}]:{reason}")
+            elif acceptance.get("state_proof_dag") is not None:
+                # Rescued by a dual-verified state-proof DAG after the flat
+                # derivations and literal gates failed: classified apart
+                # from both literal-verified and flat-derived paths.
+                dag_proven_paths.append(field_path)
             else:
                 derived = _state_derivation_proof(
                     fact, facts, protocol.get("material_graph", []), scope,
@@ -613,6 +711,7 @@ def produce_pdf_group_fact_receipt(
             verified_field_paths=tuple(verified_paths),
             reason_codes=tuple(reasons),
             derived_state_field_paths=tuple(derived_paths),
+            dag_proven_state_field_paths=tuple(dag_proven_paths),
         ))
         work_orders.append(_work_order(
             group, role_hint=role_hint.strip(), status=status,

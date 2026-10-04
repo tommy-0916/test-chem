@@ -46,6 +46,7 @@ from .route_pdf_operation_quote_tightening import (
     tighten_unreviewed_operation_quotes,
 )
 from .route_pdf_local_repair import revise_pdf_group_proposals_locally
+from .route_state_proof_dag import build_verified_state_proof_dags
 from .route_group_compiler import (
     _numeric_leaves, _required_qualitative_paths,
     canonicalize_proposal_material_ids,
@@ -231,14 +232,18 @@ def _prepare_unsigned_proposal(
     }
     retained_object_resolver = None
     group_blocks = getattr(group, "blocks", None)
+    group_block_texts: list[tuple[str, str]] = []
+    group_caption_locators: list[str] = []
     if group_blocks and isinstance(graph, list) and isinstance(facts, list):
+        group_block_texts = [(block.locator, block.text) for block in group_blocks]
+        group_caption_locators = [
+            block.locator for block in group_blocks
+            if getattr(block, "caption", False)
+        ]
         # Recomputed from the signed group blocks at this layer; a record
         # carried by the proposal or any stored artifact is never read.
         retained_object_resolver = build_retained_object_resolver(
-            graph, facts,
-            [(block.locator, block.text) for block in group_blocks],
-            [block.locator for block in group_blocks
-             if getattr(block, "caption", False)],
+            graph, facts, group_block_texts, group_caption_locators,
         )
     state_proofs: list[dict[str, Any]] = []
     if isinstance(graph, list) and isinstance(facts, list):
@@ -266,11 +271,32 @@ def _prepare_unsigned_proposal(
                     "field_path": path,
                     "proof": proof,
                 })
+    # G1 parallel audit key: composed multi-hop state-proof DAGs built and
+    # dual-verified from this group's signed blocks.  The flat
+    # ``convention_state_candidates`` loop above is untouched; downstream
+    # consumers never trust these carried DAGs — the receipt rebuilds and
+    # re-verifies from its own current signed blocks.
+    state_proof_dags: list[dict[str, Any]] = []
+    if group_block_texts and isinstance(graph, list) and isinstance(facts, list):
+        dag_entries = build_verified_state_proof_dags(
+            graph, facts,
+            paper_id=scope["paper_id"],
+            experimental_group_id=scope["experimental_group_id"],
+            source_digest=scope["source_digest"],
+            blocks=group_block_texts,
+            caption_block_locators=group_caption_locators,
+        )
+        for dag_entry in dag_entries.values():
+            state_proof_dags.append({
+                "status": "unreviewed_prerequisites_only",
+                **dag_entry,
+            })
     return {
         "required_fact_normalizations": required_rows,
         "qualitative_unit_normalizations": unit_rows,
         "controlled_state_normalizations": state_rows,
         "convention_state_candidates": state_proofs,
+        "convention_state_proof_dags": state_proof_dags,
     }
 
 
@@ -481,6 +507,7 @@ def _invoke_bounded_proposals(
         qualitative_unit_rows: list[dict[str, Any]] = []
         controlled_state_rows: list[dict[str, Any]] = []
         convention_state_rows: list[dict[str, Any]] = []
+        convention_state_proof_dag_rows: list[dict[str, Any]] = []
         canonicalized: list[Any] = []
         for proposal_index, proposal in enumerate(proposals):
             if isinstance(proposal, Mapping):
@@ -548,6 +575,9 @@ def _invoke_bounded_proposals(
                 convention_state_rows.extend({
                     "proposal_index": proposal_index, **row,
                 } for row in normalizations["convention_state_candidates"])
+                convention_state_proof_dag_rows.extend({
+                    "proposal_index": proposal_index, **row,
+                } for row in normalizations["convention_state_proof_dags"])
             else:
                 canonicalized.append(proposal)
         proposals = canonicalized
@@ -665,6 +695,9 @@ def _invoke_bounded_proposals(
         locator_artifact["qualitative_unit_normalizations"] = qualitative_unit_rows
         locator_artifact["controlled_state_normalizations"] = controlled_state_rows
         locator_artifact["convention_state_candidates"] = convention_state_rows
+        locator_artifact["convention_state_proof_dags"] = (
+            convention_state_proof_dag_rows
+        )
         locator_artifact["local_revision"] = local_revision
         if located.diagnostics:
             # Partial location records remain visible, but no partial batch

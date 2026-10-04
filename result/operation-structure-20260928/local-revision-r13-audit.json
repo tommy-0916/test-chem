@@ -1,0 +1,149 @@
+{
+  "schema_version": "bounded_local_revision/v13",
+  "model_generated": false,
+  "scope": "G1: the accepted state-proof-dag/v1 gains its two formal consumption points (extraction candidates + fact receipt); the r10/r11 verdict table is reproduced through the formal entry; ms7a.out stays BLOCKED on the retained-object evidence gap; 3E stays diagnostics-only",
+  "audit": [
+    {
+      "kind": "g1_integration_points",
+      "adapter_module": "reaserch_agent/route_state_proof_dag.py",
+      "consumption_points": [
+        {
+          "module": "reaserch_agent/route_pdf_group_extraction.py",
+          "function": "_prepare_unsigned_proposal",
+          "change": "parallel key convention_state_proof_dags next to the untouched flat convention_state_candidates; carried into locator_production on the success/locator path only"
+        },
+        {
+          "module": "reaserch_agent/route_group_fact_receipt.py",
+          "function": "_state_derivation_proof",
+          "change": "after BOTH flat derivations fail, consult the per-group dual-verified DAG map (built from THIS receipt's current signed blocks); accepted records are marked derivation=state_proof_dag_v1 and classified into the new PdfGroupLiteralStatusV1.dag_proven_state_field_paths (default () keeps the frozen dataclass compatible)"
+        }
+      ]
+    },
+    {
+      "kind": "trust_boundary",
+      "rules": [
+        "the receipt never reads the extraction artifact's DAGs; it rebuilds and dual-verifies from its own current signed blocks",
+        "no DAG is verified after being handed to mutating code",
+        "no capability token is minted, forwarded, or stored by the integration; minting stays inside the contracts build/verify windows (3D closure)",
+        "3E diagnostic records are rejected by the consumption guard and by the receipt derivation path (type/schema guards)",
+        "BLOCKED attribution is mechanical (evidence_gap when every direct upstream state dependency proves, dependency_cascade otherwise) and reproduces the committed r10/r11 table"
+      ]
+    },
+    {
+      "kind": "r10_r11_verdict_table_carryover",
+      "source": "result/operation-structure-20260928/local-revision-r11-replay.json round3d_acceptance.carried_forward_state_table_3d2",
+      "source_sha256": "sha256_b0ce74f68dca20deef6dbaf147264a2970c71cd34c7de2446346bff4ee884b20",
+      "nine_node_rows": [
+        {
+          "node": "graph[5].out",
+          "field_path": "material_graph[5].material_outputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_a7da1f8b8b4c58fe73cc4b3d7b34c40c1501caab2b896d93e3f236a324f60e68",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "graph[6].in",
+          "field_path": "material_graph[6].material_inputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_d6de9b5584aba6c4346003bd79be4db44125d04fa9e8c549dc344031391f98f1",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "graph[6].out",
+          "field_path": "material_graph[6].material_outputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_b10c30dfdd6f13e345fbb5b38b8be17afe1c3bdab58e6118b8b2e30a9bd09b55",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "graph[7].in (ms7a.in)",
+          "field_path": "material_graph[7].material_inputs[0].state",
+          "verdict": "PASS",
+          "issue": "",
+          "attribution": "proven",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_7977272438eeea95f014991249d1dfd99fee14110bf6c4c7de6c829cc6303e67",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "ms7a.out (graph[7].out)",
+          "field_path": "material_graph[7].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "evidence_gap",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "ms7b.in (graph[8].in)",
+          "field_path": "material_graph[8].material_inputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "ms7b.out (graph[8].out)",
+          "field_path": "material_graph[8].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "graph[9].in",
+          "field_path": "material_graph[9].material_inputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "",
+          "matches_r10_r11_table": true
+        },
+        {
+          "node": "graph[9].out",
+          "field_path": "material_graph[9].material_outputs[0].state",
+          "verdict": "BLOCKED",
+          "issue": "retained_object_mention_precedes_operation",
+          "attribution": "dependency_cascade",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "",
+          "matches_r10_r11_table": true
+        }
+      ]
+    },
+    {
+      "kind": "deliberately_not_done",
+      "items": [
+        "compiler/science/source/V2 boundaries: NOT wired to the DAG in this round (G1 stops at extraction + receipt)",
+        "admitted_protocols stays 0: G1 admission gating remains a separate milestone",
+        "3E operation-precondition inference stays diagnostics-only (feeds_verdict=false); ms7a.out stays BLOCKED",
+        "no new proof class, no rule additions, protocol-definition/v1 untouched, no Device run, no eight-question rerun",
+        "the extraction DAG key is an unreviewed audit candidate (status unreviewed_prerequisites_only); it never signs or approves anything"
+      ]
+    }
+  ]
+}

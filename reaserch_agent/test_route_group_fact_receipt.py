@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from hashlib import sha256
 import unittest
+from unittest import mock
 
 from chem_agent_contracts.route_candidate import ExperimentalGroupScopeV1
 from reaserch_agent.route_group_fact_receipt import (
@@ -102,6 +104,21 @@ class PdfGroupFactReceiptTest(unittest.TestCase):
                       result.review_work_orders[0]["pending_checks"])
         self.assertFalse(result.review_work_orders[0]["human_chemical_review_completed"])
         self.assertFalse(result.review_work_orders[0]["execution_authorized"])
+
+    def test_g1_dag_classification_field_defaults_and_flat_parity(self) -> None:
+        # G1 integration regression: PdfGroupLiteralStatusV1 carries the new
+        # dag_proven_state_field_paths (empty here — no DAG-provable state
+        # facts in the fixture) and disabling the DAG map changes nothing.
+        result = self._receipt()
+        for group_result in result.group_results:
+            self.assertEqual(group_result.dag_proven_state_field_paths, ())
+        self.assertIn("dag_proven_state_field_paths", asdict(result.group_results[0]))
+        with mock.patch(
+            "reaserch_agent.route_group_fact_receipt."
+            "build_verified_state_proof_dags", lambda *args, **kwargs: {},
+        ):
+            baseline = self._receipt()
+        self.assertEqual(asdict(baseline), asdict(result))
 
     def test_numeric_and_unit_must_be_literal_in_own_block(self) -> None:
         protocols = deepcopy(self.protocols)

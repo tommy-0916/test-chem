@@ -1,0 +1,783 @@
+{
+  "schema_version": "bounded_local_revision/v13",
+  "round": "G1: state-proof-dag/v1 consumption by the formal extraction/receipt chain",
+  "model_generated": false,
+  "group_identity": {
+    "paper_id": "doi_10_1021_acsami_3c11651",
+    "experimental_group_id": "Synthesis of the Pristine Ni3Fe LDHs (NiFe Control).",
+    "source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "block_count": 23,
+    "caption_count": 0
+  },
+  "proposal_reuse": {
+    "path": "result/operation-structure-20260928/local-revision-r10-proposal.json",
+    "modified": false,
+    "sha256": "sha256_cb6b1ff7f6cffad29539a2ef560bc0f079cdad0d8953a1a09292d65a6b0dc2e7",
+    "injected_via": "propose_pdf_group_unreviewed fixed invoke_json (check_required_graph_facts=True, bounded local revision retained)"
+  },
+  "baseline_flat_vs_integrated_dag": {
+    "per_state_field_table": [
+      {
+        "field_path": "material_graph[3].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "evidence_gap",
+          "build_issue": "convention_parent_state_unverified",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[3].material_inputs[1].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "evidence_gap",
+          "build_issue": "convention_parent_state_unverified",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[3].material_inputs[2].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_8f914205ac42bf193400b5538fe7f68f622e77bacf38edf4c42a5d4f2041e5b3"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_ff2301285bba4864069aa3b0f83493dd17b769c2a22ffe1df831801a818d27f1"
+        }
+      },
+      {
+        "field_path": "material_graph[5].material_inputs[1].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_2bacf369e81503b6cb8c2809d60f4064673bcdec1ba83dc27721e15759ac5d41"
+        }
+      },
+      {
+        "field_path": "material_graph[6].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_d6de9b5584aba6c4346003bd79be4db44125d04fa9e8c549dc344031391f98f1"
+        }
+      },
+      {
+        "field_path": "material_graph[7].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "dag_proven",
+          "derivation": "state_proof_dag_v1"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_7977272438eeea95f014991249d1dfd99fee14110bf6c4c7de6c829cc6303e67"
+        }
+      },
+      {
+        "field_path": "material_graph[8].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[9].material_inputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[0].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "convention_material_relation_missing_or_ambiguous",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[1].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "convention_material_relation_missing_or_ambiguous",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[2].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "convention_material_relation_missing_or_ambiguous",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[3].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "verified_literal"
+        },
+        "integrated_dag": {
+          "verdict": "verified_literal"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "convention_material_relation_missing_or_ambiguous",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_7f50f4b4546a3a0bbd59805fc0a9d27c7d6702768f56e33ffb5d4201d1f03c4f"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[1].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_f766f0e4b3c3c9517506b0631d88230363cc180cf3a76b808b3361ca905f3d1d"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[2].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_0e36b249f1accc25580ee8b2a8e84e85f744d622ab91e6135adfcde6aa7da583"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[3].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_264716cb901da33a12e6f06bb718c50f95e2d342794312766fde069ff4f1b89f"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[4].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_060df41fc85f61c1a2403cd3385877347fea85e7d79c87d85c2a69186bc3d53f"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[5].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_eb0a277da527fa213565d91ac24a4aa8ed44df1d1996f62d2e771eb8abacae60"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[6].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_aaef7a21476540e02aa5d86e86346616b4b478e793306cf2ec8e5570d24adae9"
+        }
+      },
+      {
+        "field_path": "material_graph[4].material_outputs[7].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_64ff17d69feabe5bd1a8435b96ebace39ab951b248850fc22242b126dac0c842"
+        }
+      },
+      {
+        "field_path": "material_graph[5].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "derived_flat"
+        },
+        "integrated_dag": {
+          "verdict": "derived_flat"
+        },
+        "extraction_flat_candidate": true,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_a7da1f8b8b4c58fe73cc4b3d7b34c40c1501caab2b896d93e3f236a324f60e68"
+        }
+      },
+      {
+        "field_path": "material_graph[6].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "dag_proven",
+          "derivation": "state_proof_dag_v1"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "PASS",
+          "attribution": "proven",
+          "build_issue": "",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": "sha256_b10c30dfdd6f13e345fbb5b38b8be17afe1c3bdab58e6118b8b2e30a9bd09b55"
+        }
+      },
+      {
+        "field_path": "material_graph[7].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "evidence_gap",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[8].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      },
+      {
+        "field_path": "material_graph[9].material_outputs[0].state",
+        "baseline_flat": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "integrated_dag": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "extraction_flat_candidate": false,
+        "extraction_dag": {
+          "verdict": "BLOCKED",
+          "attribution": "dependency_cascade",
+          "build_issue": "retained_object_mention_precedes_operation",
+          "verify_with_span_resolver": "",
+          "verify_blocks_only": "",
+          "dag_sha256": ""
+        }
+      }
+    ],
+    "extraction_flat_parity": {
+      "only_changed_key": "convention_state_proof_dags",
+      "flat_candidates_identical": true,
+      "dag_key_absent_or_empty_in_baseline": true
+    },
+    "receipt_dag_acceptances": {
+      "dag_accepted_paths": [
+        "material_graph[6].material_outputs[0].state",
+        "material_graph[7].material_inputs[0].state"
+      ],
+      "baseline_verdicts": {
+        "material_graph[6].material_outputs[0].state": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        },
+        "material_graph[7].material_inputs[0].state": {
+          "verdict": "blocked",
+          "reason": "semantic_binding_pending"
+        }
+      }
+    },
+    "nine_node_table": [
+      {
+        "node": "graph[5].out",
+        "field_path": "material_graph[5].material_outputs[0].state",
+        "verdict": "PASS",
+        "issue": "",
+        "attribution": "proven",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "sha256_a7da1f8b8b4c58fe73cc4b3d7b34c40c1501caab2b896d93e3f236a324f60e68",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "graph[6].in",
+        "field_path": "material_graph[6].material_inputs[0].state",
+        "verdict": "PASS",
+        "issue": "",
+        "attribution": "proven",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "sha256_d6de9b5584aba6c4346003bd79be4db44125d04fa9e8c549dc344031391f98f1",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "graph[6].out",
+        "field_path": "material_graph[6].material_outputs[0].state",
+        "verdict": "PASS",
+        "issue": "",
+        "attribution": "proven",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "sha256_b10c30dfdd6f13e345fbb5b38b8be17afe1c3bdab58e6118b8b2e30a9bd09b55",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "graph[7].in (ms7a.in)",
+        "field_path": "material_graph[7].material_inputs[0].state",
+        "verdict": "PASS",
+        "issue": "",
+        "attribution": "proven",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "sha256_7977272438eeea95f014991249d1dfd99fee14110bf6c4c7de6c829cc6303e67",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "ms7a.out (graph[7].out)",
+        "field_path": "material_graph[7].material_outputs[0].state",
+        "verdict": "BLOCKED",
+        "issue": "retained_object_mention_precedes_operation",
+        "attribution": "evidence_gap",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "ms7b.in (graph[8].in)",
+        "field_path": "material_graph[8].material_inputs[0].state",
+        "verdict": "BLOCKED",
+        "issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "ms7b.out (graph[8].out)",
+        "field_path": "material_graph[8].material_outputs[0].state",
+        "verdict": "BLOCKED",
+        "issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "graph[9].in",
+        "field_path": "material_graph[9].material_inputs[0].state",
+        "verdict": "BLOCKED",
+        "issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "",
+        "matches_r10_r11_table": true
+      },
+      {
+        "node": "graph[9].out",
+        "field_path": "material_graph[9].material_outputs[0].state",
+        "verdict": "BLOCKED",
+        "issue": "retained_object_mention_precedes_operation",
+        "attribution": "dependency_cascade",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "dag_sha256": "",
+        "matches_r10_r11_table": true
+      }
+    ]
+  },
+  "receipt_group_result_integrated": {
+    "status": "blocked",
+    "dag_proven_state_field_paths": [
+      "material_graph[6].material_outputs[0].state",
+      "material_graph[7].material_inputs[0].state"
+    ],
+    "derived_state_field_paths": [
+      "material_graph[5].material_outputs[0].state",
+      "material_graph[6].material_inputs[0].state",
+      "material_graph[4].material_outputs[0].state",
+      "material_graph[4].material_outputs[1].state",
+      "material_graph[4].material_outputs[2].state",
+      "material_graph[4].material_outputs[3].state",
+      "material_graph[4].material_outputs[4].state",
+      "material_graph[4].material_outputs[5].state",
+      "material_graph[4].material_outputs[6].state",
+      "material_graph[4].material_outputs[7].state"
+    ],
+    "reason_codes": [
+      "fact[75]:semantic_binding_pending",
+      "fact[78]:semantic_binding_pending",
+      "fact[80]:semantic_binding_pending",
+      "fact[83]:semantic_binding_pending",
+      "fact[85]:semantic_binding_pending"
+    ]
+  },
+  "receipt_group_result_baseline": {
+    "status": "blocked",
+    "derived_state_field_paths": [
+      "material_graph[5].material_outputs[0].state",
+      "material_graph[6].material_inputs[0].state",
+      "material_graph[4].material_outputs[0].state",
+      "material_graph[4].material_outputs[1].state",
+      "material_graph[4].material_outputs[2].state",
+      "material_graph[4].material_outputs[3].state",
+      "material_graph[4].material_outputs[4].state",
+      "material_graph[4].material_outputs[5].state",
+      "material_graph[4].material_outputs[6].state",
+      "material_graph[4].material_outputs[7].state"
+    ],
+    "reason_codes": [
+      "fact[69]:semantic_binding_pending",
+      "fact[73]:semantic_binding_pending",
+      "fact[75]:semantic_binding_pending",
+      "fact[78]:semantic_binding_pending",
+      "fact[80]:semantic_binding_pending",
+      "fact[83]:semantic_binding_pending",
+      "fact[85]:semantic_binding_pending"
+    ]
+  },
+  "negative_battery": {
+    "source_mutation": {
+      "mutated_block_prefix": "pdf:p2:b69",
+      "leaf_locators_in_g6_out_dag": [
+        "pdf:p2:b69-p2:b69",
+        "pdf:p2:b70-p2:b71",
+        "pdf:p2:b71-p2:b72",
+        "pdf:p2:b72-p2:b73"
+      ],
+      "rows": {
+        "material_graph[5].material_outputs[0].state": {
+          "verify_with_span_resolver": "proof_dag_node_mismatch",
+          "verify_blocks_only": "proof_dag_leaf_relocation_mismatch"
+        },
+        "material_graph[6].material_inputs[0].state": {
+          "verify_with_span_resolver": "proof_dag_node_mismatch",
+          "verify_blocks_only": "proof_dag_leaf_relocation_mismatch"
+        },
+        "material_graph[6].material_outputs[0].state": {
+          "verify_with_span_resolver": "proof_dag_node_mismatch",
+          "verify_blocks_only": "proof_dag_leaf_relocation_mismatch"
+        },
+        "material_graph[7].material_inputs[0].state": {
+          "verify_with_span_resolver": "proof_dag_node_mismatch",
+          "verify_blocks_only": "proof_dag_leaf_relocation_mismatch"
+        }
+      },
+      "g6_out_flips_to_blocked": true,
+      "g7_in_flips_to_blocked": true
+    },
+    "wrong_scope_or_instance": {
+      "wrong_experimental_group_id": "proof_dag_context_mismatch",
+      "wrong_source_digest": "proof_dag_context_mismatch"
+    },
+    "forged_entries": {
+      "tampered_root_id_rejected": true,
+      "cross_path_rejected": true,
+      "blocked_with_forged_pass_rejected": true
+    },
+    "diagnostic_record_rejection": {
+      "record_to_dict_form_rejected": true,
+      "non_mapping_record_rejected": true,
+      "receipt_derivation_rejects": true
+    }
+  },
+  "independent_controls": {
+    "er_group": {
+      "experimental_group_id": "Synthesis of the LDHs by an Etching-and-Recrystallization (ER) Method of NiFe; ERy (y = 0−10).",
+      "proposal_source": "raw_llm_outputs.route_pdf_group_propose.proposals[3] of A01-v5-quote-context-20260927 iteration_00 research_state.json",
+      "graph_steps": 5,
+      "route_facts": 33,
+      "state_facts": 11,
+      "formal_entry_diagnostic_reasons": [
+        "source_operation_unrepresented"
+      ],
+      "artifact_status": "blocked_unreviewed",
+      "coverage_gap": "the ER work-state proposal never reaches locator production: the operation-coverage audit reports source_operation_unrepresented, the blocked branch carries no convention_state_proof_dags key by design (no partial batch advances), and the graph carries no material relations, so no state field is multi-hop-provable; repairing coverage means authoring new graph steps, which is not a field-level fix",
+      "dag_key_rows": 0
+    },
+    "electrode_preparation_group": {
+      "experimental_group_id": "Electrode Preparation.",
+      "proposal_source": "raw_llm_outputs.route_pdf_group_propose.proposals[*] of A01-v5-quote-context-20260927 iteration_00 research_state.json",
+      "graph_steps": 8,
+      "route_facts": 70,
+      "artifact_status": "located_unreviewed",
+      "dag_key_rows": 24,
+      "dag_pass_paths": [
+        "material_graph[1].material_inputs[1].state",
+        "material_graph[4].material_inputs[1].state"
+      ],
+      "receipt": {
+        "group_status": "blocked",
+        "dag_proven_state_field_paths": [],
+        "derived_state_field_paths": [],
+        "dag_pass_path_verdicts": {
+          "material_graph[1].material_inputs[1].state": {
+            "baseline": {
+              "verdict": "verified_literal"
+            },
+            "integrated": {
+              "verdict": "verified_literal"
+            }
+          },
+          "material_graph[4].material_inputs[1].state": {
+            "baseline": {
+              "verdict": "verified_literal"
+            },
+            "integrated": {
+              "verdict": "verified_literal"
+            }
+          }
+        },
+        "baseline_vs_integrated_deltas": {}
+      }
+    }
+  },
+  "fixed_constraints": {
+    "diagnostics_module_zero_proof_dependency": true,
+    "adapter_mints_no_capability_token": true,
+    "no_new_proof_class": "the only proof schema consumed is state-proof-dag/v1; the receipt marker is a consumption label, not a schema",
+    "protocol_definition_v1_untouched": true,
+    "ms7a_out_blocked_issue": "retained_object_mention_precedes_operation",
+    "device_not_run": true,
+    "eight_question_rerun": false
+  },
+  "terminology": "this round is G1 consumption of multi-hop proofs: extraction records dual-verified state-proof DAGs as unreviewed candidates and the receipt accepts dual-verified DAG derivations after both flat derivations fail; nothing here is an A01 PASS, a new model generation pass, or a V2 publication gate",
+  "audit_rows": 4
+}
