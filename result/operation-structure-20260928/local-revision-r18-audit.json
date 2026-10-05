@@ -1,0 +1,31 @@
+{
+  "schema_version": "g2a_acceptance_hardening/v18",
+  "model_generated": false,
+  "scope": "r18: acceptance-script hardening (strict unittest subprocess judgement in reaserch_agent/route_test_harness.py, exercised by this runner) and two root-cause diagnoses; the folio historical loader now skips only on genuine git/commit absence and fails loudly with the original error otherwise; no model call, no conventions/protocol/parser semantic change",
+  "audit": [
+    {
+      "kind": "changed_files",
+      "items": [
+        "reaserch_agent/route_test_harness.py (NEW: strict judgement + audit_record + skip collector; pure test infrastructure, not on any production path)",
+        "reaserch_agent/test_route_test_harness.py (NEW: 21 tests -- the three r17 false-accept shapes rejected, positive accept, defence-in-depth, loader exception/skip semantics)",
+        "reaserch_agent/test_route_pdf_folio.py (MODIFIED, still 27 tests: loader raises HistoricalSourceUnavailable only for genuine git/commit absence with distinguished messages, fails loudly on import/exec errors, and passes an explicit env copy to git)",
+        "result/operation-structure-20260928/local-revision-r18.py",
+        "result/operation-structure-20260928/local-revision-r18-*.json",
+        "result/operation-structure-20260928/local-revision-r18-discover-*.log",
+        "docs/field_semantic_gate_r18_checkpoint_20261005.md"
+      ]
+    },
+    {
+      "kind": "capability_change",
+      "detail": "none in production code; acceptance capability changes: subprocess verdicts are now judged on returncode + exact summary count + exact OK verdict + zero failure/error counts + zero skips for must-run suites, with structured rejection reasons and full-output forensics"
+    },
+    {
+      "kind": "diagnoses",
+      "detail": "(a) full-slice skip=2 root-caused to an empty GIT_CONFIG_VALUE_0 exported by the agent shell x mock.patch.dict(os.environ) restore semantics on Windows (empty-valued variables are deleted from the kernel environment block) x env=None child inheritance -> git rc=128 -> disguised skip; fixed at the loader (explicit env copy) with skip/failure semantics separated; (b) the intermittent abort was NOT reproduced in 102 subprocess invocations under clean/parallel/memory-pressure conditions; -X faulthandler and full-output audit recording are built into the runner for the next occurrence"
+    },
+    {
+      "kind": "honest_endpoints",
+      "detail": "W1/W2 ineligible under the frozen v1 rules; caption-boundary corrections remain a recorded design, not an implementation; dag_consumption remains unobserved and unclaimed; diagnosis (b) is reported as not-reproduced, not explained away"
+    }
+  ]
+}

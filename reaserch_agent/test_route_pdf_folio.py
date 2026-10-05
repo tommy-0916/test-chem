@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -326,10 +327,33 @@ _PRER15_COMMIT = "c429443"
 _PRER17_COMMIT = "491ec37"
 
 
+class HistoricalSourceUnavailable(Exception):
+    """The skip channel: git itself or the pinned commit is genuinely
+    unavailable.  Import/execution errors of a fetched historical module do
+    NOT use this channel -- they raise (and fail the test) with the original
+    exception chained."""
+
+
 def _load_historical_source_module(commit: str):
     """Load route_pdf_source as of a commit for old/new comparison.
 
-    Returns (module, cleanup) or None when git or the commit is unavailable.
+    Raises HistoricalSourceUnavailable only for the two genuine causes --
+    the git executable cannot be run (OSError/SubprocessError) or ``git
+    show`` returns non-zero (commit/object missing) -- with distinct
+    messages.  Any import/execution error of the fetched source raises
+    RuntimeError chaining the original exception, so a broken historical
+    module FAILS the test instead of being disguised as a git problem.
+
+    The git subprocess receives an explicit ``env=dict(os.environ)`` copy:
+    never env=None.  On Windows, env=None makes the child inherit the Win32
+    kernel environment block, which a ``mock.patch.dict(os.environ)``
+    round-trip anywhere earlier in the same test process silently strips of
+    empty-valued variables (SetEnvironmentVariableW semantics delete
+    ``NAME=`` entries) -- e.g. a shell-injected empty GIT_CONFIG_VALUE_0,
+    after which git exits rc=128 ("missing config value
+    GIT_CONFIG_VALUE_0") and the old code wrongly skipped (r18 diagnosis a).
+    Re-serialising os.environ restores the empty value for the child.
+
     The module name carries the package prefix so its relative imports work.
     """
     try:
@@ -337,11 +361,15 @@ def _load_historical_source_module(commit: str):
             ["git", "show",
              f"{commit}:reaserch_agent/route_pdf_source.py"],
             cwd=_REPO, capture_output=True, text=True, timeout=60,
+            env=dict(os.environ),
         )
-    except (OSError, subprocess.SubprocessError):
-        return None
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HistoricalSourceUnavailable(
+            f"git executable unavailable: {exc}") from exc
     if proc.returncode != 0 or not proc.stdout:
-        return None
+        raise HistoricalSourceUnavailable(
+            f"git show failed for commit {commit} "
+            f"(rc={proc.returncode}): {(proc.stderr or '').strip()[:200]}")
     temporary = tempfile.TemporaryDirectory()
     path = Path(temporary.name) / f"_route_pdf_source_{commit}.py"
     path.write_text(proc.stdout, encoding="utf-8")
@@ -349,17 +377,21 @@ def _load_historical_source_module(commit: str):
         f"reaserch_agent._route_pdf_source_{commit}", path)
     if spec is None or spec.loader is None:
         temporary.cleanup()
-        return None
+        raise RuntimeError(
+            f"could not build an import spec for historical "
+            f"route_pdf_source @ {commit}")
     module = importlib.util.module_from_spec(spec)
     try:
         # Register before exec: the module's dataclass processing resolves
         # cls.__module__ through sys.modules.
         sys.modules[spec.name] = module
         spec.loader.exec_module(module)
-    except Exception:
+    except Exception as exc:
         sys.modules.pop(spec.name, None)
         temporary.cleanup()
-        return None
+        raise RuntimeError(
+            f"historical route_pdf_source @ {commit} failed to "
+            f"import/execute") from exc
     return module, temporary
 
 
@@ -481,9 +513,10 @@ class MisdeleteRegressionTest(unittest.TestCase):
         # bottom-band values that the current parser keeps, so those inputs
         # produce longer block sequences (v3); folio-free inputs and the
         # probe A/B shapes are unchanged.
-        loaded = _load_historical_source_module(_PRER15_COMMIT)
-        if loaded is None:
-            self.skipTest("git or the pre-r15 commit unavailable")
+        try:
+            loaded = _load_historical_source_module(_PRER15_COMMIT)
+        except HistoricalSourceUnavailable as exc:
+            self.skipTest(str(exc))
         module, temporary = loaded
         self.addCleanup(temporary.cleanup)
         self.addCleanup(sys.modules.pop, module.__name__, None)
@@ -687,9 +720,10 @@ class NeighborhoodBodyRegressionTest(unittest.TestCase):
         # strips the label-adjacent values that the current parser keeps, so
         # previously parseable probe-C-shaped inputs produce longer block
         # sequences now; isolated-folio inputs are unchanged under both.
-        loaded = _load_historical_source_module(_PRER17_COMMIT)
-        if loaded is None:
-            self.skipTest("git or the pre-r17 commit unavailable")
+        try:
+            loaded = _load_historical_source_module(_PRER17_COMMIT)
+        except HistoricalSourceUnavailable as exc:
+            self.skipTest(str(exc))
         module, temporary = loaded
         self.addCleanup(temporary.cleanup)
         self.addCleanup(sys.modules.pop, module.__name__, None)

@@ -1,0 +1,874 @@
+{
+  "schema_version": "g2a_acceptance_hardening/v18",
+  "round": "r18: acceptance-script hardening (strict subprocess judgement + structured rejection + full-output audit) + root-cause diagnoses of the full-slice skip=2 and the intermittent runner abort",
+  "model_generated": false,
+  "model_called": false,
+  "baseline": {
+    "pre_round_head": "7b6a1b4fcdcd69e465d353f501109e70502e18e8",
+    "conventions_json_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "prompt_builder_module": "reaserch_agent/route_pdf_group_extraction.py",
+    "prompt_builder_sha256": "24864d9af522666b15a1690b6c9ba829bebfa3047545d82adc3e3dff331486f7",
+    "a01_source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "wu2025_main_pdf_sha256": "0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+    "wu2025_si_pdf_sha256": "cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+    "parser_files_pinned_at_r17": {
+      "reaserch_agent/route_pdf_source.py": "51b7be8b1e99847ea26d08568aef83b65b9168945082050e1b72eee3d0f51d7a",
+      "reaserch_agent/route_pdf_groups.py": "d8eecc83b1dc71fadc5541668f4ad3c3ea210a9a8c97ca31066a548795766094"
+    },
+    "changed_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
+    },
+    "new_harness_files": {
+      "reaserch_agent/route_test_harness.py": "85c520f797bfdd7b5466c7fc66c0d5f33b1cfba9f15c00499c0a2a8616c19c17",
+      "reaserch_agent/test_route_test_harness.py": "673e72c60edc695cc2c095d73cb7de9248357f70dcf1b128166d804010e6835d"
+    },
+    "r17_checkpoint_sha256_untouched": "efb133c860e6a369fbb8f227132e3b71573364edc0fd185b5bf8f8a620ade50b",
+    "tracked_modifications_subset_of_round18_files": true
+  },
+  "code_changes": {
+    "new_files": {
+      "reaserch_agent/route_test_harness.py": "85c520f797bfdd7b5466c7fc66c0d5f33b1cfba9f15c00499c0a2a8616c19c17",
+      "reaserch_agent/test_route_test_harness.py": "673e72c60edc695cc2c095d73cb7de9248357f70dcf1b128166d804010e6835d"
+    },
+    "modified_files": {
+      "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
+    },
+    "parser_files_pinned_at_r17": {
+      "reaserch_agent/route_pdf_source.py": "51b7be8b1e99847ea26d08568aef83b65b9168945082050e1b72eee3d0f51d7a",
+      "reaserch_agent/route_pdf_groups.py": "d8eecc83b1dc71fadc5541668f4ad3c3ea210a9a8c97ca31066a548795766094"
+    },
+    "semantics_note": "conventions, protocol schemas, parser code, and every rule resource are byte-identical to the r17 state; only test infrastructure changes (the strict judgement harness and the folio historical-loader's skip/failure semantics); PDF_GROUP_PARSER_VERSION stays route_pdf_groups/v3"
+  },
+  "acceptance_hardening": {
+    "r17_rule": "accepted when the output contained the substrings 'Ran N tests' and 'OK'",
+    "r17_false_accepts": [
+      "returncode != 0 with a tail containing the substrings",
+      "OK (skipped=2) on a must-run suite"
+    ],
+    "r17_only_reject": "progress dots with no summary line",
+    "r18_rule": "returncode == 0 AND exactly one 'Ran N tests' summary with N == expected AND verdict line exactly OK AND no FAILED / failures= / errors= nonzero anywhere AND zero skipped= on must-run suites; every rejection carries structured reasons and the full timing-normalized stdout/stderr is audit-recorded",
+    "negative_tests": [
+      "nonzero returncode + 'Ran 346 tests' + 'OK' -> rejected (nonzero_returncode:1)",
+      "'OK (skipped=2)' on a must-run suite -> rejected (unexpected_skips:2)",
+      "progress dots only, no summary -> rejected (summary_missing + verdict_missing)"
+    ],
+    "positive_tests": [
+      "returncode 0 + 'Ran N tests' + 'OK' + zero skips -> accepted",
+      "loader import/exec error -> RuntimeError chaining the original exception (test FAILS, no disguise)",
+      "loader git executable/commit genuinely unavailable -> HistoricalSourceUnavailable with distinguished messages (honest skip)"
+    ]
+  },
+  "diagnosis_a_full_slice_skip": {
+    "symptom": "full-slice discover reported OK (skipped=2): the folio pre-r15/pre-r17 comparisons skipped with 'git or the commit unavailable' while passing standalone",
+    "root_cause_chain": [
+      "the agent shell exports GIT_CONFIG_COUNT=2, GIT_CONFIG_KEY_0=credential.helper and an EMPTY GIT_CONFIG_VALUE_0",
+      "the first mock.patch.dict(os.environ) round-trip in the suite (alphabetically in test_action_evidence_selection) restores via os.environ.clear()+update(); re-setting an empty-valued variable DELETES it from the Win32 kernel environment block while os.environ keeps showing '' (micro-reproduced)",
+      "children spawned with env=None inherit that block: GIT_CONFIG_VALUE_0 missing with COUNT=2/KEY_0 present -> git exits rc=128 'missing config value GIT_CONFIG_VALUE_0'",
+      "the old loader mapped any git failure to skipTest"
+    ],
+    "evidence": [
+      "verbose discover: both skips carry 'git or the pre-r1[57] commit unavailable'",
+      "instrumented loader inside discover: git rc=128 'missing config value GIT_CONFIG_VALUE_0', while the same call with env=dict(os.environ) returns rc=0",
+      "kernel-level env sniff: exactly one flip present:'' -> MISSING, at the first patch.dict(os.environ) test, never recovers",
+      "micro-repro: one patch.dict(os.environ) round-trip flips GIT_CONFIG_VALUE_0 from present:'' to kernel-MISSING and git env=None fails rc=128 while env=copy succeeds",
+      "full-slice discover with GIT_CONFIG_* stripped: 1229 tests, zero skips",
+      "with the loader fix, full-slice discover in the polluted shell: 1250 tests, zero skips"
+    ],
+    "fix": "loader passes env=dict(os.environ) to git and skips only on genuine git/commit absence (HistoricalSourceUnavailable); import/exec errors fail the test with the original exception chained",
+    "polluter_not_changed": "test_action_evidence_selection's patch.dict(os.environ) is a legitimate pattern; the trigger is the shell's empty GIT_CONFIG_VALUE_0, so the fix lands in the loader, not in 100+ patch.dict users"
+  },
+  "diagnosis_b_intermittent_abort": {
+    "symptom": "one of six r17 runner runs failed because the target-set subprocess output stopped at progress dots with no summary; isolated re-runs of the same call passed 15/15 and direct module runs 5/5",
+    "reproduction_attempts": {
+      "identical_invocation_clean": 60,
+      "three_way_parallel": 18,
+      "under_8gb_memory_pressure": 6,
+      "anomalies": 0
+    },
+    "conclusion": "NOT reproduced in 102 invocations (0 anomalies, every rc=0 with a complete summary); the dots-only-no-summary shape implies the child python.exe died mid-run with a non-zero exit (a normal unittest exit always prints the summary), most consistent with a hard child crash or an external kill; no resource, patch, or output-capture defect was observed",
+    "forensics_built_in": [
+      "every subprocess this runner spawns carries -X faulthandler (a native crash would dump the Python stack to stderr)",
+      "every judged subprocess records returncode + full timing-normalized stdout/stderr into the replay anchors",
+      "on rejection the runner writes local-revision-r18-failure-forensics.json BEFORE failing"
+    ],
+    "next_steps_if_recurs": [
+      "read the forensics file: a 0xC0000005-style returncode fingers a native crash (MuPDF is the only native library in the target set); a missing process with rc=None/timeout fingers resource pre-emption",
+      "correlate the wall-clock with external process logs (AV/EDR) on the host"
+    ]
+  },
+  "neighborhood_fix": {
+    "carried_from": "r17 replay neighborhood_fix.verification; the r18 round changes no parser code, so this section is a pure regression re-verification",
+    "before_prer17_code": {
+      "probe_c": {
+        "issue": null,
+        "blocks": 6,
+        "stripped": [
+          "11",
+          "12",
+          "13"
+        ],
+        "values_kept": [],
+        "s_folios_kept": []
+      }
+    },
+    "after_current_code": {
+      "probe_c": {
+        "issue": null,
+        "blocks": 9,
+        "stripped": [],
+        "values_kept": [
+          "11",
+          "12",
+          "13"
+        ],
+        "s_folios_kept": []
+      },
+      "label_below_value": {
+        "issue": null,
+        "blocks": 9,
+        "stripped": [],
+        "values_kept": [
+          "11",
+          "12",
+          "13"
+        ],
+        "s_folios_kept": []
+      },
+      "gap_just_below_scale": {
+        "issue": null,
+        "blocks": 9,
+        "stripped": [],
+        "values_kept": [
+          "11",
+          "12",
+          "13"
+        ],
+        "s_folios_kept": []
+      },
+      "gap_just_above_scale": {
+        "issue": null,
+        "blocks": 6,
+        "stripped": [
+          "11",
+          "12",
+          "13"
+        ],
+        "values_kept": [],
+        "s_folios_kept": []
+      },
+      "non_overlapping_label": {
+        "issue": null,
+        "blocks": 6,
+        "stripped": [
+          "11",
+          "12",
+          "13"
+        ],
+        "values_kept": [],
+        "s_folios_kept": []
+      },
+      "si_shaped_spacing": {
+        "issue": null,
+        "blocks": 6,
+        "stripped": [
+          "S 11",
+          "S 12",
+          "S 13"
+        ],
+        "values_kept": [],
+        "s_folios_kept": []
+      },
+      "control_isolated": {
+        "issue": null,
+        "blocks": 3,
+        "stripped": [
+          "11",
+          "12",
+          "13"
+        ],
+        "values_kept": [],
+        "s_folios_kept": []
+      },
+      "probe_a": {
+        "issue": null,
+        "blocks": 9,
+        "stripped": [],
+        "values_kept": [
+          "11",
+          "12",
+          "13"
+        ],
+        "s_folios_kept": []
+      },
+      "probe_b": {
+        "issue": null,
+        "blocks": 9,
+        "stripped": [],
+        "values_kept": [
+          "11",
+          "12",
+          "13"
+        ],
+        "s_folios_kept": []
+      }
+    }
+  },
+  "si_gap_distribution": {
+    "folios_measured": 79,
+    "gap_min": 14.16,
+    "gap_median": 372.04,
+    "gap_max": 534.04,
+    "tightest_folio": {
+      "page": 78,
+      "folio": "S 78",
+      "folio_size": 10.02,
+      "gap": 14.16,
+      "direction": "above",
+      "neighbor": "Electrolysis. Adv Mater.. 33, e2101425 (2021).",
+      "neighbor_size": 12.0,
+      "threshold": 12.024
+    },
+    "threshold_rule": "gap >= 1.2 x folio font size required to strip; all 79 measured folios clear it",
+    "folio_font_sizes": [
+      10.02
+    ],
+    "per_folio_thresholds": [
+      12.024
+    ],
+    "probe_c_gap": 4.26,
+    "separation_ratio_min_vs_probe_c": 3.32,
+    "smallest_five": [
+      {
+        "page": 78,
+        "folio": "S 78",
+        "folio_size": 10.02,
+        "gap": 14.16,
+        "direction": "above",
+        "neighbor": "Electrolysis. Adv Mater.. 33, e2101425 (2021).",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 60,
+        "folio": "S 60",
+        "folio_size": 10.02,
+        "gap": 25.08,
+        "direction": "above",
+        "neighbor": "catalyst post-reaction. A comparison of XPS spectra before a",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 19,
+        "folio": "S 19",
+        "folio_size": 10.02,
+        "gap": 36.92,
+        "direction": "above",
+        "neighbor": "The value of hA can be derived from Equation 2:(5)",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 79,
+        "folio": "S 79",
+        "folio_size": 10.02,
+        "gap": 63.02,
+        "direction": "above",
+        "neighbor": "Chloride Promoted Oxygen Evolution Reaction. Angew. Chem. In",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 75,
+        "folio": "S 75",
+        "folio_size": 10.02,
+        "gap": 81.32,
+        "direction": "above",
+        "neighbor": "NF: nickel foam; CF: copper foam; CC: carbon cloth; NFs: FeN",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      }
+    ]
+  },
+  "version_determination": {
+    "carried_from": "r17 replay version_determination; re-verified unchanged against the same pre-r17 parser",
+    "samples": [
+      {
+        "case": "probe_c_shape",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "label_below_value",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "gap_just_below_scale",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "gap_just_above_scale",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "non_overlapping_label",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "si_shaped_spacing",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_a_shape",
+        "pre_r17_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_b_shape",
+        "pre_r17_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "control_isolated",
+        "pre_r17_blocks": 3,
+        "current_blocks": 3,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "no_folio",
+        "pre_r17_blocks": 4,
+        "current_blocks": 4,
+        "block_sequence_identical": true
+      }
+    ],
+    "real_documents": {
+      "wu2025_si": {
+        "blocks": 1041,
+        "blocks_sha256_both_parsers": "4f82f5a11778af6fdb2dd59bc6e74647bb89df093418a28b0019d06725769b6e",
+        "block_sequence_identical": true
+      },
+      "a01": {
+        "blocks": 1289,
+        "blocks_sha256_both_parsers": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+        "block_sequence_identical": true
+      }
+    },
+    "parser_version": "route_pdf_groups/v3",
+    "r13_r13b_impact": {
+      "version_string_occurrences_in_r13_archives": 0,
+      "r13_r13b_runners_reference_parser_version": false
+    }
+  },
+  "document_anchors": {
+    "a01": {
+      "blocks": 1289,
+      "blocks_sha256": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+      "folios_stripped": 0
+    },
+    "wu_si": {
+      "blocks": 1041,
+      "folios_stripped": 79,
+      "folio_first": {
+        "page": 2,
+        "text": "S 2",
+        "x0": 299.5,
+        "x1": 315.1,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "folio_last": {
+        "page": 80,
+        "text": "S 80",
+        "x0": 297.0,
+        "x1": 317.6,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "w1_sentence_binding": {
+        "needle": "pdf:p14:b9-p14:b10",
+        "full_sentence": "pdf:p14:b9-p14:b11"
+      },
+      "enumeration_endpoint": "experimental_section_missing (0 groups)"
+    },
+    "wu_main": {
+      "issue": "pdf_column_layout_ambiguous",
+      "abstention": {
+        "reason": "pdf_column_layout_ambiguous",
+        "culprits": [
+          {
+            "page": 10,
+            "text": "36",
+            "x0": 294.6,
+            "x1": 299.9,
+            "y0": 648.0,
+            "page_width": 595.3
+          }
+        ]
+      },
+      "note": "the p10 chart tick '36' sits at 0.819h, outside the 0.90h folio band, and never becomes a candidate"
+    }
+  },
+  "pool_census": {
+    "rows": [
+      {
+        "candidate": "wu2025-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "wu2025-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "zhang2017-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "zhang2017-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "chemkb-kion",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "chemkb-pba-hosts",
+        "groups": 0,
+        "reasons": [
+          "pdf_source_too_large"
+        ]
+      },
+      {
+        "candidate": "chemkb-nife-pba",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "upload-upl_1e79",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      }
+    ],
+    "identical_to_r15_post_census": true,
+    "identical_to_r16_census": true,
+    "identical_to_r17_census": true,
+    "note": "the r18 round changes no parser code; every candidate keeps its r15/r16/r17 reason set"
+  },
+  "caption_boundary_evidence": {
+    "carried_from": "r17 replay caption_boundary_evidence; re-verified unchanged (design record, NOT implemented)",
+    "verified": {
+      "page_s14": {
+        "sort_false_numbering": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "synthesis_paragraph_original_blocks": [
+            8,
+            14
+          ]
+        },
+        "sort_true_numbering": {
+          "caption_head_original_block": 3,
+          "continuation_original_blocks": [
+            4,
+            5
+          ],
+          "synthesis_paragraph_original_blocks": [
+            7,
+            13
+          ]
+        },
+        "final_mapping": {
+          "b1_b2_from": 3,
+          "b3_from": 4,
+          "b4_from": 5,
+          "synthesis_paragraph_from": [
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13
+          ]
+        },
+        "caption_flag_on_region": false,
+        "boundary_signals": {
+          "intra_caption_gaps_pt": [
+            3.97,
+            4.69
+          ],
+          "caption_to_paragraph_gap_pt": 43.37,
+          "intra_paragraph_gaps_pt": [
+            5.47,
+            4.69,
+            4.69,
+            4.69,
+            4.69,
+            4.69
+          ],
+          "paragraph_first_line_indent_pt": 24.02
+        }
+      },
+      "page_s15": {
+        "sort_false_numbering": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "synthesis_paragraph_original_blocks": [
+            8,
+            15
+          ]
+        },
+        "sort_true_numbering": {
+          "caption_head_original_block": 3,
+          "continuation_original_blocks": [
+            4,
+            5
+          ],
+          "synthesis_paragraph_original_blocks": [
+            7,
+            14
+          ]
+        },
+        "final_mapping": {
+          "b1_b2_from": 3,
+          "b3_from": 4,
+          "b4_from": 5,
+          "synthesis_paragraph_from": [
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ]
+        },
+        "caption_flag_on_region": false,
+        "boundary_signals": {
+          "intra_caption_gaps_pt": [
+            3.97,
+            4.69
+          ],
+          "caption_to_paragraph_gap_pt": 43.37,
+          "intra_paragraph_gaps_pt": [
+            5.47,
+            4.69,
+            6.63,
+            5.41,
+            4.69,
+            4.69,
+            4.69
+          ],
+          "paragraph_first_line_indent_pt": 24.02
+        }
+      }
+    }
+  },
+  "design_corrections": [
+    {
+      "item": "original-block numbering basis",
+      "corrected": "the difference is the extraction mode: the r16 runner's internal probe enumerated get_text('dict') with the default sort=False while the production parser uses sort=True -- same block grouping and same lines, but sort=True repositions the folio block, so caption-region indices shift by one; production locator citations must use the sort=True numbering",
+      "evidence": "caption_boundary_evidence.verified.*.sort_*_numbering"
+    },
+    {
+      "item": "missed caption continuation scope",
+      "corrected": "only b3/b4 are missed caption continuation lines; from b5 on the synthesis paragraph is body text that should stay non-caption anyway, so keeping it non-caption is correct behavior, not a miss",
+      "evidence": "caption_boundary_evidence.verified.*.final_mapping"
+    },
+    {
+      "item": "visual distinguishability at the caption boundary",
+      "corrected": "withdrawn: measured boundary signals exist -- a 43.37 pt vertical gap (vs 3.97-6.63 pt inside both regions) and a 24.02 pt first-line indent.  They are recorded as TO-BE-VERIFIED boundary signals, not as an implemented rule; caption recognition stays unimplemented and the binder's at-most-one-skipped-block hop limit is unchanged",
+      "evidence": "caption_boundary_evidence.verified.*.boundary_signals"
+    }
+  ],
+  "rule_eligibility": {
+    "conventions_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "rule_count": 11,
+    "claims_verified": {
+      "w1_collection_method_unstated": true,
+      "drying_v1_requires_proven_wet_solid_input": true,
+      "dried_unrecognized_by_drying_v1": true,
+      "no_reduction_rule": true
+    },
+    "overall_verdict": "W1 and W2 are both ineligible under the frozen v1 rule table; they are retained as ingestion samples and a rule-compatible source must be found separately (不补造离心/过滤, 不改写源摘录, 不扩规则保正例)",
+    "note": "negative eligibility pre-screen carried unchanged from r15/r16/r17; the conventions resource is byte-identical, so the outcome is unchanged and remains a pre-screen, not a pass"
+  },
+  "layer_results": {
+    "attestation": {
+      "status": "verified",
+      "documents": 2
+    },
+    "group_enumeration": {
+      "status": "reached_section_gate",
+      "groups": 0,
+      "diagnostic_reasons": [
+        "experimental_section_missing",
+        "pdf_column_layout_ambiguous"
+      ],
+      "meaning": "unchanged from r15/r16/r17: the SI parses and stops at experimental_section_missing; the main paper still abstains at ingestion"
+    },
+    "proposal_extraction": {
+      "status": "not_reached"
+    },
+    "local_revision": {
+      "status": "not_reached"
+    },
+    "association": {
+      "status": "not_reached"
+    },
+    "receipt": {
+      "status": "not_reached"
+    },
+    "pool_census": {
+      "rows": [
+        {
+          "candidate": "wu2025-main",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "wu2025-si",
+          "groups": 0,
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "zhang2017-main",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "zhang2017-si",
+          "groups": 0,
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "chemkb-kion",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "chemkb-pba-hosts",
+          "groups": 0,
+          "reasons": [
+            "pdf_source_too_large"
+          ]
+        },
+        {
+          "candidate": "chemkb-nife-pba",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "upload-upl_1e79",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        }
+      ],
+      "identical_to_r15_post_census": true,
+      "identical_to_r16_census": true,
+      "identical_to_r17_census": true,
+      "note": "the r18 round changes no parser code; every candidate keeps its r15/r16/r17 reason set"
+    }
+  },
+  "dag_consumption": {
+    "observed": false,
+    "note": "still unobservable (0 groups); W1/W2 stay ineligible under the frozen v1 rules; nothing here is claimed as a pass"
+  },
+  "stays_closed_this_round": [
+    "no parser/PDF-ingestion production code change",
+    "no caption-recognition change is implemented",
+    "caption quotation is NOT opened",
+    "no SI grouping implementation",
+    "the workflow interception of incomplete sources is unchanged",
+    "3E stays diagnostics_only with zero tokens",
+    "protocol-definition/v1 not expanded",
+    "A01 ms7a.out and its cascade stay BLOCKED"
+  ],
+  "anchors": {
+    "a01_regression": {
+      "mechanism": "r13b runner re-executed as a subprocess",
+      "double_run_byte_identical": true,
+      "replay_matches_r13_archive": true,
+      "ms7a_out": "BLOCKED (retained_object_mention_precedes_operation)",
+      "subprocess_record": {
+        "label": "r13b_archive_runner",
+        "returncode": 0,
+        "stdout": "{\n \"nine_node_table\": [\n  {\n   \"node\": \"graph[5].out\",\n   \"field_path\": \"material_graph[5].material_outputs[0].state\",\n   \"verdict\": \"PASS\",\n   \"issue\": \"\",\n   \"attribution\": \"proven\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"sha256_a7da1f8b8b4c58fe73cc4b3d7b34c40c1501caab2b896d93e3f236a324f60e68\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"graph[6].in\",\n   \"field_path\": \"material_graph[6].material_inputs[0].state\",\n   \"verdict\": \"PASS\",\n   \"issue\": \"\",\n   \"attribution\": \"proven\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"sha256_d6de9b5584aba6c4346003bd79be4db44125d04fa9e8c549dc344031391f98f1\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"graph[6].out\",\n   \"field_path\": \"material_graph[6].material_outputs[0].state\",\n   \"verdict\": \"PASS\",\n   \"issue\": \"\",\n   \"attribution\": \"proven\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"sha256_b10c30dfdd6f13e345fbb5b38b8be17afe1c3bdab58e6118b8b2e30a9bd09b55\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"graph[7].in (ms7a.in)\",\n   \"field_path\": \"material_graph[7].material_inputs[0].state\",\n   \"verdict\": \"PASS\",\n   \"issue\": \"\",\n   \"attribution\": \"proven\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"sha256_7977272438eeea95f014991249d1dfd99fee14110bf6c4c7de6c829cc6303e67\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"ms7a.out (graph[7].out)\",\n   \"field_path\": \"material_graph[7].material_outputs[0].state\",\n   \"verdict\": \"BLOCKED\",\n   \"issue\": \"retained_object_mention_precedes_operation\",\n   \"attribution\": \"evidence_gap\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"ms7b.in (graph[8].in)\",\n   \"field_path\": \"material_graph[8].material_inputs[0].state\",\n   \"verdict\": \"BLOCKED\",\n   \"issue\": \"retained_object_mention_precedes_operation\",\n   \"attribution\": \"dependency_cascade\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"ms7b.out (graph[8].out)\",\n   \"field_path\": \"material_graph[8].material_outputs[0].state\",\n   \"verdict\": \"BLOCKED\",\n   \"issue\": \"retained_object_mention_precedes_operation\",\n   \"attribution\": \"dependency_cascade\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"graph[9].in\",\n   \"field_path\": \"material_graph[9].material_inputs[0].state\",\n   \"verdict\": \"BLOCKED\",\n   \"issue\": \"retained_object_mention_precedes_operation\",\n   \"attribution\": \"dependency_cascade\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"\",\n   \"matches_r10_r11_table\": true\n  },\n  {\n   \"node\": \"graph[9].out\",\n   \"field_path\": \"material_graph[9].material_outputs[0].state\",\n   \"verdict\": \"BLOCKED\",\n   \"issue\": \"retained_object_mention_precedes_operation\",\n   \"attribution\": \"dependency_cascade\",\n   \"verify_with_span_resolver\": \"\",\n   \"verify_blocks_only\": \"\",\n   \"dag_sha256\": \"\",\n   \"matches_r10_r11_table\": true\n  }\n ],\n \"receipt_dag_accepted\": [\n  \"material_graph[6].material_outputs[0].state\",\n  \"material_graph[7].material_inputs[0].state\"\n ],\n \"flat_parity\": {\n  \"only_changed_key\": \"convention_state_proof_dags\",\n  \"flat_candidates_identical\": true,\n  \"dag_key_absent_or_empty_in_baseline\": true\n },\n \"negatives_ok\": true,\n \"controls\": {\n  \"er_status\": \"blocked_unreviewed\",\n  \"ep_dag_proven\": []\n },\n \"double_run_byte_identical\": true,\n \"replay_sha256\": \"sha256_9084ca5497ccf0b46cdb0b10697953742bdb90814768d19b5ef0f1b30c7f2cb5\",\n \"wording_correction_only\": true,\n \"replay_matches_r13_archive\": true,\n \"audit_matches_r13_archive\": true\n}\n",
+        "stderr": ""
+      }
+    },
+    "diagnostics_module_zero_proof_dependency": true,
+    "judgement": {
+      "rule": "accept only when returncode == 0 AND exactly one 'Ran N tests' summary with N == expected AND the verdict line is exactly OK AND no FAILED/failures=/errors= nonzero anywhere AND (must-run suites) no skipped= nonzero",
+      "forensics_on_rejection": "local-revision-r18-failure-forensics.json"
+    },
+    "folio_test_module": {
+      "expected": 27,
+      "accepted": true,
+      "record": {
+        "label": "folio_test_module",
+        "expected_test_count": 27,
+        "require_no_skips": true,
+        "returncode": 0,
+        "accepted": true,
+        "rejection_reasons": [],
+        "ran_count": 27,
+        "verdict_line": "OK",
+        "timing_normalized": true,
+        "stdout": "",
+        "stderr": "...........................\n----------------------------------------------------------------------\nRan 27 tests in <elapsed>s\n\nOK\n"
+      }
+    },
+    "target_set": {
+      "modules": 14,
+      "expected": 367,
+      "accepted": true,
+      "record": {
+        "label": "target_set",
+        "expected_test_count": 367,
+        "require_no_skips": true,
+        "returncode": 0,
+        "accepted": true,
+        "rejection_reasons": [],
+        "ran_count": 367,
+        "verdict_line": "OK",
+        "timing_normalized": true,
+        "stdout": "",
+        "stderr": "...............................................................................................................................................................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 367 tests in <elapsed>s\n\nOK\n"
+      }
+    },
+    "full_slice_discover": {
+      "reaserch_agent": {
+        "package": "reaserch_agent",
+        "returncode": 1,
+        "summary": {
+          "ran_count": 1250,
+          "summary_lines": 1,
+          "verdict": "FAILED (failures=8, errors=21)",
+          "failures": 8,
+          "errors": 21,
+          "skipped": null
+        },
+        "skips": [],
+        "skip_count": 0,
+        "failure_headers_normalized": [
+          "ERROR: test_bootstrap_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_accepts_first_valid_candidate_without_retry)",
+          "ERROR: test_bootstrap_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_repairs_invalid_lid_once)",
+          "ERROR: test_compact_context_contains_evidence_packet (test_evidence_provenance.EvidencePacketAndRefsTest.test_compact_context_contains_evidence_packet)",
+          "ERROR: test_compact_state_context_includes_campaign_memory (test_campaign_memory.RecallContextTest.test_compact_state_context_includes_campaign_memory)",
+          "ERROR: test_cross_campaign_layer_only_on_abnormal_signal (test_campaign_memory.RecallContextTest.test_cross_campaign_layer_only_on_abnormal_signal)",
+          "ERROR: test_device_adaptation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_accepts_first_valid_candidate_without_retry)",
+          "ERROR: test_device_adaptation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_exhaustion_does_not_publish)",
+          "ERROR: test_device_adaptation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_device_adaptation_repairs_invalid_lid_once)",
+          "ERROR: test_every_macro_step_has_source_annotation (test_evidence_provenance.MacroPlanSourceTest.test_every_macro_step_has_source_annotation)",
+          "ERROR: test_evidence_refs_flow_into_ledger_and_memory (test_evidence_provenance.EvidencePacketAndRefsTest.test_evidence_refs_flow_into_ledger_and_memory)",
+          "ERROR: test_layered_memory_add_search_update_history (test_memory_layers.ChemMemoryLayerTests.test_layered_memory_add_search_update_history)",
+          "ERROR: test_nodes_written_per_turn (test_campaign_memory.TrajectoryNodeTest.test_nodes_written_per_turn)",
+          "ERROR: test_post_observation_accepts_first_valid_candidate_without_retry (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_accepts_first_valid_candidate_without_retry)",
+          "ERROR: test_post_observation_repairs_invalid_lid_once (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_repairs_invalid_lid_once)",
+          "ERROR: test_protocols_carry_registry_identity (test_evidence_provenance.ProtocolProvenanceTest.test_protocols_carry_registry_identity)",
+          "ERROR: test_query_tools_use_separate_experiment_and_literature_layers (test_memory_layers.ChemMemoryLayerTests.test_query_tools_use_separate_experiment_and_literature_layers)",
+          "ERROR: test_recall_layers_and_budgets (test_campaign_memory.RecallBuilderTest.test_recall_layers_and_budgets)",
+          "ERROR: test_research_agent_memory_uses_experiment_layer (test_memory_layers.ChemMemoryLayerTests.test_research_agent_memory_uses_experiment_layer)",
+          "ERROR: test_stage_rollup_written_on_closure_or_stage_change (test_campaign_memory.TrajectoryNodeTest.test_stage_rollup_written_on_closure_or_stage_change)",
+          "ERROR: test_valid_none_carrier_can_be_published_without_changing_bottle_lids (test_logical_container_contract.LogicalContainerContractTests.test_valid_none_carrier_can_be_published_without_changing_bottle_lids)",
+          "ERROR: test_web_and_parse_failed_sources_are_explicit_known_gaps (test_evidence_provenance.EvidencePacketAndRefsTest.test_web_and_parse_failed_sources_are_explicit_known_gaps)",
+          "FAIL: test_bootstrap_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_exhaustion_does_not_publish)",
+          "FAIL: test_concurrent_same_identity_records_do_not_overwrite (test_ingestion.KnowledgeIngestionTests.test_concurrent_same_identity_records_do_not_overwrite)",
+          "FAIL: test_default_ledger_path_layout (test_plan_ledger.PlanLedgerFileTest.test_default_ledger_path_layout)",
+          "FAIL: test_final_publication_rejects_invalid_lid_with_original_context (test_logical_container_contract.LogicalContainerContractTests.test_final_publication_rejects_invalid_lid_with_original_context)",
+          "FAIL: test_macro_step_prompt_projection_keeps_contract_without_audit_noise (test_v2_contract.ResearchV2ContractTest.test_macro_step_prompt_projection_keeps_contract_without_audit_noise)",
+          "FAIL: test_missing_container_requirements_remains_a_supported_empty_default (test_logical_container_contract.LogicalContainerContractTests.test_missing_container_requirements_remains_a_supported_empty_default)",
+          "FAIL: test_post_observation_exhaustion_does_not_publish (test_logical_container_contract.LogicalContainerContractTests.test_post_observation_exhaustion_does_not_publish)",
+          "FAIL: test_quality_gate_locates_original_step_and_container_without_mutation (test_logical_container_contract.LogicalContainerContractTests.test_quality_gate_locates_original_step_and_container_without_mutation)"
+        ],
+        "failure_header_count": 29,
+        "log_file": "local-revision-r18-discover-reaserch_agent.log"
+      },
+      "chem_agent_contracts": {
+        "package": "chem_agent_contracts",
+        "returncode": 1,
+        "summary": {
+          "ran_count": 116,
+          "summary_lines": 1,
+          "verdict": "FAILED (failures=1)",
+          "failures": 1,
+          "errors": 0,
+          "skipped": null
+        },
+        "skips": [],
+        "skip_count": 0,
+        "failure_headers_normalized": [
+          "FAIL: test_legacy_bound_package_hash_is_unchanged (test_route_binding_v2.RouteBindingV2Test.test_legacy_bound_package_hash_is_unchanged)"
+        ],
+        "failure_header_count": 1,
+        "log_file": "local-revision-r18-discover-chem_agent_contracts.log"
+      },
+      "note": "skip lists recorded as data (not asserted zero); failure-header sets asserted byte-equal to the embedded baselines (research: 30-entry baseline minus test_b1_bootstrap_generates_initial_outputs, which passes in this workspace; contracts: the single baseline entry)"
+    }
+  },
+  "fixed_constraints": {
+    "r7_to_r17_archives_untouched": true,
+    "contracts_tree_untouched": true,
+    "diagnostics_module_semantics_untouched": true,
+    "conventions_no_v1_expansion": true,
+    "parser_files_byte_identical_to_r17": true,
+    "tokens_consumed_by_this_runner": 0,
+    "model_not_called": true,
+    "device_not_run": true,
+    "ms7a_cascade_still_blocked": true,
+    "tracked_modifications_limited_to_round18_files": true
+  }
+}
