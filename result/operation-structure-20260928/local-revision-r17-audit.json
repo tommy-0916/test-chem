@@ -1,0 +1,30 @@
+{
+  "schema_version": "g2a_ingestion_folio/v17",
+  "model_generated": false,
+  "scope": "r17 (G2a follow-up-2): folio neighborhood body-text check in the PDF ingestion layer (five factors -> six), the parser-version bump to route_pdf_groups/v3 with empirical old/new evidence, and SI caption-boundary design-note corrections; no model call, no conventions/protocol semantic change, no caption release, no SI grouping",
+  "audit": [
+    {
+      "kind": "changed_files",
+      "items": [
+        "reaserch_agent/route_pdf_source.py (six-factor validated folio recognition: + neighborhood body-text check, scale derived from the candidate's font metrics; _PdfLine keeps the full glyph bbox)",
+        "reaserch_agent/route_pdf_groups.py (PDF_GROUP_PARSER_VERSION bumped to route_pdf_groups/v3 with the rationale comment)",
+        "reaserch_agent/test_route_pdf_folio.py (+ NeighborhoodBodyRegressionTest: 7 tests; pre-r15 comparison gains the probe-C case; version assertion at v3; module now 27 tests)",
+        "result/operation-structure-20260928/local-revision-r17.py",
+        "result/operation-structure-20260928/local-revision-r17-*.json",
+        "docs/field_semantic_gate_r17_checkpoint_20261005.md"
+      ]
+    },
+    {
+      "kind": "capability_change",
+      "detail": "previously parseable inputs whose bottom band carries label-adjacent incrementing values (probe C shape: label and value in adjacent original blocks at the same x, glyph-box gap ~4.26 pt) now keep those values instead of deleting them; genuine folio patterns (consistent anchor, isolated line, no horizontally-overlapping neighbor within one line height) are still stripped -- Wu SI keeps its 1041 blocks / 79 folios and A01 is byte-identical under both parsers"
+    },
+    {
+      "kind": "version_handling",
+      "detail": "block semantics changed for previously parseable inputs (three synthetic shapes change 6 -> 9 blocks; both real anchor documents unchanged), so PDF_GROUP_PARSER_VERSION moved v2 -> v3 per the route_pdf_groups.py line-50 convention; the r13/r13b archives pin no version string (re-asserted in the runner), so no pin was rewritten and historical archives keep their original bytes"
+    },
+    {
+      "kind": "honest_endpoints",
+      "detail": "W1/W2 ineligible under the frozen v1 rules; the caption-boundary corrections are a recorded design with measured geometry (43.37 pt gap, 24.02 pt indent), not an implementation; dag_consumption remains unobserved and unclaimed"
+    }
+  ]
+}

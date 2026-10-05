@@ -1,12 +1,14 @@
-"""G2a folio-recognition tests: five-factor validation and abstention detail.
+"""G2a folio-recognition tests: six-factor validation and abstention detail.
 
 A folio (printed page number such as "S 75") is page furniture only when all
-five factors hold together: a standalone folio-shaped short line in the
+six factors hold together: a standalone folio-shaped short line in the
 bottom band, a consistent vertical position across pages, a number that
 advances in lockstep with the page order, a consistent horizontal anchor,
-and body isolation (the candidate is the only non-empty line of its original
-PDF block).  Single-factor lookalikes (chart ticks, table totals, one-page
-numbers, measured values sitting under their labels) must survive, and
+body isolation inside its block (the candidate is the only non-empty line of
+its original PDF block), and body isolation across the block neighborhood
+(no horizontally overlapping line stands within body line spacing of it).
+Single-factor lookalikes (chart ticks, table totals, one-page numbers,
+measured values sitting under or next to their labels) must survive, and
 genuine layout ambiguity must still abstain -- now with structured culprit
 detail.
 """
@@ -321,10 +323,11 @@ class RealPdfFolioAnchorTest(unittest.TestCase):
 
 
 _PRER15_COMMIT = "c429443"
+_PRER17_COMMIT = "491ec37"
 
 
-def _load_prer15_source_module():
-    """Load route_pdf_source as of the pre-r15 commit for old/new comparison.
+def _load_historical_source_module(commit: str):
+    """Load route_pdf_source as of a commit for old/new comparison.
 
     Returns (module, cleanup) or None when git or the commit is unavailable.
     The module name carries the package prefix so its relative imports work.
@@ -332,7 +335,7 @@ def _load_prer15_source_module():
     try:
         proc = subprocess.run(
             ["git", "show",
-             f"{_PRER15_COMMIT}:reaserch_agent/route_pdf_source.py"],
+             f"{commit}:reaserch_agent/route_pdf_source.py"],
             cwd=_REPO, capture_output=True, text=True, timeout=60,
         )
     except (OSError, subprocess.SubprocessError):
@@ -340,10 +343,10 @@ def _load_prer15_source_module():
     if proc.returncode != 0 or not proc.stdout:
         return None
     temporary = tempfile.TemporaryDirectory()
-    path = Path(temporary.name) / "_route_pdf_source_prer15.py"
+    path = Path(temporary.name) / f"_route_pdf_source_{commit}.py"
     path.write_text(proc.stdout, encoding="utf-8")
     spec = importlib.util.spec_from_file_location(
-        "reaserch_agent._route_pdf_source_prer15", path)
+        f"reaserch_agent._route_pdf_source_{commit}", path)
     if spec is None or spec.loader is None:
         temporary.cleanup()
         return None
@@ -415,6 +418,22 @@ class MisdeleteRegressionTest(unittest.TestCase):
         document.close()
         return raw
 
+    def _probe_c(self) -> bytes:
+        # "Final pH:" label at (280,729) and the bare value at (280,747) sit
+        # in two adjacent original blocks sharing one x; the glyph-box gap
+        # is ~4.26 pt at fontsize 10.  Every r16 factor passes for the value
+        # line -- only the neighborhood body-text check intercepts.
+        document = self._fitz.open()
+        for index in range(3):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((280, 729), "Final pH:", fontsize=10)
+            page.insert_text((280, 747), str(11 + index), fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        return raw
+
     def test_cross_page_x_drift_keeps_values(self) -> None:
         # Probe A: every other factor passes (bottom band, exactly one
         # candidate per page, quorum 3, uniform empty prefix, lockstep
@@ -455,11 +474,14 @@ class MisdeleteRegressionTest(unittest.TestCase):
         )
 
     def test_prer15_block_semantics_comparison(self) -> None:
-        # Empirical basis for the version bump: the pre-r15 parser keeps
+        # Empirical basis for the version bumps: the pre-r15 parser keeps
         # folio-shaped bottom-band lines that the current parser strips, so
         # previously parseable folio-bearing inputs produce shorter block
-        # sequences; folio-free inputs and both probe shapes are unchanged.
-        loaded = _load_prer15_source_module()
+        # sequences (v2); the pre-r15 parser also strips label-adjacent
+        # bottom-band values that the current parser keeps, so those inputs
+        # produce longer block sequences (v3); folio-free inputs and the
+        # probe A/B shapes are unchanged.
+        loaded = _load_historical_source_module(_PRER15_COMMIT)
         if loaded is None:
             self.skipTest("git or the pre-r15 commit unavailable")
         module, temporary = loaded
@@ -491,6 +513,10 @@ class MisdeleteRegressionTest(unittest.TestCase):
             "no_folio": (build([[] for _ in range(4)]), 4, 4),
             "probe_a_shape": (self._probe_a(), 9, 9),
             "probe_b_shape": (self._probe_b(), 9, 9),
+            # The pre-r15 parser pre-dates folio stripping entirely, so it
+            # keeps the label-adjacent values exactly like the r17 parser
+            # does; the misdelete existed only in the r15/r16 window.
+            "probe_c_shape": (self._probe_c(), 9, 9),
         }
         for name, (raw, old_count, new_count) in cases.items():
             old_blocks, old_issue = module._read_pdf_blocks(raw)
@@ -505,17 +531,198 @@ class MisdeleteRegressionTest(unittest.TestCase):
                 self.assertEqual(old_texts, new_texts, name)
             else:
                 self.assertNotEqual(old_texts, new_texts, name)
-                # The new sequence is the old one minus the folio lines.
-                iterator = iter(old_texts)
+                # The shorter sequence is the longer one minus the lines the
+                # two parsers treat differently (stripped folios or kept
+                # label-adjacent values), in order.
+                shorter, longer = (
+                    (new_texts, old_texts)
+                    if len(new_texts) < len(old_texts)
+                    else (old_texts, new_texts)
+                )
+                iterator = iter(longer)
                 self.assertTrue(
-                    all(text in iterator for text in new_texts), name)
+                    all(text in iterator for text in shorter), name)
 
-    def test_parser_version_bumped_to_v2(self) -> None:
-        # Block semantics changed for previously parseable folio-bearing
-        # inputs (pinned by the comparison test above), so the enumerator
+    def test_parser_version_bumped_to_v3(self) -> None:
+        # Block semantics changed again for previously parseable inputs at
+        # r17: bottom-band values adjacent to their labels were stripped
+        # under v2 and are kept under v3 (pinned by the r17 replay's
+        # old/new comparison against the 491ec37 parser), so the enumerator
         # version had to move.  The r13/r13b archives pin no version string
         # (grep-verified), so the bump falsifies no pinned replay bytes.
-        self.assertEqual(PDF_GROUP_PARSER_VERSION, "route_pdf_groups/v2")
+        self.assertEqual(PDF_GROUP_PARSER_VERSION, "route_pdf_groups/v3")
+
+
+@unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
+class NeighborhoodBodyRegressionTest(unittest.TestCase):
+    """r17: body-adjacent bottom-band values are kept; isolated folios strip.
+
+    Probe C shape: the label and its value are two adjacent original blocks
+    at the same x with a ~4.26 pt glyph-box gap at fontsize 10.  All five
+    r16 factors pass for the value line, so the neighborhood body-text check
+    (factor 6) is the load-bearing one.  Its proximity scale is derived from
+    the candidate's own font metrics (one standard line height, 1.2 em) --
+    no probe text, coordinate, or page position is consulted.
+    """
+
+    def setUp(self) -> None:
+        import fitz
+
+        self._fitz = fitz
+
+    def _label_value_pages(self, label_baseline: float = 729.0,
+                           value_baseline: float = 747.0,
+                           label_x: float = 280.0, value_x: float = 280.0,
+                           ) -> bytes:
+        document = self._fitz.open()
+        for index in range(3):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((label_x, label_baseline), "Final pH:",
+                             fontsize=10)
+            page.insert_text((value_x, value_baseline), str(11 + index),
+                             fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        return raw
+
+    def test_adjacent_block_label_keeps_values(self) -> None:
+        # Probe C: label and value in adjacent original blocks, same x,
+        # glyph-box gap ~4.26 pt -- the neighborhood check alone intercepts.
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._label_value_pages())
+        self.assertIsNone(issue)
+        self.assertEqual(report["folios_stripped"], [])
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 9)
+        for value in ("11", "12", "13"):
+            self.assertIn(value, texts)
+
+    def test_label_below_value_keeps_values(self) -> None:
+        # The neighborhood check is bidirectional: a label sitting just
+        # below the value line also makes it body text.  (Both baselines
+        # stay above the 0.94h margin zone, so the legacy margin rule does
+        # not interfere.)
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._label_value_pages(label_baseline=747.0,
+                                    value_baseline=729.0))
+        self.assertIsNone(issue)
+        self.assertEqual(report["folios_stripped"], [])
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 9)
+        for value in ("11", "12", "13"):
+            self.assertIn(value, texts)
+
+    def test_gap_just_below_line_scale_keeps_values(self) -> None:
+        # Boundary case below the threshold: a 25 pt baseline delta at
+        # fontsize 10 gives a glyph-box gap of ~11.3 pt, just under the
+        # 1.2 em scale (12.0 pt); the values are still body-adjacent.
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._label_value_pages(label_baseline=722.0))
+        self.assertIsNone(issue)
+        self.assertEqual(report["folios_stripped"], [])
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 9)
+        for value in ("11", "12", "13"):
+            self.assertIn(value, texts)
+
+    def test_gap_just_above_line_scale_strips(self) -> None:
+        # Boundary case above the threshold: a 26 pt baseline delta gives a
+        # glyph-box gap of ~12.3 pt, just over the 1.2 em scale; the values
+        # validate as folios again (anti full-rejection guard).
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._label_value_pages(label_baseline=721.0))
+        self.assertIsNone(issue)
+        self.assertEqual(
+            [item["text"] for item in report["folios_stripped"]],
+            ["11", "12", "13"],
+        )
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 6)
+        self.assertIn("Final pH:", texts)
+
+    def test_non_overlapping_label_does_not_block(self) -> None:
+        # Specificity guard: a label close above the value but horizontally
+        # disjoint from it (x=70 label vs x=280 value) is not a neighbor;
+        # the values still validate as folios.
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._label_value_pages(label_x=70.0))
+        self.assertIsNone(issue)
+        self.assertEqual(
+            [item["text"] for item in report["folios_stripped"]],
+            ["11", "12", "13"],
+        )
+        self.assertEqual(len([block.text for block in blocks]), 6)
+
+    def test_real_folio_spacing_still_stripped(self) -> None:
+        # Positive control in the Wu SI's own geometry: a size-12 text line
+        # stands ~16.7 pt above the centered size-10 folio (the real SI's
+        # minimum measured gap is 14.16 pt); the folios strip.
+        fitz = self._fitz
+        document = fitz.open()
+        for index in range(3):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((240, 716), "Electrolysis reference text.",
+                             fontsize=12)
+            folio = f"S {11 + index}"
+            width = fitz.get_text_length(folio, fontsize=10)
+            page.insert_text((306 - width / 2, 747), folio, fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        blocks, issue, report = _read_pdf_blocks_with_report(raw)
+        self.assertIsNone(issue)
+        self.assertEqual(
+            [item["text"] for item in report["folios_stripped"]],
+            ["S 11", "S 12", "S 13"],
+        )
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 6)
+        self.assertIn("Electrolysis reference text.", texts)
+
+    def test_prer17_block_semantics_comparison(self) -> None:
+        # Empirical basis for the v3 bump: the r16 parser (git show 491ec37)
+        # strips the label-adjacent values that the current parser keeps, so
+        # previously parseable probe-C-shaped inputs produce longer block
+        # sequences now; isolated-folio inputs are unchanged under both.
+        loaded = _load_historical_source_module(_PRER17_COMMIT)
+        if loaded is None:
+            self.skipTest("git or the pre-r17 commit unavailable")
+        module, temporary = loaded
+        self.addCleanup(temporary.cleanup)
+        self.addCleanup(sys.modules.pop, module.__name__, None)
+
+        cases = {
+            # name: (raw, prer17_block_count, current_block_count)
+            "probe_c_shape": (self._label_value_pages(), 6, 9),
+            "label_below_value": (
+                self._label_value_pages(label_baseline=747.0,
+                                        value_baseline=729.0), 6, 9),
+            "gap_just_below_scale": (
+                self._label_value_pages(label_baseline=722.0), 6, 9),
+            "gap_just_above_scale": (
+                self._label_value_pages(label_baseline=721.0), 6, 6),
+            "non_overlapping_label": (
+                self._label_value_pages(label_x=70.0), 6, 6),
+        }
+        for name, (raw, old_count, new_count) in cases.items():
+            old_blocks, old_issue = module._read_pdf_blocks(raw)
+            new_blocks, new_issue = _read_pdf_blocks(raw)
+            self.assertIsNone(old_issue, name)
+            self.assertIsNone(new_issue, name)
+            old_texts = [block.text for block in old_blocks]
+            new_texts = [block.text for block in new_blocks]
+            self.assertEqual(len(old_texts), old_count, name)
+            self.assertEqual(len(new_texts), new_count, name)
+            if old_count == new_count:
+                self.assertEqual(old_texts, new_texts, name)
+            else:
+                # The r16 sequence is the current one minus the kept values.
+                iterator = iter(new_texts)
+                self.assertTrue(
+                    all(text in iterator for text in old_texts), name)
 
 
 if __name__ == "__main__":

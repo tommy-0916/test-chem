@@ -1,0 +1,71 @@
+{
+ "probe_c_pre_round_stripped": [
+  "11",
+  "12",
+  "13"
+ ],
+ "probe_c_values_kept": [
+  "11",
+  "12",
+  "13"
+ ],
+ "label_below_values_kept": [
+  "11",
+  "12",
+  "13"
+ ],
+ "gap_boundary_both_sides": [
+  [
+   "11",
+   "12",
+   "13"
+  ],
+  [
+   "11",
+   "12",
+   "13"
+  ]
+ ],
+ "si_shaped_still_stripped": [
+  "S 11",
+  "S 12",
+  "S 13"
+ ],
+ "control_still_stripped": [
+  "11",
+  "12",
+  "13"
+ ],
+ "si_gap_min": 14.16,
+ "si_gap_median": 372.04,
+ "parser_version": "route_pdf_groups/v3",
+ "semantic_change_cases": [
+  "probe_c_shape",
+  "label_below_value",
+  "gap_just_below_scale"
+ ],
+ "real_documents_identical_under_both_parsers": {
+  "wu2025_si": true,
+  "a01": true
+ },
+ "r13_archives_pin_no_version": true,
+ "si_blocks": 1041,
+ "si_folios_stripped": 79,
+ "w1_sentence_binding": {
+  "needle": "pdf:p14:b9-p14:b10",
+  "full_sentence": "pdf:p14:b9-p14:b11"
+ },
+ "main_still_abstains": true,
+ "a01_parse_unchanged": true,
+ "pool_census_identical_to_r15_r16": true,
+ "caption_corrections": [
+  "original-block numbering basis",
+  "missed caption continuation scope",
+  "visual distinguishability at the caption boundary"
+ ],
+ "w1_eligible": false,
+ "w2_eligible": false,
+ "anchors_ok": true,
+ "double_run_byte_identical": true,
+ "replay_sha256": "sha256_7c69421db76ad5013073d38e526e57553b8f7a078af12ffe2f561ee91c22503e"
+}

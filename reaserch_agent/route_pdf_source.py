@@ -84,6 +84,7 @@ class _PdfLine:
     x0: float
     x1: float
     y0: float
+    y1: float
     text: str
     heading: str
     body: str
@@ -139,22 +140,59 @@ def _two_column_page(lines: list[_PdfLine], width: float) -> bool:
     return left >= 8 and right >= 8
 
 
-# A folio (printed page number such as "S 75") is recognized by five factors
+# A folio (printed page number such as "S 75") is recognized by six factors
 # combined, never by a subset: (1) a standalone folio-shaped short line in
 # the bottom band of the page, (2) a consistent vertical position across
 # pages, (3) a number that advances in lockstep with the page order, (4) a
 # consistent horizontal anchor (the line's center x agrees across pages),
-# (5) body isolation (the candidate's original PDF block contains no other
-# non-empty text line).  Nothing is deleted by digit count, font size, or a
-# fixed page position; a single lookalike line (a chart tick, a table total,
-# a measured value under a label) never qualifies, because the cross-page and
-# isolation factors cannot hold for it.  When context is doubtful the line is
-# kept: keeping content is always the safe failure.
+# (5) body isolation inside its block (the candidate's original PDF block
+# contains no other non-empty text line), and (6) body isolation across the
+# block neighborhood (no other text line on the page overlaps the candidate
+# horizontally while standing within normal body line spacing of it, above
+# or below -- sole occupancy of a block does not by itself prove detachment
+# from body text).  Nothing is deleted by digit count, font size, or a fixed
+# page position; a single lookalike line (a chart tick, a table total, a
+# measured value under a label) never qualifies, because the cross-page and
+# isolation factors cannot hold for it.  When context is doubtful the line
+# is kept: keeping content is always the safe failure.
 _FOLIO_FORM = re.compile(r"([A-Za-z]{0,2})\s*([0-9]{1,4})\Z")
 _FOLIO_BAND = 0.90
 _FOLIO_MIN_PAGES = 3
 _FOLIO_Y_TOLERANCE = 4.0
 _FOLIO_X_TOLERANCE = 4.0
+# The neighborhood proximity scale is derived from the candidate's own font
+# metrics: one standard single line height (1.2 em).  A horizontally
+# overlapping neighbor whose glyph-box gap to the candidate is smaller than
+# that scale stands no further away than the next line of a single-spaced
+# paragraph, so the candidate sits inside body flow and is not a folio.
+_FOLIO_BODY_GAP_FACTOR = 1.2
+
+
+def _has_body_neighbor(candidate: _PdfLine, lines: list[_PdfLine]) -> bool:
+    """True when another text line on the page overlaps the candidate
+    horizontally and stands within body line spacing of it (either side).
+
+    The vertical glyph-box gap is compared against one standard line height
+    of the candidate's own font size; touching or vertically intersecting
+    boxes count as zero gap.  Only the gap scale comes from font metrics --
+    no text content, coordinate, or page position is consulted.
+    """
+    scale = candidate.body_size or candidate.heading_size
+    threshold = _FOLIO_BODY_GAP_FACTOR * scale
+    for other in lines:
+        if other is candidate:
+            continue
+        if other.x0 >= candidate.x1 or candidate.x0 >= other.x1:
+            continue  # no horizontal overlap
+        if other.y0 >= candidate.y1:
+            gap = other.y0 - candidate.y1
+        elif other.y1 <= candidate.y0:
+            gap = candidate.y0 - other.y1
+        else:
+            gap = 0.0  # the glyph boxes touch or intersect vertically
+        if gap < threshold:
+            return True
+    return False
 
 
 def _validated_folio_lines(
@@ -165,12 +203,13 @@ def _validated_folio_lines(
     A page contributes a candidate only when it carries exactly one
     folio-shaped line in the bottom band; pages with zero or several
     candidates contribute none.  A candidate must be the only non-empty text
-    line of its original block (a value sharing a block with its label is
-    body text, never a folio).  The candidate set is accepted only when every
-    candidate shares one alphabetic prefix form, the numbers advance exactly
-    with the page order, and the vertical positions and horizontal anchors
-    each agree within tolerance -- otherwise the set is empty and nothing is
-    stripped.
+    line of its original block, and no other line on the page may overlap it
+    horizontally within body line spacing (a value sharing a block with its
+    label, or sitting right next to it, is body text, never a folio).  The
+    candidate set is accepted only when every candidate shares one
+    alphabetic prefix form, the numbers advance exactly with the page order,
+    and the vertical positions and horizontal anchors each agree within
+    tolerance -- otherwise the set is empty and nothing is stripped.
     """
     candidates: dict[int, tuple[str, int, float, float, _PdfLine]] = {}
     for _width, lines in pages:
@@ -192,7 +231,8 @@ def _validated_folio_lines(
                 ))
         if len(found) == 1:
             prefix, number, y0, x_center, line = found[0]
-            candidates[line.page] = (prefix, number, y0, x_center, line)
+            if not _has_body_neighbor(line, lines):
+                candidates[line.page] = (prefix, number, y0, x_center, line)
     if len(candidates) < _FOLIO_MIN_PAGES:
         return set()
     ordered_pages = sorted(candidates)
@@ -353,13 +393,14 @@ def _read_pdf_blocks_with_report(
                         if line_count > _MAX_BLOCKS or chars > _MAX_TEXT_CHARS:
                             return None, "pdf_extracted_text_too_large", _empty_parse_report()
                         heading, body, heading_size, body_size = _line_parts(spans)
-                        x0, y0, x1, _ = line.get("bbox", (0, 0, 0, 0))
+                        x0, y0, x1, y1 = line.get("bbox", (0, 0, 0, 0))
                         lines_on_page.append(_PdfLine(
                             page=page_number,
                             original_block=original_block,
                             original_line=original_line,
                             page_height=page.rect.height,
                             x0=float(x0), x1=float(x1), y0=float(y0),
+                            y1=float(y1),
                             text=text, heading=heading, body=body,
                             heading_size=heading_size, body_size=body_size,
                         ))
@@ -372,7 +413,7 @@ def _read_pdf_blocks_with_report(
         return None, "pdf_no_extractable_text", _empty_parse_report()
     report = _empty_parse_report()
     # Validated folios are page furniture below the historical margin zone;
-    # the three-factor check accepts only whole-document patterns.
+    # the six-factor check accepts only whole-document patterns.
     folio_keys = _validated_folio_lines(pages)
     # Repeated margin text is page furniture, not an experimental boundary.
     margin_pages: dict[str, set[int]] = {}

@@ -1,0 +1,745 @@
+{
+  "schema_version": "g2a_ingestion_folio/v17",
+  "round": "r17 (G2a follow-up-2): folio neighborhood body-text check (sixth factor) + parser version bump (route_pdf_groups/v3) + SI caption-boundary design-note corrections",
+  "model_generated": false,
+  "model_called": false,
+  "baseline": {
+    "pre_round_head": "491ec375dd4cd3b5d6b4160580ebc6a8516338e5",
+    "conventions_json_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "prompt_builder_module": "reaserch_agent/route_pdf_group_extraction.py",
+    "prompt_builder_sha256": "24864d9af522666b15a1690b6c9ba829bebfa3047545d82adc3e3dff331486f7",
+    "a01_source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "wu2025_main_pdf_sha256": "0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+    "wu2025_si_pdf_sha256": "cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+    "changed_source_files": {
+      "reaserch_agent/route_pdf_source.py": "51b7be8b1e99847ea26d08568aef83b65b9168945082050e1b72eee3d0f51d7a",
+      "reaserch_agent/route_pdf_groups.py": "d8eecc83b1dc71fadc5541668f4ad3c3ea210a9a8c97ca31066a548795766094"
+    },
+    "changed_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "e53c52cbf8bd5a99621792b12fae55e9e25e3b9781ae26b3cca2bed311ae017a"
+    },
+    "r16_checkpoint_sha256_untouched": "2cb78990ce6fa7d44300faa09801d25597ffaf4eff875965842fc5252637570e",
+    "tracked_modifications_subset_of_changed_files": true
+  },
+  "code_changes": {
+    "files": {
+      "reaserch_agent/route_pdf_source.py": "51b7be8b1e99847ea26d08568aef83b65b9168945082050e1b72eee3d0f51d7a",
+      "reaserch_agent/route_pdf_groups.py": "d8eecc83b1dc71fadc5541668f4ad3c3ea210a9a8c97ca31066a548795766094"
+    },
+    "changed_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "e53c52cbf8bd5a99621792b12fae55e9e25e3b9781ae26b3cca2bed311ae017a"
+    },
+    "semantics_note": "conventions, protocol schemas, and every rule resource are byte-identical to the frozen baseline; ingestion block semantics changed for previously parseable inputs whose bottom band carries label-adjacent values (they were stripped under v2 and are kept under v3 -- empirically pinned in version_determination), so PDF_GROUP_PARSER_VERSION is bumped to route_pdf_groups/v3; the A01 and Wu SI anchors are asserted byte-identical under both the pre-r17 and the current parser"
+  },
+  "neighborhood_fix": {
+    "root_cause": "the r16 five-factor rule validated a bare incrementing bottom-band value as a folio even when its label sat in the ADJACENT original block a few points away; body isolation checked only same-block line counts, and sole occupancy of a block does not prove detachment from body text",
+    "six_factors": [
+      "standalone folio form: fullmatch [A-Za-z]{0,2}\\s*[0-9]{1,4} in the bottom band (y0 > 0.90h)",
+      "at most one candidate per page; quorum of three pages",
+      "uniform alphabetic prefix and page-order lockstep increment",
+      "vertical anchor: y0 within 4 pt of the median",
+      "horizontal anchor: center x within 4 pt of the median",
+      "body isolation inside the block: the candidate is the only non-empty line of its original PDF block",
+      "body isolation across the neighborhood (new): no other text line on the page overlaps the candidate horizontally while standing within one standard line height (1.2 x the candidate's font size) of it, above or below"
+    ],
+    "doubt_keeps_content": "when context is doubtful the line is kept: keeping content is always the safe failure; no page is removed, no PDF byte is modified",
+    "verification": {
+      "probes": {
+        "probe_c": "3 pages 612x792; 'Final pH:' label at (280,729) and bare values 11/12/13 at (280,747) sit in two ADJACENT original blocks at the same x; glyph-box gap ~4.26 pt at fontsize 10 -- every r16 factor passes; only the neighborhood check intercepts",
+        "label_below_value": "probe C mirrored vertically: value at (280,729), label at (280,747) -- the check is bidirectional",
+        "gap_just_below_scale": "baseline delta 25 pt -> glyph-box gap ~11.3 pt, just under the 1.2 em scale (12.0 pt): still body-adjacent, kept",
+        "gap_just_above_scale": "baseline delta 26 pt -> glyph-box gap ~12.3 pt, just over the scale: the values validate as folios again",
+        "non_overlapping_label": "label at x=70 vs value at x=280: no horizontal overlap, so the label is not a neighbor and the values strip",
+        "si_shaped_spacing": "size-12 text ~16.7 pt above a centered size-10 folio (the real SI geometry): still stripped",
+        "control_isolated": "r16 control: x-consistent bare values with no label nearby still strip",
+        "probe_a": "r16 probe A regression (x drift): values kept",
+        "probe_b": "r16 probe B regression (shared block): values kept"
+      },
+      "before_pre_round_code": {
+        "probe_c": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": [],
+          "s_folios_kept": []
+        }
+      },
+      "after_current_code": {
+        "probe_c": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ],
+          "s_folios_kept": []
+        },
+        "label_below_value": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ],
+          "s_folios_kept": []
+        },
+        "gap_just_below_scale": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ],
+          "s_folios_kept": []
+        },
+        "gap_just_above_scale": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": [],
+          "s_folios_kept": []
+        },
+        "non_overlapping_label": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": [],
+          "s_folios_kept": []
+        },
+        "si_shaped_spacing": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "S 11",
+            "S 12",
+            "S 13"
+          ],
+          "values_kept": [],
+          "s_folios_kept": []
+        },
+        "control_isolated": {
+          "issue": null,
+          "blocks": 3,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": [],
+          "s_folios_kept": []
+        },
+        "probe_a": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ],
+          "s_folios_kept": []
+        },
+        "probe_b": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ],
+          "s_folios_kept": []
+        }
+      },
+      "load_bearing": {
+        "probe_c": "neighborhood body-text check (factor 6) alone intercepts: bottom band, one candidate per page, quorum, uniform prefix, lockstep, y anchor, x anchor, and same-block isolation all pass"
+      },
+      "threshold_derivation": "one standard line height = 1.2 x the candidate's own font size; no probe text, coordinate, or page position is consulted"
+    }
+  },
+  "si_gap_distribution": {
+    "folios_measured": 79,
+    "gap_min": 14.16,
+    "gap_median": 372.04,
+    "gap_max": 534.04,
+    "tightest_folio": {
+      "page": 78,
+      "folio": "S 78",
+      "folio_size": 10.02,
+      "gap": 14.16,
+      "direction": "above",
+      "neighbor": "Electrolysis. Adv Mater.. 33, e2101425 (2021).",
+      "neighbor_size": 12.0,
+      "threshold": 12.024
+    },
+    "threshold_rule": "gap >= 1.2 x folio font size required to strip; all 79 measured folios clear it",
+    "folio_font_sizes": [
+      10.02
+    ],
+    "per_folio_thresholds": [
+      12.024
+    ],
+    "probe_c_gap": 4.26,
+    "separation_ratio_min_vs_probe_c": 3.32,
+    "smallest_five": [
+      {
+        "page": 78,
+        "folio": "S 78",
+        "folio_size": 10.02,
+        "gap": 14.16,
+        "direction": "above",
+        "neighbor": "Electrolysis. Adv Mater.. 33, e2101425 (2021).",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 60,
+        "folio": "S 60",
+        "folio_size": 10.02,
+        "gap": 25.08,
+        "direction": "above",
+        "neighbor": "catalyst post-reaction. A comparison of XPS spectra before a",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 19,
+        "folio": "S 19",
+        "folio_size": 10.02,
+        "gap": 36.92,
+        "direction": "above",
+        "neighbor": "The value of hA can be derived from Equation 2:(5)",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 79,
+        "folio": "S 79",
+        "folio_size": 10.02,
+        "gap": 63.02,
+        "direction": "above",
+        "neighbor": "Chloride Promoted Oxygen Evolution Reaction. Angew. Chem. In",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      },
+      {
+        "page": 75,
+        "folio": "S 75",
+        "folio_size": 10.02,
+        "gap": 81.32,
+        "direction": "above",
+        "neighbor": "NF: nickel foam; CF: copper foam; CC: carbon cloth; NFs: FeN",
+        "neighbor_size": 12.0,
+        "threshold": 12.024
+      }
+    ]
+  },
+  "version_determination": {
+    "method": "pre-r17 parser loaded from git show 491ec37 into a package-prefixed module; ten synthetic inputs parsed under both parsers (_read_pdf_blocks) with block sequences compared; both real anchor documents dual-parsed and pinned",
+    "samples": [
+      {
+        "case": "probe_c_shape",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "label_below_value",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "gap_just_below_scale",
+        "pre_r17_blocks": 6,
+        "current_blocks": 9,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "gap_just_above_scale",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "non_overlapping_label",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "si_shaped_spacing",
+        "pre_r17_blocks": 6,
+        "current_blocks": 6,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_a_shape",
+        "pre_r17_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_b_shape",
+        "pre_r17_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "control_isolated",
+        "pre_r17_blocks": 3,
+        "current_blocks": 3,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "no_folio",
+        "pre_r17_blocks": 4,
+        "current_blocks": 4,
+        "block_sequence_identical": true
+      }
+    ],
+    "real_documents": {
+      "wu2025_si": {
+        "blocks": 1041,
+        "blocks_sha256_both_parsers": "4f82f5a11778af6fdb2dd59bc6e74647bb89df093418a28b0019d06725769b6e",
+        "block_sequence_identical": true
+      },
+      "a01": {
+        "blocks": 1289,
+        "blocks_sha256_both_parsers": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+        "block_sequence_identical": true
+      }
+    },
+    "conclusion": {
+      "semver_reading": "route_pdf_groups.py line ~50: bump when the enumerator or route_pdf_source changes group block semantics",
+      "finding": "previously parseable inputs whose bottom band carries label-adjacent incrementing values produced shorter block sequences under v2 (values stripped) and produce longer ones under v3 (values kept); isolated-folio, folio-free, and both real anchor documents are byte-identical under both parsers",
+      "decision": "PDF_GROUP_PARSER_VERSION bumped to route_pdf_groups/v3"
+    },
+    "r13_r13b_impact": {
+      "version_string_occurrences_in_r13_archives": 0,
+      "r13_r13b_runners_reference_parser_version": false,
+      "pinning_change": "none needed: the pinned replay bytes carry no version string, so the bump falsifies nothing; historical archives keep their original bytes"
+    }
+  },
+  "document_anchors": {
+    "a01": {
+      "blocks": 1289,
+      "blocks_sha256": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+      "folios_stripped": 0
+    },
+    "wu_si": {
+      "blocks": 1041,
+      "folios_stripped": 79,
+      "folio_first": {
+        "page": 2,
+        "text": "S 2",
+        "x0": 299.5,
+        "x1": 315.1,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "folio_last": {
+        "page": 80,
+        "text": "S 80",
+        "x0": 297.0,
+        "x1": 317.6,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "w1_sentence_binding": {
+        "needle": "pdf:p14:b9-p14:b10",
+        "full_sentence": "pdf:p14:b9-p14:b11"
+      },
+      "enumeration_endpoint": "experimental_section_missing (0 groups)"
+    },
+    "wu_main": {
+      "issue": "pdf_column_layout_ambiguous",
+      "abstention": {
+        "reason": "pdf_column_layout_ambiguous",
+        "culprits": [
+          {
+            "page": 10,
+            "text": "36",
+            "x0": 294.6,
+            "x1": 299.9,
+            "y0": 648.0,
+            "page_width": 595.3
+          }
+        ]
+      },
+      "note": "the p10 chart tick '36' sits at 0.819h, outside the 0.90h folio band, and never becomes a candidate"
+    }
+  },
+  "pool_census": {
+    "rows": [
+      {
+        "candidate": "wu2025-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "wu2025-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "zhang2017-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "zhang2017-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "chemkb-kion",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "chemkb-pba-hosts",
+        "groups": 0,
+        "reasons": [
+          "pdf_source_too_large"
+        ]
+      },
+      {
+        "candidate": "chemkb-nife-pba",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "upload-upl_1e79",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      }
+    ],
+    "identical_to_r15_post_census": true,
+    "identical_to_r16_census": true,
+    "note": "the neighborhood check changes no pool candidate: every SI folio clears the new proximity scale (see si_gap_distribution) and every abstaining candidate keeps its reason"
+  },
+  "caption_boundary_evidence": {
+    "verified": {
+      "page_s14": {
+        "sort_false_numbering": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "synthesis_paragraph_original_blocks": [
+            8,
+            14
+          ],
+          "note": "the r16 runner's internal probe enumerated this mode (get_text('dict') default sort=False)"
+        },
+        "sort_true_numbering": {
+          "caption_head_original_block": 3,
+          "continuation_original_blocks": [
+            4,
+            5
+          ],
+          "synthesis_paragraph_original_blocks": [
+            7,
+            13
+          ],
+          "note": "production parser mode (get_text('dict', sort=True)); citations of production locators must use this numbering"
+        },
+        "final_mapping": {
+          "b1_b2_from": 3,
+          "b3_from": 4,
+          "b4_from": 5,
+          "synthesis_paragraph_from": [
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13
+          ]
+        },
+        "caption_flag_on_region": false,
+        "boundary_signals": {
+          "intra_caption_gaps_pt": [
+            3.97,
+            4.69
+          ],
+          "caption_to_paragraph_gap_pt": 43.37,
+          "intra_paragraph_gaps_pt": [
+            5.47,
+            4.69,
+            4.69,
+            4.69,
+            4.69,
+            4.69
+          ],
+          "paragraph_first_line_indent_pt": 24.02
+        }
+      },
+      "page_s15": {
+        "sort_false_numbering": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "synthesis_paragraph_original_blocks": [
+            8,
+            15
+          ],
+          "note": "the r16 runner's internal probe enumerated this mode (get_text('dict') default sort=False)"
+        },
+        "sort_true_numbering": {
+          "caption_head_original_block": 3,
+          "continuation_original_blocks": [
+            4,
+            5
+          ],
+          "synthesis_paragraph_original_blocks": [
+            7,
+            14
+          ],
+          "note": "production parser mode (get_text('dict', sort=True)); citations of production locators must use this numbering"
+        },
+        "final_mapping": {
+          "b1_b2_from": 3,
+          "b3_from": 4,
+          "b4_from": 5,
+          "synthesis_paragraph_from": [
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ]
+        },
+        "caption_flag_on_region": false,
+        "boundary_signals": {
+          "intra_caption_gaps_pt": [
+            3.97,
+            4.69
+          ],
+          "caption_to_paragraph_gap_pt": 43.37,
+          "intra_paragraph_gaps_pt": [
+            5.47,
+            4.69,
+            6.63,
+            5.41,
+            4.69,
+            4.69,
+            4.69
+          ],
+          "paragraph_first_line_indent_pt": 24.02
+        }
+      }
+    },
+    "findings": [
+      "the sort=False/sort=True modes group the caption region into the same one-line blocks with the same line texts; only the enumeration indices differ because sort=True repositions the folio block (page S14: from document-order index 1 to vertical-order index 15), shifting the caption region down by one.  The r16 numbering came from the probe's sort=False mode; production numbering is sort=True -- the difference is the extraction mode, not the indexing origin",
+      "the caption region is exactly head + 2 continuation lines (final b3/b4 in production numbering); from b5 on the synthesis paragraph is body text that should stay non-caption anyway",
+      "the synthesis paragraph is NOT visually indistinguishable: a 43.37 pt vertical gap (vs 3.97-6.63 pt inside both regions) and a 24.02 pt first-line indent separate it from the caption; these are recorded as to-be-verified boundary signals"
+    ]
+  },
+  "design_corrections": [
+    {
+      "item": "original-block numbering basis",
+      "r16_wording": "the acceptance feedback's block numbers ('b1/b2 from block 3, b3/b4 from block 4/5') differ by indexing convention",
+      "corrected": "the difference is the extraction mode: the r16 runner's internal probe enumerated get_text('dict') with the default sort=False while the production parser uses sort=True -- same block grouping and same lines, but sort=True repositions the folio block, so caption-region indices shift by one (page S14: caption head 4 vs 3, continuations 5/6 vs 4/5, paragraph 8-14 vs 7-13; page S15: 8-15 vs 7-14).  It is not a different numbering origin; production locator citations must use the sort=True numbering",
+      "evidence": "caption_boundary_evidence.verified.*.sort_*_numbering"
+    },
+    {
+      "item": "missed caption continuation scope",
+      "r16_wording": "the r15 'same-original-block continuations' draft would miss b3, b4, and the whole synthesis paragraph",
+      "corrected": "only b3/b4 are missed caption continuation lines; from b5 on the synthesis paragraph is body text that should stay non-caption anyway, so keeping it non-caption is correct behavior, not a miss",
+      "evidence": "caption_boundary_evidence.verified.*.final_mapping"
+    },
+    {
+      "item": "visual distinguishability at the caption boundary",
+      "r16_wording": "the synthesis paragraph is visually indistinguishable from caption prose",
+      "corrected": "withdrawn: measured boundary signals exist -- a 43.37 pt vertical gap (vs 3.97-6.63 pt inside both regions) and a 24.02 pt first-line indent.  They are recorded as TO-BE-VERIFIED boundary signals, not as an implemented rule; caption recognition stays unimplemented and the binder's at-most-one-skipped-block hop limit is unchanged",
+      "evidence": "caption_boundary_evidence.verified.*.boundary_signals"
+    }
+  ],
+  "rule_eligibility": {
+    "conventions_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "rule_count": 11,
+    "claims_verified": {
+      "w1_collection_method_unstated": true,
+      "drying_v1_requires_proven_wet_solid_input": true,
+      "dried_unrecognized_by_drying_v1": true,
+      "no_reduction_rule": true
+    },
+    "w1": {
+      "source": "Wu-2025 SI page S14, Supplementary Fig. S13 caption paragraph",
+      "chain": "hydrothermal -> collect -> dry -> reduce (500 °C, H2/N2, 6 h)"
+    },
+    "w2": {
+      "source": "Wu-2025 SI page S15, Supplementary Fig. S14 caption paragraph (powdered MoO2 nanorods)",
+      "chain": "precipitate -> heat 50 °C 3 h -> filtration/washing collection -> hydrogen reduction 500 °C 2 h"
+    },
+    "overall_verdict": "W1 and W2 are both ineligible under the frozen v1 rule table; they are retained as ingestion samples and a rule-compatible source must be found separately (不补造离心/过滤, 不改写源摘录, 不扩规则保正例)",
+    "note": "negative eligibility pre-screen carried unchanged from r15/r16; the conventions resource is byte-identical, so the outcome is unchanged and remains a pre-screen, not a pass; the full step-level table is archived in the r16 replay (rule_eligibility.w1/w2.steps)"
+  },
+  "layer_results": {
+    "attestation": {
+      "status": "verified",
+      "documents": 2
+    },
+    "group_enumeration": {
+      "status": "reached_section_gate",
+      "groups": 0,
+      "diagnostic_reasons": [
+        "experimental_section_missing",
+        "pdf_column_layout_ambiguous"
+      ],
+      "meaning": "unchanged from r15/r16: the SI parses and stops at experimental_section_missing; the main paper still abstains at ingestion"
+    },
+    "proposal_extraction": {
+      "status": "not_reached"
+    },
+    "local_revision": {
+      "status": "not_reached"
+    },
+    "association": {
+      "status": "not_reached"
+    },
+    "receipt": {
+      "status": "not_reached"
+    },
+    "pool_census": {
+      "rows": [
+        {
+          "candidate": "wu2025-main",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "wu2025-si",
+          "groups": 0,
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "zhang2017-main",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "zhang2017-si",
+          "groups": 0,
+          "reasons": [
+            "experimental_section_missing"
+          ]
+        },
+        {
+          "candidate": "chemkb-kion",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "chemkb-pba-hosts",
+          "groups": 0,
+          "reasons": [
+            "pdf_source_too_large"
+          ]
+        },
+        {
+          "candidate": "chemkb-nife-pba",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        },
+        {
+          "candidate": "upload-upl_1e79",
+          "groups": 0,
+          "reasons": [
+            "pdf_column_layout_ambiguous"
+          ]
+        }
+      ],
+      "identical_to_r15_post_census": true,
+      "identical_to_r16_census": true,
+      "note": "the neighborhood check changes no pool candidate: every SI folio clears the new proximity scale (see si_gap_distribution) and every abstaining candidate keeps its reason"
+    }
+  },
+  "dag_consumption": {
+    "observed": false,
+    "note": "still unobservable (0 groups); W1/W2 stay ineligible under the frozen v1 rules; nothing here is claimed as a pass"
+  },
+  "stays_closed_this_round": [
+    "no caption-recognition change is implemented",
+    "caption quotation is NOT opened",
+    "no SI grouping implementation",
+    "the workflow interception of incomplete sources is unchanged",
+    "3E stays diagnostics_only with zero tokens",
+    "protocol-definition/v1 not expanded",
+    "A01 ms7a.out and its cascade stay BLOCKED"
+  ],
+  "anchors": {
+    "a01_regression": {
+      "mechanism": "r13b runner re-executed as a subprocess",
+      "double_run_byte_identical": true,
+      "replay_matches_r13_archive": true,
+      "ms7a_out": "BLOCKED (retained_object_mention_precedes_operation)"
+    },
+    "diagnostics_module_zero_proof_dependency": true,
+    "folio_test_module_27_ok": true,
+    "target_set_346_ok": true
+  },
+  "fixed_constraints": {
+    "r7_to_r16_archives_untouched": true,
+    "contracts_tree_untouched": true,
+    "diagnostics_module_semantics_untouched": true,
+    "conventions_no_v1_expansion": true,
+    "tokens_consumed_by_this_runner": 0,
+    "model_not_called": true,
+    "device_not_run": true,
+    "eight_question_rerun": false,
+    "ms7a_cascade_still_blocked": true,
+    "tracked_modifications_limited_to_three_files": true
+  }
+}
