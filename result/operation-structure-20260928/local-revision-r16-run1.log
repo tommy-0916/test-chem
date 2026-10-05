@@ -1,0 +1,42 @@
+{
+ "probe_a_values_kept": [
+  "11",
+  "12",
+  "13"
+ ],
+ "probe_b_values_kept": [
+  "11",
+  "12",
+  "13"
+ ],
+ "pre_round_stripped_values": [
+  "11",
+  "12",
+  "13"
+ ],
+ "control_still_stripped": [
+  "11",
+  "12",
+  "13"
+ ],
+ "parser_version": "route_pdf_groups/v2",
+ "semantic_change_cases": [
+  "bare_digits_centered",
+  "s_prefix_centered"
+ ],
+ "r13_archives_pin_no_version": true,
+ "si_blocks": 1041,
+ "si_folios_stripped": 79,
+ "w1_sentence_binding": {
+  "needle": "pdf:p14:b9-p14:b10",
+  "full_sentence": "pdf:p14:b9-p14:b11"
+ },
+ "main_still_abstains": true,
+ "a01_parse_unchanged": true,
+ "pool_census_identical_to_r15": true,
+ "w1_eligible": false,
+ "w2_eligible": false,
+ "anchors_ok": true,
+ "double_run_byte_identical": true,
+ "replay_sha256": "sha256_6b36a10f564c2d77979fe840ed39686480aacd8e45132db287f842f0d9eae095"
+}

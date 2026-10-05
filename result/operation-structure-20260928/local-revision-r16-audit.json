@@ -1,0 +1,30 @@
+{
+  "schema_version": "g2a_ingestion_folio/v16",
+  "model_generated": false,
+  "scope": "r16 (G2a follow-up): folio misdelete tightening in the PDF ingestion layer (three factors -> five), the parser-version correction to route_pdf_groups/v2 with empirical old/new evidence, and a caption-boundary design supplement; no model call, no conventions/protocol semantic change, no caption release, no SI grouping",
+  "audit": [
+    {
+      "kind": "changed_files",
+      "items": [
+        "reaserch_agent/route_pdf_source.py (five-factor validated folio recognition: + horizontal anchor, + body isolation)",
+        "reaserch_agent/route_pdf_groups.py (PDF_GROUP_PARSER_VERSION bumped to route_pdf_groups/v2 with the rationale comment)",
+        "reaserch_agent/test_route_pdf_folio.py (+ MisdeleteRegressionTest: 5 tests; module now 20 tests)",
+        "result/operation-structure-20260928/local-revision-r16.py",
+        "result/operation-structure-20260928/local-revision-r16-*.json",
+        "docs/field_semantic_gate_r16_checkpoint_20261004.md"
+      ]
+    },
+    {
+      "kind": "capability_change",
+      "detail": "previously parseable inputs whose bottom band carries a value pattern (incrementing bare numbers with a drifting x anchor, or values sharing a block with their label) now keep those values instead of deleting them; genuine folio patterns (consistent anchor, isolated line) are still stripped -- Wu SI keeps its 1041 blocks / 79 folios and A01 is byte-identical"
+    },
+    {
+      "kind": "version_handling",
+      "detail": "block semantics changed for previously parseable folio-bearing inputs, so PDF_GROUP_PARSER_VERSION moved v1 -> v2 per the route_pdf_groups.py line-50 convention; the r13/r13b archives pin no version string (grep-verified), so no pin was rewritten and historical archives keep their original bytes"
+    },
+    {
+      "kind": "honest_endpoints",
+      "detail": "W1/W2 ineligible under the frozen v1 rules; the caption continuation/termination boundary is a recorded design with a verified block distribution, not an implementation; dag_consumption remains unobserved and unclaimed"
+    }
+  ]
+}

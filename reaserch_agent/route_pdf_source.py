@@ -139,17 +139,22 @@ def _two_column_page(lines: list[_PdfLine], width: float) -> bool:
     return left >= 8 and right >= 8
 
 
-# A folio (printed page number such as "S 75") is recognized by three factors
-# combined, never by one alone: (1) a standalone folio-shaped short line in
+# A folio (printed page number such as "S 75") is recognized by five factors
+# combined, never by a subset: (1) a standalone folio-shaped short line in
 # the bottom band of the page, (2) a consistent vertical position across
-# pages, (3) a number that advances in lockstep with the page order.  Nothing
-# is deleted by digit count, font size, or a fixed page position; a single
-# lookalike line (a chart tick, a table total) never qualifies, because the
-# cross-page factors cannot hold for it.
+# pages, (3) a number that advances in lockstep with the page order, (4) a
+# consistent horizontal anchor (the line's center x agrees across pages),
+# (5) body isolation (the candidate's original PDF block contains no other
+# non-empty text line).  Nothing is deleted by digit count, font size, or a
+# fixed page position; a single lookalike line (a chart tick, a table total,
+# a measured value under a label) never qualifies, because the cross-page and
+# isolation factors cannot hold for it.  When context is doubtful the line is
+# kept: keeping content is always the safe failure.
 _FOLIO_FORM = re.compile(r"([A-Za-z]{0,2})\s*([0-9]{1,4})\Z")
 _FOLIO_BAND = 0.90
 _FOLIO_MIN_PAGES = 3
 _FOLIO_Y_TOLERANCE = 4.0
+_FOLIO_X_TOLERANCE = 4.0
 
 
 def _validated_folio_lines(
@@ -159,26 +164,35 @@ def _validated_folio_lines(
 
     A page contributes a candidate only when it carries exactly one
     folio-shaped line in the bottom band; pages with zero or several
-    candidates contribute none.  The candidate set is accepted only when
-    every candidate shares one alphabetic prefix form, the numbers advance
-    exactly with the page order, and the vertical positions agree within
-    tolerance -- otherwise the set is empty and nothing is stripped.
+    candidates contribute none.  A candidate must be the only non-empty text
+    line of its original block (a value sharing a block with its label is
+    body text, never a folio).  The candidate set is accepted only when every
+    candidate shares one alphabetic prefix form, the numbers advance exactly
+    with the page order, and the vertical positions and horizontal anchors
+    each agree within tolerance -- otherwise the set is empty and nothing is
+    stripped.
     """
-    candidates: dict[int, tuple[str, int, float, _PdfLine]] = {}
+    candidates: dict[int, tuple[str, int, float, float, _PdfLine]] = {}
     for _width, lines in pages:
+        block_line_counts: dict[tuple[int, int], int] = {}
+        for line in lines:
+            key = (line.page, line.original_block)
+            block_line_counts[key] = block_line_counts.get(key, 0) + 1
         found = []
         for line in lines:
             if line.y0 <= line.page_height * _FOLIO_BAND:
+                continue
+            if block_line_counts.get((line.page, line.original_block), 0) != 1:
                 continue
             match = _FOLIO_FORM.fullmatch(line.text)
             if match is not None:
                 found.append((
                     match.group(1).casefold(), int(match.group(2)),
-                    line.y0, line,
+                    line.y0, (line.x0 + line.x1) / 2, line,
                 ))
         if len(found) == 1:
-            prefix, number, y0, line = found[0]
-            candidates[line.page] = (prefix, number, y0, line)
+            prefix, number, y0, x_center, line = found[0]
+            candidates[line.page] = (prefix, number, y0, x_center, line)
     if len(candidates) < _FOLIO_MIN_PAGES:
         return set()
     ordered_pages = sorted(candidates)
@@ -197,9 +211,15 @@ def _validated_folio_lines(
         for page in ordered_pages
     ):
         return set()
+    x_anchor = median(candidates[page][3] for page in ordered_pages)
+    if any(
+        abs(candidates[page][3] - x_anchor) > _FOLIO_X_TOLERANCE
+        for page in ordered_pages
+    ):
+        return set()
     return {
         (line.page, line.original_block, line.original_line)
-        for line in (candidates[page][3] for page in ordered_pages)
+        for line in (candidates[page][4] for page in ordered_pages)
     }
 
 

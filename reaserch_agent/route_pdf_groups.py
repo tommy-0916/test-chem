@@ -48,7 +48,10 @@ _EXPERIMENTAL_SECTIONS = frozenset({
 })
 
 # Bump when this enumerator or route_pdf_source changes group block semantics.
-PDF_GROUP_PARSER_VERSION = "route_pdf_groups/v1"
+# v2: validated-folio stripping (G2a) removes cross-page-validated page-number
+# lines that v1 kept as blocks; previously parseable folio-bearing inputs
+# produce shorter block sequences (empirically pinned in the r16 replay).
+PDF_GROUP_PARSER_VERSION = "route_pdf_groups/v2"
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,532 @@
+{
+  "schema_version": "g2a_ingestion_folio/v16",
+  "round": "r16 (G2a follow-up): folio misdelete tightening (five factors) + parser-version correction (v2) + caption boundary design supplement",
+  "model_generated": false,
+  "model_called": false,
+  "baseline": {
+    "pre_round_head": "89707da6d101d427a692eb46d4399b1e9d35cd88",
+    "conventions_json_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "prompt_builder_module": "reaserch_agent/route_pdf_group_extraction.py",
+    "prompt_builder_sha256": "24864d9af522666b15a1690b6c9ba829bebfa3047545d82adc3e3dff331486f7",
+    "a01_source_digest": "sha256_2e9435bccb2e2e281edc0fcbd0ff27ffe48b8c0babcc5e346fbdc0d679df12c8",
+    "wu2025_main_pdf_sha256": "0f1be588bb891a4e955e5133731295120818a84f00a3750e22cf8504d81f1819",
+    "wu2025_si_pdf_sha256": "cdd842d87e34a8dc70d87e5999e8665f5fe054e66a22f0908b72ea2953f365d4",
+    "changed_source_files": {
+      "reaserch_agent/route_pdf_source.py": "aca1f4b3ae144b4ab4b03bc99350c96e6c24e0dd4eba92ac11f9864a78d91660",
+      "reaserch_agent/route_pdf_groups.py": "b918c82989c47ba6ae92e9769b040fe857c0963902a328f701ec837f0bc80dca"
+    },
+    "changed_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "d1a122382c9ffbd428c0e721215abce74452a030f8f8cdf1fa82f662dfda810d"
+    },
+    "tracked_modifications_subset_of_changed_files": true
+  },
+  "code_changes": {
+    "files": {
+      "reaserch_agent/route_pdf_source.py": "aca1f4b3ae144b4ab4b03bc99350c96e6c24e0dd4eba92ac11f9864a78d91660",
+      "reaserch_agent/route_pdf_groups.py": "b918c82989c47ba6ae92e9769b040fe857c0963902a328f701ec837f0bc80dca"
+    },
+    "changed_test_file": {
+      "reaserch_agent/test_route_pdf_folio.py": "d1a122382c9ffbd428c0e721215abce74452a030f8f8cdf1fa82f662dfda810d"
+    },
+    "semantics_note": "conventions, protocol schemas, and every rule resource are byte-identical to the frozen baseline; ingestion block semantics changed for previously parseable folio-bearing inputs (empirically pinned in version_determination), so PDF_GROUP_PARSER_VERSION is bumped to route_pdf_groups/v2; the A01 anchor is asserted byte-identical"
+  },
+  "misdelete_fix": {
+    "root_cause": "the r15 three-factor rule validated any bare incrementing number in the bottom band as a folio; a measured value printed alone under its label (or sharing the label's block) satisfied all three and was deleted",
+    "five_factors": [
+      "standalone folio form: fullmatch [A-Za-z]{0,2}\\s*[0-9]{1,4} in the bottom band (y0 > 0.90h)",
+      "at most one candidate per page; quorum of three pages",
+      "uniform alphabetic prefix and page-order lockstep increment",
+      "vertical anchor: y0 within 4 pt of the median",
+      "horizontal anchor: center x within 4 pt of the median (new)",
+      "body isolation: the candidate is the only non-empty line of its original PDF block (new)"
+    ],
+    "doubt_keeps_content": "when context is doubtful the line is kept: keeping content is always the safe failure; no page is removed, no PDF byte is modified",
+    "verification": {
+      "probes": {
+        "probe_a": "3 pages 612x792; 'Final pH:' label at (70,730); bare values 11/12/13 at baseline 747 fontsize 10 with x drifting 70/280/460 -- every factor passes except the horizontal anchor",
+        "probe_b": "one insert_text at (280,734) writes 'Final pH:' and the value on two lines of ONE original block; x is consistent -- every factor passes except body isolation",
+        "control": "probe-A shape with a consistent x anchor: a genuine folio pattern, still stripped (over-correction guard)"
+      },
+      "before_pre_round_code": {
+        "probe_a": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": []
+        },
+        "probe_b": {
+          "issue": null,
+          "blocks": 6,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": []
+        }
+      },
+      "after_current_code": {
+        "probe_a": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ]
+        },
+        "probe_b": {
+          "issue": null,
+          "blocks": 9,
+          "stripped": [],
+          "values_kept": [
+            "11",
+            "12",
+            "13"
+          ]
+        },
+        "control": {
+          "issue": null,
+          "blocks": 3,
+          "stripped": [
+            "11",
+            "12",
+            "13"
+          ],
+          "values_kept": []
+        }
+      },
+      "load_bearing": {
+        "probe_a": "horizontal anchor (factor 4) alone intercepts",
+        "probe_b": "body isolation (factor 5) alone intercepts"
+      }
+    }
+  },
+  "version_determination": {
+    "method": "pre-r15 parser loaded from git show c429443 into a package-prefixed module; five synthetic inputs parsed under both parsers; block sequences compared",
+    "samples": [
+      {
+        "case": "bare_digits_centered",
+        "pre_r15_blocks": 8,
+        "current_blocks": 4,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "s_prefix_centered",
+        "pre_r15_blocks": 8,
+        "current_blocks": 4,
+        "block_sequence_identical": false
+      },
+      {
+        "case": "no_folio",
+        "pre_r15_blocks": 4,
+        "current_blocks": 4,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_a_shape",
+        "pre_r15_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      },
+      {
+        "case": "probe_b_shape",
+        "pre_r15_blocks": 9,
+        "current_blocks": 9,
+        "block_sequence_identical": true
+      }
+    ],
+    "conclusion": {
+      "semver_reading": "route_pdf_groups.py line ~50: bump when the enumerator or route_pdf_source changes group block semantics",
+      "finding": "previously parseable folio-bearing inputs produce shorter block sequences under the tightened rule, so group block semantics DID change for previously parseable inputs",
+      "decision": "PDF_GROUP_PARSER_VERSION bumped to route_pdf_groups/v2"
+    },
+    "r13_r13b_impact": {
+      "version_string_occurrences_in_r13_archives": 0,
+      "r13_r13b_runners_reference_parser_version": false,
+      "pinning_change": "none needed: the pinned replay bytes carry no version string, so the bump falsifies nothing; historical archives keep their original bytes"
+    }
+  },
+  "document_anchors": {
+    "a01": {
+      "blocks": 1289,
+      "blocks_sha256": "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
+      "folios_stripped": 0,
+      "note": "the blanket r15 claim 'no previously parseable document changes' is withdrawn; what holds is this anchor: A01 parses byte-identically with zero folios stripped"
+    },
+    "wu_si": {
+      "blocks": 1041,
+      "folios_stripped": 79,
+      "folio_first": {
+        "page": 2,
+        "text": "S 2",
+        "x0": 299.5,
+        "x1": 315.1,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "folio_last": {
+        "page": 80,
+        "text": "S 80",
+        "x0": 297.0,
+        "x1": 317.6,
+        "y0": 729.9,
+        "page_width": 612.0
+      },
+      "w1_sentence_binding": {
+        "needle": "pdf:p14:b9-p14:b10",
+        "full_sentence": "pdf:p14:b9-p14:b11"
+      },
+      "enumeration_endpoint": "experimental_section_missing (0 groups)"
+    },
+    "wu_main": {
+      "issue": "pdf_column_layout_ambiguous",
+      "abstention": {
+        "reason": "pdf_column_layout_ambiguous",
+        "culprits": [
+          {
+            "page": 10,
+            "text": "36",
+            "x0": 294.6,
+            "x1": 299.9,
+            "y0": 648.0,
+            "page_width": 595.3
+          }
+        ]
+      },
+      "note": "the p10 chart tick '36' sits at 0.819h, outside the 0.90h folio band, and never becomes a candidate"
+    }
+  },
+  "pool_census": {
+    "rows": [
+      {
+        "candidate": "wu2025-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "wu2025-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "zhang2017-main",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "zhang2017-si",
+        "groups": 0,
+        "reasons": [
+          "experimental_section_missing"
+        ]
+      },
+      {
+        "candidate": "chemkb-kion",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "chemkb-pba-hosts",
+        "groups": 0,
+        "reasons": [
+          "pdf_source_too_large"
+        ]
+      },
+      {
+        "candidate": "chemkb-nife-pba",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      },
+      {
+        "candidate": "upload-upl_1e79",
+        "groups": 0,
+        "reasons": [
+          "pdf_column_layout_ambiguous"
+        ]
+      }
+    ],
+    "identical_to_r15_post_census": true,
+    "note": "the tightened folio rule changes no pool candidate: Wu SI folios keep validating (consistent centered anchor, one line per block) and every abstaining candidate keeps its reason"
+  },
+  "boundary_design_supplement": {
+    "verified_distribution": {
+      "verified": {
+        "page_s14": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "lines_per_original_block": 1,
+          "final_mapping": {
+            "b1_b2_from": 4,
+            "b3_from": 5,
+            "b4_from": 6,
+            "synthesis_paragraph_from": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ]
+          },
+          "caption_flag_on_region": false
+        },
+        "page_s15": {
+          "caption_head_original_block": 4,
+          "continuation_original_blocks": [
+            5,
+            6
+          ],
+          "lines_per_original_block": 1,
+          "final_mapping": {
+            "b1_b2_from": 4,
+            "b3_from": 5,
+            "b4_from": 6,
+            "synthesis_paragraph_from": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ]
+          },
+          "caption_flag_on_region": false
+        }
+      },
+      "finding": "every line of the S14/S15 caption paragraph is its own original PyMuPDF block; only the head line's bold split (final b1+b2) shares an original block",
+      "r15_draft_phrase_impact": "the 'same-original-block continuations' phrase drafted at r15 would mark only final b1/b2 as caption and miss b3, b4, and the whole synthesis paragraph"
+    },
+    "continuation_design": [
+      "continuation binds by vertical reading order across original blocks: contiguous y progression, consistent font size, and a shared left edge -- never by shared original block, which the verified distribution shows would keep only the caption head",
+      "termination: the caption region ends at the first line that breaks the continuation pattern; on the verified pages the synthesis paragraph is visually indistinguishable from caption prose, which is exactly why recognition stays unimplemented",
+      "quote-binding consequence (unchanged): caption blocks stay non-quotable anchors and the binder may skip at most one block inside a span -- it may not jump an entire caption region"
+    ],
+    "stays_closed_this_round": [
+      "no caption-recognition change is implemented",
+      "caption quotation is NOT opened",
+      "no SI grouping implementation",
+      "the workflow interception of incomplete sources is unchanged"
+    ]
+  },
+  "rule_eligibility": {
+    "conventions_sha256": "39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b",
+    "rule_count": 11,
+    "phrase_match_semantics": "casefolded substring over operation/intent blobs (workflow.py); hit = operation + intent + proven input state jointly",
+    "claims_verified": {
+      "w1_collection_method_unstated": true,
+      "drying_v1_requires_proven_wet_solid_input": true,
+      "dried_unrecognized_by_drying_v1": true,
+      "no_reduction_rule": true
+    },
+    "w1": {
+      "source": "Wu-2025 SI page S14, Supplementary Fig. S13 caption paragraph",
+      "chain": "hydrothermal -> collect -> dry -> reduce (500 °C, H2/N2, 6 h)",
+      "steps": [
+        {
+          "step": "collect",
+          "source_slice_verbatim": "the precipitated Ni-Mo-O powder was collected",
+          "state_to_prove": "retained_wet_solid (collected precipitate)",
+          "candidate_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "absent: 'precipitated' implies a solid/liquid mixture but no suspension state is asserted, and no operation word exists",
+          "material_continuity": "would parent the drying step; unprovable here",
+          "verdict": "ineligible",
+          "note": "operation patterns require 'centrifug'; FILTRATION variant requires 'filtrat'; the bare word 'collected' matches no intent phrase either (no contiguous 'collect precipitate')"
+        },
+        {
+          "step": "dry",
+          "source_slice_verbatim": "dried",
+          "state_to_prove": "dry_solid",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "requires a PROVEN retained_wet_solid/washed_wet_solid input; the collection step above is unprovable, so the input gate fails too",
+          "material_continuity": "parent state missing -> lineage broken at the first step",
+          "verdict": "ineligible",
+          "note": "double failure: 'dried' contains neither 'dry' nor 'drying' as a substring (phrase miss), and the wet-solid input is unproven"
+        },
+        {
+          "step": "reduce",
+          "source_slice_verbatim": "reduced at 500 °C for 6 h under a mixed hydrogen-nitrogen flow",
+          "state_to_prove": "phase change to Ni-Mo alloy nanoparticles",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "placeholder rule column: NO reduction/thermal rule exists in the frozen table (no 'reduc'/'hydrogen'/'还原' pattern anywhere); operation and intent both miss on every rule"
+        }
+      ]
+    },
+    "w2": {
+      "source": "Wu-2025 SI page S15, Supplementary Fig. S14 caption paragraph (powdered MoO2 nanorods)",
+      "chain": "precipitate -> heat 50 °C 3 h -> filtration/washing collection -> hydrogen reduction 500 °C 2 h",
+      "steps": [
+        {
+          "step": "precipitate",
+          "source_slice_verbatim": "1 M HCl was added dropwise into the solution until a white precipitate was formed.",
+          "state_to_prove": "suspension/precipitate formation",
+          "candidate_rule": "CENTRIFUGE_COLLECT_PRECIPITATE_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "the post-precipitation mixture is literally called 'solution' in the next slice; no 'suspension' wording",
+          "material_continuity": "would parent filtration; not rule-provable",
+          "verdict": "ineligible",
+          "note": "no precipitation rule exists; placeholder rule's operation misses (no 'centrifug'); precipitation is a reaction outcome, not a covered unit operation"
+        },
+        {
+          "step": "heat",
+          "source_slice_verbatim": "the solution was heated at 50 °C for 3 h",
+          "state_to_prove": "heated mixture (no state token)",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "no heating/aging rule exists; every operation pattern misses on 'heated' (placeholder column only)"
+        },
+        {
+          "step": "filter_wash_collect",
+          "source_slice_verbatim": "the Mo-O precursor was collected by filtration and washing",
+          "state_to_prove": "retained_wet_solid -> washed_wet_solid",
+          "candidate_rule": "WASHING_V1",
+          "operation_phrase_hit": true,
+          "intent_phrase_hit": true,
+          "input_state_evidence": "requires a proven wet-solid input; filtration cannot supply it because FILTRATION_COLLECT_RETAINED_V1's intent phrases miss ('collected by filtration' is not 'collect the solid'/'collect retained'), and the suspension input is itself unproven",
+          "material_continuity": "filtration intent miss breaks the chain before washing",
+          "verdict": "ineligible",
+          "note": "phrase-level partial: 'wash'/'washing' hit operation+intent on WASHING_V1 (the only phrase-level hit in either chain), but the input-state gate fails; filtration hits operation ('filtrat') yet misses intent"
+        },
+        {
+          "step": "reduce",
+          "source_slice_verbatim": "MoO2 nanorods were obtained through hydrogen reduction of the Mo-O precursor at 500 °C for 2 h.",
+          "state_to_prove": "phase change to MoO2 nanorods",
+          "candidate_rule": "DRYING_V1",
+          "operation_phrase_hit": false,
+          "intent_phrase_hit": false,
+          "input_state_evidence": "n/a",
+          "material_continuity": "n/a",
+          "verdict": "ineligible",
+          "note": "no reduction rule exists; operation and intent miss on every rule (placeholder column only)"
+        }
+      ]
+    },
+    "overall_verdict": "W1 and W2 are both ineligible under the frozen v1 rule table; they are retained as ingestion samples and a rule-compatible source must be found separately (不补造离心/过滤, 不改写源摘录, 不扩规则保正例)",
+    "note": "negative eligibility pre-screen carried from r15; the conventions resource is byte-identical, so the outcome is unchanged and remains a pre-screen, not a pass"
+  },
+  "layer_results": {
+    "attestation": {
+      "status": "verified",
+      "documents": 2
+    },
+    "group_enumeration": {
+      "status": "reached_section_gate",
+      "groups": 0,
+      "diagnostic_reasons": [
+        "experimental_section_missing",
+        "pdf_column_layout_ambiguous"
+      ],
+      "meaning": "unchanged from r15: the SI parses and stops at experimental_section_missing; the main paper still abstains at ingestion"
+    },
+    "proposal_extraction": {
+      "status": "not_reached"
+    },
+    "local_revision": {
+      "status": "not_reached"
+    },
+    "association": {
+      "status": "not_reached"
+    },
+    "receipt": {
+      "status": "not_reached"
+    }
+  },
+  "dag_consumption": {
+    "observed": false,
+    "note": "still unobservable (0 groups); W1/W2 stay ineligible under the frozen v1 rules; nothing here is claimed as a pass"
+  },
+  "wording_corrections": [
+    {
+      "item": "previously-parseable-input preservation",
+      "r15_wording": "'ingestion block semantics changed ONLY for inputs that previously failed closed (no previously parseable document changes)'",
+      "corrected": "scoped to the asserted anchor: A01 parses byte-identically; other previously parseable folio-bearing inputs change by design (shorter block sequences), which is exactly why PDF_GROUP_PARSER_VERSION moved to v2",
+      "evidence": "version_determination.samples"
+    }
+  ],
+  "terminology_corrections": [
+    {
+      "item": "pool census framing",
+      "r14_wording": "every local cross-paper candidate abstains at ingestion (framed as 8/8 layout problems)",
+      "corrected": "6 layout + 1 missing-section + 1 oversize before r15; 5 layout + 2 missing-section + 1 oversize after r15; unchanged by r16"
+    },
+    {
+      "item": "element overlap",
+      "r14_wording": "zero element overlap between Ni-Mo and Ni-Fe",
+      "corrected": "withdrawn: Ni-Mo and Ni-Fe are different material systems SHARING the Ni element"
+    },
+    {
+      "item": "W1 presupposition",
+      "r14_wording": "W1 treated as the prospective multi-hop positive",
+      "corrected": "W1 is not presupposed anything; the frozen-rule eligibility table scores W1 and W2 ineligible, so neither can be a positive under v1 rules"
+    },
+    {
+      "item": "previously-parseable-input preservation (r15)",
+      "r15_wording": "no previously parseable document changes",
+      "corrected": "withdrawn as a blanket claim; holds for the A01 anchor only, other folio-bearing inputs change by design under v2"
+    }
+  ],
+  "separate_counters": {
+    "field_proofs_succeeded": 0,
+    "group_receipt_pass": 0,
+    "protocol_admitted": 0,
+    "published": 0
+  },
+  "anchors": {
+    "a01_regression": {
+      "mechanism": "r13b runner re-executed as a subprocess",
+      "double_run_byte_identical": true,
+      "replay_matches_r13_archive": true,
+      "ms7a_out": "BLOCKED (retained_object_mention_precedes_operation)"
+    },
+    "diagnostics_module_zero_proof_dependency": true,
+    "folio_test_module_20_ok": true,
+    "target_set_339_ok": true
+  },
+  "fixed_constraints": {
+    "r7_to_r15_archives_untouched": true,
+    "contracts_tree_untouched": true,
+    "diagnostics_module_semantics_untouched": true,
+    "conventions_no_v1_expansion": true,
+    "tokens_consumed_by_this_runner": 0,
+    "model_not_called": true,
+    "device_not_run": true,
+    "eight_question_rerun": false,
+    "ms7a_cascade_still_blocked": true,
+    "tracked_modifications_limited_to_three_files": true
+  }
+}

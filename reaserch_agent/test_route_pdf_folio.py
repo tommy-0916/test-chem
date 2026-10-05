@@ -1,11 +1,14 @@
-"""G2a folio-recognition tests: three-factor validation and abstention detail.
+"""G2a folio-recognition tests: five-factor validation and abstention detail.
 
 A folio (printed page number such as "S 75") is page furniture only when all
-three factors hold together: a standalone folio-shaped short line in the
-bottom band, a consistent vertical position across pages, and a number that
-advances in lockstep with the page order.  Single-factor lookalikes (chart
-ticks, table totals, one-page numbers) must survive, and genuine layout
-ambiguity must still abstain -- now with structured culprit detail.
+five factors hold together: a standalone folio-shaped short line in the
+bottom band, a consistent vertical position across pages, a number that
+advances in lockstep with the page order, a consistent horizontal anchor,
+and body isolation (the candidate is the only non-empty line of its original
+PDF block).  Single-factor lookalikes (chart ticks, table totals, one-page
+numbers, measured values sitting under their labels) must survive, and
+genuine layout ambiguity must still abstain -- now with structured culprit
+detail.
 """
 
 from __future__ import annotations
@@ -14,10 +17,15 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
-from reaserch_agent.route_pdf_groups import enumerate_pdf_experimental_groups
+from reaserch_agent.route_pdf_groups import (
+    PDF_GROUP_PARSER_VERSION,
+    enumerate_pdf_experimental_groups,
+)
 from reaserch_agent.route_pdf_source import (
     _read_pdf_blocks,
     _read_pdf_blocks_with_report,
@@ -310,6 +318,204 @@ class RealPdfFolioAnchorTest(unittest.TestCase):
             hashlib.sha256(canon.encode()).hexdigest(),
             "911a6a29246b93cd6138bd63fcc8c2b0393de61c6ada7748ae1066b08d06052f",
         )
+
+
+_PRER15_COMMIT = "c429443"
+
+
+def _load_prer15_source_module():
+    """Load route_pdf_source as of the pre-r15 commit for old/new comparison.
+
+    Returns (module, cleanup) or None when git or the commit is unavailable.
+    The module name carries the package prefix so its relative imports work.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "show",
+             f"{_PRER15_COMMIT}:reaserch_agent/route_pdf_source.py"],
+            cwd=_REPO, capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    temporary = tempfile.TemporaryDirectory()
+    path = Path(temporary.name) / "_route_pdf_source_prer15.py"
+    path.write_text(proc.stdout, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(
+        "reaserch_agent._route_pdf_source_prer15", path)
+    if spec is None or spec.loader is None:
+        temporary.cleanup()
+        return None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        # Register before exec: the module's dataclass processing resolves
+        # cls.__module__ through sys.modules.
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        temporary.cleanup()
+        return None
+    return module, temporary
+
+
+@unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")
+class MisdeleteRegressionTest(unittest.TestCase):
+    """r16: the folio recognizer must not delete experiment values.
+
+    Probes A/B reproduce the two reported misdelete shapes on 612x792 pages;
+    each new factor is the load-bearing one in its probe.  A control guards
+    against over-correction, and an old/new comparison pins the empirical
+    basis for the parser-version bump.
+    """
+
+    def setUp(self) -> None:
+        import fitz
+
+        self._fitz = fitz
+
+    def _probe_a(self) -> bytes:
+        # "Final pH:" label at (70,730); bare values 11/12/13 at baseline 747
+        # with x drifting 70/280/460 across the three pages.
+        document = self._fitz.open()
+        for index, x in enumerate((70, 280, 460)):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((70, 730), "Final pH:", fontsize=10)
+            page.insert_text((x, 747), str(11 + index), fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        return raw
+
+    def _probe_b(self) -> bytes:
+        # One insert_text writes "Final pH:\n<value>": label and value share
+        # the same original block; x is consistent across pages.
+        document = self._fitz.open()
+        for index in range(3):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((280, 734), f"Final pH:\n{11 + index}",
+                             fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        return raw
+
+    def _probe_control(self) -> bytes:
+        # Probe A shape with a consistent x and no label nearby.
+        document = self._fitz.open()
+        for index in range(3):
+            page = document.new_page(width=612, height=792)
+            page.insert_text((70, 400), "The sample was measured carefully.",
+                             fontsize=10)
+            page.insert_text((280, 747), str(11 + index), fontsize=10)
+        raw = document.tobytes()
+        document.close()
+        return raw
+
+    def test_cross_page_x_drift_keeps_values(self) -> None:
+        # Probe A: every other factor passes (bottom band, exactly one
+        # candidate per page, quorum 3, uniform empty prefix, lockstep
+        # 11->12->13, identical y0, sole non-empty line of its block); the
+        # horizontal anchor alone intercepts.
+        blocks, issue, report = _read_pdf_blocks_with_report(self._probe_a())
+        self.assertIsNone(issue)
+        self.assertEqual(report["folios_stripped"], [])
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 9)
+        for value in ("11", "12", "13"):
+            self.assertIn(value, texts)
+
+    def test_shared_original_block_keeps_values(self) -> None:
+        # Probe B: x centers agree across pages; the label line shares the
+        # value's original block, so the isolation factor alone intercepts.
+        blocks, issue, report = _read_pdf_blocks_with_report(self._probe_b())
+        self.assertIsNone(issue)
+        self.assertEqual(report["folios_stripped"], [])
+        texts = [block.text for block in blocks]
+        self.assertEqual(len(texts), 9)
+        for value in ("11", "12", "13"):
+            self.assertIn(value, texts)
+
+    def test_x_consistent_numeric_set_still_stripped(self) -> None:
+        # Control against over-correction: the probe-A shape with a
+        # consistent x anchor validates and strips.
+        blocks, issue, report = _read_pdf_blocks_with_report(
+            self._probe_control())
+        self.assertIsNone(issue)
+        self.assertEqual(
+            [item["text"] for item in report["folios_stripped"]],
+            ["11", "12", "13"],
+        )
+        self.assertEqual(
+            [block.text for block in blocks],
+            ["The sample was measured carefully."] * 3,
+        )
+
+    def test_prer15_block_semantics_comparison(self) -> None:
+        # Empirical basis for the version bump: the pre-r15 parser keeps
+        # folio-shaped bottom-band lines that the current parser strips, so
+        # previously parseable folio-bearing inputs produce shorter block
+        # sequences; folio-free inputs and both probe shapes are unchanged.
+        loaded = _load_prer15_source_module()
+        if loaded is None:
+            self.skipTest("git or the pre-r15 commit unavailable")
+        module, temporary = loaded
+        self.addCleanup(temporary.cleanup)
+        self.addCleanup(sys.modules.pop, module.__name__, None)
+        fitz = self._fitz
+
+        def build(pages: list[list[str]]) -> bytes:
+            document = fitz.open()
+            for index, folios in enumerate(pages):
+                page = document.new_page(width=612, height=792)
+                page.insert_text((70, 400), f"Page {index} body text.",
+                                 fontsize=10)
+                if folios:
+                    folio = folios[0]
+                    width = fitz.get_text_length(folio, fontsize=10)
+                    page.insert_text((306 - width / 2, 747), folio,
+                                     fontsize=10)
+            raw = document.tobytes()
+            document.close()
+            return raw
+
+        cases = {
+            # name: (raw, old_block_count, new_block_count)
+            "bare_digits_centered": (
+                build([[str(i)] for i in range(1, 5)]), 8, 4),
+            "s_prefix_centered": (
+                build([[f"S {i}"] for i in range(1, 5)]), 8, 4),
+            "no_folio": (build([[] for _ in range(4)]), 4, 4),
+            "probe_a_shape": (self._probe_a(), 9, 9),
+            "probe_b_shape": (self._probe_b(), 9, 9),
+        }
+        for name, (raw, old_count, new_count) in cases.items():
+            old_blocks, old_issue = module._read_pdf_blocks(raw)
+            new_blocks, new_issue = _read_pdf_blocks(raw)
+            self.assertIsNone(old_issue, name)
+            self.assertIsNone(new_issue, name)
+            old_texts = [block.text for block in old_blocks]
+            new_texts = [block.text for block in new_blocks]
+            self.assertEqual(len(old_texts), old_count, name)
+            self.assertEqual(len(new_texts), new_count, name)
+            if old_count == new_count:
+                self.assertEqual(old_texts, new_texts, name)
+            else:
+                self.assertNotEqual(old_texts, new_texts, name)
+                # The new sequence is the old one minus the folio lines.
+                iterator = iter(old_texts)
+                self.assertTrue(
+                    all(text in iterator for text in new_texts), name)
+
+    def test_parser_version_bumped_to_v2(self) -> None:
+        # Block semantics changed for previously parseable folio-bearing
+        # inputs (pinned by the comparison test above), so the enumerator
+        # version had to move.  The r13/r13b archives pin no version string
+        # (grep-verified), so the bump falsifies no pinned replay bytes.
+        self.assertEqual(PDF_GROUP_PARSER_VERSION, "route_pdf_groups/v2")
 
 
 if __name__ == "__main__":
