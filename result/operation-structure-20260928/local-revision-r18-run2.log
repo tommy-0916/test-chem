@@ -1,7 +1,7 @@
 {
  "acceptance_hardening": {
   "folio_module_judged_ok": 27,
-  "target_set_judged_ok": 367,
+  "target_set_judged_ok": 370,
   "zero_skip_required_and_met": true
  },
  "diagnosis_a": {
@@ -20,7 +20,7 @@
   "forensics_built_in": true
  },
  "full_slice": {
-  "research_tests": 1250,
+  "research_tests": 1253,
   "research_failure_headers": 29,
   "research_failure_set_matches_baseline": true,
   "research_skips": 0,
@@ -48,5 +48,5 @@
  "w2_eligible": false,
  "anchors_ok": true,
  "double_run_byte_identical": true,
- "replay_sha256": "sha256_f3295cb9152d0fa4313c32517dfd30aea26520ac9069947ab12249042d58a25c"
+ "replay_sha256": "sha256_b761835dad9847fe607039cbf5d555988a0269b1cc260a996d54687b1adccc82"
 }

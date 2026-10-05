@@ -1,69 +1,69 @@
 [research-agent] LLM step start: macro_action_design_bootstrap
-[research-agent] LLM step done: macro_action_design_bootstrap (0.0s)
+[research-agent] LLM step done: macro_action_design_bootstrap (<elapsed>s)
 [research-agent] LLM step start: macro_plan_design
 [research-agent] LLM step failed: macro_plan_design
 [research-agent] LLM step start: macro_action_design_post_observation
-[research-agent] LLM step done: macro_action_design_post_observation (0.0s)
+[research-agent] LLM step done: macro_action_design_post_observation (<elapsed>s)
 [research-agent] LLM step start: post_observation_macro_plan_design
 [research-agent] LLM step failed: post_observation_macro_plan_design
 [research-agent] LLM step start: macro_action_design_post_observation
-[research-agent] LLM step done: macro_action_design_post_observation (0.0s)
+[research-agent] LLM step done: macro_action_design_post_observation (<elapsed>s)
 [research-agent] LLM step start: post_observation_macro_plan_design
 [research-agent] LLM step failed: post_observation_macro_plan_design
 [research-agent] LLM step start: survey_query_generate
-[research-agent] LLM step done: survey_query_generate (0.0s)
+[research-agent] LLM step done: survey_query_generate (<elapsed>s)
 [research-agent] LLM step start: survey_expansion
-[research-agent] LLM step done: survey_expansion (0.0s)
+[research-agent] LLM step done: survey_expansion (<elapsed>s)
 [research-agent] LLM step start: paper_protocol_extract
-[research-agent] LLM step done: paper_protocol_extract (0.0s)
+[research-agent] LLM step done: paper_protocol_extract (<elapsed>s)
 [research-agent] LLM step start: survey_report_generate
-[research-agent] LLM step done: survey_report_generate (0.0s)
+[research-agent] LLM step done: survey_report_generate (<elapsed>s)
 [research-agent] LLM step start: stage_design
-[research-agent] LLM step done: stage_design (0.0s)
+[research-agent] LLM step done: stage_design (<elapsed>s)
 [research-agent] LLM step start: macro_action_design_bootstrap
-[research-agent] LLM step done: macro_action_design_bootstrap (0.0s)
+[research-agent] LLM step done: macro_action_design_bootstrap (<elapsed>s)
 [research-agent] LLM step start: macro_plan_design
-[research-agent] LLM step done: macro_plan_design (0.0s)
+[research-agent] LLM step done: macro_plan_design (<elapsed>s)
 [research-agent] LLM step start: macro_action_design_device_adaptation
-[research-agent] LLM step done: macro_action_design_device_adaptation (0.0s)
+[research-agent] LLM step done: macro_action_design_device_adaptation (<elapsed>s)
 [research-agent] LLM step start: device_adaptation_macro_plan_design
-[research-agent] LLM step done: device_adaptation_macro_plan_design (0.0s)
+[research-agent] LLM step done: device_adaptation_macro_plan_design (<elapsed>s)
 [research-agent] LLM step start: device_adaptation_macro_plan_design_quality_feedback_retry
-[research-agent] LLM step done: device_adaptation_macro_plan_design_quality_feedback_retry (0.0s)
+[research-agent] LLM step done: device_adaptation_macro_plan_design_quality_feedback_retry (<elapsed>s)
 [research-agent] LLM step start: paper_protocol_extract
-[research-agent] LLM step done: paper_protocol_extract (0.0s)
+[research-agent] LLM step done: paper_protocol_extract (<elapsed>s)
 {"status": "blocked", "reason_code": "chemical_review_not_completed"}
 {"status": "issued_independent_group_review", "group_role": "synthesis", "route_review_signed": true, "execution_authorized": false}
 starting research agent: event_type=bootstrap, model=env/default, wire_api=chat, device_context=off, memory=off, campaign=cmp_20261005_a94a8fe5, references=0
 
 debug_state_log: debug.json
 [research-agent] LLM step start: survey_query_generate
-[research-agent] LLM step done: survey_query_generate (0.0s)
+[research-agent] LLM step done: survey_query_generate (<elapsed>s)
 [research-agent] LLM step start: survey_expansion
-[research-agent] LLM step done: survey_expansion (0.0s)
+[research-agent] LLM step done: survey_expansion (<elapsed>s)
 [research-agent] LLM step start: paper_protocol_extract
-[research-agent] LLM step done: paper_protocol_extract (0.0s)
+[research-agent] LLM step done: paper_protocol_extract (<elapsed>s)
 [research-agent] LLM step start: survey_report_generate
-[research-agent] LLM step done: survey_report_generate (0.0s)
+[research-agent] LLM step done: survey_report_generate (<elapsed>s)
 [research-agent] LLM step start: stage_design
-[research-agent] LLM step done: stage_design (0.0s)
+[research-agent] LLM step done: stage_design (<elapsed>s)
 [research-agent] LLM step start: macro_action_design_bootstrap
-[research-agent] LLM step done: macro_action_design_bootstrap (0.0s)
+[research-agent] LLM step done: macro_action_design_bootstrap (<elapsed>s)
 [research-agent] LLM step start: macro_plan_design
-[research-agent] LLM step done: macro_plan_design (0.0s)
+[research-agent] LLM step done: macro_plan_design (<elapsed>s)
 [research-agent] LLM step start: unit_task
 [research-agent] LLM step failed: unit_task
 [research-agent] LLM step start: unit_task
-[research-agent] LLM step done: unit_task (0.0s)
+[research-agent] LLM step done: unit_task (<elapsed>s)
 [research-agent] LLM step start: unit_task
-[research-agent] LLM step done: unit_task (0.0s)
+[research-agent] LLM step done: unit_task (<elapsed>s)
 [research-agent] LLM step start: unit_task
 [research-agent] LLM step failed: unit_task
 
 ===== STDERR =====
 test_action_design_prompt_lists_all_four_explicit_sources_without_recipe_numbers (reaserch_agent.test_action_evidence_selection.ActionEvidenceSelectionTest.test_action_design_prompt_lists_all_four_explicit_sources_without_recipe_numbers) ... Building prefix dict from the default dictionary ...
 Loading model from cache C:\Users\tommy\AppData\Local\Temp\jieba.cache
-Loading model cost 0.385 seconds.
+Loading model cost <elapsed> seconds.
 Prefix dict has been built successfully.
 ok
 test_bootstrap_and_post_observation_prompts_consume_selected_route_only (reaserch_agent.test_action_evidence_selection.ActionEvidenceSelectionTest.test_bootstrap_and_post_observation_prompts_consume_selected_route_only) ... macro plan design failed: stop after recording the planning prompt
@@ -1206,6 +1206,9 @@ test_negative_nonzero_returncode_with_ok_rejected (reaserch_agent.test_route_tes
 test_negative_ok_with_skips_rejected (reaserch_agent.test_route_test_harness.JudgeContractTest.test_negative_ok_with_skips_rejected) ... ok
 test_negative_prose_containing_ok_not_accepted (reaserch_agent.test_route_test_harness.JudgeContractTest.test_negative_prose_containing_ok_not_accepted) ... ok
 test_negative_wrong_test_count_rejected (reaserch_agent.test_route_test_harness.JudgeContractTest.test_negative_wrong_test_count_rejected) ... ok
+test_normalize_transient_paths_llm_step_timing (reaserch_agent.test_route_test_harness.JudgeContractTest.test_normalize_transient_paths_llm_step_timing) ... ok
+test_normalize_transient_paths_makes_runs_byte_stable (reaserch_agent.test_route_test_harness.JudgeContractTest.test_normalize_transient_paths_makes_runs_byte_stable) ... ok
+test_normalize_transient_paths_tmpdir_and_jieba (reaserch_agent.test_route_test_harness.JudgeContractTest.test_normalize_transient_paths_tmpdir_and_jieba) ... ok
 test_normalize_unittest_timing_makes_output_byte_stable (reaserch_agent.test_route_test_harness.JudgeContractTest.test_normalize_unittest_timing_makes_output_byte_stable) ... ok
 test_parse_unittest_summary_failed_with_skip_count (reaserch_agent.test_route_test_harness.JudgeContractTest.test_parse_unittest_summary_failed_with_skip_count) ... ok
 test_parse_unittest_summary_ok (reaserch_agent.test_route_test_harness.JudgeContractTest.test_parse_unittest_summary_ok) ... ok
@@ -1404,7 +1407,7 @@ ERROR: test_recall_layers_and_budgets (reaserch_agent.test_campaign_memory.Recal
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp6cnd__oi\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1425,7 +1428,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp6cnd__oi\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_compact_state_context_includes_campaign_memory (reaserch_agent.test_campaign_memory.RecallContextTest.test_compact_state_context_includes_campaign_memory)
@@ -1433,7 +1436,7 @@ ERROR: test_compact_state_context_includes_campaign_memory (reaserch_agent.test_
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpks5tztl8\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1451,7 +1454,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpks5tztl8\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_cross_campaign_layer_only_on_abnormal_signal (reaserch_agent.test_campaign_memory.RecallContextTest.test_cross_campaign_layer_only_on_abnormal_signal)
@@ -1459,7 +1462,7 @@ ERROR: test_cross_campaign_layer_only_on_abnormal_signal (reaserch_agent.test_ca
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp8ezzg07f\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1477,7 +1480,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp8ezzg07f\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_nodes_written_per_turn (reaserch_agent.test_campaign_memory.TrajectoryNodeTest.test_nodes_written_per_turn)
@@ -1485,7 +1488,7 @@ ERROR: test_nodes_written_per_turn (reaserch_agent.test_campaign_memory.Trajecto
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpfj7l51ph\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1503,7 +1506,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpfj7l51ph\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_stage_rollup_written_on_closure_or_stage_change (reaserch_agent.test_campaign_memory.TrajectoryNodeTest.test_stage_rollup_written_on_closure_or_stage_change)
@@ -1511,7 +1514,7 @@ ERROR: test_stage_rollup_written_on_closure_or_stage_change (reaserch_agent.test
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp_9ljpgw6\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1529,7 +1532,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp_9ljpgw6\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_compact_context_contains_evidence_packet (reaserch_agent.test_evidence_provenance.EvidencePacketAndRefsTest.test_compact_context_contains_evidence_packet)
@@ -1537,7 +1540,7 @@ ERROR: test_compact_context_contains_evidence_packet (reaserch_agent.test_eviden
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpakh0pkif\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1555,7 +1558,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpakh0pkif\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_evidence_refs_flow_into_ledger_and_memory (reaserch_agent.test_evidence_provenance.EvidencePacketAndRefsTest.test_evidence_refs_flow_into_ledger_and_memory)
@@ -1563,7 +1566,7 @@ ERROR: test_evidence_refs_flow_into_ledger_and_memory (reaserch_agent.test_evide
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmphm7fkw2b\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1581,7 +1584,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmphm7fkw2b\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_web_and_parse_failed_sources_are_explicit_known_gaps (reaserch_agent.test_evidence_provenance.EvidencePacketAndRefsTest.test_web_and_parse_failed_sources_are_explicit_known_gaps)
@@ -1589,7 +1592,7 @@ ERROR: test_web_and_parse_failed_sources_are_explicit_known_gaps (reaserch_agent
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmph_xsildo\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1607,7 +1610,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmph_xsildo\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_every_macro_step_has_source_annotation (reaserch_agent.test_evidence_provenance.MacroPlanSourceTest.test_every_macro_step_has_source_annotation)
@@ -1615,7 +1618,7 @@ ERROR: test_every_macro_step_has_source_annotation (reaserch_agent.test_evidence
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpqs5zurq3\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1633,7 +1636,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpqs5zurq3\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_protocols_carry_registry_identity (reaserch_agent.test_evidence_provenance.ProtocolProvenanceTest.test_protocols_carry_registry_identity)
@@ -1641,7 +1644,7 @@ ERROR: test_protocols_carry_registry_identity (reaserch_agent.test_evidence_prov
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmptsb3vkeo\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1659,7 +1662,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmptsb3vkeo\\memstore\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\memstore\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_bootstrap_accepts_first_valid_candidate_without_retry (reaserch_agent.test_logical_container_contract.LogicalContainerContractTests.test_bootstrap_accepts_first_valid_candidate_without_retry)
@@ -1844,7 +1847,7 @@ ERROR: test_layered_memory_add_search_update_history (reaserch_agent.test_memory
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpi_jxklr7\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1865,7 +1868,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmpi_jxklr7\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_query_tools_use_separate_experiment_and_literature_layers (reaserch_agent.test_memory_layers.ChemMemoryLayerTests.test_query_tools_use_separate_experiment_and_literature_layers)
@@ -1873,7 +1876,7 @@ ERROR: test_query_tools_use_separate_experiment_and_literature_layers (reaserch_
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp7gf0tiku\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1894,7 +1897,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp7gf0tiku\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 ======================================================================
 ERROR: test_research_agent_memory_uses_experiment_layer (reaserch_agent.test_memory_layers.ChemMemoryLayerTests.test_research_agent_memory_uses_experiment_layer)
@@ -1902,7 +1905,7 @@ ERROR: test_research_agent_memory_uses_experiment_layer (reaserch_agent.test_mem
 Traceback (most recent call last):
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\shutil.py", line 633, in _rmtree_unsafe
     os.unlink(fullname)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp3qs4bkob\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 During handling of the above exception, another exception occurred:
 
@@ -1923,7 +1926,7 @@ Traceback (most recent call last):
     onexc(os.unlink, fullname, err)
   File "C:\Users\tommy\AppData\Roaming\kimi-desktop\daimon-bundle\runtime\python\cpython-3.12\Lib\tempfile.py", line 909, in onexc
     _os.unlink(path)
-PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp3qs4bkob\\chem_memory.sqlite'
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\tommy\\AppData\\Local\\Temp\\tmp<random>\\chem_memory.sqlite'
 
 ======================================================================
 FAIL: test_concurrent_same_identity_records_do_not_overwrite (reaserch_agent.test_ingestion.KnowledgeIngestionTests.test_concurrent_same_identity_records_do_not_overwrite)
@@ -2006,6 +2009,6 @@ Traceback (most recent call last):
 AssertionError: 18027 not less than 17633.699999999997
 
 ----------------------------------------------------------------------
-Ran 1250 tests in <elapsed>s
+Ran 1253 tests in <elapsed>s
 
 FAILED (failures=8, errors=21)

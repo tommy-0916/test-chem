@@ -272,3 +272,121 @@ three named files.
   stay as recorded in r16/r17 — nothing pre-committed.
 - Real model generation remains blocked on the quota window (r14 record
   stands).
+
+## 10. Clean-rerun defect found at acceptance and fixed (2026-10-05, same round)
+
+**Defect (deterministically reproduced by acceptance).** From a clean tree
+(`git checkout` restoring all tracked files), a single run of
+`local-revision-r18.py` failed with
+`r18 acceptance failed: tracked modifications outside the round-18 files: ["result/operation-structure-20260928/local-revision-r18-discover-reaserch_agent.log"]`.
+
+**Root cause (one sentence).** The tracked discover logs were not
+byte-stable — baseline-failure tracebacks embed random
+`tempfile.TemporaryDirectory` names (`Temp\tmpXXXXXXXX`, plus the jieba
+load-timing line) — **and** the logs were missing from the cleanliness
+gate's round-file allowed set, so the second `_build_replay()`'s
+`_baseline()` gate read its own first build's log rewrite as an
+out-of-scope tracked modification. The original double-run passed only
+because the logs were untracked at that moment; after committing them, any
+re-run had to fail. Two self-check holes: (1) the logs were never
+byte-stabilized (only the unittest summary timing was normalized), (2) the
+allowed set was never updated when the logs became tracked artifacts.
+
+**Fix (minimal, inside the round's files).**
+
+1. `route_test_harness.py` gains `normalize_transient_paths()` — Temp-path
+   random segments (`Temp\tmp…` raw / `Temp\\tmp…` escaped / `Temp/tmp…`
+   POSIX) → `tmp<random>`, and the jieba `Loading model cost X seconds`
+   line → `<elapsed>`; pinned by two new harness tests (21 → **23**).
+2. The runner's `_discover_slice` writes both discover logs through
+   `normalize_unittest_timing` + `normalize_transient_paths`; the gate's
+   allowed set now names every artifact the runner (or its stdout capture)
+   rewrites — the two discover logs, the two run logs, and the
+   replay/audit JSONs (`ROUND_ARTIFACT_FILES`) — so the gate keeps
+   catching anything *outside* the round's own byte-stable products.
+3. Pins/counts updated: harness sha256 `f5a5f88e…51aa7f3`, harness-test
+   sha256 `6d734b90…04bdd3f9`, harness tests 23, target set **369**,
+   research discover **1252**.
+
+**Re-verified invariant.** From a clean tracked tree: two consecutive
+process runs pass, run logs byte-identical, replay byte-identical to the
+first run's, and **post-run `git status` shows zero tracked modifications**
+(the discover logs are rewritten with byte-identical normalized content —
+byte-stability was also verified directly: two standalone regenerations of
+the research discover log are `cmp`-clean, 26 `tmp<random>` placeholders, 0
+residual random names). The discover-log content pins nothing in the replay
+(only headers/skips/counts ride it), so the replay sha256 changed only via
+the updated harness pins and counts.
+
+**Boundary note (standing convention, unchanged).** All runner sha256 pins
+are computed over the LF working-copy bytes that match the committed blobs;
+with `core.autocrlf=true` on this machine, a *forced* re-checkout of a
+tracked file smudges it to CRLF and would desync any pin — the convention
+(identical since r7) is that acceptance restores a clean tree without
+re-smudging, under which every pin holds.
+
+## 11. Host process-hunt found during final verification; runner adapted to pythonw.exe (2026-10-05, same round)
+
+**Symptom.** While re-running the acceptance double run after the §10 fix,
+every detached console-subsystem `python.exe` process on this host died
+within seconds to ~2 minutes of launch (six detached/watchdog/scheduled-task
+launch attempts, zero survivors), while the same interpreter ran to
+completion when executed synchronously in the foreground (a 150 s probe
+survived; the harness/369-target-set direct runs in §5 were also
+foreground).
+
+**Evidence collected.**
+
+- A detached child `python.exe` spawned by a surviving parent exited with
+  **0xC000013A (STATUS_CONTROL_C_EXIT)**, and one killed run log contained
+  a literal `^C` byte — the kill mechanism is external CTRL+C injection,
+  not resource exhaustion.
+- The kills are **not** memory-correlated: processes died with
+  phys_avail 18 GB / commit_avail 19 GB / load 43 %, and earlier deaths
+  during a real memory crunch (commit_avail < 1 GB, load 97 %) had the
+  same signature. The earlier memory correlation (historical successes at
+  commit_avail ≥ 18 GB) is not explained; it may be coincidental or one of
+  several trigger conditions. The hunter's identity is undetermined
+  (Windows Defender shows no detections; no WER/Application Error events).
+- `pythonw.exe` (GUI subsystem, no console) survives: a 200 s detached
+  probe ran to normal exit, and a pythonw-parent → pythonw-child pair ran
+  150 s to rc=0.
+
+**Adaptation (this round's runner only, semantics unchanged).**
+`_python_cmd()` and the detached launcher now use
+`.venv/Scripts/pythonw.exe`. Verdict capture is unchanged: stdout/stderr
+still arrive through pipes/files supplied by the parent, `-X faulthandler`
+is still carried, and the strict harness judgement is untouched. The
+runner remains a tracked round-18 file; this change is committed as part
+of this round.
+
+**Consequence for diagnosis (b) (§4).** The r17-era intermittent abort
+shape (progress dots, no summary) is exactly what an externally
+CTRL+C-killed child looks like, and §4 already concluded "most consistent
+with ... an external kill" — the 0xC000013A evidence now names the kill
+mechanism directly. The 102 non-reproductions in §4 were all synchronous
+foreground invocations, which this hunt does not touch, so zero anomalies
+there and the detached-run kills here are consistent. This remains a
+strongly-supported candidate root cause, not a proven sole cause: the
+hunter process itself was not identified.
+
+## 12. Clean-rerun residual: LLM-step timing line normalized (2026-10-05, same round)
+
+**Found by the first post-§11 double run.** The two runs were byte-identical
+to each other (run logs and replay `cmp`-clean), but the tracked research
+discover log differed from the committed byte-stable copy in exactly one
+line: `[research-agent] LLM step done: macro_plan_design (0.1s)` vs
+`(0.0s)`. The per-step agent timing lines were a transient fragment the
+§10 normalization did not cover; the §10 byte-stability spot-check had
+passed only because both sampled regenerations happened to print the same
+value.
+
+**Fix.** `normalize_transient_paths()` gains a third rule —
+`LLM step done: <step> (X.Ys)` → `LLM step done: <step> (<elapsed>s)` —
+pinned by a new harness test (23 → **24**). Only the discover log files
+carry raw subprocess output; the replay embeds summaries/header sets/counts
+only, so the double-run replay equality was never threatened by this line.
+Pins/counts updated: harness sha256 `e671f247…b390b`, harness-test sha256
+`4401b2fa…e31b24`, harness tests **24**, target set **370**,
+research discover **1253**. (§5 and §10 keep their historical numbers,
+which were true when written.)

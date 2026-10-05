@@ -195,6 +195,53 @@ class JudgeContractTest(unittest.TestCase):
         self.assertIn("<elapsed>s", record["stderr"])
         self.assertTrue(record["accepted"])
 
+    def test_normalize_transient_paths_tmpdir_and_jieba(self) -> None:
+        from reaserch_agent.route_test_harness import (
+            normalize_transient_paths,
+        )
+        raw = ("raw C:\\Users\\x\\AppData\\Local\\Temp\\tmp4e49ast9 tail\n"
+               "escaped Temp\\\\tmp_u5eroyt tail\n"
+               "posix Temp/tmpankrttpd tail\n"
+               "Loading model cost 0.364 seconds.\n")
+        normalized = normalize_transient_paths(raw)
+        for random_name in ("tmp4e49ast9", "tmp_u5eroyt", "tmpankrttpd",
+                            "0.364"):
+            self.assertNotIn(random_name, normalized)
+        self.assertIn("Temp\\tmp<random>", normalized)
+        self.assertIn("Temp\\\\tmp<random>", normalized)
+        self.assertIn("Temp/tmp<random>", normalized)
+        self.assertIn("Loading model cost <elapsed> seconds.", normalized)
+
+    def test_normalize_transient_paths_makes_runs_byte_stable(self) -> None:
+        from reaserch_agent.route_test_harness import (
+            normalize_transient_paths,
+        )
+        run_a = "Temp\\\\tmp4e49ast9\nLoading model cost 0.364 seconds.\n"
+        run_b = "Temp\\\\tmpdy_xtcm9\nLoading model cost 1.207 seconds.\n"
+        self.assertEqual(normalize_transient_paths(run_a),
+                         normalize_transient_paths(run_b))
+        # Idempotent: normalizing twice changes nothing.
+        once = normalize_transient_paths(run_a)
+        self.assertEqual(normalize_transient_paths(once), once)
+        self.assertEqual(normalize_transient_paths(None), "")
+
+    def test_normalize_transient_paths_llm_step_timing(self) -> None:
+        from reaserch_agent.route_test_harness import (
+            normalize_transient_paths,
+        )
+        # The agent's per-step timing lines vary run to run and leaked into
+        # the tracked discover log at the r18 final verification.
+        run_a = "[research-agent] LLM step done: macro_plan_design (0.1s)\n"
+        run_b = "[research-agent] LLM step done: macro_plan_design (0.0s)\n"
+        self.assertEqual(normalize_transient_paths(run_a),
+                         normalize_transient_paths(run_b))
+        normalized = normalize_transient_paths(run_a)
+        self.assertIn("macro_plan_design (<elapsed>s)", normalized)
+        self.assertNotIn("0.1s", normalized)
+        # Lines without a timing suffix pass through untouched.
+        bare = "[research-agent] LLM step done: some_step\n"
+        self.assertEqual(normalize_transient_paths(bare), bare)
+
 
 class HistoricalLoaderContractTest(unittest.TestCase):
     """The folio loader: genuine git absence -> skip; import errors -> fail."""

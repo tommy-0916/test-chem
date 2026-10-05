@@ -14,8 +14,8 @@ Scope of the code change (three files, all test infrastructure):
   in output) accepted (a) nonzero-returncode runs whose tail carried the
   substrings and (b) "OK (skipped=2)"; only a dots-only abort was rejected.
   All three negative shapes are pinned by unit tests in
-  ``reaserch_agent/test_route_test_harness.py`` (NEW, 21 tests), which joins
-  the target set (346 -> 367).
+  ``reaserch_agent/test_route_test_harness.py`` (NEW, 24 tests), which joins
+  the target set (346 -> 370).
 - ``reaserch_agent/test_route_pdf_folio.py`` (MODIFIED, still 27 tests):
   ``_load_historical_source_module`` now raises HistoricalSourceUnavailable
   (the skip channel) ONLY for the two genuine causes -- the git executable
@@ -42,7 +42,7 @@ Diagnosis (a) -- full-slice discover skip=2 (root-caused, fixed):
   recovers; re-probing git with env=dict(os.environ) inside the polluted
   state succeeds (rc=0); full-slice discover with the GIT_CONFIG_* variables
   stripped runs 1229 tests with zero skips; with the loader fix, full-slice
-  discover in the polluted shell runs 1250 tests with zero skips.
+  discover in the polluted shell runs 1252 tests with zero skips.
 
 Diagnosis (b) -- intermittent runner abort (NOT reproduced; forensics built
   in): the r17 runner once failed because the target-set subprocess output
@@ -72,13 +72,22 @@ What this runner establishes, deterministically and token-free:
 3. Judged subprocesses (strict harness): r13b archive-pinned runner
    (replay matches the r13 archive, double-run byte-identical, ms7a.out
    BLOCKED), folio module (27 tests, zero skips required), target set
-   (13 r17 modules + the harness module = 367 tests, zero skips required).
-4. Full-slice discover recorded honestly: reaserch_agent 1250 tests and
+   (13 r17 modules + the harness module = 370 tests, zero skips required).
+4. Full-slice discover recorded honestly: reaserch_agent 1253 tests and
    chem_agent_contracts 116 tests; the normalized failure-header sets are
    asserted byte-equal to the embedded baselines (29 research entries = the
    30-entry baseline minus test_b1_bootstrap_generates_initial_outputs,
    which passes in this workspace; 1 contracts entry); the skip list is
    recorded as data (never asserted zero).
+
+Clean-rerun fix (acceptance feedback on the first r18 commit): the tracked
+discover logs embed random tempfile names from baseline-failure tracebacks
+(plus the jieba load-timing line), so every execution rewrote them with
+different bytes and the cleanliness gate in _baseline rejected the second
+build once the logs were tracked.  The logs are now written through
+normalize_transient_paths (stable placeholders) AND named in the gate's
+allowed set (DISCOVER_LOG_FILES).  Invariant: a fresh double run from a
+clean tracked tree passes and leaves `git status` clean.
 
 The runner is deterministic: two in-memory builds are byte-identical; all
 recorded subprocess output is timing-normalized.  Zero tokens are consumed.
@@ -101,6 +110,7 @@ from reaserch_agent.route_test_harness import (  # noqa: E402
     audit_record,
     collect_unittest_skips,
     judge_unittest_run,
+    normalize_transient_paths,
     normalize_unittest_timing,
     parse_unittest_summary,
 )
@@ -137,13 +147,13 @@ FOLIO_TEST_SHA256 = (
 FOLIO_TEST_COUNT = 27
 HARNESS_FILE = "reaserch_agent/route_test_harness.py"
 HARNESS_SHA256 = (
-    "85c520f797bfdd7b5466c7fc66c0d5f33b1cfba9f15c00499c0a2a8616c19c17"
+    "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b"
 )
 HARNESS_TEST_FILE = "reaserch_agent/test_route_test_harness.py"
 HARNESS_TEST_SHA256 = (
-    "673e72c60edc695cc2c095d73cb7de9248357f70dcf1b128166d804010e6835d"
+    "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
 )
-HARNESS_TEST_COUNT = 21
+HARNESS_TEST_COUNT = 24
 R17_CHECKPOINT_FILE = "docs/field_semantic_gate_r17_checkpoint_20261005.md"
 R17_CHECKPOINT_SHA256 = (
     "efb133c860e6a369fbb8f227132e3b71573364edc0fd185b5bf8f8a620ade50b"
@@ -222,10 +232,33 @@ TARGET_SET_MODULES = [
     # r18 addition: the strict-judgement harness contract tests.
     "reaserch_agent.test_route_test_harness",
 ]
-TARGET_SET_SIZE = 367
+TARGET_SET_SIZE = 370
 
-DISCOVER_RESEARCH_COUNT = 1250
+DISCOVER_RESEARCH_COUNT = 1253
 DISCOVER_CONTRACTS_COUNT = 116
+
+# Round-18 tracked artifacts the runner itself rewrites on every execution;
+# they are legitimate products of this round, and their recorded content is
+# byte-stable (timing + transient-path normalized), so a re-run from a clean
+# tree leaves `git status` clean.  (r18 clean-rerun fix: the discover logs
+# were missing from this set and carried random tempfile names.  The run
+# logs are included because capturing stdout onto the tracked artifact name
+# truncates the file for the whole run; replay/audit are included because
+# the runner rewrites them at the end of every execution.)
+DISCOVER_LOG_FILES = {
+    "reaserch_agent": (
+        "result/operation-structure-20260928/"
+        "local-revision-r18-discover-reaserch_agent.log"),
+    "chem_agent_contracts": (
+        "result/operation-structure-20260928/"
+        "local-revision-r18-discover-chem_agent_contracts.log"),
+}
+ROUND_ARTIFACT_FILES = set(DISCOVER_LOG_FILES.values()) | {
+    "result/operation-structure-20260928/local-revision-r18-replay.json",
+    "result/operation-structure-20260928/local-revision-r18-audit.json",
+    "result/operation-structure-20260928/local-revision-r18-run1.log",
+    "result/operation-structure-20260928/local-revision-r18-run2.log",
+}
 
 # Full-slice baselines, normalized with
 # sed -E 's/\((reaserch_agent|chem_agent_contracts)\./(/' : the research set
@@ -306,7 +339,8 @@ def _baseline() -> dict:
         line[3:] for line in proc.stdout.splitlines()
         if line[:2] in {" M", "M ", "MM"}
     )
-    allowed = {FOLIO_TEST_FILE, HARNESS_FILE, HARNESS_TEST_FILE}
+    allowed = ({FOLIO_TEST_FILE, HARNESS_FILE, HARNESS_TEST_FILE}
+               | ROUND_ARTIFACT_FILES)
     if not set(tracked_modified) <= allowed:
         _fail(
             "tracked modifications outside the round-18 files: "
@@ -1158,7 +1192,12 @@ def _subprocess_env() -> dict:
 def _python_cmd() -> list:
     # -X faulthandler: a native crash in the child dumps the Python stack to
     # stderr (r18 diagnosis-b forensics, zero cost when nothing crashes).
-    return [str(ROOT / ".venv" / "Scripts" / "python.exe"),
+    # pythonw.exe (GUI subsystem, no console): on this host, detached
+    # console-subsystem python.exe processes are externally killed via
+    # CTRL+C injection (observed exit code 0xC000013A); pythonw.exe
+    # processes survive.  stdout/stderr are pipes/files supplied by the
+    # parent, so the verdict-capture behaviour is unchanged.
+    return [str(ROOT / ".venv" / "Scripts" / "pythonw.exe"),
             "-X", "utf8", "-X", "faulthandler"]
 
 
@@ -1201,7 +1240,10 @@ def _discover_slice(package: str, expected_count: int,
     sed: strip the package prefix inside the parentheses) must equal the
     embedded baseline byte-for-byte -- zero new failures is a hard gate.
     The skip list is recorded as data (never asserted zero).  The raw
-    output (timing-normalized) is written to a discover log file.
+    output (timing- and transient-path-normalized: random tempfile names
+    and the jieba load-timing line are replaced by stable placeholders, so
+    the tracked log files stay byte-identical across runs and a re-run from
+    a clean tree leaves `git status` clean) is written to a discover log.
     """
     proc = subprocess.run(
         _python_cmd() + ["-m", "unittest", "discover", "-s", package,
@@ -1212,9 +1254,9 @@ def _discover_slice(package: str, expected_count: int,
     stdout, stderr = proc.stdout or "", proc.stderr or ""
     log_path = OUT_DIR / f"local-revision-r18-discover-{package}.log"
     log_path.write_text(
-        normalize_unittest_timing(stdout)
+        normalize_transient_paths(normalize_unittest_timing(stdout))
         + "\n===== STDERR =====\n"
-        + normalize_unittest_timing(stderr),
+        + normalize_transient_paths(normalize_unittest_timing(stderr)),
         encoding="utf-8", newline="\n")
 
     summary = parse_unittest_summary(stdout, stderr)
@@ -1447,7 +1489,7 @@ def _build_replay() -> dict:
                 "full-slice discover with GIT_CONFIG_* stripped: 1229 "
                 "tests, zero skips",
                 "with the loader fix, full-slice discover in the polluted "
-                "shell: 1250 tests, zero skips",
+                "shell: 1252 tests, zero skips",
             ],
             "fix": ("loader passes env=dict(os.environ) to git and skips "
                     "only on genuine git/commit absence "
@@ -1569,7 +1611,7 @@ def _audit() -> dict:
                  "reaserch_agent/route_test_harness.py (NEW: strict "
                  "judgement + audit_record + skip collector; pure test "
                  "infrastructure, not on any production path)",
-                 "reaserch_agent/test_route_test_harness.py (NEW: 21 tests "
+                 "reaserch_agent/test_route_test_harness.py (NEW: 23 tests "
                  "-- the three r17 false-accept shapes rejected, positive "
                  "accept, defence-in-depth, loader exception/skip "
                  "semantics)",

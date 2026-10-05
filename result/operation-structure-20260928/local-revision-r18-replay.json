@@ -19,16 +19,16 @@
       "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
     },
     "new_harness_files": {
-      "reaserch_agent/route_test_harness.py": "85c520f797bfdd7b5466c7fc66c0d5f33b1cfba9f15c00499c0a2a8616c19c17",
-      "reaserch_agent/test_route_test_harness.py": "673e72c60edc695cc2c095d73cb7de9248357f70dcf1b128166d804010e6835d"
+      "reaserch_agent/route_test_harness.py": "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b",
+      "reaserch_agent/test_route_test_harness.py": "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
     },
     "r17_checkpoint_sha256_untouched": "efb133c860e6a369fbb8f227132e3b71573364edc0fd185b5bf8f8a620ade50b",
     "tracked_modifications_subset_of_round18_files": true
   },
   "code_changes": {
     "new_files": {
-      "reaserch_agent/route_test_harness.py": "85c520f797bfdd7b5466c7fc66c0d5f33b1cfba9f15c00499c0a2a8616c19c17",
-      "reaserch_agent/test_route_test_harness.py": "673e72c60edc695cc2c095d73cb7de9248357f70dcf1b128166d804010e6835d"
+      "reaserch_agent/route_test_harness.py": "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b",
+      "reaserch_agent/test_route_test_harness.py": "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
     },
     "modified_files": {
       "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
@@ -72,7 +72,7 @@
       "kernel-level env sniff: exactly one flip present:'' -> MISSING, at the first patch.dict(os.environ) test, never recovers",
       "micro-repro: one patch.dict(os.environ) round-trip flips GIT_CONFIG_VALUE_0 from present:'' to kernel-MISSING and git env=None fails rc=128 while env=copy succeeds",
       "full-slice discover with GIT_CONFIG_* stripped: 1229 tests, zero skips",
-      "with the loader fix, full-slice discover in the polluted shell: 1250 tests, zero skips"
+      "with the loader fix, full-slice discover in the polluted shell: 1252 tests, zero skips"
     ],
     "fix": "loader passes env=dict(os.environ) to git and skips only on genuine git/commit absence (HistoricalSourceUnavailable); import/exec errors fail the test with the original exception chained",
     "polluter_not_changed": "test_action_evidence_selection's patch.dict(os.environ) is a legitimate pattern; the trigger is the shell's empty GIT_CONFIG_VALUE_0, so the fix lands in the loader, not in 100+ patch.dict users"
@@ -773,20 +773,20 @@
     },
     "target_set": {
       "modules": 14,
-      "expected": 367,
+      "expected": 370,
       "accepted": true,
       "record": {
         "label": "target_set",
-        "expected_test_count": 367,
+        "expected_test_count": 370,
         "require_no_skips": true,
         "returncode": 0,
         "accepted": true,
         "rejection_reasons": [],
-        "ran_count": 367,
+        "ran_count": 370,
         "verdict_line": "OK",
         "timing_normalized": true,
         "stdout": "",
-        "stderr": "...............................................................................................................................................................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 367 tests in <elapsed>s\n\nOK\n"
+        "stderr": "..................................................................................................................................................................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 370 tests in <elapsed>s\n\nOK\n"
       }
     },
     "full_slice_discover": {
@@ -794,7 +794,7 @@
         "package": "reaserch_agent",
         "returncode": 1,
         "summary": {
-          "ran_count": 1250,
+          "ran_count": 1253,
           "summary_lines": 1,
           "verdict": "FAILED (failures=8, errors=21)",
           "failures": 8,

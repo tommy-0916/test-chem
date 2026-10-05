@@ -156,6 +156,35 @@ def normalize_unittest_timing(text: Optional[str]) -> str:
                   text or "")
 
 
+def normalize_transient_paths(text: Optional[str]) -> str:
+    """Replace run-varying path/timing fragments so recorded logs are
+    byte-stable across runs:
+
+    - tempfile random directory names (``tmp`` + 8 chars from [a-z0-9_]) in
+      Temp paths, in raw (``Temp\\tmpXXXX``), escaped (``Temp\\\\tmpXXXX``)
+      and POSIX (``Temp/tmpXXXX``) spellings -> ``tmp<random>``;
+    - the jieba model-load timing line ("Loading model cost 0.364
+      seconds.") -> "<elapsed> seconds";
+    - the agent's per-step timing lines ("[research-agent] LLM step done:
+      <step> (0.1s)") -> "(<elapsed>s)" — these leaked through at the
+      r18 final verification (one discover-log line flipped 0.1s/0.0s
+      between runs and dirtied the tracked log).
+
+    Rationale (r18 clean-rerun fix): full-slice discover logs record
+    tracebacks of the baseline failing tests, which embed random temporary
+    directory names and the jieba load time; without normalization every
+    runner execution rewrites the tracked discover logs with different
+    bytes, so the runner's own cleanliness gate rejects the second build.
+    """
+    out = re.sub(r"(Temp(?:\\\\|\\|/))tmp[0-9a-z_]{8}\b",
+                 r"\g<1>tmp<random>", text or "")
+    out = re.sub(r"(Loading model cost )[\d.]+( seconds)",
+                 r"\g<1><elapsed>\g<2>", out)
+    out = re.sub(r"(LLM step done: \S+ \()[\d.]+(s\))",
+                 r"\g<1><elapsed>\g<2>", out)
+    return out
+
+
 def parse_unittest_summary(stdout: Optional[str],
                            stderr: Optional[str]) -> dict:
     """Parse the unittest summary/verdict lines without judging them.
