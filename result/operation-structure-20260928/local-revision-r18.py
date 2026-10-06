@@ -14,8 +14,8 @@ Scope of the code change (three files, all test infrastructure):
   in output) accepted (a) nonzero-returncode runs whose tail carried the
   substrings and (b) "OK (skipped=2)"; only a dots-only abort was rejected.
   All three negative shapes are pinned by unit tests in
-  ``reaserch_agent/test_route_test_harness.py`` (NEW, 24 tests), which joins
-  the target set (346 -> 370).
+  ``reaserch_agent/test_route_test_harness.py`` (NEW, 41 tests), which joins
+  the target set (346 -> 387).
 - ``reaserch_agent/test_route_pdf_folio.py`` (MODIFIED, still 27 tests):
   ``_load_historical_source_module`` now raises HistoricalSourceUnavailable
   (the skip channel) ONLY for the two genuine causes -- the git executable
@@ -72,8 +72,8 @@ What this runner establishes, deterministically and token-free:
 3. Judged subprocesses (strict harness): r13b archive-pinned runner
    (replay matches the r13 archive, double-run byte-identical, ms7a.out
    BLOCKED), folio module (27 tests, zero skips required), target set
-   (13 r17 modules + the harness module = 370 tests, zero skips required).
-4. Full-slice discover recorded honestly: reaserch_agent 1253 tests and
+   (13 r17 modules + the harness module = 387 tests, zero skips required).
+4. Full-slice discover recorded honestly: reaserch_agent 1270 tests and
    chem_agent_contracts 116 tests; the normalized failure-header sets are
    asserted byte-equal to the embedded baselines (29 research entries = the
    30-entry baseline minus test_b1_bootstrap_generates_initial_outputs,
@@ -109,10 +109,13 @@ from reaserch_agent.route_test_harness import (  # noqa: E402
     RunExpectation,
     audit_record,
     collect_unittest_skips,
+    discover_returncode_reason,
     judge_unittest_run,
     normalize_transient_paths,
     normalize_unittest_timing,
     parse_unittest_summary,
+    timeout_forensics_record,
+    write_forensics_file,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -142,18 +145,18 @@ PARSER_FILES = {
 }
 FOLIO_TEST_FILE = "reaserch_agent/test_route_pdf_folio.py"
 FOLIO_TEST_SHA256 = (
-    "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
+    "bbf2aa16354a9d476f97a867a1c08bad8fd668a6c49734a3c28fbb78ed978ff7"
 )
 FOLIO_TEST_COUNT = 27
 HARNESS_FILE = "reaserch_agent/route_test_harness.py"
 HARNESS_SHA256 = (
-    "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b"
+    "a65f3c28473a55679311db178a206211f54281f6754e851374d27d99fd85ddf1"
 )
 HARNESS_TEST_FILE = "reaserch_agent/test_route_test_harness.py"
 HARNESS_TEST_SHA256 = (
-    "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
+    "f4312d48a836c1ca9883ec4574cd182ff91956ecbf9966eea379901b22576e1c"
 )
-HARNESS_TEST_COUNT = 24
+HARNESS_TEST_COUNT = 41
 R17_CHECKPOINT_FILE = "docs/field_semantic_gate_r17_checkpoint_20261005.md"
 R17_CHECKPOINT_SHA256 = (
     "efb133c860e6a369fbb8f227132e3b71573364edc0fd185b5bf8f8a620ade50b"
@@ -232,9 +235,9 @@ TARGET_SET_MODULES = [
     # r18 addition: the strict-judgement harness contract tests.
     "reaserch_agent.test_route_test_harness",
 ]
-TARGET_SET_SIZE = 370
+TARGET_SET_SIZE = 387
 
-DISCOVER_RESEARCH_COUNT = 1253
+DISCOVER_RESEARCH_COUNT = 1270
 DISCOVER_CONTRACTS_COUNT = 116
 
 # Round-18 tracked artifacts the runner itself rewrites on every execution;
@@ -1202,9 +1205,7 @@ def _python_cmd() -> list:
 
 
 def _write_forensics(record: dict) -> None:
-    FORENSICS.write_text(
-        json.dumps(record, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8", newline="\n")
+    write_forensics_file(FORENSICS, record)
 
 
 def _judged_unittest(label: str, modules: list,
@@ -1213,13 +1214,20 @@ def _judged_unittest(label: str, modules: list,
 
     On rejection the FULL returncode/stdout/stderr (timing-normalized) are
     written to the forensics file before the runner fails -- no
-    substring-only forensics.
+    substring-only forensics.  A subprocess timeout is likewise captured
+    (timeout fact + partial output) into the forensics file BEFORE failing
+    (r19 acceptance gap 4); timeouts are never auto-retried.
     """
-    proc = subprocess.run(
-        _python_cmd() + ["-m", "unittest"] + modules,
-        cwd=ROOT, capture_output=True, text=True, timeout=timeout,
-        env=_subprocess_env(),
-    )
+    try:
+        proc = subprocess.run(
+            _python_cmd() + ["-m", "unittest"] + modules,
+            cwd=ROOT, capture_output=True, text=True, timeout=timeout,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        _write_forensics(timeout_forensics_record(label, exc))
+        _fail(f"{label} timed out after {exc.timeout}s; partial-output "
+              f"forensics written (no auto-retry)")
     verdict = judge_unittest_run(proc.returncode, proc.stdout, proc.stderr,
                                  expectation)
     record = audit_record(label, proc, verdict, expectation,
@@ -1244,13 +1252,27 @@ def _discover_slice(package: str, expected_count: int,
     and the jieba load-timing line are replaced by stable placeholders, so
     the tracked log files stay byte-identical across runs and a re-run from
     a clean tree leaves `git status` clean) is written to a discover log.
+
+    Returncode gate (r19 acceptance gap 2): a discover slice that keeps its
+    baseline failures exits 1, a fully-green slice exits 0; EVERY other
+    returncode (usage error, crash, abort) is rejected no matter how
+    normal-looking the captured output is -- judgement trusts returncode +
+    structured summary, never log-content appearance.  A subprocess timeout
+    is captured into the forensics file (timeout fact + partial output)
+    before failing (r19 acceptance gap 4); no auto-retry.
     """
-    proc = subprocess.run(
-        _python_cmd() + ["-m", "unittest", "discover", "-s", package,
-                         "-t", ".", "-v"],
-        cwd=ROOT, capture_output=True, text=True, timeout=900,
-        env=_subprocess_env(),
-    )
+    try:
+        proc = subprocess.run(
+            _python_cmd() + ["-m", "unittest", "discover", "-s", package,
+                             "-t", ".", "-v"],
+            cwd=ROOT, capture_output=True, text=True, timeout=900,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        _write_forensics(
+            timeout_forensics_record(f"discover_{package}", exc))
+        _fail(f"discover {package} timed out after {exc.timeout}s; "
+              f"partial-output forensics written (no auto-retry)")
     stdout, stderr = proc.stdout or "", proc.stderr or ""
     log_path = OUT_DIR / f"local-revision-r18-discover-{package}.log"
     log_path.write_text(
@@ -1276,6 +1298,9 @@ def _discover_slice(package: str, expected_count: int,
         "log_file": log_path.name,
     }
     problems = []
+    rc_reason = discover_returncode_reason(proc.returncode)
+    if rc_reason is not None:
+        problems.append(rc_reason)
     if summary["ran_count"] != expected_count or summary["summary_lines"] != 1:
         problems.append(f"ran_count={summary['ran_count']},"
                         f"summary_lines={summary['summary_lines']}")
@@ -1296,11 +1321,17 @@ def _discover_slice(package: str, expected_count: int,
 
 def _anchors() -> dict:
     # (a) A01 regression: r13b archive-pinned runner as a subprocess.
-    proc = subprocess.run(
-        _python_cmd() + [str(OUT_DIR / "local-revision-r13b.py")],
-        cwd=ROOT, capture_output=True, text=True, timeout=900,
-        env=_subprocess_env(),
-    )
+    try:
+        proc = subprocess.run(
+            _python_cmd() + [str(OUT_DIR / "local-revision-r13b.py")],
+            cwd=ROOT, capture_output=True, text=True, timeout=900,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        _write_forensics(
+            timeout_forensics_record("r13b_archive_runner", exc))
+        _fail(f"r13b rerun timed out after {exc.timeout}s; partial-output "
+              f"forensics written (no auto-retry)")
     r13b_record = {
         "label": "r13b_archive_runner",
         "returncode": proc.returncode,
@@ -1611,7 +1642,7 @@ def _audit() -> dict:
                  "reaserch_agent/route_test_harness.py (NEW: strict "
                  "judgement + audit_record + skip collector; pure test "
                  "infrastructure, not on any production path)",
-                 "reaserch_agent/test_route_test_harness.py (NEW: 23 tests "
+                 "reaserch_agent/test_route_test_harness.py (NEW: 41 tests "
                  "-- the three r17 false-accept shapes rejected, positive "
                  "accept, defence-in-depth, loader exception/skip "
                  "semantics)",

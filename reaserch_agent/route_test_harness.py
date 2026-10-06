@@ -63,10 +63,30 @@ def judge_unittest_run(returncode: Optional[int], stdout: Optional[str],
                        expectation: RunExpectation) -> RunVerdict:
     """Judge one CompletedProcess-shaped unittest run.  Pure function.
 
+    Pinned judging semantics (r19 hardening, acceptance gap 1):
+
+    - **stderr is the only evidence stream.**  unittest's TextTestRunner
+      always writes the progress dots, the ``Ran N tests`` summary and the
+      verdict line (``OK`` / ``OK (skipped=N)`` / ``FAILED (...)``) to
+      stderr.  Any summary/verdict-shaped line on stdout is ordinary test
+      output (a test printing "OK") and never constitutes judgement
+      evidence.  Judgement trusts only returncode + the structured stderr
+      summary; log-content substrings on stdout never acquit a run.
+    - Exactly one ``Ran N tests`` line must exist on stderr, with N equal
+      to the expected count.
+    - Exactly one verdict-shaped line must exist on stderr **after** the
+      summary line; zero or multiple verdict lines are rejections
+      (``verdict_missing`` / ``verdict_ambiguous:N``).
+    - For must-run suites (``require_no_skips=True``), ANY nonzero
+      ``skipped=N`` anywhere on stderr — the verdict line or elsewhere —
+      is an unconditional rejection, regardless of any OK-shaped line.
+    - A nonzero returncode is always a rejection; failure/error counts
+      anywhere on stderr are a belt-and-braces rejection.
+
     All criteria must hold; every violated criterion appends one structured
     reason.  No exception is raised for a failing run -- failure is data.
     """
-    out = (stdout or "") + "\n" + (stderr or "")
+    err = stderr or ""
     reasons = []
     ran_count = None
     verdict_line = None
@@ -75,44 +95,55 @@ def judge_unittest_run(returncode: Optional[int], stdout: Optional[str],
     if returncode != 0:
         reasons.append(f"nonzero_returncode:{returncode}")
 
-    # 2. exactly one summary line with the expected count
-    summaries = _SUMMARY_RE.findall(out)
-    if not summaries:
+    # 2. exactly one summary line (stderr only) with the expected count
+    summary_hits = list(_SUMMARY_RE.finditer(err))
+    if not summary_hits:
         reasons.append("summary_missing")
-    elif len(summaries) > 1:
-        reasons.append(f"summary_ambiguous:{len(summaries)}")
+    elif len(summary_hits) > 1:
+        reasons.append(f"summary_ambiguous:{len(summary_hits)}")
     else:
-        ran_count = int(summaries[0])
+        ran_count = int(summary_hits[0].group(1))
         if ran_count != expectation.test_count:
             reasons.append(
                 f"test_count_mismatch:ran={ran_count},"
                 f"expected={expectation.test_count}")
 
-    # 3. verdict line: exactly OK (with optional zero-skip annotation)
-    ok_match = _VERDICT_OK_RE.search(out)
-    failed_match = _VERDICT_FAILED_RE.search(out)
-    if failed_match is not None:
-        verdict_line = f"FAILED ({failed_match.group(1)})"
-        reasons.append(f"failed_verdict:{failed_match.group(1)}")
-    elif ok_match is not None:
-        skipped = ok_match.group(1)
-        verdict_line = "OK" if skipped is None else f"OK (skipped={skipped})"
-        if skipped is not None and expectation.require_no_skips \
-                and int(skipped) > 0:
-            reasons.append(f"unexpected_skips:{skipped}")
-    else:
+    # 3. verdict (stderr only): exactly one verdict-shaped line AFTER the
+    #    last summary line
+    verdict_hits = [(m.end(), "ok", m.group(1))
+                    for m in _VERDICT_OK_RE.finditer(err)]
+    verdict_hits += [(m.end(), "failed", m.group(1))
+                     for m in _VERDICT_FAILED_RE.finditer(err)]
+    if summary_hits:
+        last_summary_end = summary_hits[-1].end()
+        verdict_hits = [h for h in verdict_hits if h[0] > last_summary_end]
+    if not verdict_hits:
         reasons.append("verdict_missing")
+    elif len(verdict_hits) > 1:
+        reasons.append(f"verdict_ambiguous:{len(verdict_hits)}")
+    else:
+        _, kind, detail = verdict_hits[0]
+        if kind == "failed":
+            verdict_line = f"FAILED ({detail})"
+            reasons.append(f"failed_verdict:{detail}")
+        else:
+            verdict_line = ("OK" if detail is None
+                            else f"OK (skipped={detail})")
 
-    # 4. belt-and-braces: failure/error counts anywhere in the output
-    bad = _BAD_COUNT_RE.search(out)
-    if bad is not None and failed_match is None:
+    # 4. belt-and-braces: failure/error counts anywhere on stderr
+    bad = _BAD_COUNT_RE.search(err)
+    if bad is not None \
+            and not any(r.startswith("failed_verdict:") for r in reasons):
         reasons.append(f"failure_error_count_in_output:{bad.group(0)}")
 
-    # 5. skipped= nonzero anywhere when the suite must run everything
+    # 5. must-run suites: ANY nonzero skipped=N on stderr rejects, no
+    #    matter what verdict-shaped lines exist (dedup against criterion 3)
     if expectation.require_no_skips:
-        for skip_hit in _SKIPPED_COUNT_RE.finditer(out):
-            if int(skip_hit.group(1)) > 0 and ok_match is None:
-                reasons.append(f"unexpected_skips:{skip_hit.group(1)}")
+        for skip_hit in _SKIPPED_COUNT_RE.finditer(err):
+            count = int(skip_hit.group(1))
+            reason = f"unexpected_skips:{count}"
+            if count > 0 and reason not in reasons:
+                reasons.append(reason)
                 break
 
     return RunVerdict(accepted=not reasons, reasons=tuple(reasons),
@@ -189,30 +220,41 @@ def parse_unittest_summary(stdout: Optional[str],
                            stderr: Optional[str]) -> dict:
     """Parse the unittest summary/verdict lines without judging them.
 
+    stderr is the only evidence stream (same pinned semantics as
+    ``judge_unittest_run``): the summary and verdict lines of a unittest
+    run live on stderr; summary/verdict-shaped lines on stdout are ordinary
+    test output and are ignored here.  When several verdict-shaped lines
+    exist on stderr the LAST one is taken (it is the run's final verdict);
+    the count of summary lines is reported honestly.
+
     Returns a dict with ran_count (None when no summary line), summary_lines
     (number of "Ran N tests" lines seen), verdict ("OK" / "OK (skipped=N)" /
     "FAILED (...)" / None), and the failures/errors/skipped counts from the
     verdict line (None when absent).  Used for honest recording of suites
     whose failures are an expected baseline (full-slice discover).
     """
-    out = (stdout or "") + "\n" + (stderr or "")
-    summaries = _SUMMARY_RE.findall(out)
+    err = stderr or ""
+    summaries = _SUMMARY_RE.findall(err)
     verdict = None
     failures = errors = skipped = None
-    failed_match = _VERDICT_FAILED_RE.search(out)
-    ok_match = _VERDICT_OK_RE.search(out)
-    if failed_match is not None:
-        verdict = f"FAILED ({failed_match.group(1)})"
-        counts = dict(re.findall(r"(\w+)=(\d+)", failed_match.group(1)))
-        failures = int(counts.get("failures", 0))
-        errors = int(counts.get("errors", 0))
-        skipped = int(counts["skipped"]) if "skipped" in counts else None
-    elif ok_match is not None:
-        verdict = ("OK" if ok_match.group(1) is None
-                   else f"OK (skipped={ok_match.group(1)})")
-        failures = errors = 0
-        skipped = (int(ok_match.group(1)) if ok_match.group(1) is not None
-                   else None)
+    failed_matches = list(_VERDICT_FAILED_RE.finditer(err))
+    ok_matches = list(_VERDICT_OK_RE.finditer(err))
+    candidates = [(m.end(), "failed", m) for m in failed_matches]
+    candidates += [(m.end(), "ok", m) for m in ok_matches]
+    if candidates:
+        _, kind, match = sorted(candidates)[-1]
+        if kind == "failed":
+            verdict = f"FAILED ({match.group(1)})"
+            counts = dict(re.findall(r"(\w+)=(\d+)", match.group(1)))
+            failures = int(counts.get("failures", 0))
+            errors = int(counts.get("errors", 0))
+            skipped = int(counts["skipped"]) if "skipped" in counts else None
+        else:
+            verdict = ("OK" if match.group(1) is None
+                       else f"OK (skipped={match.group(1)})")
+            failures = errors = 0
+            skipped = (int(match.group(1)) if match.group(1) is not None
+                       else None)
     return {
         "ran_count": int(summaries[-1]) if summaries else None,
         "summary_lines": len(summaries),
@@ -227,12 +269,17 @@ def collect_unittest_skips(stdout: Optional[str],
                            stderr: Optional[str]) -> list:
     """Extract (test_id, reason) skip lines from -v unittest output.
 
+    stderr is the only evidence stream (same pinned semantics as
+    ``judge_unittest_run``): ``unittest -v`` writes per-test outcome lines
+    to stderr, so skip-shaped lines on stdout are ordinary test output and
+    are ignored.
+
     Used for honest recording of full-slice discover skips (recorded as
     data, never asserted to be zero).
     """
-    out = (stdout or "") + "\n" + (stderr or "")
+    err = stderr or ""
     rows = []
-    for line in out.splitlines():
+    for line in err.splitlines():
         # unittest -v format: "test_x (pkg.mod.Case.test_x) ... skipped 'r'"
         match = re.match(r"^\w+ \(([^)]+)\) \.\.\. skipped (.*)$", line)
         if match:
@@ -241,3 +288,70 @@ def collect_unittest_skips(stdout: Optional[str],
                 "reason": match.group(2).strip().strip("'"),
             })
     return rows
+
+
+# Full-slice discover keeps its historical (baseline-pinned) failures, so a
+# healthy discover run exits 0 (all pass) or 1 (failures present).  Any
+# other returncode -- 2 (unittest usage error), or crash/abort codes like
+# 99/134/139/0xC000xxxx -- means the slice itself is broken and must be
+# rejected no matter how normal the captured output looks.
+DISCOVER_NORMAL_RETURNCODES = (0, 1)
+
+
+def discover_returncode_reason(returncode: Optional[int]) -> Optional[str]:
+    """Judge a full-slice discover returncode; None means acceptable.
+
+    Acceptance gap 2 (r19): a discover slice that preserves its baseline
+    failures is expected to exit 1, and a fully-green slice exits 0; every
+    other exit status is rejected even when stdout/stderr carry a
+    normal-looking summary.  The judgement trusts returncode + structured
+    summary only -- log-content appearance never acquits a run.
+    """
+    if returncode in DISCOVER_NORMAL_RETURNCODES:
+        return None
+    return (f"unexpected_returncode:{returncode} "
+            f"(unittest normal exit is 0=all-pass or 1=failures-present)")
+
+
+def timeout_forensics_record(label: str, exc,
+                             normalize_timing: bool = True) -> dict:
+    """Build the forensics record for a subprocess timeout (acceptance gap
+    4, r19): the timeout fact PLUS whatever partial stdout/stderr the child
+    produced before being killed, so a hung run leaves evidence instead of
+    an unrecorded exception.  ``exc`` is a subprocess.TimeoutExpired; its
+    stdout/stderr may be str (text mode) or bytes -- both are handled.
+    The runner writes this record to the forensics file and then fails;
+    there is deliberately NO automatic retry.
+    """
+    def _text(payload) -> str:
+        if payload is None:
+            return ""
+        if isinstance(payload, bytes):
+            return payload.decode("utf-8", errors="replace")
+        return str(payload)
+
+    stdout, stderr = _text(exc.stdout), _text(exc.stderr)
+    if normalize_timing:
+        stdout = normalize_transient_paths(normalize_unittest_timing(stdout))
+        stderr = normalize_transient_paths(normalize_unittest_timing(stderr))
+    return {
+        "label": label,
+        "timed_out": True,
+        "timeout_seconds": exc.timeout,
+        "cmd": [str(part) for part in (exc.cmd or [])],
+        "note": ("subprocess exceeded its timeout and was killed; partial "
+                 "output below is everything captured before the kill; "
+                 "the runner does NOT auto-retry timeouts"),
+        "stdout_partial": stdout,
+        "stderr_partial": stderr,
+    }
+
+
+def write_forensics_file(path, record: dict) -> None:
+    """Write a forensics record as UTF-8 LF JSON (single canonical form so
+    the runner and tests share one writer)."""
+    import json as _json
+    from pathlib import Path as _Path
+    _Path(path).write_text(
+        _json.dumps(record, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8", newline="\n")

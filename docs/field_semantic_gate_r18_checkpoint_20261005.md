@@ -390,3 +390,78 @@ Pins/counts updated: harness sha256 `e671f247…b390b`, harness-test sha256
 `4401b2fa…e31b24`, harness tests **24**, target set **370**,
 research discover **1253**. (§5 and §10 keep their historical numbers,
 which were true when written.)
+
+## 13. Acceptance re-review: three judgement gaps closed + timeout forensics (2026-10-06, same round)
+
+Acceptance re-review of the pushed state ("暂不整体通过") reproduced three
+judgement gaps and one forensics gap; all fixes land in test infrastructure
+only (harness / folio loader / runner).  No production code, no model call.
+
+**Gap 1 — must-run suite could pass with skips (stdout "OK" trap).**  The
+judge merged stdout+stderr and took the FIRST OK-shaped line, so a test
+printing "OK" to stdout acquitted a run whose stderr honestly reported
+`OK (skipped=1)`.  Fix (`route_test_harness.py`, `judge_unittest_run` +
+`parse_unittest_summary` + `collect_unittest_skips`): **stderr is the only
+evidence stream** (unittest's TextTestRunner always writes progress,
+summary and verdict to stderr; summary/verdict-shaped lines on stdout are
+ordinary test output).  Exactly one `Ran N tests` on stderr with the
+expected count; exactly one verdict-shaped line AFTER the summary
+(`verdict_ambiguous:N` otherwise); ANY nonzero `skipped=N` anywhere on
+stderr unconditionally rejects a must-run suite.  Pinned semantics are
+written into the docstrings; judgement trusts returncode + structured
+summary only — log-content appearance never acquits.
+
+**Gap 2 — full-slice discover accepted abnormal returncodes.**  A contracts
+slice with its normal-looking output but rc=99 (instead of 1) was accepted.
+Fix (`local-revision-r18.py::_discover_slice` +
+`route_test_harness.discover_returncode_reason`): discover slices keep
+their baseline failures, so the only acceptable returncodes are 0
+(all-pass) and 1 (failures-present); every other returncode is rejected
+regardless of output appearance.
+
+**Gap 3 — loader mapped execution failures to the skip channel.**  A git
+configuration error (rc=128 "missing config value") and TimeoutExpired
+both became HistoricalSourceUnavailable.  Fix
+(`test_route_pdf_folio.py::_load_historical_source_module`): the skip
+channel now admits exactly two causes — the git executable cannot start
+(OSError) or the pinned commit/object is genuinely absent (stderr carries
+"Not a valid object name" / "does not exist" / "bad object" / "unknown
+revision", classified by stderr content).  TimeoutExpired, other
+SubprocessErrors, any other non-zero rc, and an empty source all raise
+RuntimeError (chaining/quoting the original error) and FAIL the test.
+
+**Gap 4 — subprocess timeouts bypassed forensics.**  All three runner
+subprocess call sites (`_judged_unittest`, `_discover_slice`, the r13b
+archive runner) now catch TimeoutExpired, write a forensics record
+(timeout fact + partial stdout/stderr, via
+`route_test_harness.timeout_forensics_record` + `write_forensics_file`)
+BEFORE failing.  **No automatic retry**, by design: a retry would mask the
+evidence the timeout is supposed to preserve.
+
+**Negative tests added (17 new, all in `test_route_test_harness.py`; the
+harness suite is now 41 tests).**  (a) stdout plain "OK" + stderr
+`OK (skipped=1)` -> rejected with `unexpected_skips:1`; stdout
+summary/verdict shapes (incl. a wrong count and a FAILED shape) are ignored
+when stderr is clean; stdout "OK" alone does not acquit a missing stderr
+verdict; two verdict lines -> `verdict_ambiguous:2`; a verdict-shaped line
+before the summary is not a verdict; `skipped=1` off the verdict line
+rejects a must-run suite.  (b) rc=99 with normal-looking output ->
+`unexpected_returncode:99`; rc 0/1 accepted; rc None/2/-6/134/139/
+0xC0000005-style rejected.  (c) loader: TimeoutExpired -> RuntimeError
+(chained); rc=128 "missing config value" -> RuntimeError quoting rc and
+stderr; "Not a valid object name" / "does not exist" -> honest skip; empty
+source -> RuntimeError.  (d) a TimeoutExpired produces a forensics record
+containing the timeout fact and the partial stdout/stderr, and
+`write_forensics_file` persists it as JSON.  All pre-existing positive
+tests kept green.
+
+**Counts/pins updated.**  harness sha256 `a65f3c28…85ddf1`, harness-test
+sha256 `f4312d48…576e1c`, harness tests **41**, folio sha256
+`bbf2aa16…978ff7` (folio stays **27** tests), target set **387**,
+research discover **1270**.
+
+**Prescreen archive.**  The candidate prescreen record reviewed by
+acceptance is archived at
+`result/operation-structure-20260928/candidate-prescreen-20261006.md`
+(copied from the 2026-10-05 original with its 2026-10-06 acceptance-review
+corrections).

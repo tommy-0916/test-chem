@@ -34,7 +34,7 @@
 [research-agent] LLM step done: paper_protocol_extract (<elapsed>s)
 {"status": "blocked", "reason_code": "chemical_review_not_completed"}
 {"status": "issued_independent_group_review", "group_role": "synthesis", "route_review_signed": true, "execution_authorized": false}
-starting research agent: event_type=bootstrap, model=env/default, wire_api=chat, device_context=off, memory=off, campaign=cmp_20261005_a94a8fe5, references=0
+starting research agent: event_type=bootstrap, model=env/default, wire_api=chat, device_context=off, memory=off, campaign=cmp_20261006_a94a8fe5, references=0
 
 debug_state_log: debug.json
 [research-agent] LLM step start: survey_query_generate
@@ -1190,6 +1190,9 @@ test_dag_rescue_still_runs_independent_unit_check (reaserch_agent.test_route_sta
 test_diagnostic_record_in_dag_map_never_derives (reaserch_agent.test_route_state_proof_dag.ReceiptConsumptionPointTest.test_diagnostic_record_in_dag_map_never_derives) ... ok
 test_input_value_must_match_dag_claim (reaserch_agent.test_route_state_proof_dag.ReceiptConsumptionPointTest.test_input_value_must_match_dag_claim) ... ok
 test_pre_g1_baseline_blocks_the_dag_exclusive_state (reaserch_agent.test_route_state_proof_dag.ReceiptConsumptionPointTest.test_pre_g1_baseline_blocks_the_dag_exclusive_state) ... ok
+test_negative_rc99_with_normal_look_rejected (reaserch_agent.test_route_test_harness.DiscoverReturncodeTest.test_negative_rc99_with_normal_look_rejected) ... ok
+test_normal_returncodes_accepted (reaserch_agent.test_route_test_harness.DiscoverReturncodeTest.test_normal_returncodes_accepted) ... ok
+test_other_returncodes_rejected (reaserch_agent.test_route_test_harness.DiscoverReturncodeTest.test_other_returncodes_rejected) ... ok
 test_git_commit_missing_yields_distinguished_unavailable (reaserch_agent.test_route_test_harness.HistoricalLoaderContractTest.test_git_commit_missing_yields_distinguished_unavailable) ... ok
 test_git_executable_missing_yields_distinguished_unavailable (reaserch_agent.test_route_test_harness.HistoricalLoaderContractTest.test_git_executable_missing_yields_distinguished_unavailable) ... ok
 test_import_error_fails_with_original_exception_chained (reaserch_agent.test_route_test_harness.HistoricalLoaderContractTest.test_import_error_fails_with_original_exception_chained) ... ok
@@ -1214,6 +1217,20 @@ test_parse_unittest_summary_failed_with_skip_count (reaserch_agent.test_route_te
 test_parse_unittest_summary_ok (reaserch_agent.test_route_test_harness.JudgeContractTest.test_parse_unittest_summary_ok) ... ok
 test_positive_clean_run_accepted (reaserch_agent.test_route_test_harness.JudgeContractTest.test_positive_clean_run_accepted) ... ok
 test_positive_skips_allowed_when_not_required (reaserch_agent.test_route_test_harness.JudgeContractTest.test_positive_skips_allowed_when_not_required) ... ok
+test_negative_multiple_verdict_lines_rejected (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_negative_multiple_verdict_lines_rejected) ... ok
+test_negative_stdout_ok_line_stderr_skipped_rejected (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_negative_stdout_ok_line_stderr_skipped_rejected) ... ok
+test_stderr_skipped_count_elsewhere_rejects_must_run (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_stderr_skipped_count_elsewhere_rejects_must_run) ... ok
+test_stdout_ok_alone_does_not_acquit_missing_verdict (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_stdout_ok_alone_does_not_acquit_missing_verdict) ... ok
+test_stdout_summary_and_verdict_shapes_ignored (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_stdout_summary_and_verdict_shapes_ignored) ... ok
+test_verdict_before_summary_is_not_a_verdict (reaserch_agent.test_route_test_harness.JudgeStreamPinningTest.test_verdict_before_summary_is_not_a_verdict) ... ok
+test_commit_genuinely_absent_skips_modern_git (reaserch_agent.test_route_test_harness.LoaderSkipChannelR19Test.test_commit_genuinely_absent_skips_modern_git) ... ok
+test_empty_source_fails_not_skips (reaserch_agent.test_route_test_harness.LoaderSkipChannelR19Test.test_empty_source_fails_not_skips) ... ok
+test_git_config_error_fails_not_skips (reaserch_agent.test_route_test_harness.LoaderSkipChannelR19Test.test_git_config_error_fails_not_skips) ... ok
+test_git_timeout_fails_not_skips (reaserch_agent.test_route_test_harness.LoaderSkipChannelR19Test.test_git_timeout_fails_not_skips) ... ok
+test_path_absent_in_real_commit_skips (reaserch_agent.test_route_test_harness.LoaderSkipChannelR19Test.test_path_absent_in_real_commit_skips) ... ok
+test_forensics_file_written_with_partial_output (reaserch_agent.test_route_test_harness.TimeoutForensicsTest.test_forensics_file_written_with_partial_output) ... ok
+test_timeout_record_contains_partial_output_and_fact (reaserch_agent.test_route_test_harness.TimeoutForensicsTest.test_timeout_record_contains_partial_output_and_fact) ... ok
+test_timeout_record_handles_bytes_payload (reaserch_agent.test_route_test_harness.TimeoutForensicsTest.test_timeout_record_handles_bytes_payload) ... ok
 test_absent_configuration_stays_conservative (reaserch_agent.test_route_trust_cli.RouteTrustCliTest.test_absent_configuration_stays_conservative) ... ok
 test_inventory_register_config_cannot_replace_required_or_add_unknown_fields (reaserch_agent.test_route_trust_cli.RouteTrustCliTest.test_inventory_register_config_cannot_replace_required_or_add_unknown_fields) ... ok
 test_inventory_register_rejects_missing_directory_and_outside_kb_files (reaserch_agent.test_route_trust_cli.RouteTrustCliTest.test_inventory_register_rejects_missing_directory_and_outside_kb_files) ... ok
@@ -2009,6 +2026,6 @@ Traceback (most recent call last):
 AssertionError: 18027 not less than 17633.699999999997
 
 ----------------------------------------------------------------------
-Ran 1253 tests in <elapsed>s
+Ran 1270 tests in <elapsed>s
 
 FAILED (failures=8, errors=21)

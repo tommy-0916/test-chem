@@ -16,22 +16,22 @@
       "reaserch_agent/route_pdf_groups.py": "d8eecc83b1dc71fadc5541668f4ad3c3ea210a9a8c97ca31066a548795766094"
     },
     "changed_test_file": {
-      "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
+      "reaserch_agent/test_route_pdf_folio.py": "bbf2aa16354a9d476f97a867a1c08bad8fd668a6c49734a3c28fbb78ed978ff7"
     },
     "new_harness_files": {
-      "reaserch_agent/route_test_harness.py": "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b",
-      "reaserch_agent/test_route_test_harness.py": "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
+      "reaserch_agent/route_test_harness.py": "a65f3c28473a55679311db178a206211f54281f6754e851374d27d99fd85ddf1",
+      "reaserch_agent/test_route_test_harness.py": "f4312d48a836c1ca9883ec4574cd182ff91956ecbf9966eea379901b22576e1c"
     },
     "r17_checkpoint_sha256_untouched": "efb133c860e6a369fbb8f227132e3b71573364edc0fd185b5bf8f8a620ade50b",
     "tracked_modifications_subset_of_round18_files": true
   },
   "code_changes": {
     "new_files": {
-      "reaserch_agent/route_test_harness.py": "e671f2476c9ae3ce449372610227664583c5701d30fa9f0ebdba4d23aecb390b",
-      "reaserch_agent/test_route_test_harness.py": "4401b2fa3262fb9c66c1ec3e59e9927385f1b34800b26b5f076bffe5c9e31b24"
+      "reaserch_agent/route_test_harness.py": "a65f3c28473a55679311db178a206211f54281f6754e851374d27d99fd85ddf1",
+      "reaserch_agent/test_route_test_harness.py": "f4312d48a836c1ca9883ec4574cd182ff91956ecbf9966eea379901b22576e1c"
     },
     "modified_files": {
-      "reaserch_agent/test_route_pdf_folio.py": "a261ab79ae34b017c5563269c4b486a6d90dd3274da25ed2c4371c1da5130c02"
+      "reaserch_agent/test_route_pdf_folio.py": "bbf2aa16354a9d476f97a867a1c08bad8fd668a6c49734a3c28fbb78ed978ff7"
     },
     "parser_files_pinned_at_r17": {
       "reaserch_agent/route_pdf_source.py": "51b7be8b1e99847ea26d08568aef83b65b9168945082050e1b72eee3d0f51d7a",
@@ -773,20 +773,20 @@
     },
     "target_set": {
       "modules": 14,
-      "expected": 370,
+      "expected": 387,
       "accepted": true,
       "record": {
         "label": "target_set",
-        "expected_test_count": 370,
+        "expected_test_count": 387,
         "require_no_skips": true,
         "returncode": 0,
         "accepted": true,
         "rejection_reasons": [],
-        "ran_count": 370,
+        "ran_count": 387,
         "verdict_line": "OK",
         "timing_normalized": true,
         "stdout": "",
-        "stderr": "..................................................................................................................................................................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 370 tests in <elapsed>s\n\nOK\n"
+        "stderr": "...................................................................................................................................................................................................................................................................................................................................................................................................\n----------------------------------------------------------------------\nRan 387 tests in <elapsed>s\n\nOK\n"
       }
     },
     "full_slice_discover": {
@@ -794,7 +794,7 @@
         "package": "reaserch_agent",
         "returncode": 1,
         "summary": {
-          "ran_count": 1253,
+          "ran_count": 1270,
           "summary_lines": 1,
           "verdict": "FAILED (failures=8, errors=21)",
           "failures": 8,

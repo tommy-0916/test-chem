@@ -331,18 +331,29 @@ class HistoricalSourceUnavailable(Exception):
     """The skip channel: git itself or the pinned commit is genuinely
     unavailable.  Import/execution errors of a fetched historical module do
     NOT use this channel -- they raise (and fail the test) with the original
-    exception chained."""
+    exception chained.  Timeouts, git configuration errors, permission
+    errors and empty sources likewise FAIL the test (RuntimeError with the
+    original cause); they are never disguised as unavailability (r19
+    acceptance gap 3)."""
 
 
 def _load_historical_source_module(commit: str):
     """Load route_pdf_source as of a commit for old/new comparison.
 
-    Raises HistoricalSourceUnavailable only for the two genuine causes --
-    the git executable cannot be run (OSError/SubprocessError) or ``git
-    show`` returns non-zero (commit/object missing) -- with distinct
-    messages.  Any import/execution error of the fetched source raises
-    RuntimeError chaining the original exception, so a broken historical
-    module FAILS the test instead of being disguised as a git problem.
+    Raises HistoricalSourceUnavailable for exactly two genuine causes,
+    with distinct messages:
+
+    - the git executable cannot be started (OSError, e.g.
+      FileNotFoundError when git is absent), or
+    - ``git show`` reports the pinned commit/object as genuinely absent
+      (stderr carries "Not a valid object name" / "does not exist").
+
+    EVERYTHING ELSE fails the test: subprocess.TimeoutExpired, any other
+    SubprocessError, a non-zero rc with any other stderr (e.g. rc=128
+    "missing config value GIT_CONFIG_VALUE_0" configuration errors), and a
+    zero-rc empty source all raise RuntimeError chaining/quoting the
+    original error, so a broken fetch FAILS the test instead of being
+    disguised as a git problem.
 
     The git subprocess receives an explicit ``env=dict(os.environ)`` copy:
     never env=None.  On Windows, env=None makes the child inherit the Win32
@@ -363,13 +374,42 @@ def _load_historical_source_module(commit: str):
             cwd=_REPO, capture_output=True, text=True, timeout=60,
             env=dict(os.environ),
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except OSError as exc:
+        # git executable genuinely missing/unstartable -> honest skip
         raise HistoricalSourceUnavailable(
             f"git executable unavailable: {exc}") from exc
-    if proc.returncode != 0 or not proc.stdout:
-        raise HistoricalSourceUnavailable(
+    except subprocess.TimeoutExpired as exc:
+        # a hung git is a broken environment, not a missing commit -> FAIL
+        raise RuntimeError(
+            f"git show timed out after {exc.timeout}s for commit "
+            f"{commit}") from exc
+    except subprocess.SubprocessError as exc:
+        raise RuntimeError(
+            f"git show invocation failed for commit {commit}: "
+            f"{exc}") from exc
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()
+        # Genuine-absence markers, classified by stderr content: the pinned
+        # commit/object does not exist ("Not a valid object name" on modern
+        # git, "bad object" on older git, "unknown revision" for ambiguous
+        # refs) or the path does not exist inside a real commit ("does not
+        # exist").  Everything else (rc=128 configuration errors such as
+        # "missing config value", permission errors, ...) FAILS below.
+        if any(marker in err for marker in (
+                "Not a valid object name", "does not exist",
+                "bad object", "unknown revision")):
+            # the pinned commit/object is genuinely absent -> honest skip
+            raise HistoricalSourceUnavailable(
+                f"historical commit {commit} genuinely absent: "
+                f"{err[:200]}")
+        # configuration errors (rc=128), permission errors, anything else
+        # -> FAIL with the original reason quoted
+        raise RuntimeError(
             f"git show failed for commit {commit} "
-            f"(rc={proc.returncode}): {(proc.stderr or '').strip()[:200]}")
+            f"(rc={proc.returncode}): {err[:200]}")
+    if not proc.stdout:
+        raise RuntimeError(
+            f"git show for commit {commit} returned an empty source")
     temporary = tempfile.TemporaryDirectory()
     path = Path(temporary.name) / f"_route_pdf_source_{commit}.py"
     path.write_text(proc.stdout, encoding="utf-8")

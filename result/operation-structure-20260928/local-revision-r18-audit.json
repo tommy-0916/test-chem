@@ -7,7 +7,7 @@
       "kind": "changed_files",
       "items": [
         "reaserch_agent/route_test_harness.py (NEW: strict judgement + audit_record + skip collector; pure test infrastructure, not on any production path)",
-        "reaserch_agent/test_route_test_harness.py (NEW: 23 tests -- the three r17 false-accept shapes rejected, positive accept, defence-in-depth, loader exception/skip semantics)",
+        "reaserch_agent/test_route_test_harness.py (NEW: 41 tests -- the three r17 false-accept shapes rejected, positive accept, defence-in-depth, loader exception/skip semantics)",
         "reaserch_agent/test_route_pdf_folio.py (MODIFIED, still 27 tests: loader raises HistoricalSourceUnavailable only for genuine git/commit absence with distinguished messages, fails loudly on import/exec errors, and passes an explicit env copy to git)",
         "result/operation-structure-20260928/local-revision-r18.py",
         "result/operation-structure-20260928/local-revision-r18-*.json",

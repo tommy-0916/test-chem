@@ -20,7 +20,10 @@ from reaserch_agent.route_test_harness import (
     RunExpectation,
     audit_record,
     collect_unittest_skips,
+    discover_returncode_reason,
     judge_unittest_run,
+    timeout_forensics_record,
+    write_forensics_file,
 )
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -273,7 +276,7 @@ class HistoricalLoaderContractTest(unittest.TestCase):
             with self.assertRaises(HistoricalSourceUnavailable) as ctx:
                 _load_historical_source_module("deadbeef")
         message = str(ctx.exception)
-        self.assertIn("git show failed", message)
+        self.assertIn("genuinely absent", message)
         self.assertIn("deadbeef", message)
         self.assertIn("bad object", message)
 
@@ -337,6 +340,220 @@ class HistoricalLoaderContractTest(unittest.TestCase):
         self.assertTrue(hasattr(module, "_read_pdf_blocks"))
         self.assertEqual(module.__name__,
                          "reaserch_agent._route_pdf_source_491ec37")
+
+
+class JudgeStreamPinningTest(unittest.TestCase):
+    """r19 acceptance gap 1: stderr is the ONLY judgement evidence stream.
+
+    A plain "OK" line printed by a test to stdout must never be taken as
+    the run's verdict; a nonzero skip on stderr must reject a must-run
+    suite unconditionally.
+    """
+
+    def test_negative_stdout_ok_line_stderr_skipped_rejected(self):
+        # The exact acceptance reproduction: a test prints "OK" to stdout,
+        # stderr honestly reports "OK (skipped=1)" on a must-run suite.
+        stdout = "some test prints\nOK\n"
+        stderr = ("....s\n"
+                  "------------------------------------------------------------------\n"
+                  "Ran 5 tests in 0.042s\n\nOK (skipped=1)\n")
+        verdict = judge_unittest_run(
+            0, stdout, stderr,
+            RunExpectation(test_count=5, require_no_skips=True))
+        self.assertFalse(verdict.accepted)
+        self.assertIn("unexpected_skips:1", verdict.reasons)
+
+    def test_stdout_summary_and_verdict_shapes_ignored(self):
+        # stdout carries summary/verdict-shaped prose (incl. a wrong count);
+        # the real stderr run is clean -> accepted, judged from stderr only.
+        stdout = "Ran 999 tests in 1.0s\nOK\nFAILED (failures=3)\n"
+        stderr = ".....\nRan 5 tests in 0.042s\n\nOK\n"
+        verdict = judge_unittest_run(
+            0, stdout, stderr,
+            RunExpectation(test_count=5, require_no_skips=True))
+        self.assertTrue(verdict.accepted, verdict.reasons)
+        self.assertEqual(verdict.ran_count, 5)
+        self.assertEqual(verdict.verdict_line, "OK")
+
+    def test_stdout_ok_alone_does_not_acquit_missing_verdict(self):
+        stdout = "OK\n"
+        stderr = ".....\nRan 5 tests in 0.042s\n\n"  # no verdict line
+        verdict = judge_unittest_run(
+            0, stdout, stderr, RunExpectation(test_count=5))
+        self.assertFalse(verdict.accepted)
+        self.assertIn("verdict_missing", verdict.reasons)
+
+    def test_negative_multiple_verdict_lines_rejected(self):
+        stderr = (".....\nRan 5 tests in 0.042s\n\nOK\nOK\n")
+        verdict = judge_unittest_run(
+            0, "", stderr, RunExpectation(test_count=5))
+        self.assertFalse(verdict.accepted)
+        self.assertIn("verdict_ambiguous:2", verdict.reasons)
+
+    def test_verdict_before_summary_is_not_a_verdict(self):
+        # A verdict-shaped line BEFORE the summary cannot be the run verdict.
+        stderr = "OK\n.....\nRan 5 tests in 0.042s\n\n"
+        verdict = judge_unittest_run(
+            0, "", stderr, RunExpectation(test_count=5))
+        self.assertFalse(verdict.accepted)
+        self.assertIn("verdict_missing", verdict.reasons)
+
+    def test_stderr_skipped_count_elsewhere_rejects_must_run(self):
+        # Belt-and-braces: any skipped=N>0 on stderr rejects a must-run
+        # suite even when the verdict line itself is a bare OK.
+        stderr = (".....\nsome plugin line: skipped=1\n"
+                  "Ran 5 tests in 0.042s\n\nOK\n")
+        verdict = judge_unittest_run(
+            0, "", stderr,
+            RunExpectation(test_count=5, require_no_skips=True))
+        self.assertFalse(verdict.accepted)
+        self.assertIn("unexpected_skips:1", verdict.reasons)
+
+
+class DiscoverReturncodeTest(unittest.TestCase):
+    """r19 acceptance gap 2: full-slice discover exits 0 or 1 only."""
+
+    def test_negative_rc99_with_normal_look_rejected(self):
+        # The acceptance reproduction: the contracts slice's normal-looking
+        # output but with returncode 99 instead of 1 must be rejected.
+        reason = discover_returncode_reason(99)
+        self.assertIsNotNone(reason)
+        self.assertIn("unexpected_returncode:99", reason)
+
+    def test_normal_returncodes_accepted(self):
+        self.assertIsNone(discover_returncode_reason(0))
+        self.assertIsNone(discover_returncode_reason(1))
+
+    def test_other_returncodes_rejected(self):
+        for rc in (None, 2, -6, 134, 139, 3221225477):
+            self.assertIsNotNone(discover_returncode_reason(rc), rc)
+
+
+class TimeoutForensicsTest(unittest.TestCase):
+    """r19 acceptance gap 4: timeouts leave forensics, never auto-retry."""
+
+    def test_timeout_record_contains_partial_output_and_fact(self):
+        exc = subprocess.TimeoutExpired(
+            cmd=["pythonw.exe", "-m", "unittest"], timeout=5,
+            output="partial stdout dots ...",
+            stderr="Ran 3 tests in")
+        record = timeout_forensics_record("folio_test_module", exc)
+        self.assertTrue(record["timed_out"])
+        self.assertEqual(record["timeout_seconds"], 5)
+        self.assertIn("partial stdout dots", record["stdout_partial"])
+        self.assertIn("Ran 3 tests", record["stderr_partial"])
+        self.assertIn("NOT auto-retry", record["note"])
+
+    def test_timeout_record_handles_bytes_payload(self):
+        exc = subprocess.TimeoutExpired(cmd=["git"], timeout=60,
+                                        output=b"raw-bytes-out",
+                                        stderr=b"raw-bytes-err")
+        record = timeout_forensics_record("loader_probe", exc)
+        self.assertEqual(record["stdout_partial"], "raw-bytes-out")
+        self.assertEqual(record["stderr_partial"], "raw-bytes-err")
+
+    def test_forensics_file_written_with_partial_output(self):
+        import json
+        import tempfile
+        exc = subprocess.TimeoutExpired(cmd=["x"], timeout=1,
+                                        output="kept-stdout",
+                                        stderr="kept-stderr")
+        record = timeout_forensics_record("discover_demo", exc)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "forensics.json"
+            write_forensics_file(target, record)
+            self.assertTrue(target.exists())
+            loaded = json.loads(target.read_text(encoding="utf-8"))
+        self.assertTrue(loaded["timed_out"])
+        self.assertEqual(loaded["stdout_partial"], "kept-stdout")
+        self.assertEqual(loaded["stderr_partial"], "kept-stderr")
+
+
+class LoaderSkipChannelR19Test(unittest.TestCase):
+    """r19 acceptance gap 3: only genuine git/commit absence may skip.
+
+    Timeouts, git configuration errors, permission errors and empty sources
+    FAIL the test (RuntimeError, original cause chained/quoted).
+    """
+
+    def test_git_timeout_fails_not_skips(self):
+        from reaserch_agent.test_route_pdf_folio import (
+            HistoricalSourceUnavailable,
+            _load_historical_source_module,
+        )
+        with mock.patch(
+                "reaserch_agent.test_route_pdf_folio.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="git", timeout=60)):
+            with self.assertRaises(RuntimeError) as ctx:
+                _load_historical_source_module("491ec37")
+        self.assertNotIsInstance(ctx.exception, HistoricalSourceUnavailable)
+        self.assertIn("timed out", str(ctx.exception))
+        self.assertIsInstance(ctx.exception.__cause__,
+                              subprocess.TimeoutExpired)
+
+    def test_git_config_error_fails_not_skips(self):
+        from reaserch_agent.test_route_pdf_folio import (
+            HistoricalSourceUnavailable,
+            _load_historical_source_module,
+        )
+        fake = subprocess.CompletedProcess(
+            args=["git"], returncode=128, stdout="",
+            stderr="error: missing config value GIT_CONFIG_VALUE_0\n"
+                   "fatal: unable to parse command-line config")
+        with mock.patch(
+                "reaserch_agent.test_route_pdf_folio.subprocess.run",
+                return_value=fake):
+            with self.assertRaises(RuntimeError) as ctx:
+                _load_historical_source_module("491ec37")
+        self.assertNotIsInstance(ctx.exception, HistoricalSourceUnavailable)
+        self.assertIn("rc=128", str(ctx.exception))
+        self.assertIn("missing config value", str(ctx.exception))
+
+    def test_commit_genuinely_absent_skips_modern_git(self):
+        from reaserch_agent.test_route_pdf_folio import (
+            HistoricalSourceUnavailable,
+            _load_historical_source_module,
+        )
+        fake = subprocess.CompletedProcess(
+            args=["git"], returncode=128, stdout="",
+            stderr="fatal: Not a valid object name: 'deadbeef'.")
+        with mock.patch(
+                "reaserch_agent.test_route_pdf_folio.subprocess.run",
+                return_value=fake):
+            with self.assertRaises(HistoricalSourceUnavailable) as ctx:
+                _load_historical_source_module("deadbeef")
+        self.assertIn("genuinely absent", str(ctx.exception))
+
+    def test_path_absent_in_real_commit_skips(self):
+        from reaserch_agent.test_route_pdf_folio import (
+            HistoricalSourceUnavailable,
+            _load_historical_source_module,
+        )
+        fake = subprocess.CompletedProcess(
+            args=["git"], returncode=128, stdout="",
+            stderr="fatal: path 'reaserch_agent/route_pdf_source.py' "
+                   "does not exist in '491ec37'")
+        with mock.patch(
+                "reaserch_agent.test_route_pdf_folio.subprocess.run",
+                return_value=fake):
+            with self.assertRaises(HistoricalSourceUnavailable) as ctx:
+                _load_historical_source_module("491ec37")
+        self.assertIn("genuinely absent", str(ctx.exception))
+
+    def test_empty_source_fails_not_skips(self):
+        from reaserch_agent.test_route_pdf_folio import (
+            HistoricalSourceUnavailable,
+            _load_historical_source_module,
+        )
+        fake = subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout="", stderr="")
+        with mock.patch(
+                "reaserch_agent.test_route_pdf_folio.subprocess.run",
+                return_value=fake):
+            with self.assertRaises(RuntimeError) as ctx:
+                _load_historical_source_module("491ec37")
+        self.assertNotIsInstance(ctx.exception, HistoricalSourceUnavailable)
+        self.assertIn("empty source", str(ctx.exception))
 
 
 if __name__ == "__main__":
