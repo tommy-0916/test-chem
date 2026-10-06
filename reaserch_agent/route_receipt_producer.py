@@ -51,7 +51,7 @@ from .tools.paper_registry import PaperRegistry
 _DOI = re.compile(r"10\.[0-9]{4,9}/\S+\Z", re.IGNORECASE)
 _HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*\Z")
 _MAX_HTML_BYTES = 2 * 1024 * 1024
-_MAX_PDF_BYTES = 8 * 1024 * 1024
+_MAX_PDF_BYTES = 16 * 1024 * 1024
 _CONFIG_FIELDS = frozenset({
     "schema_version", "signed_route_source_events", "trusted_route_public_keys",
     "signed_route_signature_reviews", "trusted_route_signature_public_keys",

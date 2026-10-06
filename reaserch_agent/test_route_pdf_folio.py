@@ -616,14 +616,17 @@ class MisdeleteRegressionTest(unittest.TestCase):
                 self.assertTrue(
                     all(text in iterator for text in shorter), name)
 
-    def test_parser_version_bumped_to_v3(self) -> None:
-        # Block semantics changed again for previously parseable inputs at
-        # r17: bottom-band values adjacent to their labels were stripped
-        # under v2 and are kept under v3 (pinned by the r17 replay's
-        # old/new comparison against the 491ec37 parser), so the enumerator
-        # version had to move.  The r13/r13b archives pin no version string
-        # (grep-verified), so the bump falsifies no pinned replay bytes.
-        self.assertEqual(PDF_GROUP_PARSER_VERSION, "route_pdf_groups/v3")
+    def test_parser_version_bumped_to_v4(self) -> None:
+        # G3 ingestion round: unified 16 MiB PDF byte budget, repeated
+        # top-of-page running heads (e.g. "SUPPORTING INFORMATION") are
+        # furniture that never terminate a section/group, and numbered
+        # "Section <label>" experimental headings are recognized while
+        # table-of-contents look-alikes are rejected.  Group range
+        # semantics changed for inputs with such furniture/headings, so
+        # the enumerator version had to move.  The r13/r13b archives pin
+        # no version string (grep-verified), so the bump falsifies no
+        # pinned replay bytes.
+        self.assertEqual(PDF_GROUP_PARSER_VERSION, "route_pdf_groups/v4")
 
 
 @unittest.skipUnless(importlib.util.find_spec("fitz"), "PyMuPDF unavailable")

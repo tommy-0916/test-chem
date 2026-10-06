@@ -263,7 +263,7 @@ def discover_route_candidates(
                      "trusted_source_document_missing")
             continue
         try:
-            if document_path.stat().st_size > 8 * 1024 * 1024:
+            if document_path.stat().st_size > 16 * 1024 * 1024:
                 diagnose(protocol_index, group_index, paper_id, group_id,
                          "source_too_large")
                 continue

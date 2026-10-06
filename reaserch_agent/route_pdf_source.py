@@ -59,6 +59,15 @@ from .route_pdf_verification_context import MAX_VERIFICATION_CONTEXT_BLOCKS
 
 
 _LOCATOR = re.compile(r"pdf:p([1-9][0-9]*):b([1-9][0-9]*)-p([1-9][0-9]*):b([1-9][0-9]*)\Z")
+# PDF-specific byte budget (G3 round): unified at 16 MiB across every PDF
+# entry point (enumeration, source re-verification, attestation, receipt
+# production, discovery, pipeline).  Real publisher SIs with embedded
+# figures exceed 8 MiB while their extracted text stays tiny, so the byte
+# gate guarded parse budget, not parse load; page/block/text limits below
+# keep guarding the actual parse load.
+_MAX_PDF_SOURCE_BYTES = 16 * 1024 * 1024
+# Non-PDF budgets stay at 8 MiB: the JSON candidate-supply register and
+# any other non-PDF caller of this module keep the historical bound.
 _MAX_SOURCE_BYTES = 8 * 1024 * 1024
 _MAX_PAGES = 250
 _MAX_BLOCKS = 10000
@@ -513,6 +522,28 @@ def _caption(block: _PdfBlock) -> bool:
     return block.caption or _caption_text(block.text)
 
 
+def _furniture_heading_texts(blocks: list[_PdfBlock]) -> frozenset:
+    """Normalized heading texts that act as repeated page furniture.
+
+    A bold standalone heading recurring at the very top of two or more
+    pages (per-page block number <= 2 — block numbers restart per page —
+    e.g. a running head like "SUPPORTING INFORMATION") is page furniture,
+    never an experimental boundary: it may not terminate a section or a
+    group, and it is not itself a section/group heading candidate.  The
+    narrow top-of-page pin keeps mid-page repeated labels ("samples",
+    "authors") fully eligible as boundaries.
+    """
+    pages_by_text: dict[str, set[int]] = {}
+    for block in blocks:
+        if _heading(block) and block.number <= 2:
+            pages_by_text.setdefault(
+                " ".join(block.text.casefold().split()), set()
+            ).add(block.page)
+    return frozenset(
+        text for text, pages in pages_by_text.items() if len(pages) >= 2
+    )
+
+
 def _group_boundary(
     blocks: list[_PdfBlock], group_index: int, section_end: int,
     body_size: float,
@@ -520,15 +551,19 @@ def _group_boundary(
     # Some journals set subsection labels and prose at the same point size.
     # A peer needs heading typography; unstyled text closes the group only
     # when it is visibly larger than the section's ordinary prose.
+    # Repeated top-of-page running heads (furniture) never close a group.
     size = blocks[group_index].font_size
+    furniture = _furniture_heading_texts(blocks)
     return next((
         index for index in range(group_index + 1, section_end)
-        if (not _caption(blocks[index])
-            and _heading(blocks[index]) and blocks[index].font_size >= size - 0.1)
-        or (not _heading(blocks[index])
-            and not _caption(blocks[index])
-            and blocks[index].font_size >= size - 0.1
-            and blocks[index].font_size > body_size + 0.5)
+        if " ".join(blocks[index].text.casefold().split()) not in furniture
+        and ((not _caption(blocks[index])
+              and _heading(blocks[index])
+              and blocks[index].font_size >= size - 0.1)
+             or (not _heading(blocks[index])
+                 and not _caption(blocks[index])
+                 and blocks[index].font_size >= size - 0.1
+                 and blocks[index].font_size > body_size + 0.5))
     ), section_end)
 
 
@@ -551,15 +586,18 @@ def _group_range(
         return None
     section_index = sections[0]
     section_size = blocks[section_index].font_size
+    furniture = _furniture_heading_texts(blocks)
     section_end = next((
         index for index in range(section_index + 1, len(blocks))
         if not _caption(blocks[index])
+        and " ".join(blocks[index].text.casefold().split()) not in furniture
         and blocks[index].font_size >= section_size - 0.1
     ), len(blocks))
     groups = [
         index for index in range(section_index + 1, section_end)
         if blocks[index].text == group_id and _heading(blocks[index])
         and not _caption(blocks[index])
+        and " ".join(blocks[index].text.casefold().split()) not in furniture
         and blocks[index].font_size < section_size - 0.1
     ]
     if len(groups) != 1:
@@ -862,10 +900,10 @@ def verify_route_pdf_source(
             return _failure("source_outside_trusted_root")
         if path.suffix.lower() != ".pdf":
             return _failure("source_format_not_pdf")
-        if path.stat().st_size > _MAX_SOURCE_BYTES:
+        if path.stat().st_size > _MAX_PDF_SOURCE_BYTES:
             return _failure("source_too_large")
         raw = path.read_bytes()
-        if len(raw) > _MAX_SOURCE_BYTES:
+        if len(raw) > _MAX_PDF_SOURCE_BYTES:
             return _failure("source_too_large")
     except (OSError, ValueError, TypeError):
         return _failure("source_unavailable")

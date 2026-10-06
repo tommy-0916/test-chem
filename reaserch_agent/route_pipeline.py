@@ -120,7 +120,9 @@ def _matching_trusted_source(
                 continue
             if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
                 continue
-            if path.stat().st_size > 8 * 1024 * 1024:
+            limit = (16 * 1024 * 1024 if path.suffix.lower() == ".pdf"
+                     else 8 * 1024 * 1024)
+            if path.stat().st_size > limit:
                 continue
             if "sha256_" + sha256(path.read_bytes()).hexdigest() == scope.source_digest:
                 matches.append(path)
@@ -205,7 +207,10 @@ def _evaluate_route_decision_v1_impl(
                 path = Path(name).expanduser().resolve(strict=True)
                 if (path.is_file() and path.is_relative_to(root)
                         and path.suffix.lower() in {".txt", ".md", ".pdf"}
-                        and path.stat().st_size <= 8 * 1024 * 1024):
+                        and path.stat().st_size <= (
+                            16 * 1024 * 1024
+                            if path.suffix.lower() == ".pdf"
+                            else 8 * 1024 * 1024)):
                     if is_attested:
                         if path.suffix.lower() != ".pdf":
                             continue

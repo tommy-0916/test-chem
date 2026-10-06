@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 _DOCUMENT_DIGEST = re.compile(r"sha256_[0-9a-f]{64}\Z")
 _DOI = re.compile(r"10\.[0-9]{4,9}/\S+\Z", re.IGNORECASE)
-_MAX_PDF_BYTES = 8 * 1024 * 1024
+_MAX_PDF_BYTES = 16 * 1024 * 1024
 _MAX_ATTESTATION_BYTES = 32 * 1024
 _ATTESTATION_DIR = Path("registry") / "route_source_attestations_v1"
 

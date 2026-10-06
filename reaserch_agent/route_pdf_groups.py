@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -23,9 +24,10 @@ from .route_attestation import (
     _verified_events_from_signed_envelopes,
 )
 from .route_pdf_source import (
-    _MAX_SOURCE_BYTES,
+    _MAX_PDF_SOURCE_BYTES,
     _PdfBlock,
     _caption,
+    _furniture_heading_texts,
     _group_boundary,
     _group_range,
     _heading,
@@ -42,10 +44,37 @@ _EXPERIMENTAL_SECTIONS = frozenset({
     "experimental",
     "experimental section",
     "experimental methods",
+    # v4: "experimental procedures" is the base phrase used by numbered SI
+    # sections such as "Section S1 Experimental Procedures".
+    "experimental procedures",
     "materials and methods",
     "materials & methods",
     "methods and materials",
 })
+
+# v4: numbered SI section headings — an optional leading "section <label>"
+# qualifier ("Section S1 Experimental Procedures" -> base phrase).  The
+# qualifier is stripped only when a base phrase follows it in full.
+_SECTION_PREFIX = re.compile(r"\Asection\s+[a-z0-9]+[.:)]?\s+", re.IGNORECASE)
+# Table-of-contents look-alikes carry dot leaders ("……" or "...") and/or a
+# trailing page number; they are navigation entries, never section headings.
+_TOC_LEADER = re.compile(r"\u2026|\.{3,}|(?:\.\s*)+\d+\s*\Z")
+
+
+def _experimental_section_heading(text: str) -> bool:
+    """Whether a heading text names an experimental section.
+
+    Accepts the base phrases exactly, or a numbered "Section <label>"
+    qualifier followed by a base phrase; rejects table-of-contents entries
+    (dot leaders or trailing page numbers) before either check.
+    """
+    normalized = _normalized_heading(text)
+    if not normalized or _TOC_LEADER.search(normalized):
+        return False
+    if normalized in _EXPERIMENTAL_SECTIONS:
+        return True
+    stripped = _SECTION_PREFIX.sub("", normalized)
+    return bool(stripped) and stripped in _EXPERIMENTAL_SECTIONS
 
 # Bump when this enumerator or route_pdf_source changes group block semantics.
 # v2: validated-folio stripping (G2a) removes cross-page-validated page-number
@@ -54,7 +83,11 @@ _EXPERIMENTAL_SECTIONS = frozenset({
 # v3: the folio rule gains a neighborhood body-text check, so inputs whose
 # bottom band carries label-adjacent values that v2 stripped now keep those
 # lines as blocks (empirically pinned in the r17 replay).
-PDF_GROUP_PARSER_VERSION = "route_pdf_groups/v3"
+# v4: 16 MiB unified PDF byte budget; repeated top-of-page running heads
+# (e.g. "SUPPORTING INFORMATION") are page furniture that never terminate a
+# section or group; numbered "Section <label>" experimental headings are
+# recognized while table-of-contents look-alikes are rejected (G3 ingestion).
+PDF_GROUP_PARSER_VERSION = "route_pdf_groups/v4"
 
 
 @dataclass(frozen=True)
@@ -126,9 +159,11 @@ def _section_groups(
     """Return all groups for one section, or abstain for that whole section."""
     section_block = blocks[section_index]
     section_size = section_block.font_size
+    furniture = _furniture_heading_texts(blocks)
     section_end = next((
         index for index in range(section_index + 1, len(blocks))
         if not _caption(blocks[index])
+        and " ".join(blocks[index].text.casefold().split()) not in furniture
         and blocks[index].font_size >= section_size - 0.1
     ), len(blocks))
     if section_end < len(blocks) and not _heading(blocks[section_end]):
@@ -138,6 +173,7 @@ def _section_groups(
         index for index in range(section_index + 1, section_end)
         if _heading(blocks[index])
         and not _caption(blocks[index])
+        and " ".join(blocks[index].text.casefold().split()) not in furniture
         and blocks[index].font_size < section_size - 0.1
     ]
     if not group_indexes:
@@ -241,10 +277,10 @@ def enumerate_pdf_experimental_groups(
                     raise ValueError("path outside source root")
                 if path.suffix.lower() != ".pdf":
                     raise ValueError("not PDF extension")
-                if path.stat().st_size > _MAX_SOURCE_BYTES:
+                if path.stat().st_size > _MAX_PDF_SOURCE_BYTES:
                     raise OverflowError("source too large")
                 raw = path.read_bytes()
-                if len(raw) > _MAX_SOURCE_BYTES:
+                if len(raw) > _MAX_PDF_SOURCE_BYTES:
                     raise OverflowError("source too large")
             except OverflowError:
                 reason = "pdf_source_too_large"
@@ -272,10 +308,12 @@ def enumerate_pdf_experimental_groups(
                     ),
                 ))
                 continue
+            furniture_texts = _furniture_heading_texts(blocks)
             section_indexes = [
                 index for index, block in enumerate(blocks)
                 if _heading(block)
-                and _normalized_heading(block.text) in _EXPERIMENTAL_SECTIONS
+                and " ".join(block.text.casefold().split()) not in furniture_texts
+                and _experimental_section_heading(block.text)
             ]
             if not section_indexes:
                 result.diagnostics.append(PdfGroupEnumerationDiagnosticV1(
