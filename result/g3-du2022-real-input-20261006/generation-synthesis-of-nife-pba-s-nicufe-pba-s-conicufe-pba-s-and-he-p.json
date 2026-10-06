@@ -1,0 +1,1582 @@
+{
+  "protocols": [],
+  "diagnostics": [
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+      "proposal_index": 0
+    }
+  ],
+  "locator_production": {
+    "status": "located_unreviewed",
+    "located_proposals": [
+      {
+        "source_group_ref": {
+          "paper_id": "du-2022-si",
+          "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+          "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+        },
+        "role_hint": "material_synthesis_procedure",
+        "target": "NiFe-PBA-S composite",
+        "route_signature": {
+          "version": "RouteSignatureV1",
+          "operations": [
+            "ground for 30 minutes",
+            "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h"
+          ]
+        },
+        "material_graph": [
+          {
+            "macro_step_id": "ms_grind_1",
+            "macro_action_id": "ma_grind_1",
+            "sequence": 1,
+            "operation": "ground for 30 minutes",
+            "sample_id": "sample_nife_pba_s",
+            "provenance": {
+              "kind": "paper",
+              "reference": "fact:f_graph_op_grind"
+            },
+            "material_inputs": [
+              {
+                "material_id": "material_2d10215f7834cb3833279b0b",
+                "material_instance_id": "instance_125dccea50b1cf23cbd38be5",
+                "name": "NiFe-PBA powder",
+                "state": "powder",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f_nife_name"
+                },
+                "quantity": {
+                  "value": 43,
+                  "unit": "mg"
+                }
+              },
+              {
+                "material_id": "material_a6b7c3b00baef2ab7e492aa6",
+                "material_instance_id": "instance_2d9200074ec84799c2c91f8d",
+                "name": "sublimed sulfur",
+                "state": "unresolved",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f_sulfur_name"
+                },
+                "quantity": {
+                  "value": 100,
+                  "unit": "mg"
+                }
+              }
+            ],
+            "material_intermediates": [],
+            "material_outputs": [
+              {
+                "material_id": "material_9776d60b261d9c7453308457",
+                "material_instance_id": "instance_2ca7f7499978b2f72c56d6b7",
+                "name": "fine mixture",
+                "state": "unresolved",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f_fine_mixture_name"
+                }
+              }
+            ]
+          },
+          {
+            "macro_step_id": "ms_melt_diffusion_1",
+            "macro_action_id": "ma_melt_diffusion_1",
+            "sequence": 2,
+            "operation": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+            "sample_id": "sample_nife_pba_s",
+            "provenance": {
+              "kind": "paper",
+              "reference": "fact:f_graph_op_heat"
+            },
+            "material_inputs": [
+              {
+                "material_id": "material_9776d60b261d9c7453308457",
+                "material_instance_id": "instance_2ca7f7499978b2f72c56d6b7",
+                "name": "fine mixture",
+                "state": "unresolved",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f_fine_mixture_name"
+                }
+              }
+            ],
+            "material_intermediates": [],
+            "material_outputs": [
+              {
+                "material_id": "material_ae704852f95deab63f3b0c20",
+                "material_instance_id": "instance_a4abd0bef3f73241a931e738",
+                "name": "NiFe-PBA-S composites",
+                "state": "unresolved",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f_final_name"
+                }
+              }
+            ]
+          }
+        ],
+        "route_facts": [
+          {
+            "fact_id": "f_sig_op_grind",
+            "field_path": "route_signature.operations[0]",
+            "value": "ground for 30 minutes",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_sig_op_heat",
+            "field_path": "route_signature.operations[1]",
+            "value": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+            "unit": "",
+            "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+            "required": true,
+            "block_locator": "pdf:p4:b5-p4:b5"
+          },
+          {
+            "fact_id": "f_graph_op_grind",
+            "field_path": "material_graph[0].operation",
+            "value": "ground for 30 minutes",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_nife_name",
+            "field_path": "material_graph[0].material_inputs[0].name",
+            "value": "NiFe-PBA powder",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_nife_state",
+            "field_path": "material_graph[0].material_inputs[0].state",
+            "value": "powder",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_nife_quantity",
+            "field_path": "material_graph[0].material_inputs[0].quantity.value",
+            "value": 43,
+            "unit": "mg",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_sulfur_name",
+            "field_path": "material_graph[0].material_inputs[1].name",
+            "value": "sublimed sulfur",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_sulfur_quantity",
+            "field_path": "material_graph[0].material_inputs[1].quantity.value",
+            "value": 100,
+            "unit": "mg",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_fine_mixture_name",
+            "field_path": "material_graph[0].material_outputs[0].name",
+            "value": "fine mixture",
+            "unit": "",
+            "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+            "required": true,
+            "block_locator": "pdf:p4:b4-p4:b4"
+          },
+          {
+            "fact_id": "f_graph_op_heat",
+            "field_path": "material_graph[1].operation",
+            "value": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+            "unit": "",
+            "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+            "required": true,
+            "block_locator": "pdf:p4:b5-p4:b5"
+          },
+          {
+            "fact_id": "f_final_name",
+            "field_path": "material_graph[1].material_outputs[0].name",
+            "value": "NiFe-PBA-S composites",
+            "unit": "",
+            "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+            "required": true,
+            "block_locator": "pdf:p4:b5-p4:b5"
+          }
+        ]
+      }
+    ],
+    "field_records": [
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 0,
+        "fact_id": "f_sig_op_grind",
+        "field_path": "route_signature.operations[0]",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 1,
+        "fact_id": "f_sig_op_heat",
+        "field_path": "route_signature.operations[1]",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b5-p4:b5",
+        "resolved_span": "pdf:p4:b5-p4:b5",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 2,
+        "fact_id": "f_graph_op_grind",
+        "field_path": "material_graph[0].operation",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 3,
+        "fact_id": "f_nife_name",
+        "field_path": "material_graph[0].material_inputs[0].name",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 4,
+        "fact_id": "f_nife_state",
+        "field_path": "material_graph[0].material_inputs[0].state",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 5,
+        "fact_id": "f_nife_quantity",
+        "field_path": "material_graph[0].material_inputs[0].quantity.value",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 6,
+        "fact_id": "f_sulfur_name",
+        "field_path": "material_graph[0].material_inputs[1].name",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 7,
+        "fact_id": "f_sulfur_quantity",
+        "field_path": "material_graph[0].material_inputs[1].quantity.value",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 8,
+        "fact_id": "f_fine_mixture_name",
+        "field_path": "material_graph[0].material_outputs[0].name",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b4-p4:b4",
+        "resolved_span": "pdf:p4:b4-p4:b4",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 9,
+        "fact_id": "f_graph_op_heat",
+        "field_path": "material_graph[1].operation",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b5-p4:b5",
+        "resolved_span": "pdf:p4:b5-p4:b5",
+        "reason_code": "computed_from_source"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p4:b2-p4:b6",
+        "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 10,
+        "fact_id": "f_final_name",
+        "field_path": "material_graph[1].material_outputs[0].name",
+        "raw_block_locator": null,
+        "resolved_block_locator": "pdf:p4:b5-p4:b5",
+        "resolved_span": "pdf:p4:b5-p4:b5",
+        "reason_code": "computed_from_source"
+      }
+    ],
+    "diagnostics": [],
+    "raw_proposals_digest": "sha256_612f8f1e5bf02b5ed11fae35652f0224df470d10a4dbb57c393507f978db5702",
+    "located_proposals_digest": "sha256_a6f3c7255f9bf2c7c030179143cb9c7a5cbc9840a0b3fd499aa887918d4c2c67",
+    "parser_version": "route_pdf_groups/v4",
+    "binding_version": "route_pdf_quote_binding/v1",
+    "production_version": "pdf_proposal_locator/v1",
+    "generated_material_ids": [
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m_nife_pba",
+        "generated_id": "material_2d10215f7834cb3833279b0b"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "i_nife_pba",
+        "generated_id": "instance_125dccea50b1cf23cbd38be5"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[1].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m_sulfur",
+        "generated_id": "material_a6b7c3b00baef2ab7e492aa6"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "i_sulfur",
+        "generated_id": "instance_2d9200074ec84799c2c91f8d"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_outputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m_fine_mixture",
+        "generated_id": "material_9776d60b261d9c7453308457"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "i_fine_mixture",
+        "generated_id": "instance_2ca7f7499978b2f72c56d6b7"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[1].material_inputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m_fine_mixture",
+        "generated_id": "material_9776d60b261d9c7453308457"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[1].material_inputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "i_fine_mixture",
+        "generated_id": "instance_2ca7f7499978b2f72c56d6b7"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[1].material_outputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m_nife_pba_s",
+        "generated_id": "material_ae704852f95deab63f3b0c20"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[1].material_outputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "i_nife_pba_s",
+        "generated_id": "instance_a4abd0bef3f73241a931e738"
+      }
+    ],
+    "source_operation_inventory": [],
+    "source_operation_inventory_issues": [],
+    "source_operation_coverage": [],
+    "source_operation_coverage_issues": [],
+    "operation_quote_tightening": [],
+    "operation_quote_tightening_issues": [],
+    "clause_quote_tightening": [],
+    "clause_quote_tightening_issues": [],
+    "material_structure": [],
+    "material_structure_issues": [],
+    "required_fact_normalizations": [],
+    "qualitative_unit_normalizations": [],
+    "controlled_state_normalizations": [],
+    "convention_state_candidates": [],
+    "convention_state_proof_dags": [
+      {
+        "proposal_index": 0,
+        "status": "unreviewed_prerequisites_only",
+        "field_path": "material_graph[0].material_inputs[0].state",
+        "dag": {
+          "schema_version": "state-proof-dag/v1",
+          "nodes": {
+            "proof_node_3920f1db4d3df89a6f6890b3": {
+              "schema_version": "paper-literal-proof/v1",
+              "node_type": "paper_literal",
+              "claim": {
+                "field_path": "material_graph[0].material_inputs[0].state",
+                "target_state": "powder",
+                "material_id": "material_2d10215f7834cb3833279b0b",
+                "material_instance_id": "instance_125dccea50b1cf23cbd38be5"
+              },
+              "premises": [],
+              "rule_id": "",
+              "rule_version": "",
+              "rule_resource_digest": "",
+              "leaf": {
+                "schema_version": "source-evidence-leaf/v1",
+                "paper_id": "du-2022-si",
+                "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+                "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+                "section": "",
+                "locator": "pdf:p4:b4-p4:b4",
+                "char_span": [
+                  220,
+                  327
+                ],
+                "excerpt_digest": "sha256_02b0c91d3ffb77982b7f81c24ce0dde360d9f6d6708543a5c00123553a583932",
+                "field_path": "material_graph[0].material_inputs[0].state",
+                "claim_value": "powder",
+                "unit": "",
+                "fact_digest": "sha256_3ed43aeeec84423ed8d0aeddce324ac1bfc53bec6f366727ca3b201cbd79cbf2",
+                "leaf_id": "source_leaf_f7abd5d1858b516d085cd733"
+              },
+              "gates": {
+                "controlled_state_mapping": true,
+                "local_attribution": true
+              },
+              "node_id": "proof_node_3920f1db4d3df89a6f6890b3"
+            }
+          },
+          "root_id": "proof_node_3920f1db4d3df89a6f6890b3",
+          "context": {
+            "graph_digest": "sha256_314df7637624222cb744d6aaf6f5f51ada3d29c1174f733ad0a9d10c636c8d7c",
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+            "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+          }
+        },
+        "build_issue": "",
+        "verify_with_span_resolver": "",
+        "verify_blocks_only": "",
+        "verdict": "PASS",
+        "attribution": "proven",
+        "derivation": {
+          "derivation": "state_proof_dag_v1",
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "target_state": "powder",
+          "material_instance_id": "instance_125dccea50b1cf23cbd38be5",
+          "proof_dag_root_id": "proof_node_3920f1db4d3df89a6f6890b3",
+          "proof_dag_node_count": 1,
+          "root_node_type": "paper_literal"
+        }
+      }
+    ],
+    "local_revision": {
+      "status": "reassessed_unreviewed",
+      "original_proposals_digest": "sha256_612f8f1e5bf02b5ed11fae35652f0224df470d10a4dbb57c393507f978db5702",
+      "initial_issues": [
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_inputs[0].name",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_inputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        }
+      ],
+      "revisions": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "initial_issues": [
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[1].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_outputs[0].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[1].material_inputs[0].name",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[1].material_inputs[0].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[1].material_outputs[0].state",
+              "reason_code": "required_graph_fact_missing"
+            }
+          ],
+          "original_group_digest": "sha256_9f03f2266ac8e1f7c228d80118bf29ebff5e12df14e66fcc4dd163481cb97c10",
+          "original_required_field_paths": [
+            "material_graph[0].material_inputs[0].name",
+            "material_graph[0].material_inputs[0].quantity.value",
+            "material_graph[0].material_inputs[0].state",
+            "material_graph[0].material_inputs[1].name",
+            "material_graph[0].material_inputs[1].quantity.value",
+            "material_graph[0].material_outputs[0].name",
+            "material_graph[0].operation",
+            "material_graph[1].material_outputs[0].name",
+            "material_graph[1].operation",
+            "route_signature.operations[0]",
+            "route_signature.operations[1]"
+          ],
+          "passing_fact_indexes": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ],
+          "group_layout_digest": "sha256_df7a5ab260ef0aa64a82f96295c05d813f0f7dc1435ba93f5d50d22b83de9632",
+          "prompt_chars": 13637,
+          "response_chars": 6635,
+          "raw_revision": {
+            "proposals": [
+              {
+                "source_group_ref": {
+                  "paper_id": "du-2022-si",
+                  "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+                  "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+                },
+                "role_hint": "material_synthesis_procedure",
+                "target": "NiFe-PBA-S composite",
+                "route_signature": {
+                  "version": "RouteSignatureV1",
+                  "operations": [
+                    "ground for 30 minutes",
+                    "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h"
+                  ]
+                },
+                "material_graph": [
+                  {
+                    "macro_step_id": "ms_grind_1",
+                    "macro_action_id": "ma_grind_1",
+                    "sequence": 1,
+                    "operation": "ground for 30 minutes",
+                    "sample_id": "sample_nife_pba_s",
+                    "provenance": {
+                      "kind": "paper",
+                      "reference": "fact:f_graph_op_grind"
+                    },
+                    "material_inputs": [
+                      {
+                        "material_id": "material_2d10215f7834cb3833279b0b",
+                        "material_instance_id": "instance_125dccea50b1cf23cbd38be5",
+                        "name": "NiFe-PBA powder",
+                        "state": "powder",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f_nife_name"
+                        },
+                        "quantity": {
+                          "value": 43,
+                          "unit": "mg"
+                        }
+                      },
+                      {
+                        "material_id": "material_a6b7c3b00baef2ab7e492aa6",
+                        "material_instance_id": "instance_2d9200074ec84799c2c91f8d",
+                        "name": "sublimed sulfur",
+                        "state": "sublimed",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f_sulfur_name"
+                        },
+                        "quantity": {
+                          "value": 100,
+                          "unit": "mg"
+                        }
+                      }
+                    ],
+                    "material_intermediates": [],
+                    "material_outputs": [
+                      {
+                        "material_id": "material_9776d60b261d9c7453308457",
+                        "material_instance_id": "instance_2ca7f7499978b2f72c56d6b7",
+                        "name": "fine mixture",
+                        "state": "mixture",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f_fine_mixture_name"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "macro_step_id": "ms_melt_diffusion_1",
+                    "macro_action_id": "ma_melt_diffusion_1",
+                    "sequence": 2,
+                    "operation": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+                    "sample_id": "sample_nife_pba_s",
+                    "provenance": {
+                      "kind": "paper",
+                      "reference": "fact:f_graph_op_heat"
+                    },
+                    "material_inputs": [
+                      {
+                        "material_id": "material_9776d60b261d9c7453308457",
+                        "material_instance_id": "instance_2ca7f7499978b2f72c56d6b7",
+                        "name": "fine mixture",
+                        "state": "mixture",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f_fine_mixture_input_name"
+                        }
+                      }
+                    ],
+                    "material_intermediates": [],
+                    "material_outputs": [
+                      {
+                        "material_id": "material_ae704852f95deab63f3b0c20",
+                        "material_instance_id": "instance_a4abd0bef3f73241a931e738",
+                        "name": "NiFe-PBA-S composites",
+                        "state": "composites",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f_final_name"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "route_facts": [
+                  {
+                    "fact_id": "f_sig_op_grind",
+                    "field_path": "route_signature.operations[0]",
+                    "value": "ground for 30 minutes",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_sig_op_heat",
+                    "field_path": "route_signature.operations[1]",
+                    "value": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+                    "unit": "",
+                    "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_graph_op_grind",
+                    "field_path": "material_graph[0].operation",
+                    "value": "ground for 30 minutes",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_nife_name",
+                    "field_path": "material_graph[0].material_inputs[0].name",
+                    "value": "NiFe-PBA powder",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_nife_state",
+                    "field_path": "material_graph[0].material_inputs[0].state",
+                    "value": "powder",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_nife_quantity",
+                    "field_path": "material_graph[0].material_inputs[0].quantity.value",
+                    "value": 43,
+                    "unit": "mg",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_sulfur_name",
+                    "field_path": "material_graph[0].material_inputs[1].name",
+                    "value": "sublimed sulfur",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_sulfur_state",
+                    "field_path": "material_graph[0].material_inputs[1].state",
+                    "value": "sublimed",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_sulfur_quantity",
+                    "field_path": "material_graph[0].material_inputs[1].quantity.value",
+                    "value": 100,
+                    "unit": "mg",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_fine_mixture_name",
+                    "field_path": "material_graph[0].material_outputs[0].name",
+                    "value": "fine mixture",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_fine_mixture_state",
+                    "field_path": "material_graph[0].material_outputs[0].state",
+                    "value": "mixture",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_graph_op_heat",
+                    "field_path": "material_graph[1].operation",
+                    "value": "placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h",
+                    "unit": "",
+                    "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_fine_mixture_input_name",
+                    "field_path": "material_graph[1].material_inputs[0].name",
+                    "value": "fine mixture",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_fine_mixture_input_state",
+                    "field_path": "material_graph[1].material_inputs[0].state",
+                    "value": "mixture",
+                    "unit": "",
+                    "excerpt": "43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_final_name",
+                    "field_path": "material_graph[1].material_outputs[0].name",
+                    "value": "NiFe-PBA-S composites",
+                    "unit": "",
+                    "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+                    "required": true
+                  },
+                  {
+                    "fact_id": "f_final_state",
+                    "field_path": "material_graph[1].material_outputs[0].state",
+                    "value": "composites",
+                    "unit": "",
+                    "excerpt": "the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.",
+                    "required": true
+                  }
+                ]
+              }
+            ]
+          },
+          "operation_quote_tightening": [],
+          "operation_quote_tightening_issues": [],
+          "material_structure": [],
+          "material_structure_issues": [],
+          "generated_material_ids": [
+            {
+              "field_path": "material_graph[0].material_inputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_2d10215f7834cb3833279b0b",
+              "generated_id": "material_2d10215f7834cb3833279b0b"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_125dccea50b1cf23cbd38be5",
+              "generated_id": "instance_125dccea50b1cf23cbd38be5"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[1].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_a6b7c3b00baef2ab7e492aa6",
+              "generated_id": "material_a6b7c3b00baef2ab7e492aa6"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_2d9200074ec84799c2c91f8d",
+              "generated_id": "instance_2d9200074ec84799c2c91f8d"
+            },
+            {
+              "field_path": "material_graph[0].material_outputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_9776d60b261d9c7453308457",
+              "generated_id": "material_9776d60b261d9c7453308457"
+            },
+            {
+              "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_2ca7f7499978b2f72c56d6b7",
+              "generated_id": "instance_2ca7f7499978b2f72c56d6b7"
+            },
+            {
+              "field_path": "material_graph[1].material_inputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_9776d60b261d9c7453308457",
+              "generated_id": "material_9776d60b261d9c7453308457"
+            },
+            {
+              "field_path": "material_graph[1].material_inputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_2ca7f7499978b2f72c56d6b7",
+              "generated_id": "instance_2ca7f7499978b2f72c56d6b7"
+            },
+            {
+              "field_path": "material_graph[1].material_outputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_ae704852f95deab63f3b0c20",
+              "generated_id": "material_ae704852f95deab63f3b0c20"
+            },
+            {
+              "field_path": "material_graph[1].material_outputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_a4abd0bef3f73241a931e738",
+              "generated_id": "instance_a4abd0bef3f73241a931e738"
+            }
+          ],
+          "producer_normalizations": {
+            "required_fact_normalizations": [],
+            "qualitative_unit_normalizations": [],
+            "controlled_state_normalizations": [],
+            "convention_state_candidates": [],
+            "convention_state_proof_dags": [
+              {
+                "status": "unreviewed_prerequisites_only",
+                "field_path": "material_graph[0].material_inputs[0].state",
+                "dag": {
+                  "schema_version": "state-proof-dag/v1",
+                  "nodes": {
+                    "proof_node_3920f1db4d3df89a6f6890b3": {
+                      "schema_version": "paper-literal-proof/v1",
+                      "node_type": "paper_literal",
+                      "claim": {
+                        "field_path": "material_graph[0].material_inputs[0].state",
+                        "target_state": "powder",
+                        "material_id": "material_2d10215f7834cb3833279b0b",
+                        "material_instance_id": "instance_125dccea50b1cf23cbd38be5"
+                      },
+                      "premises": [],
+                      "rule_id": "",
+                      "rule_version": "",
+                      "rule_resource_digest": "",
+                      "leaf": {
+                        "schema_version": "source-evidence-leaf/v1",
+                        "paper_id": "du-2022-si",
+                        "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+                        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+                        "section": "",
+                        "locator": "pdf:p4:b4-p4:b4",
+                        "char_span": [
+                          220,
+                          327
+                        ],
+                        "excerpt_digest": "sha256_02b0c91d3ffb77982b7f81c24ce0dde360d9f6d6708543a5c00123553a583932",
+                        "field_path": "material_graph[0].material_inputs[0].state",
+                        "claim_value": "powder",
+                        "unit": "",
+                        "fact_digest": "sha256_3ed43aeeec84423ed8d0aeddce324ac1bfc53bec6f366727ca3b201cbd79cbf2",
+                        "leaf_id": "source_leaf_f7abd5d1858b516d085cd733"
+                      },
+                      "gates": {
+                        "controlled_state_mapping": true,
+                        "local_attribution": true
+                      },
+                      "node_id": "proof_node_3920f1db4d3df89a6f6890b3"
+                    }
+                  },
+                  "root_id": "proof_node_3920f1db4d3df89a6f6890b3",
+                  "context": {
+                    "graph_digest": "sha256_fcddb4644e6ae446846e1a604a7b429b6794198247dd9e02c9134723eda35501",
+                    "paper_id": "du-2022-si",
+                    "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+                    "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+                    "rule_resource_digest": "sha256_39fb6e77c7e40dc30db6819d9ae9e2823f5120f3ff165207668c22b464e8267b"
+                  }
+                },
+                "build_issue": "",
+                "verify_with_span_resolver": "",
+                "verify_blocks_only": "",
+                "verdict": "PASS",
+                "attribution": "proven",
+                "derivation": {
+                  "derivation": "state_proof_dag_v1",
+                  "field_path": "material_graph[0].material_inputs[0].state",
+                  "target_state": "powder",
+                  "material_instance_id": "instance_125dccea50b1cf23cbd38be5",
+                  "proof_dag_root_id": "proof_node_3920f1db4d3df89a6f6890b3",
+                  "proof_dag_node_count": 1,
+                  "root_node_type": "paper_literal"
+                }
+              },
+              {
+                "status": "unreviewed_prerequisites_only",
+                "field_path": "material_graph[0].material_inputs[1].state",
+                "dag": null,
+                "build_issue": "convention_parent_state_unverified",
+                "verify_with_span_resolver": "",
+                "verify_blocks_only": "",
+                "verdict": "BLOCKED",
+                "attribution": "evidence_gap"
+              },
+              {
+                "status": "unreviewed_prerequisites_only",
+                "field_path": "material_graph[0].material_outputs[0].state",
+                "dag": null,
+                "build_issue": "convention_material_relation_missing_or_ambiguous",
+                "verify_with_span_resolver": "",
+                "verify_blocks_only": "",
+                "verdict": "BLOCKED",
+                "attribution": "dependency_cascade"
+              },
+              {
+                "status": "unreviewed_prerequisites_only",
+                "field_path": "material_graph[1].material_inputs[0].state",
+                "dag": null,
+                "build_issue": "convention_parent_state_unverified",
+                "verify_with_span_resolver": "",
+                "verify_blocks_only": "",
+                "verdict": "BLOCKED",
+                "attribution": "evidence_gap"
+              },
+              {
+                "status": "unreviewed_prerequisites_only",
+                "field_path": "material_graph[1].material_outputs[0].state",
+                "dag": null,
+                "build_issue": "convention_material_relation_missing_or_ambiguous",
+                "verify_with_span_resolver": "",
+                "verify_blocks_only": "",
+                "verdict": "BLOCKED",
+                "attribution": "dependency_cascade"
+              }
+            ]
+          },
+          "reason_code": "local_revision_unrelated_claim_changed"
+        }
+      ],
+      "parser_version": "route_pdf_groups/v4",
+      "binding_version": "route_pdf_quote_binding/v1",
+      "production_version": "pdf_proposal_locator/v1",
+      "repair_version": "pdf_group_local_repair/v1",
+      "check_required_graph_facts": true,
+      "field_requirements_before": [
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[0]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[1]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        }
+      ],
+      "field_requirements_after": [
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[0]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[1]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[1].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        }
+      ],
+      "coverage_before": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "declared_required_count": 11,
+          "declared_literal_passed_count": 11,
+          "graph_required_count": 16,
+          "graph_required_with_fact_count": 11,
+          "missing_graph_required_paths": [
+            "material_graph[0].material_inputs[1].state",
+            "material_graph[0].material_outputs[0].state",
+            "material_graph[1].material_inputs[0].name",
+            "material_graph[1].material_inputs[0].state",
+            "material_graph[1].material_outputs[0].state"
+          ]
+        }
+      ],
+      "final_issues": [
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_inputs[0].name",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_inputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[1].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        }
+      ],
+      "final_proposals_digest": "sha256_612f8f1e5bf02b5ed11fae35652f0224df470d10a4dbb57c393507f978db5702",
+      "coverage_after": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "declared_required_count": 11,
+          "declared_literal_passed_count": 11,
+          "graph_required_count": 16,
+          "graph_required_with_fact_count": 11,
+          "missing_graph_required_paths": [
+            "material_graph[0].material_inputs[1].state",
+            "material_graph[0].material_outputs[0].state",
+            "material_graph[1].material_inputs[0].name",
+            "material_graph[1].material_inputs[0].state",
+            "material_graph[1].material_outputs[0].state"
+          ]
+        }
+      ],
+      "groups_attempted": 1,
+      "groups_merged": 0,
+      "groups_budget_skipped": 0
+    }
+  },
+  "raw_calls": [
+    {
+      "prompt_chars": 6391,
+      "raw_text": "{\n  \"proposals\": [\n    {\n      \"source_group_ref\": {\n        \"paper_id\": \"du-2022-si\",\n        \"experimental_group_id\": \"Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S\",\n        \"source_digest\": \"sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee\"\n      },\n      \"role_hint\": \"material_synthesis_procedure\",\n      \"target\": \"NiFe-PBA-S composite\",\n      \"route_signature\": {\n        \"version\": \"RouteSignatureV1\",\n        \"operations\": [\n          \"ground for 30 minutes\",\n          \"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\"\n        ]\n      },\n      \"material_graph\": [\n        {\n          \"macro_step_id\": \"ms_grind_1\",\n          \"macro_action_id\": \"ma_grind_1\",\n          \"sequence\": 1,\n          \"operation\": \"ground for 30 minutes\",\n          \"sample_id\": \"sample_nife_pba_s\",\n          \"provenance\": {\n            \"kind\": \"paper\",\n            \"reference\": \"fact:f_graph_op_grind\"\n          },\n          \"material_inputs\": [\n            {\n              \"material_id\": \"m_nife_pba\",\n              \"material_instance_id\": \"i_nife_pba\",\n              \"name\": \"NiFe-PBA powder\",\n              \"state\": \"powder\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f_nife_name\"\n              },\n              \"quantity\": {\n                \"value\": 43,\n                \"unit\": \"mg\"\n              }\n            },\n            {\n              \"material_id\": \"m_sulfur\",\n              \"material_instance_id\": \"i_sulfur\",\n              \"name\": \"sublimed sulfur\",\n              \"state\": \"unresolved\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f_sulfur_name\"\n              },\n              \"quantity\": {\n                \"value\": 100,\n                \"unit\": \"mg\"\n              }\n            }\n          ],\n          \"material_intermediates\": [],\n          \"material_outputs\": [\n            {\n              \"material_id\": \"m_fine_mixture\",\n              \"material_instance_id\": \"i_fine_mixture\",\n              \"name\": \"fine mixture\",\n              \"state\": \"unresolved\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f_fine_mixture_name\"\n              }\n            }\n          ]\n        },\n        {\n          \"macro_step_id\": \"ms_melt_diffusion_1\",\n          \"macro_action_id\": \"ma_melt_diffusion_1\",\n          \"sequence\": 2,\n          \"operation\": \"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\n          \"sample_id\": \"sample_nife_pba_s\",\n          \"provenance\": {\n            \"kind\": \"paper\",\n            \"reference\": \"fact:f_graph_op_heat\"\n          },\n          \"material_inputs\": [\n            {\n              \"material_id\": \"m_fine_mixture\",\n              \"material_instance_id\": \"i_fine_mixture\",\n              \"name\": \"fine mixture\",\n              \"state\": \"unresolved\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f_fine_mixture_name\"\n              }\n            }\n          ],\n          \"material_intermediates\": [],\n          \"material_outputs\": [\n            {\n              \"material_id\": \"m_nife_pba_s\",\n              \"material_instance_id\": \"i_nife_pba_s\",\n              \"name\": \"NiFe-PBA-S composites\",\n              \"state\": \"unresolved\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f_final_name\"\n              }\n            }\n          ]\n        }\n      ],\n      \"route_facts\": [\n        {\n          \"fact_id\": \"f_sig_op_grind\",\n          \"field_path\": \"route_signature.operations[0]\",\n          \"value\": \"ground for 30 minutes\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_sig_op_heat\",\n          \"field_path\": \"route_signature.operations[1]\",\n          \"value\": \"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\n          \"unit\": \"\",\n          \"excerpt\": \"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_graph_op_grind\",\n          \"field_path\": \"material_graph[0].operation\",\n          \"value\": \"ground for 30 minutes\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_nife_name\",\n          \"field_path\": \"material_graph[0].material_inputs[0].name\",\n          \"value\": \"NiFe-PBA powder\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_nife_state\",\n          \"field_path\": \"material_graph[0].material_inputs[0].state\",\n          \"value\": \"powder\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_nife_quantity\",\n          \"field_path\": \"material_graph[0].material_inputs[0].quantity.value\",\n          \"value\": 43,\n          \"unit\": \"mg\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_sulfur_name\",\n          \"field_path\": \"material_graph[0].material_inputs[1].name\",\n          \"value\": \"sublimed sulfur\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_sulfur_quantity\",\n          \"field_path\": \"material_graph[0].material_inputs[1].quantity.value\",\n          \"value\": 100,\n          \"unit\": \"mg\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_fine_mixture_name\",\n          \"field_path\": \"material_graph[0].material_outputs[0].name\",\n          \"value\": \"fine mixture\",\n          \"unit\": \"\",\n          \"excerpt\": \"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_graph_op_heat\",\n          \"field_path\": \"material_graph[1].operation\",\n          \"value\": \"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\n          \"unit\": \"\",\n          \"excerpt\": \"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\n          \"required\": true\n        },\n        {\n          \"fact_id\": \"f_final_name\",\n          \"field_path\": \"material_graph[1].material_outputs[0].name\",\n          \"value\": \"NiFe-PBA-S composites\",\n          \"unit\": \"\",\n          \"excerpt\": \"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\n          \"required\": true\n        }\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "prompt_chars": 13637,
+      "raw_text": "{\"proposals\":[{\"source_group_ref\":{\"paper_id\":\"du-2022-si\",\"experimental_group_id\":\"Synthesis of NiFe-PBA-S, NiCuFe-PBA-S, CoNiCuFe-PBA-S, and HE-PBA-S\",\"source_digest\":\"sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee\"},\"role_hint\":\"material_synthesis_procedure\",\"target\":\"NiFe-PBA-S composite\",\"route_signature\":{\"version\":\"RouteSignatureV1\",\"operations\":[\"ground for 30 minutes\",\"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\"]},\"material_graph\":[{\"macro_step_id\":\"ms_grind_1\",\"macro_action_id\":\"ma_grind_1\",\"sequence\":1,\"operation\":\"ground for 30 minutes\",\"sample_id\":\"sample_nife_pba_s\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_graph_op_grind\"},\"material_inputs\":[{\"material_id\":\"material_2d10215f7834cb3833279b0b\",\"material_instance_id\":\"instance_125dccea50b1cf23cbd38be5\",\"name\":\"NiFe-PBA powder\",\"state\":\"powder\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_nife_name\"},\"quantity\":{\"value\":43,\"unit\":\"mg\"}},{\"material_id\":\"material_a6b7c3b00baef2ab7e492aa6\",\"material_instance_id\":\"instance_2d9200074ec84799c2c91f8d\",\"name\":\"sublimed sulfur\",\"state\":\"sublimed\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_sulfur_name\"},\"quantity\":{\"value\":100,\"unit\":\"mg\"}}],\"material_intermediates\":[],\"material_outputs\":[{\"material_id\":\"material_9776d60b261d9c7453308457\",\"material_instance_id\":\"instance_2ca7f7499978b2f72c56d6b7\",\"name\":\"fine mixture\",\"state\":\"mixture\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_fine_mixture_name\"}}]},{\"macro_step_id\":\"ms_melt_diffusion_1\",\"macro_action_id\":\"ma_melt_diffusion_1\",\"sequence\":2,\"operation\":\"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\"sample_id\":\"sample_nife_pba_s\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_graph_op_heat\"},\"material_inputs\":[{\"material_id\":\"material_9776d60b261d9c7453308457\",\"material_instance_id\":\"instance_2ca7f7499978b2f72c56d6b7\",\"name\":\"fine mixture\",\"state\":\"mixture\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_fine_mixture_input_name\"}}],\"material_intermediates\":[],\"material_outputs\":[{\"material_id\":\"material_ae704852f95deab63f3b0c20\",\"material_instance_id\":\"instance_a4abd0bef3f73241a931e738\",\"name\":\"NiFe-PBA-S composites\",\"state\":\"composites\",\"provenance\":{\"kind\":\"paper\",\"reference\":\"fact:f_final_name\"}}]}],\"route_facts\":[{\"fact_id\":\"f_sig_op_grind\",\"field_path\":\"route_signature.operations[0]\",\"value\":\"ground for 30 minutes\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_sig_op_heat\",\"field_path\":\"route_signature.operations[1]\",\"value\":\"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\"unit\":\"\",\"excerpt\":\"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\"required\":true},{\"fact_id\":\"f_graph_op_grind\",\"field_path\":\"material_graph[0].operation\",\"value\":\"ground for 30 minutes\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_nife_name\",\"field_path\":\"material_graph[0].material_inputs[0].name\",\"value\":\"NiFe-PBA powder\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_nife_state\",\"field_path\":\"material_graph[0].material_inputs[0].state\",\"value\":\"powder\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_nife_quantity\",\"field_path\":\"material_graph[0].material_inputs[0].quantity.value\",\"value\":43,\"unit\":\"mg\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_sulfur_name\",\"field_path\":\"material_graph[0].material_inputs[1].name\",\"value\":\"sublimed sulfur\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_sulfur_state\",\"field_path\":\"material_graph[0].material_inputs[1].state\",\"value\":\"sublimed\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_sulfur_quantity\",\"field_path\":\"material_graph[0].material_inputs[1].quantity.value\",\"value\":100,\"unit\":\"mg\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_fine_mixture_name\",\"field_path\":\"material_graph[0].material_outputs[0].name\",\"value\":\"fine mixture\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_fine_mixture_state\",\"field_path\":\"material_graph[0].material_outputs[0].state\",\"value\":\"mixture\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_graph_op_heat\",\"field_path\":\"material_graph[1].operation\",\"value\":\"placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h\",\"unit\":\"\",\"excerpt\":\"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\"required\":true},{\"fact_id\":\"f_fine_mixture_input_name\",\"field_path\":\"material_graph[1].material_inputs[0].name\",\"value\":\"fine mixture\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_fine_mixture_input_state\",\"field_path\":\"material_graph[1].material_inputs[0].state\",\"value\":\"mixture\",\"unit\":\"\",\"excerpt\":\"43 mg of NiFe-PBA powder and 100 mg of sublimed sulfur were ground for 30 minutes to obtain a fine mixture.\",\"required\":true},{\"fact_id\":\"f_final_name\",\"field_path\":\"material_graph[1].material_outputs[0].name\",\"value\":\"NiFe-PBA-S composites\",\"unit\":\"\",\"excerpt\":\"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\"required\":true},{\"fact_id\":\"f_final_state\",\"field_path\":\"material_graph[1].material_outputs[0].state\",\"value\":\"composites\",\"unit\":\"\",\"excerpt\":\"the mixture was placed in a 50 mL sealed Teflon autoclave and heated up to 130 °C for 12 h to prepare the final NiFe-PBA-S composites.\",\"required\":true}]}]}"
+    }
+  ],
+  "model": "k3 (LLMFactory)",
+  "source_identity": "manual supply channel: received/identity_verified/ingested; no signed acquisition events for du-2022"
+}

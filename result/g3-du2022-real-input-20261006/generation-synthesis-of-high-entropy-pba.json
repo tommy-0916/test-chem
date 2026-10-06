@@ -1,0 +1,1638 @@
+{
+  "protocols": [],
+  "diagnostics": [
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "required_graph_fact_missing",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "fact_quantity_attribution_unresolved",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "fact_quantity_attribution_unresolved",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "fact_quantity_attribution_unresolved",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "fact_quantity_attribution_unresolved",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    },
+    {
+      "reason_code": "fact_quantity_attribution_unresolved",
+      "paper_id": "du-2022-si",
+      "experimental_group_id": "Synthesis of high-entropy PBA",
+      "proposal_index": 0
+    }
+  ],
+  "locator_production": {
+    "status": "located_unreviewed",
+    "located_proposals": [
+      {
+        "source_group_ref": {
+          "paper_id": "du-2022-si",
+          "experimental_group_id": "Synthesis of high-entropy PBA",
+          "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+        },
+        "role_hint": "synthesis",
+        "target": {
+          "name": "CoNiCuMnZnFe-PBA"
+        },
+        "route_signature": {
+          "operations": [
+            "synthesis"
+          ]
+        },
+        "material_graph": [
+          {
+            "macro_step_id": "ms-1",
+            "macro_action_id": "ma-1",
+            "sequence": 1,
+            "operation": "synthesis",
+            "sample_id": "sample-he-pba",
+            "provenance": {
+              "kind": "paper",
+              "reference": "fact:f-op-1"
+            },
+            "material_inputs": [
+              {
+                "material_id": "material_eacf4280d3247f5a491d1c8c",
+                "material_instance_id": "instance_809ce0416a6185a00dd265c0",
+                "name": "Co",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-in-co-name"
+                },
+                "quantity": {
+                  "value": 0.4,
+                  "unit": "mmol"
+                }
+              },
+              {
+                "material_id": "material_959591de2ae1132200172932",
+                "material_instance_id": "instance_4a4dbfd291ee828b4cac7d69",
+                "name": "Ni",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-in-ni-name"
+                },
+                "quantity": {
+                  "value": 0.4,
+                  "unit": "mmol"
+                }
+              },
+              {
+                "material_id": "material_738d98a971f70993dc4d365a",
+                "material_instance_id": "instance_60753f33db444f485986342e",
+                "name": "Cu",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-in-cu-name"
+                },
+                "quantity": {
+                  "value": 0.4,
+                  "unit": "mmol"
+                }
+              },
+              {
+                "material_id": "material_d6eb3cfe051e25075e2295d5",
+                "material_instance_id": "instance_fa0127a5fffffd23fcc49585",
+                "name": "Mn",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-in-mn-name"
+                },
+                "quantity": {
+                  "value": 0.4,
+                  "unit": "mmol"
+                }
+              },
+              {
+                "material_id": "material_c927e9e8166a5a89d7a522bd",
+                "material_instance_id": "instance_d20ce34be92e0b26dd3e526d",
+                "name": "Zn",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-in-zn-name"
+                },
+                "quantity": {
+                  "value": 0.4,
+                  "unit": "mmol"
+                }
+              }
+            ],
+            "material_intermediates": [],
+            "material_outputs": [
+              {
+                "material_id": "material_63053fc0a76808061e1d07e9",
+                "material_instance_id": "instance_cf79a1969c6376f1016c5291",
+                "name": "CoNiCuMnZnFe-PBA",
+                "state": "unknown",
+                "provenance": {
+                  "kind": "paper",
+                  "reference": "fact:f-out-name"
+                }
+              }
+            ]
+          }
+        ],
+        "route_facts": [
+          {
+            "fact_id": "f-op-1",
+            "field_path": "material_graph[0].operation",
+            "value": "synthesis",
+            "unit": "",
+            "excerpt": "The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.",
+            "required": true,
+            "block_locator": "pdf:p3:b41-p3:b41"
+          },
+          {
+            "fact_id": "f-sig-op-1",
+            "field_path": "route_signature.operations[0]",
+            "value": "synthesis",
+            "unit": "",
+            "excerpt": "The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.",
+            "required": true,
+            "block_locator": "pdf:p3:b41-p3:b41"
+          },
+          {
+            "fact_id": "f-out-name",
+            "field_path": "material_graph[0].material_outputs[0].name",
+            "value": "CoNiCuMnZnFe-PBA",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-co-name",
+            "field_path": "material_graph[0].material_inputs[0].name",
+            "value": "Co",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-co-qty",
+            "field_path": "material_graph[0].material_inputs[0].quantity.value",
+            "value": 0.4,
+            "unit": "mmol",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-ni-name",
+            "field_path": "material_graph[0].material_inputs[1].name",
+            "value": "Ni",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-ni-qty",
+            "field_path": "material_graph[0].material_inputs[1].quantity.value",
+            "value": 0.4,
+            "unit": "mmol",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-cu-name",
+            "field_path": "material_graph[0].material_inputs[2].name",
+            "value": "Cu",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-cu-qty",
+            "field_path": "material_graph[0].material_inputs[2].quantity.value",
+            "value": 0.4,
+            "unit": "mmol",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-mn-name",
+            "field_path": "material_graph[0].material_inputs[3].name",
+            "value": "Mn",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-mn-qty",
+            "field_path": "material_graph[0].material_inputs[3].quantity.value",
+            "value": 0.4,
+            "unit": "mmol",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-zn-name",
+            "field_path": "material_graph[0].material_inputs[4].name",
+            "value": "Zn",
+            "unit": "",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          },
+          {
+            "fact_id": "f-in-zn-qty",
+            "field_path": "material_graph[0].material_inputs[4].quantity.value",
+            "value": 0.4,
+            "unit": "mmol",
+            "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+            "required": true,
+            "block_locator": "pdf:p3:b42-p3:b42"
+          }
+        ]
+      }
+    ],
+    "field_records": [
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 0,
+        "fact_id": "f-op-1",
+        "field_path": "material_graph[0].operation",
+        "raw_block_locator": "pdf:p3:b41-p3:b41",
+        "resolved_block_locator": "pdf:p3:b41-p3:b41",
+        "resolved_span": "pdf:p3:b41-p3:b41",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 1,
+        "fact_id": "f-sig-op-1",
+        "field_path": "route_signature.operations[0]",
+        "raw_block_locator": "pdf:p3:b41-p3:b41",
+        "resolved_block_locator": "pdf:p3:b41-p3:b41",
+        "resolved_span": "pdf:p3:b41-p3:b41",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 2,
+        "fact_id": "f-out-name",
+        "field_path": "material_graph[0].material_outputs[0].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 3,
+        "fact_id": "f-in-co-name",
+        "field_path": "material_graph[0].material_inputs[0].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 4,
+        "fact_id": "f-in-co-qty",
+        "field_path": "material_graph[0].material_inputs[0].quantity.value",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 5,
+        "fact_id": "f-in-ni-name",
+        "field_path": "material_graph[0].material_inputs[1].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 6,
+        "fact_id": "f-in-ni-qty",
+        "field_path": "material_graph[0].material_inputs[1].quantity.value",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 7,
+        "fact_id": "f-in-cu-name",
+        "field_path": "material_graph[0].material_inputs[2].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 8,
+        "fact_id": "f-in-cu-qty",
+        "field_path": "material_graph[0].material_inputs[2].quantity.value",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 9,
+        "fact_id": "f-in-mn-name",
+        "field_path": "material_graph[0].material_inputs[3].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 10,
+        "fact_id": "f-in-mn-qty",
+        "field_path": "material_graph[0].material_inputs[3].quantity.value",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 11,
+        "fact_id": "f-in-zn-name",
+        "field_path": "material_graph[0].material_inputs[4].name",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      },
+      {
+        "status": "located_unreviewed",
+        "paper_id": "du-2022-si",
+        "experimental_group_id": "Synthesis of high-entropy PBA",
+        "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee",
+        "group_locator": "pdf:p3:b40-p3:b42",
+        "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+        "parser_version": "route_pdf_groups/v4",
+        "binding_version": "route_pdf_quote_binding/v1",
+        "production_version": "pdf_proposal_locator/v1",
+        "proposal_index": 0,
+        "fact_index": 12,
+        "fact_id": "f-in-zn-qty",
+        "field_path": "material_graph[0].material_inputs[4].quantity.value",
+        "raw_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_block_locator": "pdf:p3:b42-p3:b42",
+        "resolved_span": "pdf:p3:b42-p3:b42",
+        "reason_code": "model_locator_confirmed"
+      }
+    ],
+    "diagnostics": [],
+    "raw_proposals_digest": "sha256_e4398d4db77971ac2c10c1b2007c13b6c7c171f0bf684804e17ef70c3ffb973f",
+    "located_proposals_digest": "sha256_e4398d4db77971ac2c10c1b2007c13b6c7c171f0bf684804e17ef70c3ffb973f",
+    "parser_version": "route_pdf_groups/v4",
+    "binding_version": "route_pdf_quote_binding/v1",
+    "production_version": "pdf_proposal_locator/v1",
+    "generated_material_ids": [
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-co-salt",
+        "generated_id": "material_eacf4280d3247f5a491d1c8c"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-co-salt",
+        "generated_id": "instance_809ce0416a6185a00dd265c0"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[1].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-ni-salt",
+        "generated_id": "material_959591de2ae1132200172932"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-ni-salt",
+        "generated_id": "instance_4a4dbfd291ee828b4cac7d69"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[2].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-cu-salt",
+        "generated_id": "material_738d98a971f70993dc4d365a"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[2].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-cu-salt",
+        "generated_id": "instance_60753f33db444f485986342e"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[3].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-mn-salt",
+        "generated_id": "material_d6eb3cfe051e25075e2295d5"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[3].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-mn-salt",
+        "generated_id": "instance_fa0127a5fffffd23fcc49585"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[4].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-zn-salt",
+        "generated_id": "material_c927e9e8166a5a89d7a522bd"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_inputs[4].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-zn-salt",
+        "generated_id": "instance_d20ce34be92e0b26dd3e526d"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_outputs[0].material_id",
+        "id_kind": "material_id",
+        "model_symbol": "m-he-pba",
+        "generated_id": "material_63053fc0a76808061e1d07e9"
+      },
+      {
+        "proposal_index": 0,
+        "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+        "id_kind": "material_instance_id",
+        "model_symbol": "mi-he-pba",
+        "generated_id": "instance_cf79a1969c6376f1016c5291"
+      }
+    ],
+    "source_operation_inventory": [],
+    "source_operation_inventory_issues": [],
+    "source_operation_coverage": [],
+    "source_operation_coverage_issues": [],
+    "operation_quote_tightening": [],
+    "operation_quote_tightening_issues": [],
+    "clause_quote_tightening": [],
+    "clause_quote_tightening_issues": [],
+    "material_structure": [],
+    "material_structure_issues": [],
+    "required_fact_normalizations": [],
+    "qualitative_unit_normalizations": [],
+    "controlled_state_normalizations": [],
+    "convention_state_candidates": [],
+    "convention_state_proof_dags": [],
+    "local_revision": {
+      "status": "reassessed_unreviewed",
+      "original_proposals_digest": "sha256_e4398d4db77971ac2c10c1b2007c13b6c7c171f0bf684804e17ef70c3ffb973f",
+      "initial_issues": [
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[2].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[3].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[4].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 4,
+          "fact_id": "f-in-co-qty",
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 6,
+          "fact_id": "f-in-ni-qty",
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 8,
+          "fact_id": "f-in-cu-qty",
+          "field_path": "material_graph[0].material_inputs[2].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 10,
+          "fact_id": "f-in-mn-qty",
+          "field_path": "material_graph[0].material_inputs[3].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 12,
+          "fact_id": "f-in-zn-qty",
+          "field_path": "material_graph[0].material_inputs[4].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        }
+      ],
+      "revisions": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of high-entropy PBA",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "initial_issues": [
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[0].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[1].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[2].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[3].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_inputs[4].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": -1,
+              "fact_id": "",
+              "field_path": "material_graph[0].material_outputs[0].state",
+              "reason_code": "required_graph_fact_missing"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": 4,
+              "fact_id": "f-in-co-qty",
+              "field_path": "material_graph[0].material_inputs[0].quantity.value",
+              "reason_code": "fact_quantity_attribution_unresolved"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": 6,
+              "fact_id": "f-in-ni-qty",
+              "field_path": "material_graph[0].material_inputs[1].quantity.value",
+              "reason_code": "fact_quantity_attribution_unresolved"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": 8,
+              "fact_id": "f-in-cu-qty",
+              "field_path": "material_graph[0].material_inputs[2].quantity.value",
+              "reason_code": "fact_quantity_attribution_unresolved"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": 10,
+              "fact_id": "f-in-mn-qty",
+              "field_path": "material_graph[0].material_inputs[3].quantity.value",
+              "reason_code": "fact_quantity_attribution_unresolved"
+            },
+            {
+              "proposal_index": 0,
+              "fact_index": 12,
+              "fact_id": "f-in-zn-qty",
+              "field_path": "material_graph[0].material_inputs[4].quantity.value",
+              "reason_code": "fact_quantity_attribution_unresolved"
+            }
+          ],
+          "original_group_digest": "sha256_0e05892dff04eb77dc640defed6f089fb69177b70648cfeb86485fa12f883b8a",
+          "original_required_field_paths": [
+            "material_graph[0].material_inputs[0].name",
+            "material_graph[0].material_inputs[0].quantity.value",
+            "material_graph[0].material_inputs[1].name",
+            "material_graph[0].material_inputs[1].quantity.value",
+            "material_graph[0].material_inputs[2].name",
+            "material_graph[0].material_inputs[2].quantity.value",
+            "material_graph[0].material_inputs[3].name",
+            "material_graph[0].material_inputs[3].quantity.value",
+            "material_graph[0].material_inputs[4].name",
+            "material_graph[0].material_inputs[4].quantity.value",
+            "material_graph[0].material_outputs[0].name",
+            "material_graph[0].operation",
+            "route_signature.operations[0]"
+          ],
+          "passing_fact_indexes": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            7,
+            9,
+            11
+          ],
+          "group_layout_digest": "sha256_5fc5a139d220ad29ea570d910a668491954093de429767f9deef0361f2479d0d",
+          "prompt_chars": 14671,
+          "response_chars": 3972,
+          "raw_revision": {
+            "proposals": [
+              {
+                "source_group_ref": {
+                  "paper_id": "du-2022-si",
+                  "experimental_group_id": "Synthesis of high-entropy PBA",
+                  "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+                },
+                "role_hint": "synthesis",
+                "target": {
+                  "name": "CoNiCuMnZnFe-PBA"
+                },
+                "route_signature": {
+                  "operations": [
+                    "synthesis"
+                  ]
+                },
+                "material_graph": [
+                  {
+                    "macro_step_id": "ms-1",
+                    "macro_action_id": "ma-1",
+                    "sequence": 1,
+                    "operation": "synthesis",
+                    "sample_id": "sample-he-pba",
+                    "provenance": {
+                      "kind": "paper",
+                      "reference": "fact:f-op-1"
+                    },
+                    "material_inputs": [
+                      {
+                        "material_id": "material_eacf4280d3247f5a491d1c8c",
+                        "material_instance_id": "instance_809ce0416a6185a00dd265c0",
+                        "name": "Co",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-in-co-name"
+                        }
+                      },
+                      {
+                        "material_id": "material_959591de2ae1132200172932",
+                        "material_instance_id": "instance_4a4dbfd291ee828b4cac7d69",
+                        "name": "Ni",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-in-ni-name"
+                        }
+                      },
+                      {
+                        "material_id": "material_738d98a971f70993dc4d365a",
+                        "material_instance_id": "instance_60753f33db444f485986342e",
+                        "name": "Cu",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-in-cu-name"
+                        }
+                      },
+                      {
+                        "material_id": "material_d6eb3cfe051e25075e2295d5",
+                        "material_instance_id": "instance_fa0127a5fffffd23fcc49585",
+                        "name": "Mn",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-in-mn-name"
+                        }
+                      },
+                      {
+                        "material_id": "material_c927e9e8166a5a89d7a522bd",
+                        "material_instance_id": "instance_d20ce34be92e0b26dd3e526d",
+                        "name": "Zn",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-in-zn-name"
+                        }
+                      }
+                    ],
+                    "material_intermediates": [],
+                    "material_outputs": [
+                      {
+                        "material_id": "material_63053fc0a76808061e1d07e9",
+                        "material_instance_id": "instance_cf79a1969c6376f1016c5291",
+                        "name": "CoNiCuMnZnFe-PBA",
+                        "provenance": {
+                          "kind": "paper",
+                          "reference": "fact:f-out-name"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "route_facts": [
+                  {
+                    "fact_id": "f-op-1",
+                    "field_path": "material_graph[0].operation",
+                    "value": "synthesis",
+                    "unit": "",
+                    "excerpt": "The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b41-p3:b41"
+                  },
+                  {
+                    "fact_id": "f-sig-op-1",
+                    "field_path": "route_signature.operations[0]",
+                    "value": "synthesis",
+                    "unit": "",
+                    "excerpt": "The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b41-p3:b41"
+                  },
+                  {
+                    "fact_id": "f-out-name",
+                    "field_path": "material_graph[0].material_outputs[0].name",
+                    "value": "CoNiCuMnZnFe-PBA",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  },
+                  {
+                    "fact_id": "f-in-co-name",
+                    "field_path": "material_graph[0].material_inputs[0].name",
+                    "value": "Co",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  },
+                  {
+                    "fact_id": "f-in-ni-name",
+                    "field_path": "material_graph[0].material_inputs[1].name",
+                    "value": "Ni",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  },
+                  {
+                    "fact_id": "f-in-cu-name",
+                    "field_path": "material_graph[0].material_inputs[2].name",
+                    "value": "Cu",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  },
+                  {
+                    "fact_id": "f-in-mn-name",
+                    "field_path": "material_graph[0].material_inputs[3].name",
+                    "value": "Mn",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  },
+                  {
+                    "fact_id": "f-in-zn-name",
+                    "field_path": "material_graph[0].material_inputs[4].name",
+                    "value": "Zn",
+                    "unit": "",
+                    "excerpt": "CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.",
+                    "required": true,
+                    "block_locator": "pdf:p3:b42-p3:b42"
+                  }
+                ]
+              }
+            ]
+          },
+          "operation_quote_tightening": [],
+          "operation_quote_tightening_issues": [],
+          "material_structure": [],
+          "material_structure_issues": [],
+          "generated_material_ids": [
+            {
+              "field_path": "material_graph[0].material_inputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_eacf4280d3247f5a491d1c8c",
+              "generated_id": "material_eacf4280d3247f5a491d1c8c"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_809ce0416a6185a00dd265c0",
+              "generated_id": "instance_809ce0416a6185a00dd265c0"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[1].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_959591de2ae1132200172932",
+              "generated_id": "material_959591de2ae1132200172932"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_4a4dbfd291ee828b4cac7d69",
+              "generated_id": "instance_4a4dbfd291ee828b4cac7d69"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[2].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_738d98a971f70993dc4d365a",
+              "generated_id": "material_738d98a971f70993dc4d365a"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[2].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_60753f33db444f485986342e",
+              "generated_id": "instance_60753f33db444f485986342e"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[3].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_d6eb3cfe051e25075e2295d5",
+              "generated_id": "material_d6eb3cfe051e25075e2295d5"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[3].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_fa0127a5fffffd23fcc49585",
+              "generated_id": "instance_fa0127a5fffffd23fcc49585"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[4].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_c927e9e8166a5a89d7a522bd",
+              "generated_id": "material_c927e9e8166a5a89d7a522bd"
+            },
+            {
+              "field_path": "material_graph[0].material_inputs[4].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_d20ce34be92e0b26dd3e526d",
+              "generated_id": "instance_d20ce34be92e0b26dd3e526d"
+            },
+            {
+              "field_path": "material_graph[0].material_outputs[0].material_id",
+              "id_kind": "material_id",
+              "model_symbol": "material_63053fc0a76808061e1d07e9",
+              "generated_id": "material_63053fc0a76808061e1d07e9"
+            },
+            {
+              "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+              "id_kind": "material_instance_id",
+              "model_symbol": "instance_cf79a1969c6376f1016c5291",
+              "generated_id": "instance_cf79a1969c6376f1016c5291"
+            }
+          ],
+          "producer_normalizations": {
+            "required_fact_normalizations": [],
+            "qualitative_unit_normalizations": [],
+            "controlled_state_normalizations": [],
+            "convention_state_candidates": [],
+            "convention_state_proof_dags": []
+          },
+          "reason_code": "local_revision_required_field_dropped"
+        }
+      ],
+      "parser_version": "route_pdf_groups/v4",
+      "binding_version": "route_pdf_quote_binding/v1",
+      "production_version": "pdf_proposal_locator/v1",
+      "repair_version": "pdf_group_local_repair/v1",
+      "check_required_graph_facts": true,
+      "field_requirements_before": [
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[0]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        }
+      ],
+      "field_requirements_after": [
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].quantity.value",
+          "verification_mode": "paper_literal",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].name",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].operation",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "route_signature.operations[0]",
+          "verification_mode": "controlled_mapping",
+          "paper_fact_present": true
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[1].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[2].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[3].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_inputs[4].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        },
+        {
+          "proposal_index": 0,
+          "field_path": "material_graph[0].material_outputs[0].material_instance_id",
+          "verification_mode": "generated_id",
+          "paper_fact_present": false
+        }
+      ],
+      "coverage_before": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of high-entropy PBA",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "declared_required_count": 13,
+          "declared_literal_passed_count": 8,
+          "graph_required_count": 19,
+          "graph_required_with_fact_count": 13,
+          "missing_graph_required_paths": [
+            "material_graph[0].material_inputs[0].state",
+            "material_graph[0].material_inputs[1].state",
+            "material_graph[0].material_inputs[2].state",
+            "material_graph[0].material_inputs[3].state",
+            "material_graph[0].material_inputs[4].state",
+            "material_graph[0].material_outputs[0].state"
+          ]
+        }
+      ],
+      "final_issues": [
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[1].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[2].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[3].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_inputs[4].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": -1,
+          "fact_id": "",
+          "field_path": "material_graph[0].material_outputs[0].state",
+          "reason_code": "required_graph_fact_missing"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 4,
+          "fact_id": "f-in-co-qty",
+          "field_path": "material_graph[0].material_inputs[0].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 6,
+          "fact_id": "f-in-ni-qty",
+          "field_path": "material_graph[0].material_inputs[1].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 8,
+          "fact_id": "f-in-cu-qty",
+          "field_path": "material_graph[0].material_inputs[2].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 10,
+          "fact_id": "f-in-mn-qty",
+          "field_path": "material_graph[0].material_inputs[3].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        },
+        {
+          "proposal_index": 0,
+          "fact_index": 12,
+          "fact_id": "f-in-zn-qty",
+          "field_path": "material_graph[0].material_inputs[4].quantity.value",
+          "reason_code": "fact_quantity_attribution_unresolved"
+        }
+      ],
+      "final_proposals_digest": "sha256_e4398d4db77971ac2c10c1b2007c13b6c7c171f0bf684804e17ef70c3ffb973f",
+      "coverage_after": [
+        {
+          "proposal_index": 0,
+          "source_group_ref": {
+            "paper_id": "du-2022-si",
+            "experimental_group_id": "Synthesis of high-entropy PBA",
+            "source_digest": "sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee"
+          },
+          "declared_required_count": 13,
+          "declared_literal_passed_count": 8,
+          "graph_required_count": 19,
+          "graph_required_with_fact_count": 13,
+          "missing_graph_required_paths": [
+            "material_graph[0].material_inputs[0].state",
+            "material_graph[0].material_inputs[1].state",
+            "material_graph[0].material_inputs[2].state",
+            "material_graph[0].material_inputs[3].state",
+            "material_graph[0].material_inputs[4].state",
+            "material_graph[0].material_outputs[0].state"
+          ]
+        }
+      ],
+      "groups_attempted": 1,
+      "groups_merged": 0,
+      "groups_budget_skipped": 0
+    }
+  },
+  "raw_calls": [
+    {
+      "prompt_chars": 5968,
+      "raw_text": "```json\n{\n  \"proposals\": [\n    {\n      \"source_group_ref\": {\n        \"paper_id\": \"du-2022-si\",\n        \"experimental_group_id\": \"Synthesis of high-entropy PBA\",\n        \"source_digest\": \"sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee\"\n      },\n      \"role_hint\": \"synthesis\",\n      \"target\": {\n        \"name\": \"CoNiCuMnZnFe-PBA\"\n      },\n      \"route_signature\": {\n        \"operations\": [\n          \"synthesis\"\n        ]\n      },\n      \"material_graph\": [\n        {\n          \"macro_step_id\": \"ms-1\",\n          \"macro_action_id\": \"ma-1\",\n          \"sequence\": 1,\n          \"operation\": \"synthesis\",\n          \"sample_id\": \"sample-he-pba\",\n          \"provenance\": {\n            \"kind\": \"paper\",\n            \"reference\": \"fact:f-op-1\"\n          },\n          \"material_inputs\": [\n            {\n              \"material_id\": \"m-co-salt\",\n              \"material_instance_id\": \"mi-co-salt\",\n              \"name\": \"Co\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-co-name\"\n              },\n              \"quantity\": {\n                \"value\": 0.4,\n                \"unit\": \"mmol\"\n              }\n            },\n            {\n              \"material_id\": \"m-ni-salt\",\n              \"material_instance_id\": \"mi-ni-salt\",\n              \"name\": \"Ni\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-ni-name\"\n              },\n              \"quantity\": {\n                \"value\": 0.4,\n                \"unit\": \"mmol\"\n              }\n            },\n            {\n              \"material_id\": \"m-cu-salt\",\n              \"material_instance_id\": \"mi-cu-salt\",\n              \"name\": \"Cu\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-cu-name\"\n              },\n              \"quantity\": {\n                \"value\": 0.4,\n                \"unit\": \"mmol\"\n              }\n            },\n            {\n              \"material_id\": \"m-mn-salt\",\n              \"material_instance_id\": \"mi-mn-salt\",\n              \"name\": \"Mn\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-mn-name\"\n              },\n              \"quantity\": {\n                \"value\": 0.4,\n                \"unit\": \"mmol\"\n              }\n            },\n            {\n              \"material_id\": \"m-zn-salt\",\n              \"material_instance_id\": \"mi-zn-salt\",\n              \"name\": \"Zn\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-zn-name\"\n              },\n              \"quantity\": {\n                \"value\": 0.4,\n                \"unit\": \"mmol\"\n              }\n            }\n          ],\n          \"material_intermediates\": [],\n          \"material_outputs\": [\n            {\n              \"material_id\": \"m-he-pba\",\n              \"material_instance_id\": \"mi-he-pba\",\n              \"name\": \"CoNiCuMnZnFe-PBA\",\n              \"state\": \"unknown\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-out-name\"\n              }\n            }\n          ]\n        }\n      ],\n      \"route_facts\": [\n        {\n          \"fact_id\": \"f-op-1\",\n          \"field_path\": \"material_graph[0].operation\",\n          \"value\": \"synthesis\",\n          \"unit\": \"\",\n          \"excerpt\": \"The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b41-p3:b41\"\n        },\n        {\n          \"fact_id\": \"f-sig-op-1\",\n          \"field_path\": \"route_signature.operations[0]\",\n          \"value\": \"synthesis\",\n          \"unit\": \"\",\n          \"excerpt\": \"The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b41-p3:b41\"\n        },\n        {\n          \"fact_id\": \"f-out-name\",\n          \"field_path\": \"material_graph[0].material_outputs[0].name\",\n          \"value\": \"CoNiCuMnZnFe-PBA\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-co-name\",\n          \"field_path\": \"material_graph[0].material_inputs[0].name\",\n          \"value\": \"Co\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-co-qty\",\n          \"field_path\": \"material_graph[0].material_inputs[0].quantity.value\",\n          \"value\": 0.4,\n          \"unit\": \"mmol\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-ni-name\",\n          \"field_path\": \"material_graph[0].material_inputs[1].name\",\n          \"value\": \"Ni\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-ni-qty\",\n          \"field_path\": \"material_graph[0].material_inputs[1].quantity.value\",\n          \"value\": 0.4,\n          \"unit\": \"mmol\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-cu-name\",\n          \"field_path\": \"material_graph[0].material_inputs[2].name\",\n          \"value\": \"Cu\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-cu-qty\",\n          \"field_path\": \"material_graph[0].material_inputs[2].quantity.value\",\n          \"value\": 0.4,\n          \"unit\": \"mmol\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-mn-name\",\n          \"field_path\": \"material_graph[0].material_inputs[3].name\",\n          \"value\": \"Mn\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-mn-qty\",\n          \"field_path\": \"material_graph[0].material_inputs[3].quantity.value\",\n          \"value\": 0.4,\n          \"unit\": \"mmol\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-zn-name\",\n          \"field_path\": \"material_graph[0].material_inputs[4].name\",\n          \"value\": \"Zn\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-zn-qty\",\n          \"field_path\": \"material_graph[0].material_inputs[4].quantity.value\",\n          \"value\": 0.4,\n          \"unit\": \"mmol\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        }\n      ]\n    }\n  ]\n}\n```"
+    },
+    {
+      "prompt_chars": 14671,
+      "raw_text": "{\n  \"proposals\": [\n    {\n      \"source_group_ref\": {\n        \"paper_id\": \"du-2022-si\",\n        \"experimental_group_id\": \"Synthesis of high-entropy PBA\",\n        \"source_digest\": \"sha256_9f05be9f4a5d5c607dbefdeb8ebb5c89ac5fb7ee4385534e174c88e921efc7ee\"\n      },\n      \"role_hint\": \"synthesis\",\n      \"target\": {\n        \"name\": \"CoNiCuMnZnFe-PBA\"\n      },\n      \"route_signature\": {\n        \"operations\": [\"synthesis\"]\n      },\n      \"material_graph\": [\n        {\n          \"macro_step_id\": \"ms-1\",\n          \"macro_action_id\": \"ma-1\",\n          \"sequence\": 1,\n          \"operation\": \"synthesis\",\n          \"sample_id\": \"sample-he-pba\",\n          \"provenance\": {\n            \"kind\": \"paper\",\n            \"reference\": \"fact:f-op-1\"\n          },\n          \"material_inputs\": [\n            {\n              \"material_id\": \"material_eacf4280d3247f5a491d1c8c\",\n              \"material_instance_id\": \"instance_809ce0416a6185a00dd265c0\",\n              \"name\": \"Co\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-co-name\"\n              }\n            },\n            {\n              \"material_id\": \"material_959591de2ae1132200172932\",\n              \"material_instance_id\": \"instance_4a4dbfd291ee828b4cac7d69\",\n              \"name\": \"Ni\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-ni-name\"\n              }\n            },\n            {\n              \"material_id\": \"material_738d98a971f70993dc4d365a\",\n              \"material_instance_id\": \"instance_60753f33db444f485986342e\",\n              \"name\": \"Cu\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-cu-name\"\n              }\n            },\n            {\n              \"material_id\": \"material_d6eb3cfe051e25075e2295d5\",\n              \"material_instance_id\": \"instance_fa0127a5fffffd23fcc49585\",\n              \"name\": \"Mn\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-mn-name\"\n              }\n            },\n            {\n              \"material_id\": \"material_c927e9e8166a5a89d7a522bd\",\n              \"material_instance_id\": \"instance_d20ce34be92e0b26dd3e526d\",\n              \"name\": \"Zn\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-in-zn-name\"\n              }\n            }\n          ],\n          \"material_intermediates\": [],\n          \"material_outputs\": [\n            {\n              \"material_id\": \"material_63053fc0a76808061e1d07e9\",\n              \"material_instance_id\": \"instance_cf79a1969c6376f1016c5291\",\n              \"name\": \"CoNiCuMnZnFe-PBA\",\n              \"provenance\": {\n                \"kind\": \"paper\",\n                \"reference\": \"fact:f-out-name\"\n              }\n            }\n          ]\n        }\n      ],\n      \"route_facts\": [\n        {\n          \"fact_id\": \"f-op-1\",\n          \"field_path\": \"material_graph[0].operation\",\n          \"value\": \"synthesis\",\n          \"unit\": \"\",\n          \"excerpt\": \"The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b41-p3:b41\"\n        },\n        {\n          \"fact_id\": \"f-sig-op-1\",\n          \"field_path\": \"route_signature.operations[0]\",\n          \"value\": \"synthesis\",\n          \"unit\": \"\",\n          \"excerpt\": \"The synthesis steps of high-entropy PBA are similar with that of binary PBAs, except that five metal salts replace one metal salt.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b41-p3:b41\"\n        },\n        {\n          \"fact_id\": \"f-out-name\",\n          \"field_path\": \"material_graph[0].material_outputs[0].name\",\n          \"value\": \"CoNiCuMnZnFe-PBA\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-co-name\",\n          \"field_path\": \"material_graph[0].material_inputs[0].name\",\n          \"value\": \"Co\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-ni-name\",\n          \"field_path\": \"material_graph[0].material_inputs[1].name\",\n          \"value\": \"Ni\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-cu-name\",\n          \"field_path\": \"material_graph[0].material_inputs[2].name\",\n          \"value\": \"Cu\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-mn-name\",\n          \"field_path\": \"material_graph[0].material_inputs[3].name\",\n          \"value\": \"Mn\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        },\n        {\n          \"fact_id\": \"f-in-zn-name\",\n          \"field_path\": \"material_graph[0].material_inputs[4].name\",\n          \"value\": \"Zn\",\n          \"unit\": \"\",\n          \"excerpt\": \"CoNiCuMnZnFe-PBA were prepared with 0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol:0.4 mmol ratio of Co/Ni/Cu/Mn/Zn.\",\n          \"required\": true,\n          \"block_locator\": \"pdf:p3:b42-p3:b42\"\n        }\n      ]\n    }\n  ]\n}"
+    }
+  ],
+  "model": "k3 (LLMFactory)",
+  "source_identity": "manual supply channel: received/identity_verified/ingested; no signed acquisition events for du-2022"
+}
